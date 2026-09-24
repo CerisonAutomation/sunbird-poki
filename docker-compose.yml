@@ -1,0 +1,61 @@
+# Sunbird self-hosted backend stack.
+#
+#   cp .env.example .env   # then set the two secrets (openssl rand -hex 32)
+#   docker compose up -d --build
+#
+#   multiplayer  → Rust authoritative WS server   http://localhost:8080  (/v1/ws, /v1/reconnect-token, /healthz, :9090 metrics)
+#   social       → TypeScript social backend      http://localhost:8791  (/mp/v1/…, /health)
+#
+# Client wiring: point VITE_MULTIPLAYER_URL / VITE_SOCIAL_URL at the two
+# services (they must be same-origin or listed in SUNBIRD_PUBLIC_ORIGINS /
+# SOCIAL_ALLOWED_ORIGINS for the browser build).
+
+services:
+  multiplayer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sunbird-multiplayer:latest
+    restart: unless-stopped
+    ports:
+      - "${SUNBIRD_MP_PORT:-8080}:8080"
+    environment:
+      SUNBIRD_ENV: ${SUNBIRD_ENV:-development}
+      SUNBIRD_BIND_ADDR: 0.0.0.0:8080
+      # Comma-separated browser origins. "*" is refused outside development,
+      # so production must list explicit https origins.
+      SUNBIRD_PUBLIC_ORIGINS: ${SUNBIRD_PUBLIC_ORIGINS:-*}
+      # HMAC key for single-generation reconnect tokens — REQUIRED.
+      SUNBIRD_RECONNECT_HMAC_SECRET: ${SUNBIRD_RECONNECT_HMAC_SECRET:?set SUNBIRD_RECONNECT_HMAC_SECRET in .env (openssl rand -hex 32)}
+      SUNBIRD_RECONNECT_GRACE_SECONDS: ${SUNBIRD_RECONNECT_GRACE_SECONDS:-30}
+      SUNBIRD_SHUTDOWN_GRACE_SECONDS: ${SUNBIRD_SHUTDOWN_GRACE_SECONDS:-5}
+      # Prometheus metrics; set empty to disable.
+      SUNBIRD_METRICS_BIND_ADDR: ${SUNBIRD_METRICS_BIND_ADDR:-0.0.0.0:9090}
+    expose:
+      - "9090"
+
+  social:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: sunbird-social:latest
+    restart: unless-stopped
+    ports:
+      - "${SUNBIRD_SOCIAL_PORT:-8791}:8791"
+    environment:
+      PORT: "8791"
+      HOST: 0.0.0.0
+      # HMAC secret for session/match tokens — REQUIRED (min 32 chars in
+      # production; NODE_ENV=production enforces a non-dev value).
+      SUNBIRD_TOKEN_SECRET: ${SUNBIRD_TOKEN_SECRET:?set SUNBIRD_TOKEN_SECRET in .env (openssl rand -hex 32)}
+      SUNBIRD_MODERATION_KEY: ${SUNBIRD_MODERATION_KEY:-}
+      # Public base URL used for share links (join codes, ghost challenges).
+      SUNBIRD_PUBLIC_BASE_URL: ${SUNBIRD_PUBLIC_BASE_URL:-http://localhost:5173}
+      # JSON file persistence under the mounted volume.
+      SUNBIRD_PERSIST: ${SUNBIRD_PERSIST:-1}
+      SUNBIRD_DATA_DIR: /data
+    volumes:
+      - social-data:/data
+
+volumes:
+  social-data:

@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test coverage
+coverage/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel
+.vercel/
+
+# Rust
+rust/target/
+
+# Graph-it
+.graph-it/
+.vercel
+
+# Playwright MCP debug snapshots
+.playwright-mcp/
+server/social/sunbird-social-data/
+
+# portal build artifacts
+dist-poki/
+dist-crazy/
+sunbird-poki.zip
+sunbird-crazy.zip
+dist-generic/
+sunbird-generic.zip
+dist-itch/
+
+# botsim CI reports (uploaded as artifacts, never committed)
+botsim-*.json
+*.png  # screenshot artifacts — do not version
+
+# Browser test artifacts
+test-artifacts/
+test-results/
+playwright-report/
+
+dist-multiplayer/
+
+.cache/
+sunbird-social-data/
+
+# Poki build output + QA harness
+dist-poki/
+dist-dev/
+poki-upload/
+sunbird-poki.zip
+scripts-tmp/
+*.tsbuildinfo

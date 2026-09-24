@@ -1,0 +1,201 @@
+name: botsim
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Every PR must survive a room full of bots. Two jobs run the same harness
+# against the two server implementations:
+#
+#   load-reference       — the Node protocol reference (`server/`). Proves the
+#                          room protocol, the 15 Hz tick, roster fan-out,
+#                          server-assigned finish order and seat resume all hold
+#                          under 40 concurrent clients. Cheat containment is
+#                          REPORTED here, not gated: that server is a
+#                          deprecated protocol reference and deliberately has
+#                          no validation.
+#
+#   load-authoritative   — the Rust `sunbird-server` that ships. Same harness,
+#                          but with `--require-anticheat`, so a regression in
+#                          `validate.rs` that lets a teleport or a 1e300
+#                          coordinate reach another pilot fails the build.
+
+jobs:
+  load-reference:
+    name: 40 bots vs Node reference server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Start the reference room server
+        run: |
+          node server/sunbird-server.mjs > /tmp/reference-server.log 2>&1 &
+          echo $! > /tmp/reference-server.pid
+          for i in $(seq 1 50); do
+            if curl -sf http://127.0.0.1:8787/health > /dev/null; then
+              echo "reference server healthy after ${i} tries"; exit 0
+            fi
+            sleep 0.2
+          done
+          echo "reference server never became healthy"; cat /tmp/reference-server.log; exit 1
+
+      - name: Run 40 bots
+        run: >
+          node scripts/botsim.mjs
+          --url ws://127.0.0.1:8787
+          --players 40
+          --seconds 15
+          --seed ${{ github.sha }}
+          --json botsim-reference.json
+
+      - name: Server log
+        if: always()
+        run: cat /tmp/reference-server.log
+
+      # The Actions log bundle and the artifact blob host are unreachable from
+      # some sandboxes, so the headline numbers are posted to the PR directly.
+      - name: Post botsim report to the PR
+        if: always() && github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### botsim — Node reference server (containment reported, not gated)"
+            echo '```'
+            jq -r '
+              "connected        \(.report.connected)/\(.report.players)  roster \(.report.rosterMax)",
+              "cadence p50/p95  \(.report.frameIntervalMs.p50)/\(.report.frameIntervalMs.p95) ms",
+              "state frames     p50 \(.report.stateFrames.p50)  min \(.report.stateFrames.min)",
+              "finish           \(.report.finish.count) finishes, \(.report.finish.unique) unique places",
+              "resume           \(.report.resume.resumed)/\(.report.resume.dropped) re-seated",
+              "bandwidth        \(.report.bandwidth.perClientKBps) KB/s per client",
+              "cheat leaks      \(.report.cheatContainment.leaks)  \(.report.cheatContainment.byReason)",
+              "gates failed     \([.gates[] | select(.pass == false and .optional != true)] | length)"
+            ' botsim-reference.json
+            echo '```'
+          } > /tmp/botsim-body.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/botsim-body.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: botsim-report-reference
+          path: botsim-reference.json
+          retention-days: 14
+
+  load-authoritative:
+    name: 40 bots vs Rust authoritative server (anti-cheat gated)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Build the authoritative server
+        run: cargo build --release -p sunbird-server
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Start the authoritative server
+        env:
+          SUNBIRD_ENV: development
+          SUNBIRD_BIND_ADDR: 127.0.0.1:8080
+          SUNBIRD_RECONNECT_HMAC_SECRET: ci-only-not-a-production-secret-32bytes
+        run: |
+          ./target/release/sunbird-server > /tmp/authoritative-server.log 2>&1 &
+          echo $! > /tmp/authoritative-server.pid
+          for i in $(seq 1 100); do
+            if curl -sf http://127.0.0.1:8080/health > /dev/null; then
+              echo "authoritative server healthy after ${i} tries"; exit 0
+            fi
+            sleep 0.2
+          done
+          echo "authoritative server never became healthy"; cat /tmp/authoritative-server.log; exit 1
+
+      # --require-anticheat turns cheat containment from a report into a gate.
+      - name: Run 40 bots with the anti-cheat gate
+        working-directory: .
+        run: >
+          node scripts/botsim.mjs
+          --url ws://127.0.0.1:8080/ws
+          --players 40
+          --seconds 15
+          --seed ${{ github.sha }}
+          --cheaters 4
+          --require-anticheat
+          --json botsim-authoritative.json
+
+      - name: Rejection metrics
+        if: always()
+        run: curl -sf http://127.0.0.1:8080/metrics | grep -E "sunbird_legacy_state_rejected_total" || echo "no rejections recorded"
+
+      - name: Server log
+        if: always()
+        run: cat /tmp/authoritative-server.log
+
+      # The Actions log bundle and the artifact blob host are unreachable from
+      # some sandboxes, so the headline numbers are posted to the PR directly.
+      - name: Post botsim report to the PR
+        if: always() && github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### botsim — Rust authoritative server (`--require-anticheat`)"
+            echo '```'
+            jq -r '
+              "connected        \(.report.connected)/\(.report.players)  roster \(.report.rosterMax)",
+              "cadence p50/p95  \(.report.frameIntervalMs.p50)/\(.report.frameIntervalMs.p95) ms",
+              "state frames     p50 \(.report.stateFrames.p50)  min \(.report.stateFrames.min)",
+              "finish           \(.report.finish.count) finishes, \(.report.finish.unique) unique places",
+              "resume           \(.report.resume.resumed)/\(.report.resume.dropped) re-seated",
+              "bandwidth        \(.report.bandwidth.perClientKBps) KB/s per client",
+              "cheat leaks      \(.report.cheatContainment.leaks)  \(.report.cheatContainment.byReason)",
+              "gates failed     \([.gates[] | select(.pass == false and .optional != true)] | length)"
+            ' botsim-authoritative.json
+            echo '```'
+          } > /tmp/botsim-body.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/botsim-body.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: botsim-report-authoritative
+          path: botsim-authoritative.json
+          retention-days: 14

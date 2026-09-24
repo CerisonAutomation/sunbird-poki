@@ -1,0 +1,241 @@
+{
+  "_comment": [
+    "SUNBIRD protocol v1 contract — THE single source of truth.",
+    "",
+    "Every limit, variant name, required field and canonical sample below is",
+    "asserted mechanically by BOTH implementations:",
+    "  - Rust  : rust/crates/sunbird-protocol/tests/contract.rs",
+    "  - TS    : src/game/__tests__/protocol-contract.test.ts",
+    "",
+    "Change a value here and one or both suites fail until the mirrors agree.",
+    "This file exists because 'the Rust crate is the source of truth and the TS",
+    "file mirrors it' was a comment, not a check — and the two had already",
+    "drifted (ServerMessage::Snapshot existed in Rust and not in TypeScript).",
+    "",
+    "Rules for editing:",
+    "  1. Never add a variant without a canonical sample that both sides parse.",
+    "  2. Never widen a limit without a matching note in PROTOCOL_NOTES.md.",
+    "  3. Movement limits are derived from client physics constants — see",
+    "     `movement.derivation`. Do not invent new numbers."
+  ],
+
+  "protocolVersion": 1,
+  "minProtocolVersion": 1,
+
+  "limits": {
+    "maxJsonPayloadBytes": 8192,
+    "maxNameChars": 14,
+    "maxRoomCodeChars": 5,
+    "maxSeedChars": 64,
+    "maxSkinChars": 32,
+    "maxIdempotencyChars": 80,
+    "maxErrorMessageChars": 256,
+    "sessionMinTokenChars": 16,
+    "sessionMaxTokenChars": 512
+  },
+
+  "movement": {
+    "_comment": "Server-authoritative plausibility envelope for legacy `state` frames.",
+    "derivation": {
+      "tickHz": 15,
+      "maxSpeedUnitsPerSec": 234.0,
+      "maxSpeedFormula": "MAX_SPEED_FEVER (128) * wingboost speedMult (1.5) + BOOST_EXTRA_SPEED (42) — src/game/Bird.ts:260 + src/game/PowerUps.ts:79",
+      "deltaHeadroomFactor": 2.0,
+      "maxStateDeltaXPerTickFormula": "234.0 / 15 * 2.0 = 31.2, rounded down to 31.0"
+    },
+    "tickHz": 15,
+    "maxSpeedUnitsPerSec": 234.0,
+    "speedHeadroomFactor": 2.0,
+    "minSampleIntervalSec": 0.0167,
+    "maxSampleIntervalSec": 2.0,
+    "maxStateDeltaXPerTick": 31.0,
+    "maxStateDeltaYPerTick": 31.0,
+    "maxCoordinateAbs": 1000000.0,
+    "maxAltitudeAbs": 100000.0,
+    "maxRotationAbs": 12.5664,
+    "maxDistance": 500000.0,
+    "distanceRegressionTolerance": 0.5,
+    "positionDecimalPlaces": 2,
+    "rotationDecimalPlaces": 2
+  },
+
+  "clientMessages": {
+    "join": {
+      "required": ["version", "intentId", "seed", "name", "skin"],
+      "optional": ["roomCode", "reconnectToken"],
+      "sample": {
+        "type": "join",
+        "version": 1,
+        "intentId": "6f1e2d3c-4b5a-4968-8797-a6b5c4d3e2f1",
+        "roomCode": "K7QZM",
+        "seed": "2026-09-12",
+        "name": "Kestrel",
+        "skin": "bluejay",
+        "reconnectToken": null
+      }
+    },
+    "leave": {
+      "required": ["version", "roomId", "seatId"],
+      "optional": [],
+      "sample": {
+        "type": "leave",
+        "version": 1,
+        "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+        "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90"
+      }
+    },
+    "ready": {
+      "required": ["version", "roomId", "seatId", "ready"],
+      "optional": [],
+      "sample": {
+        "type": "ready",
+        "version": 1,
+        "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+        "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+        "ready": true
+      }
+    },
+    "heartbeat": {
+      "required": ["version", "roomId", "seatId", "sequence", "clientTime"],
+      "optional": [],
+      "sample": {
+        "type": "heartbeat",
+        "version": 1,
+        "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+        "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+        "sequence": 42,
+        "clientTime": "2026-09-12T09:30:00Z"
+      }
+    },
+    "reconnect": {
+      "required": ["version", "roomId", "seatId", "reconnectToken"],
+      "optional": [],
+      "sample": {
+        "type": "reconnect",
+        "version": 1,
+        "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+        "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+        "reconnectToken": "sb1.opaque-reconnect-token"
+      }
+    }
+  },
+
+  "serverMessages": {
+    "hello": {
+      "required": ["version", "serverName", "limits"],
+      "sample": {
+        "type": "hello",
+        "version": 1,
+        "serverName": "sunbird-dev",
+        "limits": { "version": 1, "maxJsonPayloadBytes": 8192, "maxNameChars": 14 }
+      }
+    },
+    "welcome": {
+      "required": ["version", "grant", "room"],
+      "sample": {
+        "type": "welcome",
+        "version": 1,
+        "grant": {
+          "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+          "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+          "playerId": "3d6a40dc-4bc3-4f51-b158-4b5c7e8f9012",
+          "generation": 1,
+          "reconnectToken": "sb1.opaque-reconnect-token"
+        },
+        "room": {
+          "id": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+          "code": "K7QZM",
+          "seed": "2026-09-12",
+          "capacity": 40,
+          "hostSeatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+          "pilots": [
+            {
+              "joinedAt": "2026-09-12T09:30:00Z",
+              "id": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+              "name": "Kestrel",
+              "skin": "bluejay",
+              "ready": false,
+              "reconnecting": false
+            }
+          ]
+        }
+      }
+    },
+    "rosterUpdate": {
+      "required": ["version", "room"],
+      "sample": {
+        "type": "rosterUpdate",
+        "version": 1,
+        "room": {
+          "id": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+          "code": "K7QZM",
+          "seed": "2026-09-12",
+          "capacity": 40,
+          "hostSeatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+          "pilots": []
+        }
+      }
+    },
+    "started": {
+      "required": ["version", "roomId", "startAt", "seed"],
+      "sample": {
+        "type": "started",
+        "version": 1,
+        "roomId": "1b4e28ba-2fa1-4d3f-9f36-2f3a5c6d7e8f",
+        "startAt": "2026-09-12T09:30:06Z",
+        "seed": "2026-09-12"
+      }
+    },
+    "snapshot": {
+      "required": ["version", "snapshot"],
+      "_note": "This variant existed in Rust (ServerMessage::Snapshot) with no TypeScript mirror. Its absence is the drift this contract was written to make impossible.",
+      "sample": {
+        "type": "snapshot",
+        "version": 1,
+        "snapshot": {
+          "serverTime": "2026-09-12T09:30:07Z",
+          "tick": 105,
+          "pilots": [
+            {
+              "seatId": "2c5f39cb-3ab2-4e40-a047-3a4b6d7e8f90",
+              "x": 128.25,
+              "y": 41.5,
+              "rotation": -0.12,
+              "distance": 64,
+              "finished": false
+            }
+          ]
+        }
+      }
+    },
+    "error": {
+      "required": ["version", "error"],
+      "sample": {
+        "type": "error",
+        "version": 1,
+        "error": { "code": "roomFull" }
+      }
+    }
+  },
+
+  "serverErrorCodes": [
+    "unsupportedVersion",
+    "invalidMessage",
+    "payloadTooLarge",
+    "rateLimited",
+    "roomFull",
+    "roomNotFound",
+    "seatNotFound",
+    "invalidReconnectToken",
+    "rejected"
+  ],
+
+  "legacy": {
+    "_comment": "The simple wire protocol the shipped browser client speaks on GET /ws. Unversioned by history; pinned here so a frame rename is a contract break, not a silent client failure.",
+    "up": ["state", "emote", "ready", "finish"],
+    "down": ["welcome", "peers", "left", "state", "emote", "finish", "start", "error"],
+    "capacity": 40,
+    "tickHz": 15,
+    "stateFields": ["id", "x", "y", "rot", "distance"]
+  }
+}

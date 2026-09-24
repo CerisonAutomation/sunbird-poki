@@ -1,0 +1,176 @@
+name: rust-backend
+
+on:
+  push:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # `Publish fmt diff as a check` POSTs a check run so the diff survives
+      # environments where the Actions log blob host is unreachable. Without
+      # `checks: write` that POST 403s and the step's continue-on-error hides
+      # it, leaving a bare "Format (check) failed" with no way to see why.
+      checks: write
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Format (check)
+        id: fmt
+        # rustfmt is a gate, not an autofix. This step used to run `cargo fmt`
+        # and push the result back as github-actions[bot], which caused two
+        # failures observed on this repo:
+        #   1. two rust-backend runs racing on the same push — the loser fails
+        #      here with a non-fast-forward before Test ever runs;
+        #   2. the bot's follow-up commit triggers runs that sit in
+        #      `action_required`, turning a green PR red until someone with
+        #      approval rights clicks through (a normal PR token gets 403 on
+        #      POST /actions/runs/{id}/approve).
+        # Failing the build instead keeps branch history human-authored and
+        # every run approvable by whoever pushed it.
+        run: cargo fmt --all --check
+      # The Actions log bundle is not always retrievable (results-receiver is
+      # unreachable from some sandboxes), so the fmt diff — the only thing
+      # that says WHAT to reformat — is also published where it survives.
+      # Self-checking (runs its own cargo fmt --check) instead of branching
+      # on the previous step's outcome, which the runner skips when the
+      # gate has already failed. continue-on-error keeps this purely
+      # informational — the Format (check) step above remains the gate.
+      - name: Publish fmt diff as a check
+        # Explicit if conditions are AND-ed with success(), so this only
+        # runs after the gate has failed — hence the failure() head. The
+        # results-receiver log bundle is unreachable from some sandboxes,
+        # so the diff — the only artifact that says what to reformat — is
+        # published as a check run, which comes back over api.github.com.
+        # continue-on-error keeps this informational; Format (check) above
+        # remains the gate.
+        if: failure() && steps.fmt.outcome == 'failure'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd rust 2>/dev/null || cd .
+          report=/tmp/fmt-report.txt
+          echo "pwd: $(pwd)" > "$report"
+          echo "cargo: $(cargo --version 2>&1)" >> "$report"
+          cargo fmt --all --check >> "$report" 2>&1
+          echo "fmt-check-exit: $?" >> "$report"
+          cargo fmt --all
+          git diff > /tmp/fmt.diff
+          {
+            cat "$report"
+            echo "--- diff ($(wc -l < /tmp/fmt.diff) lines) ---"
+            head -c 58000 /tmp/fmt.diff
+          } > /tmp/fmt-summary.txt
+          gh api "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name="rust-fmt-diff" \
+            -f head_sha="$GITHUB_SHA" \
+            -f status="completed" \
+            -f conclusion="neutral" \
+            -F output_title="rustfmt diff (run ${GITHUB_RUN_ID})" \
+            -F output_summary="$(cat /tmp/fmt-summary.txt)"
+      # Same goal as the check-run POST above, reached a way that cannot fail
+      # silently: the POST needs `checks: write` and, under
+      # `continue-on-error`, a 403 from it still shows a green step — which is
+      # how this repo shipped a bare "Format (check) failed" with no diff to
+      # act on. Workflow-command annotations always come back over
+      # api.github.com (check-runs → annotations), so the diff travels there.
+      - name: Publish fmt diff as annotations
+        if: failure() && steps.fmt.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          cd rust 2>/dev/null || cd .
+          cargo fmt --all
+          git diff --unified=2 | grep -E '^(@@|[+-][^+-])' | head -80 | while IFS= read -r line; do
+            echo "::warning title=rustfmt::${line//%/%25}"
+          done
+      - name: Clippy
+        id: clippy
+        run: |
+          set -o pipefail
+          cargo clippy --workspace --all-targets --message-format=short -- -D warnings 2>&1 \
+            | tee /tmp/clippy.log
+      # The Actions log bundle is not always retrievable (the results-receiver
+      # host is unreachable from some sandboxes), so diagnostics are also
+      # published as check annotations, which come back over api.github.com.
+      - name: Publish clippy diagnostics
+        if: failure() && steps.clippy.outcome == 'failure'
+        run: |
+          # Cargo-level failures (dependency resolution, manifest problems) print
+          # as a bare `error: ...` with no file path, which a path-shaped grep
+          # silently misses -- that is how the first attempt at this step
+          # "succeeded" while reporting nothing.
+          grep -E '(^|: )(error|warning)(\[|:)' /tmp/clippy.log | head -40 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          {
+            echo '### Clippy output'
+            echo '```'
+            tail -n 100 /tmp/clippy.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Post clippy log to the PR
+        if: failure() && steps.clippy.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo '### `cargo clippy` output (job '"$GITHUB_RUN_ID"')'
+            echo '```'
+            tail -n 120 /tmp/clippy.log
+            echo '```'
+          } > /tmp/clippy-body.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/clippy-body.md
+      - name: Test
+        id: test
+        run: |
+          set -o pipefail
+          cargo test --workspace 2>&1 | tee /tmp/test.log
+      - name: Publish test failures as annotations
+        if: failure() && steps.test.outcome == 'failure'
+        run: |
+          # -A3 after "panicked at" because the assertion message -- the only
+          # part that says WHICH case failed -- is on the following lines, and
+          # a bare grep of the header line tells you nothing.
+          grep -A3 "panicked at" /tmp/test.log | head -40 | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error::${line}"
+          done
+          {
+            echo '### cargo test output'
+            echo '```'
+            tail -n 120 /tmp/test.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Post test log to the PR
+        if: failure() && steps.test.outcome == 'failure' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo '### `cargo test` output (job '"$GITHUB_RUN_ID"')'
+            echo '```'
+            grep -B2 -A6 "panicked at" /tmp/test.log | tail -n 120
+            echo '```'
+          } > /tmp/test-body.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/test-body.md
+      - name: Release build
+        run: cargo build --workspace --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sunbird-server
+          path: rust/target/release/sunbird-server

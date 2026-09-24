@@ -1,0 +1,2526 @@
+{
+  "$comment": "Machine-readable form of the extracted Poki developer guide (docs/poki/*.md). Each rule is checked by `pnpm poki:audit` (scripts/poki-audit.mjs), which writes docs/poki/COMPLIANCE.md. verify.type: file | grep | grepAbsent | test | command | barrel | manual. `kind` mirrors the guide's force: requirement (enforced by the platform), recommendation, informational. `status`: satisfied | action (human/submission step) | deferred (documented, accepted) | informational.",
+  "version": "2026-09-22",
+  "sources": [
+    "https://developers.poki.com/guide",
+    "https://developers.poki.com/guide/web-game-engines",
+    "https://developers.poki.com/guide/easy-access",
+    "https://developers.poki.com/guide/engagement",
+    "https://developers.poki.com/guide/monetization",
+    "https://developers.poki.com/guide/localization",
+    "https://developers.poki.com/guide/thumbnail",
+    "https://developers.poki.com/guide/player-device-report",
+    "https://developers.poki.com/guide/game-dev-tools",
+    "https://developers.poki.com/guide/external-resources-policy",
+    "https://developers.poki.com/guide/sdk-html5",
+    "https://developers.poki.com/guide/sdk-overview",
+    "https://developers.poki.com/guide/game-events",
+    "https://developers.poki.com/guide/netlib",
+    "https://developers.poki.com/guide/auds",
+    "https://developers.poki.com/guide/accounts",
+    "https://developers.poki.com/guide/adding-your-game",
+    "https://developers.poki.com/guide/content-player-safety",
+    "https://developers.poki.com/guide/player-fit-test",
+    "https://developers.poki.com/guide/web-fit-test",
+    "https://developers.poki.com/guide/final-review",
+    "https://developers.poki.com/guide/working-with-poki",
+    "https://developers.poki.com/guide/what-we-look-for",
+    "https://developers.poki.com/guide/inspector"
+  ],
+  "groups": [
+    {
+      "id": "GK",
+      "file": "00-guide-overview.md",
+      "title": "Developer Guide overview"
+    },
+    {
+      "id": "ENG",
+      "file": "01-web-game-engines.md",
+      "title": "Choosing your web game engine"
+    },
+    {
+      "id": "EA",
+      "file": "02-easy-access.md",
+      "title": "Easy access"
+    },
+    {
+      "id": "EN",
+      "file": "03-engagement.md",
+      "title": "Engagement"
+    },
+    {
+      "id": "MON",
+      "file": "04-monetization.md",
+      "title": "Monetization"
+    },
+    {
+      "id": "LOC",
+      "file": "05-localization.md",
+      "title": "Localization"
+    },
+    {
+      "id": "THB",
+      "file": "06-thumbnail.md",
+      "title": "Game thumbnail"
+    },
+    {
+      "id": "DEV",
+      "file": "07-player-device-report.md",
+      "title": "Poki Player Device Report"
+    },
+    {
+      "id": "TOOL",
+      "file": "08-game-dev-tools.md",
+      "title": "Poki game development tools"
+    },
+    {
+      "id": "REQ",
+      "file": "09-platform-requirements.md",
+      "title": "Platform requirements, policies & release"
+    },
+    {
+      "id": "SDK",
+      "file": "10-sdk-html5.md",
+      "title": "PokiSDK: HTML5"
+    },
+    {
+      "id": "EV",
+      "file": "11-sdk-events.md",
+      "title": "SDK overview & events"
+    },
+    {
+      "id": "GM",
+      "file": "12-game-events.md",
+      "title": "Game Events (measure)"
+    },
+    {
+      "id": "NL",
+      "file": "13-netlib.md",
+      "title": "Poki Networking Library (Netlib)"
+    },
+    {
+      "id": "AU",
+      "file": "14-auds.md",
+      "title": "AUDS: Arbitrary User Data Store"
+    },
+    {
+      "id": "UA",
+      "file": "15-user-accounts.md",
+      "title": "User Accounts & cloud gamesaves"
+    },
+    {
+      "id": "SUB",
+      "file": "16-submission.md",
+      "title": "Submission readiness & policies"
+    },
+    {
+      "id": "PAR",
+      "file": "17-partnering.md",
+      "title": "Partnering, curation & release"
+    }
+  ],
+  "rules": [
+    {
+      "id": "GK-01",
+      "group": "GK",
+      "kind": "recommendation",
+      "rule": "Choose a web game engine deliberately (2D/3D + multiplayer needs) and understand player-hardware insights so the build stays compatible and performant.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "docs/poki/01-web-game-engines.md"
+      },
+      "evidence": "Engine decision + device baseline documented; the game uses Three.js with hand-rolled systems (see docs/poki/01-web-game-engines.md §Part 4)."
+    },
+    {
+      "id": "GK-02",
+      "group": "GK",
+      "kind": "recommendation",
+      "rule": "Success on web depends on fast onboarding, high engagement strategies, and localization.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/firstflight.test.ts"
+      },
+      "evidence": "3-step play-signal onboarding, progression systems, and 12 locales."
+    },
+    {
+      "id": "GK-03",
+      "group": "GK",
+      "kind": "recommendation",
+      "rule": "Integrate monetization early so rewarded placements land at natural moments.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "rewardedBreak|continue-ad"
+      },
+      "evidence": "Rewarded revive is part of the crash flow, with placement analytics."
+    },
+    {
+      "id": "GK-04",
+      "group": "GK",
+      "kind": "recommendation",
+      "rule": "Thumbnails are the primary acquisition surface; make them impactful.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "Spec-checked thumbnails in assets/submission/ + THB gate."
+    },
+    {
+      "id": "GK-05",
+      "group": "GK",
+      "kind": "informational",
+      "rule": "The guide is the starting point for optimising games for the web environment.",
+      "status": "informational",
+      "verify": {
+        "type": "file",
+        "path": "docs/poki/README.md"
+      },
+      "evidence": "This corpus."
+    },
+    {
+      "id": "ENG-01",
+      "group": "ENG",
+      "kind": "recommendation",
+      "rule": "Filter engines by required dimensions (2D/3D) and multiplayer support before deeper research.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "docs/poki/01-web-game-engines.md"
+      },
+      "evidence": "§Part 4 records the filter outcome for Sunbird."
+    },
+    {
+      "id": "ENG-02",
+      "group": "ENG",
+      "kind": "requirement",
+      "rule": "Mobile web fit: prefer engines with touch support and small files — initial download < 5 MB, total < 8 MB.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "scripts/verify-portal.mjs",
+        "pattern": "MAX_ZIP_BYTES = 8_000_000"
+      },
+      "evidence": "Portal zips gated at 8 MB; shipped size ≈0.7 MB."
+    },
+    {
+      "id": "ENG-03",
+      "group": "ENG",
+      "kind": "requirement",
+      "rule": "Team fit: the engine must support collaborative work on the same project files; count per-seat licensing.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "LICENSE",
+        "pattern": "MIT"
+      },
+      "evidence": "MIT-licensed library + plain TypeScript modules + git: no per-seat cost, no binary project format."
+    },
+    {
+      "id": "ENG-04",
+      "group": "ENG",
+      "kind": "recommendation",
+      "rule": "Some engines are purpose-built for web performance; heavy engines need extra effort for web exports.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "docs/poki/REBUILD_REPORT.md"
+      },
+      "evidence": "Documented engine decision; no engine runtime ships."
+    },
+    {
+      "id": "ENG-05",
+      "group": "ENG",
+      "kind": "informational",
+      "rule": "Web success factors: mobile web optimisation, engine capabilities, team workflow.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Reference material."
+      },
+      "evidence": "See docs/poki/01-web-game-engines.md §Part 3."
+    },
+    {
+      "id": "EA-01",
+      "group": "EA",
+      "kind": "requirement",
+      "rule": "Mobile first: prioritise mobile compatibility early, not as a late port.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "isCoarsePointer\\(\\)"
+      },
+      "evidence": "Mobile/tablet detection (UA + coarse pointer + narrow viewport) drives render tier, DPR and AI fidelity."
+    },
+    {
+      "id": "EA-02",
+      "group": "EA",
+      "kind": "requirement",
+      "rule": "Keep it small: target an 8–10 MB game file for older hardware and slow connections.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Procedural assets, self-hosted subset fonts, single-file build; zip gated < 8 MB."
+    },
+    {
+      "id": "EA-03",
+      "group": "EA",
+      "kind": "recommendation",
+      "rule": "Skip the menu: let first-time players reach gameplay without splash/title/level-select detours.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "home-launch"
+      },
+      "evidence": "One-screen entry with a single hero 'Fly now' action."
+    },
+    {
+      "id": "EA-04",
+      "group": "EA",
+      "kind": "requirement",
+      "rule": "Loading screens must be visually engaging and include a progress bar.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "index.html",
+        "pattern": "role=\"progressbar\""
+      },
+      "evidence": "Inline zero-request boot screen with an animated mark and a progress bar driven by real boot stages."
+    },
+    {
+      "id": "EA-05",
+      "group": "EA",
+      "kind": "recommendation",
+      "rule": "Progressive loading: ship essential initial assets first, load the rest in the background.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/boot-progress.test.ts"
+      },
+      "evidence": "Interaction-first boot stages + idle-deferred work (BootProgress)."
+    },
+    {
+      "id": "EA-06",
+      "group": "EA",
+      "kind": "recommendation",
+      "rule": "Safe beginner environment: simple early levels, gradual difficulty, prevent early death.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/firstflight.test.ts"
+      },
+      "evidence": "Onboarding runs on forgiving terrain with launch assist; second-wind continue exists."
+    },
+    {
+      "id": "EA-07",
+      "group": "EA",
+      "kind": "recommendation",
+      "rule": "Gradual introduction: teach mechanics and controls over several levels to cut frontal load.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/firstflight.test.ts"
+      },
+      "evidence": "One cue at a time (dive → soar → land), gated on real input."
+    },
+    {
+      "id": "EA-08",
+      "group": "EA",
+      "kind": "requirement",
+      "rule": "Explain the game with visuals, not text walls; tutorials must not block gameplay.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/input-ui.test.ts"
+      },
+      "evidence": "Gesture/icon cues that never take input away, localized across all locales."
+    },
+    {
+      "id": "EA-09",
+      "group": "EA",
+      "kind": "recommendation",
+      "rule": "Playtest recordings to fine-tune onboarding and drop-off.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-game-events.test.ts",
+        "pattern": "enables event tracking on the boot path"
+      },
+      "evidence": "First-run funnel is instrumented and pinned (boot-path event tracking + visible/interact pairing, poki-game-events.test.ts). The Playtest upload itself is a dashboard action."
+    },
+    {
+      "id": "EA-10",
+      "group": "EA",
+      "kind": "requirement",
+      "rule": "Portrait vs landscape: portrait raises engagement ~6% and unlocks Gamebar Display ads; both orientations are supported.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "e2e/scaling.spec.ts"
+      },
+      "evidence": "Portrait and landscape both playable: narrow-aspect camera pull-back, safe-area insets, HUD reflow; e2e covers phone portrait + landscape."
+    },
+    {
+      "id": "EN-01",
+      "group": "EN",
+      "kind": "requirement",
+      "rule": "Accessibility: support both mouse and keyboard navigation.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/input-ui.test.ts"
+      },
+      "evidence": "Full play with mouse-only, keyboard-only, touch-only or gamepad; menus are focus-managed DOM overlays."
+    },
+    {
+      "id": "EN-02",
+      "group": "EN",
+      "kind": "requirement",
+      "rule": "Standardise controls: WASD or arrow keys for movement, space or return for primary menu actions.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/input-ui.test.ts",
+        "pattern": "ArrowDown|KeyW"
+      },
+      "evidence": "Dive accepts Space/WASD/arrows; Space+Return activate an overlay's primary action (OverlayNavigation)."
+    },
+    {
+      "id": "EN-03",
+      "group": "EN",
+      "kind": "recommendation",
+      "rule": "Clear long-term goals in addition to short-term level goals.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/Mastery.ts"
+      },
+      "evidence": "Skins with perks, trails, biomes, mastery, missions, collections, season pass, cups, ranked divisions."
+    },
+    {
+      "id": "EN-04",
+      "group": "EN",
+      "kind": "recommendation",
+      "rule": "Tune difficulty with an increasing scale from accessible starts to new mechanics.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/FlightProgression.ts"
+      },
+      "evidence": "In-run ramps + campaign/mastery/rank progression."
+    },
+    {
+      "id": "EN-05",
+      "group": "EN",
+      "kind": "recommendation",
+      "rule": "Congratulate the player: celebrate milestones with visual and audio feedback.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "new-best"
+      },
+      "evidence": "Confetti burst + jingle on personal bests, level-ups, chests and race wins; the results card carries a NEW BEST banner and the portal celebration hook fires when one exists."
+    },
+    {
+      "id": "EN-06",
+      "group": "EN",
+      "kind": "recommendation",
+      "rule": "Test it: find drop-off points to distinguish difficulty frustration from lost interest.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/Telemetry.ts"
+      },
+      "evidence": "Run outcome, placement visibility/interaction and economy events are all instrumented."
+    },
+    {
+      "id": "MON-01",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Integrate monetization early so rewarded video fits the natural game flow.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "rewardedBreak"
+      },
+      "evidence": "Rewarded revive wired into the crash flow."
+    },
+    {
+      "id": "MON-02",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Engagement first: rewarded video performance follows engagement.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/SeasonPass.ts"
+      },
+      "evidence": "Deep progression layer independent of ads."
+    },
+    {
+      "id": "MON-03",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Rewarded videos must be optional and never block core gameplay.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "Let it sleep"
+      },
+      "evidence": "Free restart and free 'let it sleep' paths always exist; no mode is ad-gated."
+    },
+    {
+      "id": "MON-04",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Every video-triggering element must be clearly labelled, accessible and transparent about the reward.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "Watch for Second Wind"
+      },
+      "evidence": "Labelled button, aria-labelled, explicit reward wording."
+    },
+    {
+      "id": "MON-05",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Always provide a standard (non-ad) alternative to a rewarded option.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "e2e/results.spec.ts",
+        "pattern": "continue-sleep"
+      },
+      "evidence": "e2e/results.spec.ts pins the standard and free options beside the rewarded one ('Let it sleep' always rendered)."
+    },
+    {
+      "id": "MON-06",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Standard and rewarded options appear simultaneously.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "renderContinue"
+      },
+      "evidence": "All three options render in one pass; nothing gates the ad behind a wizard step."
+    },
+    {
+      "id": "MON-07",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "The standard button is at least as large as the rewarded button and sits above or beside it.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "CSS audit: .primary-btn (18px type, 12px padding, full width) renders above .soft-btn.wide (14px, 10px padding); pinned by HUD test."
+      },
+      "evidence": "src/game/HUD.ts renderContinue markup order."
+    },
+    {
+      "id": "MON-08",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Rewarded buttons must not be green.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Rewarded CTA uses the warm-neutral .soft-btn surface; the game's action colour is orange and gold is reserved for the Gold pass."
+      },
+      "evidence": "src/index.css .soft-btn"
+    },
+    {
+      "id": "MON-09",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Reward buttons carry a prominent clapperboard icon.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "🎬"
+      },
+      "evidence": "🎬 present on the rewarded continue button and verified in the shipped bundle."
+    },
+    {
+      "id": "MON-10",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "One video per reward, maximum.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "rewardedBreak"
+      },
+      "evidence": "A single grant site; the returned boolean is the only reward source."
+    },
+    {
+      "id": "MON-11",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Confirm rewards immediately (animation/sound) and apply them automatically.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "doContinue"
+      },
+      "evidence": "Run resumes in place with a jingle, coin toast and slow-mo restore - no menu detour."
+    },
+    {
+      "id": "MON-12",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "No reward when the ad fails or is blocked; handle it silently.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "rewardedBreak"
+      },
+      "evidence": "false/rejected break grants nothing, offers fallbacks, and never mentions ad blocking."
+    },
+    {
+      "id": "MON-13",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "No ad-timer manipulation; the platform decides ad availability.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "portalEnabled\\(\\)"
+      },
+      "evidence": "adTimer/shouldShowInterstitial/adsLeftToday are local-build-only; portal builds ask the SDK."
+    },
+    {
+      "id": "MON-14",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "Never reward-wall core gameplay.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/experience-loop.test.ts"
+      },
+      "evidence": "Every mode is reachable with earned coins or for free."
+    },
+    {
+      "id": "MON-15",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "No pushy prompts: non-ad options in primary positions, no invasive rewarded CTAs.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "One rewarded placement in the whole game, shown only after crash; standard option is the primary-styled button."
+      },
+      "evidence": "src/game/HUD.ts renderContinue"
+    },
+    {
+      "id": "MON-16",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Helping hand: revives, skips, hints, boosts to reduce drop-off.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "Second Wind"
+      },
+      "evidence": "Rewarded revive."
+    },
+    {
+      "id": "MON-17",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "In-game economy: let players spend earned currency or watch a video for the same reward.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "Spend"
+      },
+      "evidence": "Coins-or-video choice on the continue screen, single currency."
+    },
+    {
+      "id": "MON-18",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Customization: rewarded video can unlock cosmetics and replayability.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/Economy.ts"
+      },
+      "evidence": "Skins/trails/biomes are earned with in-game coins (no real money in portal builds)."
+    },
+    {
+      "id": "MON-19",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Prefer dynamic, context-specific rewarded opportunities over static always-on buttons.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/continue-offer.test.ts"
+      },
+      "evidence": "ContinueOffer picks framing from run context (near-best, streak at risk, momentum) and only exists after a crash."
+    },
+    {
+      "id": "MON-20",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Use temporary or seasonal content to lift long-term retention.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/game/Events.ts"
+      },
+      "evidence": "Season pass, weekly cups, festival events, rotating daily/weekly challenges."
+    },
+    {
+      "id": "MON-21",
+      "group": "MON",
+      "kind": "recommendation",
+      "rule": "Monitor balance: ad rewards must not distort progression; consider limits.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/economy.test.ts"
+      },
+      "evidence": "One continue per crash; economy faucets are audited (see POKI_COMPLIANCE_AUDIT.md fix log F5/F8)."
+    },
+    {
+      "id": "MON-22",
+      "group": "MON",
+      "kind": "requirement",
+      "rule": "No fake ad affordances: nothing may look like an ad surface unless it is one.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Removed in the compliance pass: the 'Ad Multiplier' card and the wheel's video-option button were deleted; the only TV/clapperboard surface is the real rewarded break."
+      },
+      "evidence": "POKI_COMPLIANCE_AUDIT.md F6"
+    },
+    {
+      "id": "LOC-01",
+      "group": "LOC",
+      "kind": "recommendation",
+      "rule": "Localization is essential for engagement outside English-speaking regions.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "src/i18n/translations.barrel.json"
+      },
+      "evidence": "12 shipped locales."
+    },
+    {
+      "id": "LOC-02",
+      "group": "LOC",
+      "kind": "requirement",
+      "rule": "Centralize all text into a single file format before translating.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/i18n/index.ts",
+        "pattern": "export function t\\("
+      },
+      "evidence": "One barrel file with keyed entries (sourceText + meta + placeholders + translations); lookup via t()/useTranslations()."
+    },
+    {
+      "id": "LOC-03",
+      "group": "LOC",
+      "kind": "recommendation",
+      "rule": "Prioritise localization for text-carrying genres/mechanics.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "docs/poki/05-localization.md"
+      },
+      "evidence": "Tutorial, shop, settings and results copy are all in the barrel."
+    },
+    {
+      "id": "LOC-04",
+      "group": "LOC",
+      "kind": "requirement",
+      "rule": "Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian.",
+      "status": "satisfied",
+      "verify": {
+        "type": "barrel",
+        "locales": [
+          "en",
+          "fr",
+          "it",
+          "de",
+          "es",
+          "tr",
+          "zh-CN",
+          "ja",
+          "pt-BR",
+          "ru"
+        ]
+      },
+      "evidence": "All phase-1 and phase-3 locales ship, with the phase-2 CJK pair present (Korean is the remaining optional locale)."
+    },
+    {
+      "id": "LOC-05",
+      "group": "LOC",
+      "kind": "requirement",
+      "rule": "Detect the browser language and serve it; a manual selector should exist too.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/i18n/__tests__/locales.test.ts"
+      },
+      "evidence": "Boot-time navigator.language matching, persisted choice (private-mode safe), manual selector in Settings, RTL direction handling."
+    },
+    {
+      "id": "THB-01",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "A high-quality thumbnail is essential for attracting players.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "assets/submission/sunbird-thumbnail-1024.png rendered from the game's own palette and mid-dive pose."
+    },
+    {
+      "id": "THB-02",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "The thumbnail must accurately reflect the game's content.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Thumbnail uses the game's sky/sun/ridge palette and the player's bird in the pose seen in the first five seconds."
+      },
+      "evidence": "assets/submission/sunbird-thumbnail-1024.png"
+    },
+    {
+      "id": "THB-03",
+      "group": "THB",
+      "kind": "recommendation",
+      "rule": "Embrace simplicity: one clear foreground object.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Single hero subject (bird) over a two-layer background; no clutter or screenshot chrome."
+      },
+      "evidence": "assets/submission/sunbird-thumbnail-1024.png"
+    },
+    {
+      "id": "THB-04",
+      "group": "THB",
+      "kind": "recommendation",
+      "rule": "Keep a series visually consistent across thumbnails.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "One palette and hero pose reused across icon sizes, store card and video frame."
+      },
+      "evidence": "public/icons/ + assets/submission/"
+    },
+    {
+      "id": "THB-05",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "Full-bleed square, minimum 628 x 628 px.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "1024x1024, square, full-bleed."
+    },
+    {
+      "id": "THB-06",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "Do not cut corners: rounded corners are applied by the platform mask.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "Gate asserts corner pixels are opaque and painted (no baked rounding, border or letterbox)."
+    },
+    {
+      "id": "THB-07",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "Details and typography must stay legible when scaled down.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "Gate downsamples to 128 px and requires the subject/background contrast to survive; thumbnail carries no typography by design."
+    },
+    {
+      "id": "THB-08",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "High contrast; avoid colours close to the Poki Playground background #83FFE7.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "Gate rejects a dominant colour within the threshold of #83FFE7 and requires a minimum luminance spread."
+    },
+    {
+      "id": "THB-09",
+      "group": "THB",
+      "kind": "requirement",
+      "rule": "Static thumbnail for the player-fit test; animated 3-5 s gameplay loop before global release.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "assets/submission/sunbird-thumbnail-animated.gif"
+      },
+      "evidence": "Animated 3-5 s gameplay loop captured from the shipping folder by scripts/capture-animated-thumbnail.mjs (628x628 GIF); the static thumbnails are gated by verify:thumbnail."
+    },
+    {
+      "id": "THB-10",
+      "group": "THB",
+      "kind": "recommendation",
+      "rule": "Keep delivered image weight sane (Inspector warns on heavy images).",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-thumbnail.mjs"
+      },
+      "evidence": "Gate enforces a maximum encoded size per thumbnail."
+    },
+    {
+      "id": "DEV-01",
+      "group": "DEV",
+      "kind": "informational",
+      "rule": "The Player Device Report gives daily-updated insights into player hardware and software.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Reference: the platform publishes this; the game consumes the implications."
+      },
+      "evidence": "docs/poki/07-player-device-report.md"
+    },
+    {
+      "id": "DEV-02",
+      "group": "DEV",
+      "kind": "informational",
+      "rule": "Report data comes from a random sample of 100M players and follows Poki's privacy policies.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Reference. Sunbird's own device_profile telemetry is aggregate capability data only - no PII, no persistent identifier."
+      },
+      "evidence": "src/sdk/device-report.ts (no identifiers emitted)"
+    },
+    {
+      "id": "DEV-03",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Code to the measured baseline: know the runtime's capabilities and pick tiers from them.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/sdk/__tests__/device-report.test.ts"
+      },
+      "evidence": "detectDeviceProfile() probes every dimension the report lists and derives a render tier."
+    },
+    {
+      "id": "DEV-10",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Capture OS and browser distribution inputs.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "browserName"
+      },
+      "evidence": "userAgentData first, UA fallback; reported once per session."
+    },
+    {
+      "id": "DEV-11",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Capture CPU core counts and size quality tiers accordingly.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "hardwareConcurrency"
+      },
+      "evidence": "Low-core devices resolve to the lite tier (shadows off, capped DPR, reduced AI fidelity)."
+    },
+    {
+      "id": "DEV-12",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Capture aspect ratios and device pixel ratios; never render more pixels than needed.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "preferredDpr"
+      },
+      "evidence": "DPR capped (never above 2x) and reduced automatically under load; aspect feeds the camera rig."
+    },
+    {
+      "id": "DEV-13",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Know audio format support.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "audio/ogg"
+      },
+      "evidence": "Opus/AAC/MP3/WebM/FLAC/WAV probed; the audio path is a procedural WebAudio synth, so no asset format can fail - the probe drives the no-WebAudio fallback."
+    },
+    {
+      "id": "DEV-14",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Know WASM, WebRTC, WebP and WakeLock support and gate features on it.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "wakeLock"
+      },
+      "evidence": "WebRTC gates the P2P transport; WakeLock keeps mobile screens awake during runs; WebP checked before image output; WASM probed for the multiplayer client path."
+    },
+    {
+      "id": "DEV-15",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Know WebGPU and WebGL version/extension support.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "webgl2"
+      },
+      "evidence": "WebGL 1/2 + renderer string + max texture size probed before renderer creation; WebGPU availability reported for future renderer decisions."
+    },
+    {
+      "id": "DEV-16",
+      "group": "DEV",
+      "kind": "requirement",
+      "rule": "Know AI feature availability (translator, language model, summarizer, detector).",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/device-report.ts",
+        "pattern": "LanguageModel|Translator"
+      },
+      "evidence": "Probed and reported only; no AI-generated player-visible content ships (see REQ-34)."
+    },
+    {
+      "id": "TOOL-01",
+      "group": "TOOL",
+      "kind": "informational",
+      "rule": "The Inspector evaluates a web build against the platform's success factors.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Submission-time tool run."
+      },
+      "evidence": "docs/poki/08-game-dev-tools.md"
+    },
+    {
+      "id": "TOOL-02",
+      "group": "TOOL",
+      "kind": "requirement",
+      "rule": "The build must survive the Inspector's mobile and technical-optimisation passes (no external resources, no console errors, sane image weights).",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/audit-zips.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "audit-zips.mjs sweeps the bundle for external URLs, banned markers and lifecycle signals."
+    },
+    {
+      "id": "TOOL-03",
+      "group": "TOOL",
+      "kind": "requirement",
+      "rule": "Uploadable as a folder with index.html at the root, working from any sub-path.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-upload.mjs",
+        "requires": [
+          "poki-upload/index.html",
+          "sunbird-poki.zip",
+          "dist-poki/index.html"
+        ]
+      },
+      "evidence": "`pnpm build:poki` GENERATES `poki-upload/` (index.html at the root); `pnpm verify:upload` (ROOT-01…ROOT-06) asserts the folder and the zip both carry a root index.html, that the folder is current with `dist-poki/`, and that it holds only uploadable files — the failure mode behind the reported \"missing index.html\" upload. Runbook: docs/poki/UPLOAD.md."
+    },
+    {
+      "id": "TOOL-04",
+      "group": "TOOL",
+      "kind": "informational",
+      "rule": "Netlib is a WebRTC-datachannel P2P library for web games.",
+      "status": "informational",
+      "verify": {
+        "type": "file",
+        "path": "src/game/PokiNetlib.ts"
+      },
+      "evidence": "Client implemented behind a code-split."
+    },
+    {
+      "id": "TOOL-05",
+      "group": "TOOL",
+      "kind": "informational",
+      "rule": "Netlib is usable whether or not the game is hosted on Poki.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Availability note."
+      },
+      "evidence": "docs/poki/08-game-dev-tools.md"
+    },
+    {
+      "id": "TOOL-06",
+      "group": "TOOL",
+      "kind": "requirement",
+      "rule": "Feature-detect WebRTC and keep a non-P2P path when using Netlib.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiMpUtils.ts",
+        "pattern": "RTCPeerConnection"
+      },
+      "evidence": "P2P is selected only when the build targets Poki AND RTCPeerConnection/crypto are present (PokiMpUtils.isPokiMultiplayerAvailable); WebSocket and local paths remain for every other build."
+    },
+    {
+      "id": "TOOL-07",
+      "group": "TOOL",
+      "kind": "informational",
+      "rule": "AUDS stores user-generated content and returns shareable codes, enabling non-real-time multiplayer.",
+      "status": "informational",
+      "verify": {
+        "type": "file",
+        "path": "src/sdk/auds.ts"
+      },
+      "evidence": "Implemented: score boards, ghost shares, per-user sync, a public pilot directory (src/game/PilotDirectory.ts — code-only lookup, one record per pilot, no presence claims) and — for non-real-time multiplayer — run share codes (src/sdk/auds.ts, src/game/SharedRun.ts: publish a run, race a friend's code, count plays through the public _increment endpoint)."
+    },
+    {
+      "id": "TOOL-08",
+      "group": "TOOL",
+      "kind": "requirement",
+      "rule": "AUDS is exclusive to Poki-hosted games and needs a live game id, so it cannot be a dependency of portable builds.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-upload.mjs"
+      },
+      "evidence": "ROOT-10 proves the shipped html carries the Poki game id with AUDS live; isolation:check proves no non-Poki edition can reach auds.poki.io."
+    },
+    {
+      "id": "REQ-01",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Scale to 640x360, 836x470 and 1031x580 (plus real devices) with no crop or scroll.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "e2e/scaling.spec.ts",
+        "pattern": "640|836|1031"
+      },
+      "evidence": "e2e asserts canvas coverage, visible menu/lobby and zero page errors at each size."
+    },
+    {
+      "id": "REQ-02",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Run inside a cross-origin iframe: no top-level navigation, window.open, dialogs, or console errors.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/rejection-guard.ts",
+        "pattern": "unhandledrejection|rejection"
+      },
+      "evidence": "Rejection guard installed before anything else; overlay-only UI; share flow uses the platform share API."
+    },
+    {
+      "id": "REQ-03",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Fully playable in incognito / with storage blocked.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/storage.test.ts"
+      },
+      "evidence": "Storage facade: localStorage -> sessionStorage -> in-memory, canary-probed."
+    },
+    {
+      "id": "REQ-04",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Initial download under ~5 MB, total under ~8 MB.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Zip gate at 8 MB; measured ≈0.7 MB."
+    },
+    {
+      "id": "REQ-05",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No service worker or manifest inside portal builds.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Manifest link stripped at packaging; boot.ts skips registration entirely for portal targets."
+    },
+    {
+      "id": "REQ-06",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Fixed non-scrolling page with the canvas filling the viewport; portrait and landscape supported.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/index.css",
+        "pattern": "position: fixed"
+      },
+      "evidence": "body/#root fixed inset:0 overflow:hidden; renderer resize on viewport change."
+    },
+    {
+      "id": "REQ-10",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Lifecycle order init -> gameLoadingStart -> gameLoadingFinished, each phase marker once.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/sdk/__tests__/platform-failsafe.test.ts"
+      },
+      "evidence": "PokiAdapter.loadingFinished() is one-shot; gameLoadingStart fires once right after init; and the entry-point loading-screen failsafe routes through the live adapter instead of the raw SDK global, so it cannot add a second gameLoadingFinished on a healthy boot (it used to, 1.5 s after window load — found by e2e/poki-artifact.spec.ts, pinned by platform-failsafe.test.ts)."
+    },
+    {
+      "id": "REQ-11",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "gameplayStart on real play start, gameplayStop on stop; never duplicated or inverted.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "e2e/poki-artifact.spec.ts"
+      },
+      "evidence": "GameplayEventSink dedupes every emission and suppresses stale phase replays; the shipping artifact is now recorded in a real browser (pnpm test:artifact) and the sequence is asserted to contain no consecutive duplicate gameplay phase."
+    },
+    {
+      "id": "REQ-12",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Pause/unpause order: gameplayStop -> commercialBreak -> gameplayStart.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "resumeFromPause"
+      },
+      "evidence": "Both resume call sites (button, ESC/P) route through the commercial break."
+    },
+    {
+      "id": "REQ-13",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Game events: one start per attempt, then exactly one of complete or fail.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "runOutcome"
+      },
+      "evidence": "runOutcome resets to fail at run start and is only set to complete on the goal-reached branch."
+    },
+    {
+      "id": "REQ-14",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Rewarded placements emit visible when shown and interact when chosen.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "continue-ad"
+      },
+      "evidence": "measure('button','continue-ad','visible'|'interact') on the continue screen."
+    },
+    {
+      "id": "REQ-15",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Mute audio and disable input for the whole ad break.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "beginPortalAd"
+      },
+      "evidence": "beginPortalAd/endPortalAd mute audio and gate input around the break."
+    },
+    {
+      "id": "REQ-16",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Work when the SDK is unavailable: boot anyway, never block on the portal.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/journey-reliability.test.ts"
+      },
+      "evidence": "SDK load races a hard timeout; init rejection is swallowed; a safety timer dismisses the portal loader."
+    },
+    {
+      "id": "REQ-20",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No in-app purchases on the platform and no UI implying them.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Packaging scrubs payment markers; verify-portal rejects stripe literals; portal builds use coin-only progression."
+    },
+    {
+      "id": "REQ-21",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No secondary spendable currencies.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/economy.test.ts"
+      },
+      "evidence": "One spendable currency (coins); VIP/Gold are statuses. The dead VIP-coin ad flow was removed."
+    },
+    {
+      "id": "REQ-22",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No third-party ad systems.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/audit-zips.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Bundle sweep asserts the absence of non-platform ad literals."
+    },
+    {
+      "id": "REQ-23",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No ad-timer or cooldown manipulation.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "portalEnabled\\(\\)"
+      },
+      "evidence": "Local ad pacing logic is excluded from portal builds."
+    },
+    {
+      "id": "REQ-24",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "External links only through the platform API; portal builds should have none.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Zero external links in portal bundles (og:url stripped, store links scrubbed)."
+    },
+    {
+      "id": "REQ-30",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "All-ages content: no violence, sexual content, gambling, substances, fear or bullying.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Family-friendly bird flight; no combat, no gore, no casino framing (the lucky wheel is a free daily gift, not a paid spin), no substances, no chat."
+      },
+      "evidence": "POKI_COMPLIANCE_AUDIT.md C12"
+    },
+    {
+      "id": "REQ-31",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No chat in multiplayer surfaces; emotes are the recommended alternative.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Portal editions ship NO chat: SQUAD_CHAT=false in edition.poki/crazy/generic.ts removes the club chat box, its input and the chat promise from the menu copy, Game/Squad refuse the send, and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07); emotes are the sanctioned alternative and are now reachable in every race state (src/game/__tests__/emote-ui.test.ts)."
+    },
+    {
+      "id": "REQ-32",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No PII collection; platform identity is display-only.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "getIdentity"
+      },
+      "evidence": "Passive getUser() only, never persisted; no email/social login."
+    },
+    {
+      "id": "REQ-33",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Originality: art, UI, mechanics, characters, audio and name must be the developer's own.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Procedural biomes, custom UI, original bird/characters, procedural score; no third-party art or audio."
+      },
+      "evidence": "POKI_COMPLIANCE_AUDIT.md C13"
+    },
+    {
+      "id": "REQ-34",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "AI-assisted production: no watermarks or prompt text; process documentable on request.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "No AI-generated asset files ship (art is procedural, audio is synthesized); production history is the git log."
+      },
+      "evidence": "Bundle sweep for watermark/prompt strings (audit-zips.mjs)"
+    },
+    {
+      "id": "REQ-35",
+      "group": "REQ",
+      "kind": "recommendation",
+      "rule": "External resources policy: prefer zero external requests; bundle assets and avoid CDNs.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/audit-zips.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Full external-URL inventory of the bundle; fonts self-hosted and inlined."
+    },
+    {
+      "id": "REQ-40",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Identity is passive: never force a login at boot.",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "login() is deliberately not called at boot (Poki's login reloads the page on first use); getUser() is passive with a local fallback name."
+      },
+      "evidence": "src/sdk/poki.ts getIdentity()"
+    },
+    {
+      "id": "REQ-41",
+      "group": "REQ",
+      "kind": "recommendation",
+      "rule": "Platform tokens are short-lived and must be verified server-side immediately, never stored.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "getToken"
+      },
+      "evidence": "getIapToken() returns the token for immediate verification; nothing persists it."
+    },
+    {
+      "id": "REQ-42",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "A player who is not signed in must still play the full game.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/save.test.ts"
+      },
+      "evidence": "Local save and local boards are the default; platform identity only decorates the profile."
+    },
+    {
+      "id": "REQ-50",
+      "group": "REQ",
+      "kind": "informational",
+      "rule": "Revenue split: 100% on search/owned traffic, 50/50 on platform-driven traffic.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Business term; nothing to implement."
+      },
+      "evidence": "docs/poki/09-platform-requirements.md"
+    },
+    {
+      "id": "REQ-51",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "The submitted build is web-exclusive: no store build that double-serves the Poki artifact.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/audit-zips.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "Separate artifacts per portal with distinct hashes; the Poki zip carries no store links, and scripts/audit-zips.mjs + verify-portal.mjs fail on ANY foreign portal marker (scripts/portal-markers.mjs)."
+    },
+    {
+      "id": "REQ-52",
+      "group": "REQ",
+      "kind": "informational",
+      "rule": "Release flow: folder upload -> Inspector QA -> player-fit test -> web-fit test -> review.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-inspector-qa.mjs"
+      },
+      "evidence": "Inspector QA modules mapped to gates: folder/root index (verify:upload), External Resources (audit:zips), Image Optimization (verify:thumbnail); scaling and mobile are covered by test:orientation and test:mobile in `pnpm gate`."
+    },
+    {
+      "id": "REQ-53",
+      "group": "REQ",
+      "kind": "informational",
+      "rule": "Web-fit metrics: C2P (click-to-play), CTR (thumbnail), time on page.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "C2P is minimised by the sub-1 MB boot and immediate first frame; CTR by the specification-compliant thumbnail; time-on-page by the daily/weekly retention loops."
+      },
+      "evidence": "docs/poki/09-platform-requirements.md"
+    },
+    {
+      "id": "REQ-60",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Do not place HUD under the mobile platform pill; use movePill() to relocate it.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/platform.ts",
+        "pattern": "movePill"
+      },
+      "evidence": "Pill moved clear of the flight HUD at SDK boot."
+    },
+    {
+      "id": "REQ-61",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Player-authored text is limited to the pilot's own display name: no chat system, no personal-data collection, and the name is moderated before it can be broadcast or stored, because it reaches other players (netlib rosters, name tags) and a public leaderboard.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/pilot-name-moderation.test.ts",
+        "pattern": "Scunthorpe problem"
+      },
+      "evidence": "Poki forbids chat systems and personal-data collection (external-resources policy: 'Chat systems aren't allowed', 'Games must not collect personal information', 'no email-based logins'), which is SQUAD_CHAT=false — the chat UI is not in the bundle. It does not forbid a chosen display name, so edition.poki.ts sets CUSTOM_PILOT_NAMES=true and the safety work moves to moderation: every write goes through src/game/pilotNameModeration.ts (shape + contact guard + NFKD/leit/homoglyph normalisation + blocklist + a safe-word allowlist so 'Cockpit'/'Classic'/'Assassin' are not caught by their own substrings), asserted by pilot-name-moderation.test.ts (95 cases) and gated at both write paths in Game.ts. crazy/generic keep CUSTOM_PILOT_NAMES=false (no filter there)."
+    },
+    {
+      "id": "REQ-62",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "No offer to remove or disable ads, and no ad-frequency claim in a portal paywall.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/portal-policy.test.ts",
+        "pattern": "sponsored breaks"
+      },
+      "evidence": "GOLD's \"No sponsored breaks, ever\" bullet is emitted only when edition SELL_AD_REMOVAL is true (direct build); portal bundles fold the ternary to [] and contain no such string. Portal builds never inject their own interstitials (dueAd is gated on portalEnabled()), so the claim was untrue there as well as forbidden."
+    },
+    {
+      "id": "REQ-63",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "Portal bundles must contain no ad-removal copy, and no portal may ship a name surface it does not moderate (bundle-level enforcement of REQ-20 and the pilot-name policy).",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "node scripts/verify-portal.mjs",
+        "requires": [
+          "sunbird-poki.zip"
+        ]
+      },
+      "evidence": "PORTAL_FORBIDDEN_MARKERS rejects /No sponsored breaks/i and ad-removal phrasing in every portal zip; the direct build keeps both (dist/assets/Game-*.js). data-ref=\"pilotName\" is a FOREIGN marker for crazy/generic (CUSTOM_PILOT_NAMES=false there, so a typed field in those bundles means the flag regressed) and an allowed surface on Poki, which moderates it."
+    },
+    {
+      "id": "REQ-64",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "A portal build must not describe or count ad breaks it does not schedule — the platform owns ad frequency.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "e2e/portal-policy.spec.ts",
+        "pattern": "must not offer ad removal"
+      },
+      "evidence": "The Account screen's \"Sponsored breaks respect a hard cap: N left today\" line is now gated on portalName === \"none\"; e2e/portal-policy.spec.ts (pnpm test:policy) boots poki-upload/ in a real browser and scans the rendered text of 17 reachable screens for ad-removal/ad-schedule copy on desktop and phone."
+    },
+    {
+      "id": "REQ-65",
+      "group": "REQ",
+      "kind": "requirement",
+      "rule": "A portal build must issue no request that can fail on the host origin (no relative calls to absent backends).",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "e2e/portal-policy.spec.ts",
+        "pattern": "HTTP \\$\\{r.status"
+      },
+      "evidence": "Squad.load() returned early only on abort/live/loading, so with VITE_SOCIAL_URL blanked it fetched a relative /register against the host origin — a 404 plus a console error the moment a player opened Squad on Poki. It now also bails when API is empty; the policy spec fails on any response >= 400 while walking every menu screen."
+    },
+    {
+      "id": "SDK-01",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "The SDK is loaded from the platform CDN in the page head; never bundled or re-hosted.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "scripts/package-portal.mjs",
+        "pattern": "game-cdn\\.poki\\.com/scripts/v2/poki-sdk\\.js"
+      },
+      "evidence": "scripts/package-portal.mjs injects the exact CDN script tag into the Poki head; ROOT-08 + the analytics test assert it survives packaging."
+    },
+    {
+      "id": "SDK-02",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "init() runs at start and the game continues on both then() and catch().",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/platform.ts",
+        "pattern": "pokiInitOptions"
+      },
+      "evidence": "bootstrapSdk() awaits init() inside a try; SDK_LOAD_TIMEOUT_MS and the loading failsafe keep a blocked CDN playable."
+    },
+    {
+      "id": "SDK-03",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "gameLoadingFinished() fires when loading completes, exactly once.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "loadingFinishedSent"
+      },
+      "evidence": "One-shot flag in PokiAdapter.loadingFinished(); the entry-point failsafe routes through the same adapter."
+    },
+    {
+      "id": "SDK-04",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "gameplayStart()/gameplayStop() mark play and its halt, never repeating the same phase.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "GameplayEventSink|gameplayStart"
+      },
+      "evidence": "Every phase change funnels through GameplayEventSink (src/game/GameplayEvents.ts), which suppresses consecutive duplicates."
+    },
+    {
+      "id": "SDK-05",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "commercialBreak() fires at natural stops as the player heads back into gameplay.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "commercialBreak"
+      },
+      "evidence": "Result/continue/pause transitions route through PlatformAdapter.commercialBreak()."
+    },
+    {
+      "id": "SDK-06",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "Audio is muted and input disabled for the duration of a break, restored afterwards.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "setAdMuted"
+      },
+      "evidence": "beginPortalAd()/endPortalAd() silence audio and lock input; restore never depends on the pause callback firing."
+    },
+    {
+      "id": "SDK-07",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "A break that does not interrupt gameplay carries no stop/start pair.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "No gameplay event is sent here on purpose"
+      },
+      "evidence": "Documented and implemented in beginPortalAd(); pinned by the analytics test."
+    },
+    {
+      "id": "SDK-08",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "rewardedBreak() rewards only on true, after telling the player an ad is coming.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "rewardedBreak"
+      },
+      "evidence": "The boolean gates the reward; the offer card is labelled with the 🎬 ad path beside a non-ad alternative."
+    },
+    {
+      "id": "SDK-09",
+      "group": "SDK",
+      "kind": "informational",
+      "rule": "A rewarded break resets the platform's commercial ad timer.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Platform-side behaviour; the game schedules no ads of its own."
+      },
+      "evidence": "No internal ad timer exists (REQ-21), so the platform's timer is the only one."
+    },
+    {
+      "id": "SDK-10",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "Space/arrow keys and wheel must not scroll the host page.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/platform.ts",
+        "pattern": "installPageScrollGuards"
+      },
+      "evidence": "installPageScrollGuards() is wired in Game boot and detached on dispose."
+    },
+    {
+      "id": "SDK-11",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "Shareable links use shareableURL() and are read back with getURLParam().",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "shareableURL"
+      },
+      "evidence": "PokiAdapter.share() prefers the SDK URL builder and only degrades when the SDK is absent."
+    },
+    {
+      "id": "SDK-12",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "External navigation goes through openExternalLink() — the game frame never navigates away.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "openExternalLink"
+      },
+      "evidence": "The Settings privacy link routes through platform.openExternalLink()."
+    },
+    {
+      "id": "SDK-13",
+      "group": "SDK",
+      "kind": "recommendation",
+      "rule": "movePill(topPercent, topPx) keeps the mobile pill clear of the UI; topPercent is 0–50.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/platform.ts",
+        "pattern": "movePill"
+      },
+      "evidence": "Boot nudges to (50,-4) then (0,56) once the HUD exists — below the daylight meter, still above 50%."
+    },
+    {
+      "id": "SDK-14",
+      "group": "SDK",
+      "kind": "informational",
+      "rule": "Pill is 46x62 below 1211px wide and 92x64 at 1211px and up.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Platform-drawn element; sizing is informational for layout decisions."
+      },
+      "evidence": "The HUD keeps the top-left band clear on both pill widths."
+    },
+    {
+      "id": "SDK-15",
+      "group": "SDK",
+      "kind": "requirement",
+      "rule": "The build is uploaded as a folder with index.html at the root and its event log checked in the Inspector.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm verify:upload"
+      },
+      "evidence": "Folder shape is ROOT-01..ROOT-10 (index.html at the root, no wrapping directory, uploadable files only). The event-log sequences are pinned by src/game/__tests__/poki-analytics.test.ts; the Inspector walk confirms the same log."
+    },
+    {
+      "id": "EV-02",
+      "group": "EV",
+      "kind": "informational",
+      "rule": "gameLoadingFinished() is required to track loading and C2P.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Tracked by SDK-03."
+      },
+      "evidence": "Fired once per boot."
+    },
+    {
+      "id": "EV-03",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "gameplayStart() = player starts interacting; gameplayStop() = gameplay halts.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/GameplayEvents.ts",
+        "pattern": "send\\(phase"
+      },
+      "evidence": "The sink is the single emitter of both phases."
+    },
+    {
+      "id": "EV-04",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "Signal commercial opportunities liberally at natural stops; the platform decides when an ad shows.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "onAdOpened: \\(\\) => this.beginPortalAd\\(\\)"
+      },
+      "evidence": "Breaks are requested at every natural halt (death, results exit, pause return)."
+    },
+    {
+      "id": "EV-06",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "Startup order is gameLoadingFinished() then gameplayStart().",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "gameplayStart"
+      },
+      "evidence": "The stub-SDK test asserts the boot order."
+    },
+    {
+      "id": "EV-07",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "Death/next-level/pause sequence is stop → commercialBreak → start.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "commercialBreak"
+      },
+      "evidence": "Pause→resume is asserted as commercialBreak start/end then gameplayStart."
+    },
+    {
+      "id": "EV-08",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "Revive sequence is stop → rewardedBreak → start.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "rewardedBreak"
+      },
+      "evidence": "Revive path asserted with the rewarded break."
+    },
+    {
+      "id": "EV-09",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "Non-interrupting ads need no stop/start pair.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "stop/start pairs"
+      },
+      "evidence": "Documented in beginPortalAd()'s comment and enforced by the sink."
+    },
+    {
+      "id": "EV-10",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "No consecutive duplicate phases and no gameplay phase while an ad is on screen.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "break"
+      },
+      "evidence": "The analytics test asserts zero gameplay events between break start and end."
+    },
+    {
+      "id": "EV-11",
+      "group": "EV",
+      "kind": "requirement",
+      "rule": "The Inspector Event Log is the acceptance surface for the sequences.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-analytics.test.ts",
+        "pattern": "dashboard order"
+      },
+      "evidence": "The documented sequence (gameplayStop -> commercialBreak -> gameplayStart, and the rewarded revive) is asserted in-process by poki-analytics.test.ts and observed end-to-end on the shipping artifact by e2e/poki-artifact.spec.ts."
+    },
+    {
+      "id": "GM-01",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "Event tracking is switched on at boot, or no measure() checkpoint is recorded.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/platform.ts",
+        "pattern": "enableEventTracking"
+      },
+      "evidence": "Called right after init({submitScore}) inside its own try."
+    },
+    {
+      "id": "GM-02",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "measure() uses short, stable category/what/action values.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "measure\\(\"run\""
+      },
+      "evidence": "run/<mode>/start + outcome, button/<placement>/visible + interact, reward/<placement>/granted."
+    },
+    {
+      "id": "GM-03",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "'/' and '^' must not appear in any measure() value.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-game-events.test.ts",
+        "pattern": "reserved"
+      },
+      "evidence": "Source-level scan of every measure() call site plus the two dynamic value definitions."
+    },
+    {
+      "id": "GM-04",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "Progress events pair start with exactly one of complete/fail, same category and what.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "this.runOutcome"
+      },
+      "evidence": "The settlement path sends one outcome per attempt."
+    },
+    {
+      "id": "GM-05",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "Interaction events pair visible with interact for the same category/what.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/poki-game-events.test.ts",
+        "pattern": "visible"
+      },
+      "evidence": "Pinned by the game-events test (visible count >= interact count)."
+    },
+    {
+      "id": "GM-06",
+      "group": "GM",
+      "kind": "requirement",
+      "rule": "measure() must not duplicate ad impressions or completions.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "rewarded bonus card is on the recap"
+      },
+      "evidence": "Only the offer UI is measured; ad playback is tracked by the ad calls themselves."
+    },
+    {
+      "id": "GM-07",
+      "group": "GM",
+      "kind": "recommendation",
+      "rule": "Rewarded placements are measured per placement.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/ContinueOffer.ts",
+        "pattern": "continuePlacementLabel"
+      },
+      "evidence": "Placement labels ('continue-ad-<kind>') keep offers comparable across contexts."
+    },
+    {
+      "id": "GM-08",
+      "group": "GM",
+      "kind": "recommendation",
+      "rule": "Custom events cover milestones and choices that fit no pattern.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "measure\\(\"reward\""
+      },
+      "evidence": "reward/<placement>/granted records the milestone."
+    },
+    {
+      "id": "NL-02",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "new Network(<game-id>) then create() a lobby or join(code) it.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiNetlib.ts",
+        "pattern": "new Network\\(NETLIB_GAME_ID\\)"
+      },
+      "evidence": "Host creates, guest joins by code; both wrapped behind the game's NetTransport interface."
+    },
+    {
+      "id": "NL-03",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "Real-time state on the unreliable channel; critical events on reliable.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiNetlib.ts",
+        "pattern": "unreliable"
+      },
+      "evidence": "15 Hz unreliable state + reliable hello/start/place events."
+    },
+    {
+      "id": "NL-05",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "WebRTC is feature-detected and a non-WebRTC path exists.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiMpUtils.ts",
+        "pattern": "RTCPeerConnection"
+      },
+      "evidence": "isPokiMultiplayerAvailable() gates the Netlib client; net-transport.poki.ts falls back to the WebSocket client."
+    },
+    {
+      "id": "NL-06",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "The UI says whether the player is in a live room or a local/AI fallback.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "multiplayerLive"
+      },
+      "evidence": "HUD status + race screen state the live/local truth; local rivals are labelled AI."
+    },
+    {
+      "id": "NL-07",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "A dropped connection must not end the session; degrade to the local flock.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiNetlib.ts",
+        "pattern": "closedByUs"
+      },
+      "evidence": "Reconnect + seat preservation in PokiNetlibClient; MassRace keeps flying the local squadron otherwise."
+    },
+    {
+      "id": "NL-08",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "Netlib is loaded lazily so it never lands in the boot path.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/net-transport.poki.ts",
+        "pattern": "import\\(\"\\./PokiNetlib\"\\)"
+      },
+      "evidence": "One shared dynamic import (loadNetlib) is awaited by createNetTransport and warmed by prewarmNetTransport: the library is never in the boot path, and never in a non-Poki bundle."
+    },
+    {
+      "id": "NL-09",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "A Netlib build must not contain another platform's transport names or endpoints.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm isolation:check"
+      },
+      "evidence": "Per-target transport module swap + isolation check."
+    },
+    {
+      "id": "NL-10",
+      "group": "NL",
+      "kind": "requirement",
+      "rule": "Lobby codes are short and unambiguous to read aloud.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/PokiMpUtils.ts",
+        "pattern": "ABCDEFGHJKLMNPQRSTUVWXYZ"
+      },
+      "evidence": "No 0/O/1/I alphabet, five characters, shared with the WebSocket transport."
+    },
+    {
+      "id": "AU-01",
+      "group": "AU",
+      "kind": "informational",
+      "rule": "POST …/<key> creates an entry from {data, values}; values accepts string|number|boolean.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "API shape; implemented in src/sdk/auds.ts."
+      },
+      "evidence": "Create payloads keep values scalar."
+    },
+    {
+      "id": "AU-02",
+      "group": "AU",
+      "kind": "requirement",
+      "rule": "The create secret is returned once and must be stored if the entry will ever change.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/auds.ts",
+        "pattern": "SECRET_STORAGE_PREFIX"
+      },
+      "evidence": "Secrets are stored per entry; public score rows deliberately retain none (immutable)."
+    },
+    {
+      "id": "AU-04",
+      "group": "AU",
+      "kind": "requirement",
+      "rule": "List supports q=, sort=/-sort=, includedata and limit (1–100).",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/auds.ts",
+        "pattern": "sort=-"
+      },
+      "evidence": "Boards query the public sorted list with a limit."
+    },
+    {
+      "id": "AU-07",
+      "group": "AU",
+      "kind": "requirement",
+      "rule": "Public counters use POST …/_increment?key=<k>, key must contain 'count', no secret.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/SharedRun.ts",
+        "pattern": "play-count"
+      },
+      "evidence": "Shared-run plays are counted through the public counter endpoint."
+    },
+    {
+      "id": "AU-09",
+      "group": "AU",
+      "kind": "requirement",
+      "rule": "Published content is public: payloads from the network must be validated before use.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Leaderboard.ts",
+        "pattern": "truncate"
+      },
+      "evidence": "Leaderboard/SharedRun/GhostNet validate, clamp and truncate every network payload before rendering."
+    },
+    {
+      "id": "AU-10",
+      "group": "AU",
+      "kind": "requirement",
+      "rule": "AUDS is Poki-only; no other edition may reach auds.poki.io.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/auds.ts",
+        "pattern": "createAudsIfConfigured"
+      },
+      "evidence": "Gated on VITE_POKI_GAME_ID and asserted by pnpm isolation:check."
+    },
+    {
+      "id": "UA-01",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "getUser() is called after load and every state (signed in, out, opted out) is handled.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "adoptPortalIdentity"
+      },
+      "evidence": "Adoption runs after boot; a null or throwing getUser() leaves the generated call sign in place."
+    },
+    {
+      "id": "UA-02",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "login() is only called from a user interaction, never automatically on load.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Game.ts",
+        "pattern": "case \"portal-sign-in\""
+      },
+      "evidence": "Only the Account screen's Sign in button reaches signInToPortal()."
+    },
+    {
+      "id": "UA-04",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "getToken() tokens are short-lived (~1 min) and must not be stored or reused.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/sdk/poki.ts",
+        "pattern": "getToken"
+      },
+      "evidence": "No backend needs the token, so the build never requests, stores or transmits one."
+    },
+    {
+      "id": "UA-07",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "Local-only data is prefixed poki_ignore so cloud gamesaves skip it.",
+      "status": "satisfied",
+      "verify": {
+        "type": "test",
+        "path": "src/game/__tests__/storage.test.ts",
+        "pattern": "poki_ignore"
+      },
+      "evidence": "physicalKey() maps board/ghost/journal/squad caches, AUDS secrets and the probe onto poki_ignore.*; reads migrate legacy keys."
+    },
+    {
+      "id": "UA-08",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "The cloud save payload must stay under 1 MB gzipped.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Storage.ts",
+        "pattern": "LOCAL_ONLY_PREFIXES"
+      },
+      "evidence": "The synced set is the small progress/settings blob; large or device-specific data is ignored by construction."
+    },
+    {
+      "id": "UA-09",
+      "group": "UA",
+      "kind": "requirement",
+      "rule": "Synced state must be safe to receive from another device.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Storage.ts",
+        "pattern": "physicalKey"
+      },
+      "evidence": "Per-device identifiers, recordings and caches live outside the synced set."
+    },
+    {
+      "id": "UA-03",
+      "group": "UA",
+      "kind": "informational",
+      "rule": "Inspector debug mode returns a static TestUser with a placeholder avatar.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "The Account screen renders whatever getUser() returns."
+      },
+      "evidence": "TestUser renders as an ordinary signed-in account."
+    },
+    {
+      "id": "SUB-01",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "Upload a web build: folder with index.html at the root, working on desktop, mobile and tablet.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm verify:upload"
+      },
+      "evidence": "poki-upload/ root index.html + responsive layout gates."
+    },
+    {
+      "id": "SUB-04",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "Thumbnail: full-bleed square >=628px, one subject, minimal text, high contrast, not near #83FFE7.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm verify:thumbnail"
+      },
+      "evidence": "THB gate measures size, bleed, corner mask, contrast, 128px legibility and weight."
+    },
+    {
+      "id": "SUB-05",
+      "group": "SUB",
+      "kind": "recommendation",
+      "rule": "Suggested categories: up to four chosen for genuine fit.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "docs/poki/SUBMISSION.md",
+        "pattern": "Suggested Categories"
+      },
+      "evidence": "Four categories chosen for fit and recorded in SUBMISSION.md (Multiplayer, Flappy-style, Racing, Popular); pasting them into the dashboard is the submission step."
+    },
+    {
+      "id": "SUB-06",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "A live privacy policy page is required before an external service can be approved.",
+      "status": "satisfied",
+      "verify": {
+        "type": "file",
+        "path": "public/privacy.html"
+      },
+      "evidence": "Self-contained policy page shipped with the standalone deploy; VITE_PRIVACY_URL can point at another host."
+    },
+    {
+      "id": "SUB-07",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "The privacy policy must also be linked from inside the game.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/HUD.ts",
+        "pattern": "open-privacy"
+      },
+      "evidence": "Settings links it through platform.openExternalLink()."
+    },
+    {
+      "id": "SUB-08",
+      "group": "SUB",
+      "kind": "recommendation",
+      "rule": "Dashboard description and engine field describe the game and the tech.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "docs/poki/SUBMISSION.md",
+        "pattern": "three-js"
+      },
+      "evidence": "Description and engine field prepared in SUBMISSION.md (engine: three-js); pasting them into the dashboard is the submission step."
+    },
+    {
+      "id": "SUB-09",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "External resources are requested in Settings → CSP; assets are bundled, not fetched from CDNs.",
+      "status": "satisfied",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm verify:portals"
+      },
+      "evidence": "Bundled fonts/images + the portal external-URL gate."
+    },
+    {
+      "id": "SUB-11",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "No in-game chat systems; emoji/quick messages are the sanctioned alternative.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/edition.poki.ts",
+        "pattern": "SQUAD_CHAT = false"
+      },
+      "evidence": "The chat UI is not in the portal bundle at all; emotes remain."
+    },
+    {
+      "id": "SUB-12",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "No external account systems and no collection of personal information.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/pilotNameModeration.ts",
+        "pattern": "const CONTACT"
+      },
+      "evidence": "No email/social login in any portal build: identity comes from Poki's own getUser() (docs/poki/15-user-accounts.md), and the null/throwing case simply keeps the generated call sign. A typed pilot name is allowed, but CONTACT in src/game/pilotNameModeration.ts rejects anything shaped like an address, link, @handle or long digit run, so a public leaderboard cannot be used to publish contact details."
+    },
+    {
+      "id": "SUB-13",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "Content must stay family-friendly (no violence, gambling, adult or scary themes).",
+      "status": "satisfied",
+      "verify": {
+        "type": "manual",
+        "note": "Game content: birds, islands, weather; currency earned only by flying."
+      },
+      "evidence": "Reviewed against the content list; nothing to remove."
+    },
+    {
+      "id": "SUB-14",
+      "group": "SUB",
+      "kind": "requirement",
+      "rule": "Controls offer alternatives so players who cannot use WASD are not excluded.",
+      "status": "satisfied",
+      "verify": {
+        "type": "grep",
+        "path": "src/game/Input.ts",
+        "pattern": "pointerdown"
+      },
+      "evidence": "Pointer drag, touch drag, keyboard and auto-glide all steer; menus are mouse/touch/keyboard navigable."
+    },
+    {
+      "id": "SUB-16",
+      "group": "SUB",
+      "kind": "informational",
+      "rule": "Player fit test: 500 players; healthy = 3 min+ average and >=25% over 3 min.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Run after the thumbnail is uploaded; requires 10 playtest recordings watched first."
+      },
+      "evidence": "Target metric for the first fit test."
+    },
+    {
+      "id": "SUB-17",
+      "group": "SUB",
+      "kind": "informational",
+      "rule": "Web fit test weights CTR, average time on page and C2P equally; C2P comes from the first gameplayStart().",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "C2P work already landed: portal editions skip the name screen and boot straight to play."
+      },
+      "evidence": "Measured by the platform."
+    },
+    {
+      "id": "PAR-02",
+      "group": "PAR",
+      "kind": "informational",
+      "rule": "Web exclusivity: the same game may not be published on other web portals or aggregators.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Separate per-target artifacts; the exclusivity decision is a publishing choice."
+      },
+      "evidence": "Kept as a build/publish policy rather than a code fork."
+    },
+    {
+      "id": "PAR-05",
+      "group": "PAR",
+      "kind": "informational",
+      "rule": "Baseline signals: quality, player fit, and tech (load time, frame rate, file size).",
+      "status": "informational",
+      "verify": {
+        "type": "command",
+        "cmd": "pnpm audit:zips"
+      },
+      "evidence": "1.78 MB single-file build, adaptive quality tiers, measured device profile."
+    },
+    {
+      "id": "PAR-06",
+      "group": "PAR",
+      "kind": "recommendation",
+      "rule": "Beyond the baseline: originality, depth, first impression, cross-device feel, room to grow.",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Documented in REBUILD_REPORT.md (30 tracks, seasons, wings, daily goals, endless/solo/race)."
+      },
+      "evidence": "Feature depth is tracked in the rebuild report."
+    },
+    {
+      "id": "PAR-08",
+      "group": "PAR",
+      "kind": "informational",
+      "rule": "After final review: agreement, legal, QA, Soft Release, Global Release (~2-3 months).",
+      "status": "informational",
+      "verify": {
+        "type": "manual",
+        "note": "Tracked in docs/poki/SUBMISSION.md as the roadmap after upload."
+      },
+      "evidence": "Planning note."
+    }
+  ]
+}

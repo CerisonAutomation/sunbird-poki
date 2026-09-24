@@ -1,0 +1,308 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+      - name: UX/UI audit (dead buttons, null refs, layout hygiene)
+        run: pnpm audit:ui
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Typecheck (social backend)
+        run: pnpm typecheck:server
+
+      - name: Test
+        run: pnpm test
+
+      - name: Test (social backend)
+        run: pnpm test:server
+
+      - name: Build (Vercel / direct / PWA)
+        env:
+          VITE_PORTAL_TARGET: none
+        run: pnpm build:vercel
+
+      - name: Upload dist artifact (Vercel)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sunbird-dist-vercel
+          path: dist/
+          retention-days: 14
+
+  orientation:
+    name: Portrait · Landscape · Rotation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test the production build in both orientations
+        run: pnpm test:orientation
+      - name: Preserve browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orientation-test-results
+          path: test-results/
+          retention-days: 7
+
+  mobile:
+    name: Mobile · touch, scroll & tap-anywhere
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      # The regressions this suite exists to catch, all of them reported by real
+      # players on phones: menus that would not scroll (a blanket
+      # `preventDefault` on touchstart/touchmove was overriding a correct
+      # `touch-action`), taps that did nothing (touchstart swallowed the
+      # synthetic click), controls that gave no feedback at ≤640px, and a results
+      # screen whose tap-anywhere-to-fly-again dead zone sat underneath the card
+      # rather than inside it. Driven over real CDP touch on a Pixel 7 profile;
+      # the desktop project self-skips because it has no touch.
+      - name: Touch, scroll and tap-anywhere on a phone profile
+        run: pnpm test:mobile
+      - name: Preserve browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-test-results
+          path: test-results/
+          retention-days: 7
+
+  verify-prod:
+    name: Production gate (audit + budget + determinism)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Autoperfect production mode
+        run: pnpm verify:prod
+
+  build-itch:
+    name: Build (itch.io single-file)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build (itch.io singlefile)
+        env:
+          VITE_PORTAL_TARGET: none
+          VITE_SINGLEFILE: "true"
+        run: pnpm build:itch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sunbird-dist-itch
+          path: dist-itch/
+          retention-days: 14
+
+  artifact:
+    name: Artifact (Inspector folder in a real browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the Poki artifact
+        run: pnpm build:poki
+      - name: Verify the upload shape
+        run: pnpm verify:upload
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Load the shipping folder in a real browser
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "node: $(node -v)"
+            echo "playwright: $(npx playwright --version)"
+            echo "browser cache:"; ls -1 "${HOME}/.cache/ms-playwright" 2>/dev/null || true
+            echo "artifact: $(stat -c '%s bytes' poki-upload/index.html 2>/dev/null || echo MISSING)"
+            npx playwright test -c playwright.artifact.config.ts --reporter=list,json
+          } 2>&1 | tee poki-artifact-test.log
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/report.json
+      # The run's own log is the evidence for a browser test; keep it either
+      # way (GitHub's log API cannot be relied on for this job).
+      - name: Upload the artifact test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: poki-artifact-test
+          path: |
+            poki-artifact-test.log
+            test-results/
+          retention-days: 7
+          if-no-files-found: warn
+      # Belt and braces: step log and artifacts are not always retrievable, so
+      # the failure is also emitted as annotations, which the checks API serves.
+      - name: Surface the artifact test result
+        if: always()
+        shell: bash
+        run: |
+          [ -f poki-artifact-test.log ] || exit 0
+          # The SDK sequence the Inspector's Event Log is checked against, and
+          # the failing lines (when there are any), published as check
+          # annotations — the only channel that is always reachable.
+          seq=$(grep -a -m1 "Poki SDK boot sequence" poki-artifact-test.log || true)
+          if [ -n "$seq" ]; then
+            echo "::notice title=Poki SDK event log recorded::$(printf '%s' "$seq" | sed 's/%/%25/g')"
+          fi
+          tail -c 6000 poki-artifact-test.log | grep -a -E "✘|Error:|Expected|Received" | head -8 | while IFS= read -r line; do
+            echo "::error title=Poki artifact test::$(printf '%s' "$line" | sed 's/%/%25/g; s/\r//g')"
+          done || true
+
+  policy:
+    name: Portal policy (shipping artifacts, real browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      # Source-level gates prove what the bundle *contains*; this proves what a
+      # player actually *sees*. It drives the two shipping folders — `poki-upload/`
+      # (handed to the Poki Inspector) and `dist/` (the direct build) — through
+      # the portal policy contract: a read-only curated pilot name and no
+      # ad-removal offers on Poki, and the free-text name field still present on
+      # the direct build. The script builds both folders itself, so a stale
+      # committed `poki-upload/` snapshot can never make this green for the wrong
+      # reason — which is exactly how the first-run welcome screen shipped a
+      # free-text input into the Poki bundle unnoticed.
+      - name: Policy contract on both builds
+        run: pnpm test:policy
+      - name: Preserve browser failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-test-results
+          path: test-results/
+          retention-days: 7
+
+  pvp-live:
+    name: PvP · live clients · pilot directory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `pvp:check` boots the real room server on a scratch port and runs three
+      # layers against it: the raw protocol smoke, the live two-client suite
+      # (real RealtimeClient, real server, real state frames) and the pilot
+      # directory contract behind the Pilot Lookup panel. It fails unless every
+      # layer passes, so "multiplayer works" is a checked claim on every push,
+      # not something a human has to remember to try.
+      - name: PvP + pilot directory (scratch server, live clients)
+        run: pnpm pvp:check
+
+  portals:
+    name: Build (Poki + CrazyGames + generic zips)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build all portal zips
+        run: pnpm build:portals
+      - name: Verify per-version isolation (each build carries only its own portal)
+        run: pnpm verify:portals && pnpm audit:zips && pnpm verify:thumbnail
+      # Source-level half of the same contract: the Rust stack stays
+      # platform-agnostic and the Poki edition stays P2P (netlib) + AUDS.
+      - name: Verify the Rust/Poki split at the source level
+        run: pnpm isolation:check
+      - name: Verify the Poki Inspector upload shape
+        run: pnpm verify:upload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sunbird-portal-zips
+          path: |
+            sunbird-poki.zip
+            sunbird-crazy.zip
+            sunbird-generic.zip
+            poki-upload/
+          retention-days: 14

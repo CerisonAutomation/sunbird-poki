@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sunbird — Privacy Policy</title>
+<meta name="description" content="What Sunbird stores, what it never collects, and how the Poki platform features it uses handle data." />
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 20px 64px; background: #fbf5e9; color: #33291f;
+         font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 0 0 4px; color: #d2591f; letter-spacing: .01em; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  .sub { margin: 0 0 24px; color: #6c5b48; font-size: 14px; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  code { background: #efe4d2; border-radius: 5px; padding: 1px 5px; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 4px; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #ddcdb6; padding: 7px 10px 7px 0; }
+  th { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #7a6752; }
+  .card { background: #fff; border: 1px solid #e2d5c1; border-radius: 14px; padding: 18px 20px; }
+  a { color: #b4491a; }
+  footer { margin-top: 32px; color: #7a6752; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sunbird — Privacy Policy</h1>
+  <p class="sub">Last updated: 22 September 2026 · Applies to the game <strong>Sunbird</strong> in every edition (web, itch.io, CrazyGames and Poki).</p>
+
+  <div class="card">
+    <p><strong>Short version:</strong> Sunbird does not ask for your name, email, phone number,
+    address or any other personal information. It collects no analytics of its own on portal builds.
+    Progress, settings and high scores are stored on your device, and — on Poki, when you are signed
+    in — synced to your Poki cloud save by the Poki SDK. There is no advertising network of ours in
+    the build; ads on portals are delivered by the portal itself.</p>
+  </div>
+
+  <h2>1. Information we do not collect</h2>
+  <ul>
+    <li>No account, email, password or real name is requested by the game.</li>
+    <li>No contact lists, precise location, camera, microphone or files.</li>
+    <li>No third-party analytics, trackers, fingerprinting or advertising SDKs are bundled.</li>
+    <li>No in-game chat or free-text entry that other players can read: pilot names are chosen from a curated list.</li>
+  </ul>
+
+  <h2>2. What is stored, and where</h2>
+  <table>
+    <thead><tr><th>Data</th><th>Where it lives</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Progress, coins, unlocks, settings, best distance</td><td>Your browser's <code>localStorage</code> on your device</td><td>So the game remembers you between sessions.</td></tr>
+      <tr><td>A random device id (no link to you or your account)</td><td>Your device's <code>localStorage</code></td><td>Used to sign score submissions and to recognise you in a race room.</td></tr>
+      <tr><td>Your pilot name and score on a public leaderboard</td><td>Poki's AUDS service on Poki builds; our own API only if a self-hosted board is configured</td><td>Public leaderboards are public by design — anyone can see the name and score.</td></tr>
+      <tr><td>Ghost flights and shared run codes you choose to publish</td><td>Poki's AUDS service (Poki builds only)</td><td>So a friend can race the same run you shared.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. Poki platform features</h2>
+  <p>On Poki, the game integrates the official Poki SDK. These platform features can process data under
+  Poki's own privacy policy, which is the controller for them:</p>
+  <ul>
+    <li><strong>Cloud gamesaves.</strong> When you are signed in to Poki, the Poki SDK syncs your game save
+      (localStorage) to your Poki account so progress follows you between devices. Keys the game marks
+      local-only — caches, recordings, diagnostics — are excluded with the documented
+      <code>poki_ignore</code> prefix. Saves are limited to 1&nbsp;MB gzip; if a save exceeded that, cloud
+      sync would simply be disabled for that player.</li>
+    <li><strong>User Accounts.</strong> The game reads <code>getUser()</code> after loading to greet you by your
+      Poki username. Signing in is only ever triggered by you pressing <em>Sign in</em> in Settings.
+      We do not receive or store your Poki credentials; a session token, if requested, is single-use and
+      expires in about a minute.</li>
+    <li><strong>AUDS (leaderboards, ghost runs, share codes).</strong> Scores and shared runs are stored by
+      Poki's AUDS service for the game id configured in the build, and are readable by anyone who has the
+      entry's id or code.</li>
+    <li><strong>Netlib (multiplayer).</strong> Live races connect players directly over WebRTC data channels
+      (peer-to-peer), with Poki-hosted signalling and TURN relays used only to establish or relay the
+      connection. In-race traffic is your pilot position, skin and emote — no personal data.</li>
+    <li><strong>Ads.</strong> Commercial and rewarded breaks are delivered by Poki. We receive aggregate
+      reporting from Poki's dashboard; the game itself sets no advertising identifiers.</li>
+  </ul>
+
+  <h2>4. Other editions</h2>
+  <p>The standalone web build, the itch.io build and the CrazyGames build ship without AUDS, without
+  Poki features and without any tracker. If you run a self-hosted Sunbird server, leaderboard entries are
+  stored on that server; the operator of that server is the controller for them.</p>
+
+  <h2>5. Children</h2>
+  <p>Sunbird is made for a general audience including children. The game contains no chat, no
+  player-authored text, no purchases and no data collection aimed at children. Pilot names are drawn from
+  a curated list of fictional call signs.</p>
+
+  <h2>6. Your choices</h2>
+  <ul>
+    <li>Clearing your browser's site data removes the local save and local caches.</li>
+    <li>Not signing in to Poki keeps the game fully playable; cloud sync simply stays off.</li>
+    <li>On Poki, requests about platform-side data (account, cloud saves, ad data) are handled by Poki
+      under its own privacy policy.</li>
+  </ul>
+
+  <h2>7. Changes and contact</h2>
+  <p>Material changes to this policy will be reflected here with an updated date. Questions about this
+  policy or about data in the game: <a href="mailto:privacy@cerison.dev">privacy@cerison.dev</a>.</p>
+
+  <footer>Sunbird is developed and published by Cerison. Poki, CrazyGames and itch.io are separate
+  platforms with their own terms and privacy policies.</footer>
+</main>
+</body>
+</html>

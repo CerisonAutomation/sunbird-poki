@@ -45,10 +45,9 @@ function dest(key: string, action: string, icon: MenuIconName, title: string, de
 }
 
 export const PLAY_DESTINATIONS: MenuDestination[] = [
-  dest("daily", "play-daily", "daily", "Long Light", "Today’s shared course · daily challenge"),
-  dest("challenges", "open-challenges", "challenge", "Race the flock", "Online or AI · choose a world"),
+  dest("challenges", "open-challenges", "online", "PvP · vs AI", "Race online or against the neural flock"),
+  dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush"),
   dest("leaderboard", "open-board", "board", "Leaderboards", "All-time · weekly · today · you"),
-  dest("gameModes", "mode-select", "compass", "Solo modes", "Time Trial · Skyline · Coin Rush"),
   dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge"),
   dest("versus", "versus", "flight", "Same-screen 1v1", "Space / Enter · or touch your half"),
 ];

@@ -1,6 +1,6 @@
 import { browseSkins, newShopBrowse, nextBird, type ShopBrowse } from "./ShopBrowse";
 import { flightTakeaway } from "./FlightGuidance";
-import { menuIcon, menuHorizon, arrowUpRightSvg, arrowRightSvg, type MenuIconName } from "./MenuIcons";
+import { menuIcon, menuHorizon, arrowUpRightSvg, arrowRightSvg, iconGlyph, type MenuIconName } from "./MenuIcons";
 import { paginate } from "./Pagination";
 import { flockLoadingMark } from "./FlockLoading";
 import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, type MenuDestination } from "./MenuCatalog";
@@ -2205,15 +2205,14 @@ function renderChallenges(s: HudSnapshot): string {
   const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0];
   const raceChallenges = `
     <section class="race-section challenge-races" aria-label="Race challenges">
-      <div class="race-section-head"><h3>${menuIcon("versus")} Race challenges</h3><span class="section-step">PvP · AI · worlds</span></div>
-      <p class="fineprint">Choose a format and world once. Then race online when available, or launch the same challenge against the AI flock.</p>
-      <div class="lobby-selector-label"><span>Format</span><b>${activeMode ? `${escapeHtml(activeMode.name)} · ${activeMode.finish}m` : "Choose a format"}</b></div>
-      <div class="pills-scroll challenge-pills">${modePills}</div>
-      <div class="lobby-selector-label"><span>World</span><b>${activeWorld ? escapeHtml(activeWorld.name) : "Choose a world"}</b></div>
+      <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched format</span></div>
+      <p class="fineprint">Pick your world. Format is auto-matched to whoever's available — get racing faster.</p>
+      <div class="lobby-selector-label"><span>World</span><b>${activeWorld ? escapeHtml(activeWorld.name) : "Any world"}</b></div>
       <div class="pills-scroll challenge-pills">${worldPills}</div>
       <div class="quick-match-btns challenge-actions">
-        <button class="primary-btn gold" data-ui data-action="quick-match-instant">${menuIcon("online")} Race this challenge</button>
-        <button class="soft-btn" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">${menuIcon("versus")} Practice vs AI</button>
+        <button class="primary-btn gold wide" data-ui data-action="quick-match-instant">⚡ Race Now</button>
+        <button class="soft-btn" data-ui data-action="quick-match-shuffle">🎲 Random world &amp; format</button>
+        <button class="soft-btn" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">🤖 vs AI flock · no wait</button>
       </div>
     </section>`;
   const daily = `
@@ -2265,7 +2264,7 @@ function renderChallenges(s: HudSnapshot): string {
       ${s.mastery
         .map(
           (m) => `<div class="mastery-row ${m.maxed ? "maxed" : ""}">
-            <span class="m-icon">${m.icon}</span>
+            <span class="m-icon">${iconGlyph(m.icon)}</span>
             <div class="m-body"><b>${m.name}${m.maxed ? ` <span class="m-skill">★ ${m.skillName}</span>` : ""}</b>
             <em>${
               m.maxed
@@ -2880,7 +2879,7 @@ function renderMain(s: HudSnapshot): string {
       </div>
     </section>` : ""}
     <div class="home-mode-strip" role="group" aria-label="Quick access">
-      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("challenge")}<span>Race</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("online")}<span>PvP · AI</span></button>
       <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
       <button class="home-mode-btn" data-ui data-action="open-progress">${menuIcon("progress")}<span>Goals</span></button>
       <button class="home-mode-btn" data-ui data-action="open-settings">${menuIcon("settings")}<span>Settings</span></button>

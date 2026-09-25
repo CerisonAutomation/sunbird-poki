@@ -2625,7 +2625,7 @@ export class Game {
     if (!this.coach) return "";
     const v = this.coach.view();
     if (v.step < 0 || !v.text) return "";
-    const pips = Array.from({ length: v.steps }, (_, i) => (i < v.step ? "●" : i === v.step ? "◉" : "○")).join(" ");
+    const pips = [..."●".repeat(v.step) + "◉" + "○".repeat(Math.max(0, v.steps - v.step - 1))].join(" ");
     return `${pips}  ${v.text}`;
   }
 

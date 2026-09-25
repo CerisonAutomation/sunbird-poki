@@ -1903,6 +1903,10 @@ const COIN_SVG =
   '<circle cx="12" cy="12" r="1.8" fill="rgba(255,255,255,0.86)"/>' +
   "</svg>";
 
+function sectionTitle(main: string, sub?: string): string {
+  return `<div class="section-title">${main}${sub ? ` <small>${sub}</small>` : ""}</div>`;
+}
+
 /** Replace every leading bullet with the SVG coin glyph. Runs on the final
  *  rendered HTML so price strings defined in Economy.ts and toast strings in
  *  Game.ts all pick up the fix without edits at every call site. */
@@ -2206,7 +2210,7 @@ function renderChallenges(s: HudSnapshot): string {
       </div>
     </section>`;
   const daily = `
-    <div class="section-title">Daily challenge <small>resets at midnight</small></div>
+    ${sectionTitle("Daily challenge", "resets at midnight")}
     <div class="daily-card ${d.done ? "done" : ""}">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(d.modeIcon)}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
       <div class="daily-mod"><b>${menuIconSm(d.modifierIcon)} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
@@ -2218,7 +2222,7 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   const gauntlet = `
-    <div class="section-title">Weekly gauntlet <small>3 stages · resets Monday</small></div>
+    ${sectionTitle("Weekly gauntlet", "3 stages · resets Monday")}
     <div class="gauntlet">
       ${g.stages
         .map(
@@ -2233,7 +2237,7 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   const calendar = `
-    <div class="section-title">Login calendar <small>day ${c.cycleDay || "—"} of 28</small></div>
+    ${sectionTitle("Login calendar", `day ${c.cycleDay || "—"} of 28`)}
     <div class="cal-grid">
       ${c.days
         .map(
@@ -2249,7 +2253,7 @@ function renderChallenges(s: HudSnapshot): string {
     }`;
 
   const mastery = `
-    <div class="section-title">Mode mastery <small>fly every mode</small></div>
+    ${sectionTitle("Mode mastery", "fly every mode")}
     <div class="mastery-list">
       ${s.mastery
         .map(
@@ -2272,7 +2276,7 @@ function renderChallenges(s: HudSnapshot): string {
   const th = s.monthlyTheme;
   const trailDone = s.themeTrailClaimed;
   const event = `
-    <div class="section-title">Live event <small>new twist every week</small></div>
+    ${sectionTitle("Live event", "new twist every week")}
     <div class="event-card">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
       <div class="event-meta"><span>Fly ${ev.target.toLocaleString()} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
@@ -2938,7 +2942,7 @@ function renderProgress(s: HudSnapshot): string {
 
     ${doNow.length > 0 ? `<div class="section-title progress-do-now"><span>Do this now</span></div>${doNow.join("")}` : ""}
 
-    <div class="section-title">Today <small>QUESTS &amp; GOALS</small></div>
+    ${sectionTitle("Today", "QUESTS &amp; GOALS")}
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}
 
@@ -2948,7 +2952,7 @@ function renderProgress(s: HudSnapshot): string {
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
 
-    <div class="section-title">Career <small>RANK &amp; WINGS</small></div>
+    ${sectionTitle("Career", "RANK &amp; WINGS")}
     <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
       <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
       <span class="rank-num">${s.rival.rating}</span>

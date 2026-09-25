@@ -2990,8 +2990,9 @@ export class Game {
       });
       if (this.duelActive) {
         // Duel: one seeded opponent whose skill tracks your rating band.
-        const opp = duelOpponent(`${this.seed}:${this.today}`, this.save.state.rival.rating);
-        this.massRace.setFieldSkill(duelSkillFor(this.save.state.rival.rating));
+        const rivalRating = this.save.state.rival.rating;
+        const opp = duelOpponent(`${this.seed}:${this.today}`, rivalRating);
+        this.massRace.setFieldSkill(duelSkillFor(rivalRating));
         const r = this.massRace.rivals[0];
         if (r) r.name = opp.name;
         this.hud.toast(`⚔ Duel vs ${opp.name} · first to the line`, "gold");

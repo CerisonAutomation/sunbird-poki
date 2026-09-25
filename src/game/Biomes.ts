@@ -14,6 +14,14 @@ export type BiomeDef = {
   /** hill amplitude / wavelength multipliers — the feel of the world */
   amp: number;
   wave: number;
+  /**
+   * Hill shape skew: 0 = symmetric cosine, positive = fast-rise slow-drop
+   * (steep front face like a dune), negative = slow-rise fast-drop (cliff
+   * overhang / canyon wall). Range roughly -0.7..0.7.
+   */
+  skew: number;
+  /** Noise layering on top of the base cosine: 0 = smooth, 1 = very jagged. */
+  roughness: number;
   /** terrain vertex colours */
   top: number;
   ridge: number;
@@ -55,6 +63,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "leaf",
     amp: 0.60,
     wave: 0.62,
+    skew: 0.0,       // symmetric — pure teaching rhythm
+    roughness: 0.05, // almost no noise — read-ahead is easy
     top: 0x86dc7e,
     ridge: 0x4aa85c,
     mid: 0x2f7d5b,
@@ -84,6 +94,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "island",
     amp: 0.78,
     wave: 0.72,
+    skew: 0.15,      // gentle forward lean — downslopes feel a touch steeper
+    roughness: 0.1,
     top: 0x7ff0b0,
     ridge: 0x35c48a,
     mid: 0x1f8f80,
@@ -113,6 +125,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "shell",
     amp: 0.98,
     wave: 0.88,
+    skew: -0.18,     // slow climb, fast drop — launches feel punchy
+    roughness: 0.15,
     top: 0xffc9d8,
     ridge: 0xf09ab8,
     mid: 0x2fb4a8,
@@ -142,6 +156,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "buildings",
     amp: 1.18,
     wave: 1.05,
+    skew: -0.30,     // deep valley then sharp launch lip — rewards late release
+    roughness: 0.18,
     top: 0xd98ac0,
     ridge: 0x9a5a9e,
     mid: 0x5f3a7a,
@@ -171,6 +187,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "dunes",
     amp: 1.42,
     wave: 1.28,
+    skew: 0.45,      // classic dune: very gradual windward slope, sharp leeward drop
+    roughness: 0.08, // smooth — wind polishes the sand
     hazard: "gust",
     top: 0xf2cf7a,
     ridge: 0xdc9a4a,
@@ -200,6 +218,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "moon",
     amp: 1.08,
     wave: 0.95,
+    skew: 0.20,      // choppy storm sea feel — waves are steep-fronted
+    roughness: 0.35, // storm roughness — unpredictable micro-bumps
     top: 0x3f5a8a,
     ridge: 0x2c3f68,
     mid: 0x1d2848,
@@ -229,6 +249,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "aurora",
     amp: 1.55,
     wave: 0.88,
+    skew: -0.50,     // ice shards: near-vertical front face, gentle backslide
+    roughness: 0.28, // crystalline fracture texture
     top: 0xe6f7ff,
     ridge: 0x9fd0ee,
     mid: 0x5a7fc0,
@@ -258,6 +280,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "volcano",
     amp: 1.75,
     wave: 0.72,
+    skew: 0.0,       // symmetric spikes — equally brutal both directions
+    roughness: 0.55, // volcanic rubble — chaotic, jagged surface noise
     top: 0x5a4448,
     ridge: 0x3c2a30,
     mid: 0x281a20,
@@ -287,6 +311,8 @@ export const BIOMES: BiomeDef[] = [
     emoji: "mountain",
     amp: 1.95,
     wave: 1.08,
+    skew: -0.60,     // canyon walls: long plateau then sheer cliff drop
+    roughness: 0.22, // wind-carved — some texture but readable
     top: 0xe08a5a,
     ridge: 0xb85c3c,
     mid: 0x8a3c2c,

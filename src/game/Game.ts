@@ -158,6 +158,19 @@ const RING_CHAIN_WINDOW = 2.8;
 
 const ASLEEP: BirdStepOpts = { diving: false, fever: false, speedMult: 1, boost: false };
 
+/** Per-biome intro hint shown for ~9 s when the player first enters a world. */
+const BIOME_INTRO_HINTS: Record<string, string> = {
+  green:   "HOLD to dive · RELEASE to launch — master the rhythm",
+  tropical:"RELEASE on thermals — let the updrafts carry you",
+  reef:    "Hills drop fast here — release LATE for the biggest launch",
+  sunset:  "Deep valleys ahead — dive to the bottom, release sharp",
+  desert:  "Slow rises, sharp drops — dune shape is the key",
+  night:   "Storm gusts push you — watch the wind and lean into slopes",
+  aurora:  "Ice faces are steep — HOLD hard, RELEASE hard",
+  volcano: "Jagged spikes — tiny timing windows, maximum rewards",
+  canyon:  "Plateau then cliff — hold steady, explode off the lip",
+};
+
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };
 
 export class Game {
@@ -569,6 +582,8 @@ export class Game {
   private powerFxAcc = 0;
   private hueT = 0;
   private lastBiomeId = "";
+  private biomeHint = "";
+  private biomeHintTimer = 0;
   private readonly onFocus: () => void;
   private readonly onBlur: () => void;
   private readonly onOrientationChange: () => void;
@@ -1710,8 +1725,13 @@ export class Game {
     const biomeNow = this.terrain.biomeAt(this.bird.x);
     if (biomeNow.id !== this.lastBiomeId) {
       this.lastBiomeId = biomeNow.id;
-      if (this.save.markBiomeSeen(biomeNow.id)) this.hud.toast(`New shores charted: ${biomeNow.name}`, "island");
+      const isNew = this.save.markBiomeSeen(biomeNow.id);
+      if (isNew) this.hud.toast(`New shores charted: ${biomeNow.name}`, "island");
+      // Set a short gameplay hint so the player knows what's different here.
+      this.biomeHint = BIOME_INTRO_HINTS[biomeNow.id] ?? "";
+      this.biomeHintTimer = this.biomeHint ? 9 : 0;
     }
+    if (this.biomeHintTimer > 0) this.biomeHintTimer -= dt;
 
     if (this.bird.inWater && this.shield > 0) {
       this.shield -= 1;
@@ -2604,6 +2624,8 @@ export class Game {
   }
 
   private computeHint(): string {
+    // Biome intro hint takes priority for the first few seconds in a new world.
+    if (this.biomeHintTimer > 0 && this.biomeHintTimer < 9) return this.biomeHint;
     const novice = this.save.state.tutorialRuns < 3;
     const local = this.terrain.localX(this.bird.x);
     const cue = terrainCue({ grounded: this.bird.grounded, localX: local,

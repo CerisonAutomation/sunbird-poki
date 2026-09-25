@@ -11,7 +11,7 @@ import { feedbackSlot } from "./HudFeedback";
 import type { AchievementView } from "./Achievements";
 import type { ActivePower } from "./PowerUps";
 import type { SessionGoal } from "./Engagement";
-import { PVP_MODES, type ModeDef, type PvpWorldCourse, type ModeId } from "./Modes";
+import { type ModeDef, type PvpWorldCourse, type ModeId } from "./Modes";
 import type { RacerStats } from "./Racer";
 import { CUSTOM_PILOT_NAMES, LEADERBOARD_CLOUD_LABEL, POKI_EDITION, PORTAL_DISPLAY_NAME, PORTAL_EDITION_NOTE, SELL_AD_REMOVAL, SQUAD_CHAT } from "./edition";
 import { leaderboardBackend } from "./Leaderboard";
@@ -3092,6 +3092,14 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
         ${equippedSkin ? `<div class="shop-preview-action">${skinAction(equippedSkin, s.portalName !== "none", s.wallet)}</div>` : ""}
       </div>
     </div>
+    ${owned <= 1 ? `<div class="shop-onboard">
+      <b>${menuIconSm("coin")} How it works</b>
+      <ol class="shop-onboard-steps">
+        <li>Fly to earn coins — longer flights = bigger rewards</li>
+        <li>Unlock birds with unique perks that help in solo modes</li>
+        <li>Equip your bird before a run — perk activates automatically</li>
+      </ol>
+    </div>` : ""}
     <p class="shop-rules">Bird perks are for solo play. Live races use equal flight equipment; your appearance stays yours.</p>
 
     <div class="pc pc--blue">

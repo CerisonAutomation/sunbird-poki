@@ -5270,3 +5270,9 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .daily-hero-text b { font: 700 13px var(--display); color: #4a3010; }
 .daily-hero-text span { font: 400 11px var(--body); color: #7a5a28; }
 .daily-hero-arrow { font: 700 18px var(--display); color: #c08820; flex-shrink: 0; }
+
+/* ---------- Shop onboarding banner (shown until player owns 2+ birds) ---------- */
+.shop-onboard { background: linear-gradient(135deg,rgba(255,240,180,0.5),rgba(255,220,100,0.3)); border: 1.5px solid rgba(200,160,20,0.4); border-radius: 14px; padding: 11px 14px 12px; margin-bottom: 12px; }
+.shop-onboard b { display: flex; align-items: center; gap: 6px; font: 700 12px var(--display); color: #5a3d10; margin-bottom: 7px; }
+.shop-onboard-steps { margin: 0; padding: 0 0 0 16px; display: flex; flex-direction: column; gap: 5px; }
+.shop-onboard-steps li { font: 400 11.5px/1.45 var(--body); color: #6a4a18; }

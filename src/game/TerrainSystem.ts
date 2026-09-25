@@ -428,21 +428,32 @@ export class TerrainSystem {
     const b = biomeForIsland(island);
     const amp = b.amp * flightProgression(island).hillScale;
     const wave = b.wave;
+    const skew = b.skew ?? 0;
+    const roughness = b.roughness ?? 0.1;
 
     const local = this.localX(x);
     const seg = this.segmentAt(local, island);
     const t = (local - seg.start) / seg.len; // 0..1 across this arch
-    // cosine arch: 0 at the ends, 1 at the middle — C1-continuous when chained
-    const arch = 0.5 - 0.5 * Math.cos(Math.PI * 2 * t);
+
+    // Skewed arch: skew > 0 → peak shifts toward the front (dune / steep rise);
+    // skew < 0 → peak shifts toward the back (cliff overhang / canyon wall).
+    // We remap t through a power curve so the arch remains C1-continuous.
+    const ts = skew >= 0
+      ? Math.pow(t, 1 + skew * 1.8)
+      : 1 - Math.pow(1 - t, 1 - skew * 1.8);
+    const arch = 0.5 - 0.5 * Math.cos(Math.PI * 2 * ts);
 
     // Base terrain line drifts slowly so the world isn't a flat conveyor.
     const base = seg.base + (seg.baseNext - seg.base) * (0.5 - 0.5 * Math.cos(Math.PI * t));
     let h = base + seg.height * amp * arch;
 
-    // A whisper of noise for character — far too small to break the curves.
-    h += 0.85 * (fbm(x * 0.02 / wave, this.seedN, 3) - 0.5) * 2;
-    h += 0.35 * (valueNoise(x * 0.08, this.seedN + 9) - 0.5) * 2;
-    if (b.id === "ember") h += 0.7 * Math.sin(x * 0.16 + this.seedN) * 0.5;
+    // Noise budget scaled by biome roughness: smooth worlds stay readable,
+    // jagged worlds get fractured surface texture.
+    const nScale = roughness * 2.5;
+    h += nScale * (fbm(x * 0.022 / wave, this.seedN, 3) - 0.5) * 2;
+    h += (roughness * 0.8) * (valueNoise(x * 0.09, this.seedN + 9) - 0.5) * 2;
+    // High-freq micro-bumps only on rough worlds (volcano, night)
+    if (roughness > 0.3) h += (roughness - 0.3) * 2.5 * (valueNoise(x * 0.28, this.seedN + 77) - 0.5);
     return Math.max(3.4, h);
   }
 

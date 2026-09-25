@@ -710,7 +710,7 @@ export class Music {
     // Post-fader send: music volume, mode and event ducking control the wet
     // signal too. Per-note sends used to bypass all three (even at volume 0).
     this.wetGain = ctx.createGain();
-    this.wetGain.gain.value = 0.22;
+    this.wetGain.gain.value = 0.30; // more room reverb = spacious, relaxing feel
     this.duckGain.connect(this.wetGain);
     this.wetGain.connect(reverbSend);
 
@@ -1077,7 +1077,9 @@ export class Music {
 
   private advance(): void {
     const beat = 60 / this.bpm;
-    const swing = this.mode === "sleep" ? 0.5 : 0.56;
+    // Island tracks use 0.58 swing (groovier), chip tracks use 0.54 (tighter arcade feel)
+    const swingBase = this.mode === "sleep" ? 0.5 : this.isChipTrack ? 0.54 : 0.58;
+    const swing = swingBase;
     const dur = this.step % 2 === 0 ? beat * swing : beat * (1 - swing);
     this.nextTime += this.mode === "sleep" ? beat * 0.75 : dur;
     this.step += 1;
@@ -1122,12 +1124,19 @@ export class Music {
     const idx = this.bar * 8 + this.step;
     const beat = 60 / this.bpm;
 
-    // Chord pad: ensemble strings swell once per bar (island tracks only)
-    if (!this.isChipTrack && this.step === 0 && (this.mode === "menu" || this.mode === "play")) this.pad(t, chordName, beat * 4);
+    // Chord pad: ensemble strings swell once per bar (island tracks only).
+    // On the menu, swell on every bar for a lush ambient bed.
+    // In play, swell every other bar — present but not overwhelming.
+    if (!this.isChipTrack && this.step === 0) {
+      if (this.mode === "menu") this.pad(t, chordName, beat * 5.5);
+      else if ((this.mode === "play" || this.mode === "fever") && this.bar % 2 === 0) this.pad(t, chordName, beat * 4.5);
+    }
 
-    // Menu-only birdsong: an occasional far-away sparkle chirp
-    if (!this.isChipTrack && this.mode === "menu" && this.step === 6 && Math.random() < 0.3) {
+    // Birdsong: menu gets it more often for a relaxing ambient feel;
+    // play mode adds an occasional chirp so the world feels alive mid-flight.
+    if (!this.isChipTrack && this.step === 6 && Math.random() < (this.mode === "menu" ? 0.5 : 0.15)) {
       this.birdsong(t + Math.random() * beat * 0.5);
+      if (this.mode === "menu" && Math.random() < 0.3) this.birdsong(t + beat * 0.7 + Math.random() * beat * 0.3);
     }
 
     // Chord strum (island tracks) or Tron chord pulse
@@ -1386,10 +1395,12 @@ export class Music {
    * fast attack and a medium-length hold, then a short release. Much lighter
    * than the old string ensemble: it supports the melody without swamping it.
    */
-  /** Lush string pad: slow 0.18s attack, lowpass 900 Hz — the Steven Universe warm swell. */
+  /** Lush string pad: slow 0.18s attack, lowpass 900 Hz — the Steven Universe warm swell.
+   *  Voiced as root+5th+octave+9th (open voicing) for a dreamy, airy quality. */
   private pad(t: number, chordName: string, dur: number): void {
     const root = (BASS_ROOT[chordName] ?? 48) + 12 + this.transpose;
-    const notes = [root, root + 4, root + 7, root + 12];
+    // Open voicing: root, 5th, octave, 9th — avoids muddy 3rds in the mid-register
+    const notes = [root, root + 7, root + 12, root + 14];
     notes.forEach((m, i) => {
       const o = this.ctx.createOscillator();
       const fl = this.ctx.createBiquadFilter();
@@ -1397,34 +1408,56 @@ export class Music {
       o.type = i % 2 === 0 ? "sine" : "triangle"; // alternating = silky blend
       o.frequency.value = mtof(m);
       fl.type = "lowpass";
-      fl.frequency.value = 900;
+      fl.frequency.value = 1100;
       o.connect(fl); fl.connect(g); g.connect(this.padGain);
-      const vol = 0.07 / notes.length;
+      // 9th is quieter — it adds shimmer, not volume
+      const vol = (0.07 / notes.length) * (i === 3 ? 0.55 : 1);
       g.gain.setValueAtTime(0.00008, t);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.18); // slow swell
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.6), t + 0.18 + dur * 0.45);
-      g.gain.exponentialRampToValueAtTime(0.00008, t + 0.18 + dur * 0.45 + dur * 0.55);
-      o.start(t); o.stop(t + dur + 0.14);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.22); // slightly slower swell
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * 0.6), t + 0.22 + dur * 0.45);
+      g.gain.exponentialRampToValueAtTime(0.00008, t + 0.22 + dur * 0.45 + dur * 0.55);
+      o.start(t); o.stop(t + dur + 0.18);
     });
   }
 
-  /** Distant two-note bird chirp for the menu — pure decoration. */
+  /** Distant bird chirp — 3 random patterns for variety. */
   private birdsong(t: number): void {
-    const base = 2200 + Math.random() * 900;
+    const base = 1800 + Math.random() * 1400;
+    const pattern = Math.floor(Math.random() * 3);
     const o = this.ctx.createOscillator();
     const g = this.ctx.createGain();
     o.type = "sine";
-    o.frequency.setValueAtTime(base, t);
-    o.frequency.exponentialRampToValueAtTime(base * 1.25, t + 0.05);
-    o.frequency.exponentialRampToValueAtTime(base * 0.92, t + 0.11);
-    o.frequency.exponentialRampToValueAtTime(base * 1.18, t + 0.16);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.05, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    if (pattern === 0) {
+      // rising two-note call
+      o.frequency.setValueAtTime(base, t);
+      o.frequency.exponentialRampToValueAtTime(base * 1.32, t + 0.08);
+      o.frequency.setValueAtTime(base * 1.32, t + 0.10);
+      o.frequency.exponentialRampToValueAtTime(base * 0.0001, t + 0.10); // cut
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.045, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    } else if (pattern === 1) {
+      // three-note twitter: up, down, up
+      o.frequency.setValueAtTime(base, t);
+      o.frequency.exponentialRampToValueAtTime(base * 1.18, t + 0.04);
+      o.frequency.exponentialRampToValueAtTime(base * 0.88, t + 0.09);
+      o.frequency.exponentialRampToValueAtTime(base * 1.22, t + 0.14);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.038, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.025, t + 0.07);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    } else {
+      // quick descending slide — like a distant warbler
+      o.frequency.setValueAtTime(base * 1.4, t);
+      o.frequency.exponentialRampToValueAtTime(base * 0.85, t + 0.14);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.032, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    }
     o.connect(g);
     g.connect(this.glockGain);
     o.start(t);
-    o.stop(t + 0.25);
+    o.stop(t + 0.22);
   }
 
 

@@ -40,8 +40,8 @@
 .overlay :is(.mini-btn,.soft-btn,.nav-btn,.seg button,.tier-reward) { min-height: 44px; }
 .overlay .mini-btn { min-width: 44px; }
 .overlay .section-title { color: #735340; line-height: 1.5; gap: 8px; flex-wrap: wrap; }
-.overlay :is(.fineprint,.tagline,.empty-note,.md) { color: #71574c; line-height: 1.55; }
-.overlay .section-title small { color: #71574c; }
+.overlay :is(.fineprint,.tagline,.empty-note,.md) { color: var(--clay); line-height: 1.55; }
+.overlay .section-title small { color: var(--clay); }
 .overlay .redeem { display: flex; gap: 8px; align-items: center; }
 .overlay .redeem input { flex: 1; width: 0; }
 .overlay .redeem button { flex-shrink: 0; }
@@ -65,7 +65,7 @@
 .menu-hero .quick-action span { font-size: 11px; }
 .menu-hero .home-more { margin: 12px 0 0; background: #fffaf2; border-color: #dfcfbc; }
 .menu-hero .home-more > summary { display: flex; flex-wrap: wrap; gap: 2px 8px; padding: 12px; min-height: 52px; font-size: 13px; }
-.menu-hero .home-more > summary span { margin-left: 0; font-size: 11px; font-weight: 400; color: #71574c; }
+.menu-hero .home-more > summary span { margin-left: 0; font-size: 11px; font-weight: 400; color: var(--clay); }
 .menu-hero .home-more[open] > summary span { visibility: visible; }
 .menu-hero .daily-strip { min-height: 62px; margin: 0; border: 1px solid #e5d2aa; }
 .menu-hero .hero-meta { flex-wrap: wrap; }
@@ -75,7 +75,7 @@
 /* Settings: meaningful state, continuous volume, explicit choices.
    The canonical .setting-row shape lives in the FINAL PASS block near the end
    of this file (flat flex rows); here only the spacing that block keeps. */
-.settings-intro { font-size: 13px; color: #71574c; line-height: 1.5; text-align: left; margin: 0 0 14px; }
+.settings-intro { font-size: 13px; color: var(--clay); line-height: 1.5; text-align: left; margin: 0 0 14px; }
 .overlay .setting-row { gap: 12px; min-height: 60px; text-align: left; }
 .overlay .setting-row > span, .overlay .setting-row > label { font-size: 13px; font-weight: 600; }
 .overlay .setting-volume, .overlay .setting-select { display: grid; grid-template-columns: minmax(0,1fr); gap: 4px; }
@@ -107,8 +107,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff9a62, #ff6b3d);
-  border: 2px solid #ffffff;
+  background: linear-gradient(135deg, var(--wing), #ff6b3d);
+  border: 2px solid var(--pure-white);
   box-shadow: 0 2px 6px rgba(120, 60, 20, 0.35);
   margin-top: -9px;
   transition: transform 0.12s ease;
@@ -117,8 +117,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff9a62, #ff6b3d);
-  border: 2px solid #ffffff;
+  background: linear-gradient(135deg, var(--wing), #ff6b3d);
+  border: 2px solid var(--pure-white);
   box-shadow: 0 2px 6px rgba(120, 60, 20, 0.35);
   transition: transform 0.12s ease;
 }
@@ -135,7 +135,7 @@
 .overlay .toggle i { width: 20px; height: 20px; top: 12px; left: 6px; }
 .overlay .toggle.on i { left: 26px; }
 .danger-zone { margin-top: 20px; border-top: 1px solid #decfbd; padding-top: 10px; }
-.danger-zone summary { min-height: 44px; padding: 12px 0; font-size: 13px; color: #71574c; cursor: pointer; }
+.danger-zone summary { min-height: 44px; padding: 12px 0; font-size: 13px; color: var(--clay); cursor: pointer; }
 /* Shop: compact collection index, explicit cost and ownership. */
 .overlay .collection { border: 1px solid #e1d1bd; border-radius: 14px; background: #fffaf2; margin: 5px 0; }
 .overlay .collection .coll-head { margin: 0; padding: 8px 12px; min-height: 40px; cursor: pointer; gap: 8px; flex-wrap: wrap; }
@@ -143,13 +143,13 @@
 .overlay .collection[open] .coll-head::before { content: "−"; }
 .overlay .collection summary { list-style: none; }
 .overlay .collection summary::-webkit-details-marker { display: none; }
-.overlay .collection .coll-count { font-size: 10px; padding: 3px 6px; color: #71574c; }
+.overlay .collection .coll-count { font-size: 10px; padding: 3px 6px; color: var(--clay); }
 .overlay .collection .skin-grid { padding: 0 10px 10px; gap: 10px; }
 .overlay .skin-card { min-width: 0; border-radius: 16px; }
 .overlay .skin-card :is(.sk-perk,.tag) { white-space: normal; overflow-wrap: anywhere; }
 .overlay .shop-section { border-top: 1px solid #decfbd; margin-top: 10px; padding: 0 0 6px; }
 .overlay .shop-section > summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 14px; font-weight: 700; }
-.overlay .shop-section > summary span { color: #71574c; font-size: 11px; font-weight: 400; }
+.overlay .shop-section > summary span { color: var(--clay); font-size: 11px; font-weight: 400; }
 .overlay .shop-section > summary::after { content: "+"; }
 .overlay .shop-section[open] > summary::after { content: "−"; }
 @media (min-width: 840px) {
@@ -171,7 +171,7 @@
 }
 .overlay .room-ctl .seg button { min-width: 44px; padding-inline: 8px; }
 .overlay .trophy-collection > summary { text-transform: capitalize; }
-.overlay .import-confirm { display: flex; align-items: center; gap: 10px; min-height: 48px; text-align: left; font-size: 12px; line-height: 1.4; margin: 8px 0; color: #71574c; }
+.overlay .import-confirm { display: flex; align-items: center; gap: 10px; min-height: 48px; text-align: left; font-size: 12px; line-height: 1.4; margin: 8px 0; color: var(--clay); }
 .overlay .import-confirm input { flex: 0 0 22px; width: 22px; height: 22px; }
 .overlay .screen-head > span:empty { display: none; }
 .overlay .screen-head h2 { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
@@ -193,12 +193,12 @@
 .results-card > h2 { font-size: 28px; margin: 0 0 6px; }
 .result-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: stretch; margin: 16px 0; }
 .result-actions .play-again-btn { margin: 0; min-height: 52px; font-size: 17px; padding: 12px; }
-.result-actions .soft-btn { margin: 0; min-width: 80px; font-size: 13px; color: #71574c; border-color: #d5c4ad; background: rgba(255,255,255,0.5); }
+.result-actions .soft-btn { margin: 0; min-width: 80px; font-size: 13px; color: var(--clay); border-color: #d5c4ad; background: rgba(255,255,255,0.5); }
 .results-card .result-summary { grid-template-columns: repeat(3,minmax(0,1fr)); margin: 12px 0; }
 .result-summary b { font-size: clamp(17px,4vw,24px); overflow-wrap: anywhere; }
 .result-details { border: 1px solid #e1d1bd; border-radius: 14px; background: #fffaf2; margin: 12px 0; text-align: left; padding: 0 12px; }
 .result-details > summary { cursor: pointer; min-height: 52px; padding: 12px 0; font-weight: 700; font-size: 13px; }
-.result-details > summary span { display: block; font-size: 11px; font-weight: 400; color: #71574c; margin-top: 3px; }
+.result-details > summary span { display: block; font-size: 11px; font-weight: 400; color: var(--clay); margin-top: 3px; }
 .result-details .over-stats { margin-bottom: 12px; }
 .result-links { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
 .result-links .soft-btn { min-width: 0; font-size: 12px; padding: 10px 6px; }
@@ -1164,7 +1164,7 @@ button,
   text-align: left;
   cursor: pointer;
   font-family: inherit;
-  border: 1.5px solid #d4aa44;
+  border: 1.5px solid var(--gold-muted);
   background: linear-gradient(145deg, #fffbec, #fff3c4);
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1211,7 +1211,7 @@ button,
 .hpc-body b {
   display: block;
   font: 700 13px/1.3 var(--display);
-  color: #2c1f14;
+  color: var(--espresso);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1219,7 +1219,7 @@ button,
 .hpc-body span {
   display: block;
   font: 400 11px/1.4 var(--body);
-  color: #7a5c30;
+  color: var(--caramel);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1298,7 +1298,7 @@ button,
 .progress-destinations .destination[data-action="open-challenges"] .destination-copy b,
 .progress-destinations .destination[data-action="open-board"] .destination-copy b {
   font-size: 15px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .progress-destinations .destination[data-action="open-challenges"] .destination-copy span,
 .progress-destinations .destination[data-action="open-board"] .destination-copy span {
@@ -1361,7 +1361,7 @@ button,
 .overlay .screen-head h2 {
   font-size: clamp(19px, 5vw, 23px);
   letter-spacing: -.03em;
-  color: #2c1f14;
+  color: var(--espresso);
   font-weight: 700;
 }
 
@@ -1404,7 +1404,7 @@ button,
 
 /* ── Soft buttons: genuine depth, tactile press ───────────────────────────── */
 .overlay .soft-btn {
-  background: linear-gradient(165deg, #ffffff 0%, #f8f1e4 100%) !important;
+  background: linear-gradient(165deg, var(--pure-white) 0%, #f8f1e4 100%) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
@@ -1441,7 +1441,7 @@ button,
     inset 0 1px 0 rgba(255,255,210,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(100,30,0,0.35) !important;
   font-weight: 700 !important;
   letter-spacing: .01em;
@@ -1472,7 +1472,7 @@ button,
   box-shadow:
     inset 0 2px 4px rgba(100,70,20,0.07),
     0 1px 0 rgba(255,255,255,0.85) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   border-radius: 12px !important;
 }
 .overlay :is(input, select, textarea):not([type="range"]):focus {
@@ -1548,7 +1548,7 @@ button,
 }
 .trophy-grid .trophy.unlocked {
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fffbdd !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1558,7 +1558,7 @@ button,
 .trophy-collection > summary {
   font-size: 16px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   padding: 12px 0 !important;
   border-bottom: 1.5px solid #decfbd !important;
 }
@@ -1576,7 +1576,7 @@ button,
 .overlay .section-title {
   font-size: 13px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: .01em !important;
   display: flex;
   align-items: center;
@@ -1586,7 +1586,7 @@ button,
 .overlay .section-title small {
   font-size: 11px !important;
   font-weight: 400 !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Squad: section heading style ──────────────────────────────────────────── */
@@ -1599,7 +1599,7 @@ button,
 /* ── Squad invite / pilot code card ────────────────────────────────────────── */
 .squad-invite {
   background: linear-gradient(130deg, #fff9dc 0%, #ffecaa 100%) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fff8cc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1624,7 +1624,7 @@ button,
 .format-divider {
   font: 700 11px/1.4 var(--display) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   text-transform: uppercase;
   margin: 16px 0 8px !important;
   padding: 8px 12px !important;
@@ -1642,7 +1642,7 @@ button,
 .format-btn.on {
   border-left-color: #d4900a !important;
   background: linear-gradient(135deg, #fffbee, #fff1c4) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
 }
 
 /* ── Setting rows: the FINAL PASS block near the end of this file owns the
@@ -1653,7 +1653,7 @@ button,
 /* ── Collection headers in shop: bolder heading ─────────────────────────────── */
 .overlay .collection .coll-head b {
   font: 700 16px var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .overlay .collection {
   background: linear-gradient(to bottom, #fffef8, #fffaee) !important;
@@ -1685,7 +1685,7 @@ button,
 }
 .board-badge.local {
   background: #f0e8d4 !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   border: 1px solid #c8aa70 !important;
 }
 .board-badge.live {
@@ -1724,7 +1724,7 @@ button,
 /* ── Squad offline banner: amber toast, not bland grey ─────────────────────── */
 .squad-offline-note {
   background: linear-gradient(130deg, #fff8e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #4a3010 !important;
   border-radius: 14px !important;
   box-shadow:
@@ -1735,7 +1735,7 @@ button,
 /* ── Club card ──────────────────────────────────────────────────────────────── */
 .club-card.mine {
   background: linear-gradient(145deg, #fffcec, #fff3cc) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fffbe8 !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -1752,7 +1752,7 @@ button,
     0 2px 0 rgba(150,120,50,0.15),
     0 4px 10px rgba(80,60,20,0.06) !important;
 }
-.squad-quest-card .sq-info b { color: #2c1f14 !important; }
+.squad-quest-card .sq-info b { color: var(--espresso) !important; }
 .squad-quest-card .sq-info span { color: #7a6040 !important; }
 .squad-quest-card .sq-prog { color: #b06a10 !important; font-weight: 700; }
 
@@ -1806,7 +1806,7 @@ button,
 .pause-kicker {
   font: 700 9px/1 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5));
   border: 1px solid rgba(200,160,50,0.35);
   border-radius: 20px;
@@ -1817,11 +1817,11 @@ button,
 }
 .pause-card h2 {
   font-size: 28px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin: 2px 0 6px !important;
 }
 .pause-card .tagline {
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   font-size: 12px !important;
   margin-bottom: 12px !important;
 }
@@ -1845,14 +1845,14 @@ button,
   display: block;
   font: 700 8px/1.4 var(--body) !important;
   letter-spacing: .12em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase;
   margin-bottom: 4px;
 }
 .prs .prs-value {
   display: block;
   font: 700 18px/1.1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .pause-resume {
   background: linear-gradient(145deg, #ffb53a 0%, #ff8c1a 55%, #f56a10 100%) !important;
@@ -1862,7 +1862,7 @@ button,
     inset 0 1px 0 rgba(255,255,210,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font-weight: 700 !important;
   font-size: 16px !important;
   min-height: 52px !important;
@@ -1887,7 +1887,7 @@ button,
     0 2px 0 rgba(150,120,50,0.15) !important;
   min-height: 60px !important;
   font-size: 11px !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   transition: box-shadow .12s ease, transform .1s ease !important;
 }
 .pause-q:hover {
@@ -1917,13 +1917,13 @@ button,
   margin-top: 8px !important;
 }
 .ghost-btn {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
 }
 .ghost-btn:active {
@@ -1942,7 +1942,7 @@ button,
 }
 .pause-exit-note {
   font-size: 11px !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-align: center !important;
   margin-top: 8px !important;
 }
@@ -1950,7 +1950,7 @@ button,
 /* ── Progress screen: pc-row cards warm palette ─────────────────────────────── */
 .pc-row {
   border-radius: 18px !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   padding: 16px !important;
   margin: 12px 0 !important;
   box-shadow:
@@ -1960,7 +1960,7 @@ button,
 }
 .pc--blue {
   background: linear-gradient(145deg, #fdf8e8, #fff3c0) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
 }
 .pc--pink {
   background: linear-gradient(145deg, #fff0e8, #ffe4c8) !important;
@@ -1989,14 +1989,14 @@ button,
 }
 .pc-body b {
   font: 700 16px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   display: block;
   margin-bottom: 4px;
 }
 .pc-body p, .pc-body span {
   font-size: 12px !important;
   line-height: 1.5 !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 .pc-row .primary-btn {
   min-height: 48px !important;
@@ -2026,7 +2026,7 @@ button,
   right: 0;
   top: 14px;
   font: 400 10px var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Hero meta pills ────────────────────────────────────────────────────────── */
@@ -2034,7 +2034,7 @@ button,
   font: 600 11px/1.4 var(--body) !important;
   padding: 4px 10px !important;
   border-radius: 20px !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   background: linear-gradient(135deg, #fff9dc, #ffecb0) !important;
   color: #5a3800 !important;
   box-shadow: 0 2px 0 rgba(160,120,20,0.18) !important;
@@ -2066,7 +2066,7 @@ button,
 .utility-destinations .destination-copy b {
   font-size: 13px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 
 /* ── Section number codes: styled badge, not dev label ──────────────────────── */
@@ -2077,14 +2077,14 @@ button,
   padding: 2px 7px !important;
   font: 700 8px/1.5 var(--body) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Shop: header kicker and section labels ─────────────────────────────────── */
 .shop-intro {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.5), rgba(255,215,80,0.3));
   border: 1px solid rgba(200,160,50,0.25);
   border-radius: 8px;
@@ -2096,14 +2096,14 @@ button,
   display: block !important;
   font: 600 16px/1.4 var(--display) !important;
   letter-spacing: 0 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-top: 2px !important;
 }
 
 /* ── Shop hero bird card ────────────────────────────────────────────────────── */
 .shop-hero {
   background: linear-gradient(130deg, #fff9e0 0%, #ffedb8 60%, #ffe090 100%) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fff8cc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -2116,7 +2116,7 @@ button,
 [class*="flash-sale"],
 [class*="daily-sale"] {
   background: linear-gradient(135deg, #ff6b35, #e84020) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   border: 1px solid #c03010 !important;
   box-shadow: 0 2px 6px rgba(200,50,10,0.3) !important;
 }
@@ -2130,7 +2130,7 @@ button,
 .results-card .results-kicker {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5));
   border: 1px solid rgba(200,160,50,0.3);
   border-radius: 20px;
@@ -2139,7 +2139,7 @@ button,
 }
 .results-card h2 {
   font-size: 32px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: -.03em !important;
 }
 .result-summary {
@@ -2157,10 +2157,10 @@ button,
 }
 .result-summary > *:last-child { border-right: none !important; }
 .result-summary b {
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .result-summary small {
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   font-size: 9px !important;
   letter-spacing: .1em !important;
   display: block;
@@ -2170,7 +2170,7 @@ button,
 /* ── Rank / score / stat badges on results ──────────────────────────────────── */
 .reward-strip {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -2189,28 +2189,28 @@ button,
 /* ── Next flight card ────────────────────────────────────────────────────────── */
 .next-flight {
   background: linear-gradient(135deg, #fff9e0, #ffecb8) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
     0 4px 0 rgba(160,120,20,0.22),
     0 8px 20px rgba(140,100,20,0.1) !important;
 }
-.next-flight b { color: #2c1f14 !important; }
-.next-flight p { color: #6b4c2a !important; }
-.next-flight small { color: #9a7b4e !important; }
+.next-flight b { color: var(--espresso) !important; }
+.next-flight p { color: var(--toffee) !important; }
+.next-flight small { color: var(--sand) !important; }
 
 /* ── Race/lobby entry card ───────────────────────────────────────────────────── */
 .room-entry {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
     0 4px 0 rgba(160,120,20,0.22),
     0 8px 24px rgba(160,120,20,0.14) !important;
 }
-.room-entry h3 { color: #2c1f14 !important; }
+.room-entry h3 { color: var(--espresso) !important; }
 
 /* ── Race section (PvP lobby) ────────────────────────────────────────────────── */
 .race-section {
@@ -2224,8 +2224,8 @@ button,
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.race-section h3 { color: #2c1f14 !important; font-weight: 700 !important; }
-.race-section p { color: #6b4c2a !important; }
+.race-section h3 { color: var(--espresso) !important; font-weight: 700 !important; }
+.race-section p { color: var(--toffee) !important; }
 
 /* ── Skin cards: no backdrop-filter (flash), warm gradient ──────────────────── */
 .skin-card,
@@ -2271,7 +2271,7 @@ button,
 .event-meta b {
   font: 700 10px/1.4 var(--body) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   text-transform: uppercase;
 }
 
@@ -2338,7 +2338,7 @@ button,
 /* ── Lock chip (upgrade prompt) ──────────────────────────────────────────────── */
 .lock-chip {
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   font-weight: 700 !important;
   border-radius: 20px !important;
@@ -2368,7 +2368,7 @@ button,
 /* ── Match-making banner (waiting for opponent) ──────────────────────────────── */
 .room-connecting {
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-radius: 16px !important;
   padding: 14px !important;
   box-shadow:
@@ -2393,7 +2393,7 @@ button,
   border: 1.5px dashed #d4c080 !important;
 }
 .board-row.empty {
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   font-style: italic;
   padding: 20px 14px !important;
   text-align: center;
@@ -2415,7 +2415,7 @@ button,
 /* ── Settings: rows, toggles, sliders, selects ──────────────────────────────── */
 .settings-intro {
   font: 400 12px/1.6 var(--body) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   margin-bottom: 14px !important;
 }
 .setting-row {
@@ -2436,7 +2436,7 @@ button,
 .section-title {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin: 18px 0 4px !important;
 }
@@ -2475,7 +2475,7 @@ button,
   top: 3px !important;
   left: 3px !important;
   border-radius: 50% !important;
-  background: #fff !important;
+  background: var(--text-on-sky) !important;
   box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important;
   transition: transform .2s ease !important;
 }
@@ -2504,8 +2504,8 @@ input[type="range"]::-webkit-slider-thumb {
   width: 18px !important;
   height: 18px !important;
   border-radius: 50% !important;
-  background: #fff !important;
-  border: 2px solid #d4aa44 !important;
+  background: var(--text-on-sky) !important;
+  border: 2px solid var(--gold-muted) !important;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
   cursor: pointer !important;
 }
@@ -2516,7 +2516,7 @@ select.setting-select {
   border-radius: 10px !important;
   padding: 7px 28px 7px 10px !important;
   font: 500 13px var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(150,120,50,0.14) !important;
@@ -2558,7 +2558,7 @@ select.setting-select {
   border-radius: 20px !important;
   border: 1px solid #d4c090 !important;
   background: linear-gradient(135deg, #fffef8, #fff4e0) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   text-decoration: none !important;
   box-shadow: 0 2px 0 rgba(150,120,50,0.14) !important;
   transition: background .12s, border-color .12s !important;
@@ -2581,7 +2581,7 @@ select.setting-select {
   border-radius: 20px !important;
   border: 1px solid #d4c090 !important;
   background: linear-gradient(135deg, #fffef8, #fff4e0) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   box-shadow: 0 2px 0 rgba(150,120,50,0.12) !important;
   cursor: pointer !important;
   transition: background .1s, border-color .1s, box-shadow .1s !important;
@@ -2604,12 +2604,12 @@ select.setting-select {
   border-radius: 6px !important;
   border: 1px solid rgba(200,160,50,0.3) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.5), rgba(255,215,80,0.3)) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 .deal,
 .deal-tag {
   background: linear-gradient(135deg, #ff6b35, #e84020) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   border: 1px solid #c03010 !important;
   border-radius: 6px !important;
   font: 700 9px/1.4 var(--body) !important;
@@ -2633,12 +2633,12 @@ select.setting-select {
 .r-legendary { background: linear-gradient(135deg, #fff8e0, #ffecaa) !important; color: #804000 !important; border: 1px solid #e0b840 !important; box-shadow: 0 0 6px rgba(220,160,20,0.3) !important; }
 .r-mythic  { background: linear-gradient(135deg, #ffe8f8, #ffd4f0) !important; color: #800060 !important; border: 1px solid #e090c0 !important; box-shadow: 0 0 8px rgba(220,60,160,0.25) !important; }
 .r-starter { background: #f4efe8 !important; color: #6a5a40 !important; border: 1px solid #d0c4a8 !important; }
-.r-prize   { background: linear-gradient(135deg, #fff4cc, #ffe078) !important; color: #5a3000 !important; border: 1.5px solid #d4a020 !important; }
+.r-prize   { background: linear-gradient(135deg, #fff4cc, #ffe078) !important; color: var(--bark-hot) !important; border: 1.5px solid #d4a020 !important; }
 
 /* ── Progress cards: gold, red, vault variants ───────────────────────────────── */
 .pc--gold {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
     0 4px 0 rgba(160,120,20,0.22),
@@ -2661,19 +2661,19 @@ select.setting-select {
   border-radius: 20px !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.35) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   margin-bottom: 8px !important;
 }
 .pc-label {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .12em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin-bottom: 4px !important;
 }
 .pc-header {
   font: 700 18px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-bottom: 6px !important;
 }
 .pc-price {
@@ -2702,7 +2702,7 @@ select.setting-select {
 }
 .boost-once {
   font: 600 11px/1.4 var(--body) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   background: linear-gradient(135deg, #fff4d0, #ffe8a0) !important;
   border: 1px solid #d4a040 !important;
   border-radius: 8px !important;
@@ -2727,11 +2727,11 @@ select.setting-select {
 }
 .coll-head b {
   font: 700 14px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .coll-count {
   font: 600 11px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: rgba(200,160,50,0.12) !important;
   border-radius: 20px !important;
   padding: 2px 8px !important;
@@ -2763,13 +2763,13 @@ select.setting-select {
 }
 .sk-name {
   font: 700 10px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-top: 6px !important;
   display: block !important;
 }
 .sk-perk {
   font: 400 9px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   display: block !important;
   margin-top: 2px !important;
 }
@@ -2785,7 +2785,7 @@ select.setting-select {
   padding: 1px 5px !important;
   border-radius: 4px !important;
   background: rgba(200,160,50,0.12) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Upsell / VIP card ───────────────────────────────────────────────────────── */
@@ -2818,7 +2818,7 @@ select.setting-select {
   padding: 10px 12px !important;
   border-radius: 14px !important;
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
     0 3px 0 rgba(160,120,20,0.18) !important;
@@ -2842,7 +2842,7 @@ select.setting-select {
 .board-refresh,
 button[data-action="board-refresh"],
 .board-footer button {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
@@ -2851,7 +2851,7 @@ button[data-action="board-refresh"],
   border-radius: 12px !important;
   padding: 10px 20px !important;
   font: 600 13px var(--body) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   width: 100% !important;
 }
 .board-footer button:active {
@@ -2865,7 +2865,7 @@ button[data-action="board-refresh"],
 .field-label {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .14em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin-bottom: 6px !important;
   display: block !important;
@@ -2959,7 +2959,7 @@ button[data-action="board-refresh"],
 /* ── Match count in shop filter ──────────────────────────────────────────────── */
 .shop-match-count {
   font: 400 11px var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   margin: 6px 0 2px !important;
 }
 
@@ -2991,7 +2991,7 @@ button[data-action="board-refresh"],
   padding: 4px 12px !important;
   border-radius: 20px !important;
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3120,7 +3120,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,220,100,0.5),
     0 3px 0 #b54c0e,
     0 5px 12px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(120,40,0,0.4) !important;
   letter-spacing: .02em !important;
   transition: box-shadow .12s, transform .1s !important;
@@ -3147,7 +3147,7 @@ button.upsell:active,
   border: 1px solid #aa1800 !important;
   border-radius: 20px !important;
   padding: 4px 12px !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .08em !important;
   text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
@@ -3198,7 +3198,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,160,130,0.4),
     0 4px 0 #881000,
     0 7px 18px rgba(180,30,10,0.3) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(80,0,0,0.4) !important;
 }
 
@@ -3219,7 +3219,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,230,120,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(120,40,0,0.4) !important;
 }
 .primary-btn.gold:active {
@@ -3295,7 +3295,7 @@ button.upsell:active,
 /* (already renamed in source; if old bundle shows it, style it well) */
 .overlay [data-action="open-portal-leaderboard"] {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3319,7 +3319,7 @@ button.upsell:active,
   border-radius: 10px !important;
   padding: 9px 12px !important;
   font: 600 14px var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   box-shadow:
     inset 0 1px 3px rgba(100,70,20,0.07),
     0 1px 0 rgba(255,255,255,0.9) !important;
@@ -3335,7 +3335,7 @@ button.upsell:active,
 /* ── Prize / tournament card ─────────────────────────────────────────────────── */
 .prize-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -3347,12 +3347,12 @@ button.upsell:active,
 }
 .prize-card h3 {
   font: 700 15px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-bottom: 6px !important;
 }
 .prize-card p {
   font-size: 12px !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 
 /* ── Board list rows: refined ────────────────────────────────────────────────── */
@@ -3380,14 +3380,14 @@ button.upsell:active,
    back to the bare ui.css defaults. Renamed to the real classes. */
 .board-row .bp {
   font: 700 12px/1 var(--display) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   min-width: 22px !important;
   text-align: right !important;
 }
 .board-row .bn {
   flex: 1 !important;
   font: 600 13px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -3404,13 +3404,13 @@ button.upsell:active,
   border-radius: 12px !important;
   padding: 10px 12px !important;
   font-size: 12px !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   margin: 6px 0 !important;
   text-align: center !important;
 }
 .board-rank b {
   font-size: 16px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 
 /* ── Seg tabs: ensure active pill is always warm amber ───────────────────────── */
@@ -3449,7 +3449,7 @@ button.upsell:active,
 .board-rank ~ .section-title {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin: 16px 0 8px !important;
   padding-bottom: 6px !important;
@@ -3467,7 +3467,7 @@ button.upsell:active,
   border-radius: 20px !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.35) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Home pulse row: ensure cells never bleed on narrow screens ──────────────── */
@@ -3498,7 +3498,7 @@ button.upsell:active,
 /* ── Squad: club card, member row ────────────────────────────────────────────── */
 .club-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3518,11 +3518,11 @@ button.upsell:active,
 .member-row .member-name {
   flex: 1 !important;
   font: 600 13px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .member-row .member-score {
   font: 700 12px/1 var(--display) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 
 /* ── Account screen: transfer, sync rows ────────────────────────────────────── */
@@ -3557,11 +3557,11 @@ button.upsell:active,
 .trophy .trophy-icon { font-size: 28px !important; line-height: 1; }
 .trophy .trophy-name {
   font: 700 10px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .trophy .trophy-desc {
   font: 400 9px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Scores screen: your-scores table ────────────────────────────────────────── */
@@ -3576,15 +3576,15 @@ button.upsell:active,
 .score-row .score-mode {
   flex: 1 !important;
   font: 600 12px/1.4 var(--body) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
 }
 .score-row .score-val {
   font: 700 14px/1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .score-row .score-date {
   font: 400 10px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   min-width: 60px !important;
   text-align: right !important;
 }
@@ -3603,7 +3603,7 @@ button.upsell:active,
 .ad-label {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   text-align: center !important;
   margin-bottom: 8px !important;
@@ -3685,7 +3685,7 @@ button.upsell:active,
 }
 .pod-name {
   font: 700 11px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -3724,7 +3724,7 @@ button.upsell:active,
 .prize-tier b {
   display: block !important;
   font: 600 10px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .prize-tier.gold {
   background: linear-gradient(145deg, #fffde0, #fff4aa) !important;
@@ -3771,7 +3771,7 @@ button.upsell:active,
 /* ── Home record section (personal best stat bar) ────────────────────────────── */
 .home-record {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3839,13 +3839,13 @@ hr.divider {
 
 /* ── "Save" / "Random" inline buttons next to name input ────────────────────── */
 .pilot-name-row .mini-btn:not(.gold) {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
   padding: 8px 12px !important;
   border-radius: 10px !important;
@@ -3853,13 +3853,13 @@ hr.divider {
 
 /* ── Mini-btn default (non-gold variant) ─────────────────────────────────────── */
 .mini-btn:not(.gold) {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(160,130,80,0.16) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
 }
 .mini-btn:not(.gold):active {
@@ -3870,7 +3870,7 @@ hr.divider {
 /* ── Coin pill (wallet display in header) ────────────────────────────────────── */
 .pill.coin {
   background: linear-gradient(135deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   font-weight: 700 !important;
   font-size: 13px !important;
@@ -3889,13 +3889,13 @@ hr.divider {
   font-weight: 600 !important;
   border-radius: 14px !important;
   margin-bottom: 8px !important;
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
 }
 .soft-btn.wide:active {
   box-shadow: inset 0 2px 4px rgba(100,70,20,0.14) !important;
@@ -3905,7 +3905,7 @@ hr.divider {
 /* Portal leaderboard soft-btn: special gold treatment */
 .overlay [data-action="open-portal-leaderboard"].soft-btn.wide {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3932,7 +3932,7 @@ hr.divider {
 .result-kicker {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.3) !important;
   border-radius: 20px !important;
@@ -3945,7 +3945,7 @@ hr.divider {
 .result-distance,
 .result-score {
   font: 700 clamp(36px, 10vw, 52px)/1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: -.04em !important;
   line-height: 1 !important;
 }
@@ -3953,7 +3953,7 @@ hr.divider {
 /* ── Coin counter in HUD (in-flight) ─────────────────────────────────────────── */
 .hud-coins {
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-radius: 20px !important;
   padding: 4px 12px !important;
   font: 700 14px/1.3 var(--display) !important;
@@ -3984,7 +3984,7 @@ hr.divider {
 /* ── Campaign / story card ───────────────────────────────────────────────────── */
 .campaign-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -4008,19 +4008,19 @@ hr.divider {
   box-shadow:
     inset 0 1px 0 rgba(255,230,120,0.45),
     0 3px 0 #b54c0e !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font-weight: 700 !important;
   border-radius: 12px !important;
   padding: 11px !important;
 }
 .cancel-btn {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
   border-radius: 12px !important;
   padding: 11px !important;

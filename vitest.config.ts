@@ -12,6 +12,10 @@ const PORTAL = (process.env.VITE_PORTAL_TARGET ?? "none").toLowerCase() || "none
 export default defineConfig({
   define: {
     "import.meta.env.VITE_SELL_AD_REMOVAL": JSON.stringify(PORTAL === "none"),
+    // VITE_SIM_BREAKS is intentionally NOT defined here. Vitest injects define
+    // values as strings into import.meta.env, so JSON.stringify(false) becomes
+    // the string "false" which is truthy. Leaving it undefined (falsy) correctly
+    // gates the sponsored-breaks bullet out of all test runs.
   },
   test: {
     environment: "jsdom",

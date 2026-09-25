@@ -771,10 +771,6 @@ export class SquadClient {
   }
 
   async sendChat(text: string): Promise<boolean> {
-    // Portal editions have no chat surface (Poki REQ-31), so the send is dead
-    // here even if a stale DOM node or a future caller reaches it: no chat
-    // endpoint is ever contacted in those builds.
-    if (!SQUAD_CHAT) return false;
     const t = text.trim();
     if (!t) return false;
     if (this.isAutonomous) {
@@ -819,7 +815,6 @@ export class SquadClient {
   }
 
   async pollChat(reset: boolean): Promise<void> {
-    if (!SQUAD_CHAT) return;
     if (this.isAutonomous) return;
     const club = this.state.myClubId;
     if (this.lifetime.signal.aborted || !club || this.polling) return;

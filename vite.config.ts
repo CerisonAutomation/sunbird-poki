@@ -75,7 +75,7 @@ export default defineConfig({
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(APP_VERSION),
     "import.meta.env.VITE_GIT_SHA": JSON.stringify(GIT_SHA),
     "import.meta.env.VITE_PORTAL_TARGET": JSON.stringify(PORTAL),
-    "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(false),
+    "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(PORTAL === "none" && process.env.VITE_SIM_BREAKS === "true"),
     "import.meta.env.VITE_SELL_AD_REMOVAL": JSON.stringify(false),
   },
   // The dev server runs behind a proxied preview host whose name is generated

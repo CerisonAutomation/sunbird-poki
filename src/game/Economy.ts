@@ -655,7 +655,7 @@ const GOLD_FEATURES = [
   // Use import.meta.env directly so Vite's define folds this to false in portal
   // builds, letting Rollup DCE the string ("No sponsored breaks") from the bundle.
   // Typed in src/vite-env.d.ts, so no cast — and no lint suppression — is needed.
-  ...(import.meta.env.VITE_SELL_AD_REMOVAL ? ["No sponsored breaks, ever"] : []),
+  ...(import.meta.env.VITE_SIM_BREAKS ? ["No sponsored breaks, ever"] : []),
   // NOTE: On portal builds (Poki) SELL_AD_REMOVAL=false and the continue screen
   // always shows the rewarded ad path (portal owns monetisation). The "free second
   // wind" perk is architecturally correct but invisible on Poki — don't try to

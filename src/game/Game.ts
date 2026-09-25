@@ -129,7 +129,7 @@ import { flag } from "./Flags";
 import { variant } from "./Experiments";
 import { buildRoomInviteUrl, normalizeRoomCode, readRoomInviteFromUrl } from "./RoomInvite";
 import { PORTAL_BANNER_ID, attachPortalErrorReporters, initPlatform, installPageScrollGuards, isCoarsePointer, isPortalBuild, portalTarget as getPortalTarget, type PlatformAdapter } from "../sdk/platform";
-import { CUSTOM_PILOT_NAMES, POKI_MULTIPLAYER, SELL_AD_REMOVAL, SQUAD_CHAT } from "./edition";
+import { CUSTOM_PILOT_NAMES, POKI_MULTIPLAYER, SELL_AD_REMOVAL, SIMULATED_BREAKS, SQUAD_CHAT } from "./edition";
 import { PRIVACY_URL } from "./legal";
 import { GameplayEventSink } from "./GameplayEvents";
 import { LivingBackground } from "./LivingBackground";
@@ -3117,7 +3117,7 @@ export class Game {
     // tap did nothing, with no ad, no toast and no state change.
     const canAd = this.portalEnabled()
       ? this.adsLive()
-      : !gold && this.ads.isAvailable() && this.save.adsLeftToday() > 0;
+      : SIMULATED_BREAKS && !gold && this.ads.isAvailable() && this.save.adsLeftToday() > 0;
     // Honest tiering: free players get 1 second wind, VIP gets 2, and Gold
     // gets what its feature list promises — the sun never wins on a technicality.
     const maxContinues = gold ? 99 : this.save.isVipActive() ? 2 : 1;
@@ -3455,7 +3455,7 @@ export class Game {
     if (newTrophies.length > 0) this.audio.trophy();
 
     const runs = this.save.state.runsPlayed;
-    const dueAd = !this.portalEnabled() && !this.save.state.gold && this.save.shouldShowInterstitial(runs);
+    const dueAd = SIMULATED_BREAKS && !this.portalEnabled() && !this.save.state.gold && this.save.shouldShowInterstitial(runs);
     if (dueAd && !this.skipInterstitialOnce && this.ads.isAvailable()) {
       this.adReason = "interstitial";
       this.adTimer = this.ads.duration;
@@ -7006,7 +7006,7 @@ export class Game {
       continueCost: CONTINUE_COST,
       canAffordContinue: st.wallet >= CONTINUE_COST,
       // Portal: only advertise a rewarded option the SDK can actually pay out.
-      adAvailable: this.portalEnabled() ? this.adsLive() : this.ads.isAvailable(),
+      adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
       adTimer: this.adTimer,
       adSkippable: !this.portalEnabled(),
       adTotal: this.ads.duration,
@@ -7236,6 +7236,8 @@ export class Game {
       pvpWorlds: PVP_WORLDS,
       selectedPvpMode: this.selectedPvpMode,
       selectedPvpWorld: this.selectedPvpWorld,
+      beatLine: null,
+      nextAction: "",
     };
     this.hud.update(snap);
   }

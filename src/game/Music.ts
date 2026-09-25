@@ -108,13 +108,16 @@ const PROG_A = ["C", "G", "Am", "F", "C", "G", "F", "G"];
 const PROG_K = ["Am", "F", "C", "G", "Am", "F", "C", "G"];
 const PROG_B = ["Am", "F", "C", "G", "Am", "F", "C", "G"];
 const PROG_C = ["F", "G", "Em", "Am", "F", "G", "C", "C"];
-const PROG_D = ["Dm", "G", "C", "Am", "F", "G", "C", "G"];
+const PROG_D = ["Dm", "G", "C", "Am", "F", "G", "G", "C"];
 const PROG_E = ["C", "Am", "F", "G", "C", "Am", "F", "G"];
-const PROG_F = ["Am", "Em", "F", "C", "Am", "Em", "F", "C"];
-const PROG_G = ["C", "G", "Dm", "Am", "C", "G", "Dm", "Am"];
-const PROG_H = ["G", "C", "Am", "F", "G", "C", "Am", "F"];
-const PROG_I = ["F", "C", "Dm", "G", "F", "C", "Dm", "G"];
-const PROG_J = ["Am", "C", "G", "F", "Am", "C", "G", "F"];
+// PROG_F: night drift. Antecedent Am–Em–F–C; consequent departs to G–Am cadence
+// (modal v–i; no harmonic-minor V–i since E major is outside the melodic contract).
+const PROG_F = ["Am", "Em", "F", "C", "F", "G", "Em", "Am"];
+// PROG_G: crystal sparkle. Adds G–Am cadence so the loop resolves.
+const PROG_G = ["C", "G", "Dm", "Am", "C", "Am", "G", "Am"];
+const PROG_H = ["G", "C", "Am", "F", "C", "Am", "G", "C"];
+const PROG_I = ["F", "C", "Dm", "G", "Am", "F", "G", "C"];
+const PROG_J = ["Am", "C", "G", "F", "F", "G", "Em", "Am"];
 // PROG_TRON: dark electronic. Am → Dm → Gm → Em — all minor,
 // no major relief. Creates a tense, circuit-board claustrophobia.
 const PROG_TRON = ["Am", "Dm", "Am", "Em", "Am", "Dm", "Gm", "Em"];
@@ -403,7 +406,7 @@ const PROG_CHIP_1 = ["C", "G", "Am", "F", "C", "G", "Am", "F"]; // I–V–vi–
 const PROG_CHIP_2 = ["C", "F", "G", "F", "C", "F", "G", "G"];  // I–IV–V–IV
 const PROG_CHIP_3 = ["C", "Am", "F", "G", "C", "Am", "F", "G"]; // I–vi–IV–V
 const PROG_CHIP_5 = ["C", "F", "Am", "G", "C", "F", "Am", "G"]; // I–IV–vi–V
-const PROG_CHIP_6 = ["Dm", "G", "C", "F", "Dm", "G", "C", "F"]; // ii–V–I–IV
+const PROG_CHIP_6 = ["Dm", "G", "C", "F", "Dm", "G", "F", "C"]; // ii–V–I–IV, ends F→C plagal
 
 // Flappy Rush: staccato rising arp → peak hold → falling resolve. The bounce
 // of a coin-tap game: C5–E5–G5–C6 on the downbeat of bar 1.

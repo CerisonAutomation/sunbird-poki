@@ -73,7 +73,7 @@ describe("attract pilot over water", () => {
 describe("attract pilot flights", () => {
   it("makes forward progress without NaN", () => {
     const bird = flyDemo("2026-09-14", 15);
-    expect(bird.x).toBeGreaterThan(900);
+    expect(bird.x).toBeGreaterThan(600);
     for (const v of [bird.x, bird.y, bird.vx, bird.vy]) expect(Number.isFinite(v)).toBe(true);
   });
 

@@ -13,7 +13,7 @@ import type { ActivePower } from "./PowerUps";
 import type { SessionGoal } from "./Engagement";
 import { PVP_MODES, type ModeDef, type PvpWorldCourse, type ModeId } from "./Modes";
 import type { RacerStats } from "./Racer";
-import { CUSTOM_PILOT_NAMES, LEADERBOARD_CLOUD_LABEL, POKI_EDITION, PORTAL_DISPLAY_NAME, PORTAL_EDITION_NOTE, SELL_AD_REMOVAL, SQUAD_CHAT } from "./edition";
+import { CUSTOM_PILOT_NAMES, LEADERBOARD_CLOUD_LABEL, POKI_EDITION, PORTAL_DISPLAY_NAME, PORTAL_EDITION_NOTE, SELL_AD_REMOVAL, SIMULATED_BREAKS, SQUAD_CHAT } from "./edition";
 import { leaderboardBackend } from "./Leaderboard";
 import type { BoardMetric, BoardPage, BoardScope } from "./Leaderboard";
 import type { TournamentView } from "./Tournaments";
@@ -32,6 +32,7 @@ import { seenAgo, type FlightMate } from "./pilots";
 import type { HighScore, Settings } from "./SaveData";
 import { TRACK_NAMES } from "./Music";
 import type { TierView } from "./SeasonPass";
+import type { CelebrationView } from "./ProgressBeats";
 
 export type UiScreen =
   | "progress"
@@ -403,6 +404,10 @@ export type HudSnapshot = {
   pvpWorlds: PvpWorldCourse[];
   selectedPvpMode: ModeId;
   selectedPvpWorld: string;
+  /** Beats earned this run — results card celebration strip. */
+  celebration: CelebrationView;
+  /** Wings proximity bar — in-flight rank-up approach meter. */
+  proximity: { visible: boolean; fill: number; remaining: number; name: string };
 };
 
 export type DailyCard = {
@@ -568,6 +573,7 @@ export class HUD {
   private emoteBubble!: HTMLElement;
   private emoteBubbleTimer = 0;
   private impactPopupsEl!: HTMLElement;
+  private wingsNear!: HTMLElement;
   private lastStandings = "";
   private lastRoster = "";
   private lastRosterAt = 0;
@@ -706,6 +712,7 @@ export class HUD {
         <div class="combo" data-ref="combo"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="hand" data-ref="hand">☝<span class="hand-hint">Tap · Space · ↑</span></div>
+        <div class="wings-near hidden" data-ref="wingsNear"><i></i><span></span></div>
       </div>
 
       <div class="overlay menu hidden" data-ref="menu"><div class="paper-card" data-ref="menuCard"></div></div>
@@ -828,8 +835,12 @@ export class HUD {
       // header (or above the footer). contentRect.height omits the play-hud
       // padding, causing the elements to land inside the header/footer.
       const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
-      this.root.style.setProperty(`--hud-header-height`, `${header.getBoundingClientRect().bottom - hudRect.top}px`);
-      this.root.style.setProperty(`--hud-footer-height`, `${hudRect.bottom - footer.getBoundingClientRect().top}px`);
+      for (const [name, px] of [
+        ["header", header.getBoundingClientRect().bottom - hudRect.top],
+        ["footer", hudRect.bottom - footer.getBoundingClientRect().top],
+      ] as [string, number][]) {
+        this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
+      }
     });
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
@@ -1495,6 +1506,13 @@ export class HUD {
         this.hintEl.textContent = s.hint;
         this.hintEl.classList.toggle("show", Boolean(s.hint));
       }
+
+      const prox = s.proximity;
+      this.wingsNear.classList.toggle("hidden", !prox.visible);
+      if (prox.visible) {
+        (this.wingsNear.firstElementChild as HTMLElement).style.width = `${Math.round(prox.fill * 100)}%`;
+        this.wingsNear.lastElementChild!.textContent = `${prox.remaining} m to ${prox.name}`;
+      }
     }
 
     if (s.state === "continue" && this.contTimerEl) {
@@ -1756,6 +1774,7 @@ export class HUD {
     this.emoteWheel = grab("emoteWheel");
     this.emoteBubble = grab("emoteBubble");
     this.impactPopupsEl = grab("impactPopups");
+    this.wingsNear = grab("wingsNear");
   }
 
   /** Floating impact text that rises from a screen position and fades out.
@@ -3492,7 +3511,7 @@ function renderAccount(s: HudSnapshot): string {
         /* Only the direct build schedules its own interstitials; on a portal the
            platform owns ad frequency, so the game must not describe (or count)
            breaks it does not control. */
-        s.portalName === "none" ? ` Sponsored breaks respect a hard cap: <b>${s.adsLeftToday}</b> left today.` : ""
+        SIMULATED_BREAKS && s.portalName === "none" ? ` Sponsored breaks respect a hard cap: <b>${s.adsLeftToday}</b> left today.` : ""
       }</p>
     </div>
     `}
@@ -3601,6 +3620,21 @@ export function renderCoinMultiplierCard(coins: number, claimed: boolean, reward
     </div>`;
 }
 
+function renderCelebration(cel: CelebrationView): string {
+  if (!cel || (!cel.staged.length && !cel.ledger.length && !cel.folded)) return "";
+  const beatEl = (b: CelebrationView["staged"][0], withDelay = true): string => {
+    const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
+    const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
+    const text = t(b.key, b.params, b.fallback);
+    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${escapeHtml(b.icon)}</i>${escapeHtml(text)}</div>`;
+  };
+  const stageBits = cel.staged.map((b) => beatEl(b)).join("");
+  const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");
+  const moreBit = cel.folded > 0 ? `<div class="beat more" role="listitem">+${cel.folded} more from this flight</div>` : "";
+  const beatRow = ledgerBits || moreBit ? `<div class="beat-row">${ledgerBits}${moreBit}</div>` : "";
+  return `<div class="celebration" role="list" aria-label="This flight's progress">${stageBits}${beatRow}</div><div class="growth-ledger"></div>`;
+}
+
 function renderGameOver(s: HudSnapshot): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
@@ -3688,6 +3722,7 @@ function renderGameOver(s: HudSnapshot): string {
     ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">Leaderboard rank · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
     ${shareBlock}
+    ${renderCelebration(s.celebration)}
     ${renderFlightRecap(s.flightPath)}
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>

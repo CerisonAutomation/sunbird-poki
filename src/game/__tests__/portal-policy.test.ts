@@ -90,25 +90,22 @@ describe("GOLD.features", () => {
     // member expression. The assertion below is what proves it is not reached
     // through an imported const.
     expect(src).toMatch(
-      /\.\.\.\(import\.meta\.env\.VITE_SELL_AD_REMOVAL(?: as any)? \? \["No sponsored breaks, ever"\] : \[\]\)/,
+      /\.\.\.\(import\.meta\.env\.VITE_SIM_BREAKS(?: as any)? \? \["No sponsored breaks, ever"\] : \[\]\)/,
     );
     // The string must never be reachable via a plain imported const, which
     // Rollup would not constant-fold across modules.
     //
-    // The lookbehind is load-bearing. Without it this pattern is satisfied by
-    // the GOOD form too, because `import.meta.env.VITE_SELL_AD_REMOVAL ? [`
-    // contains the substring `SELL_AD_REMOVAL ? [`. The old `as any` cast
-    // happened to break the match by sitting between them, so removing the cast
-    // silently turned this guard into a tautology — it rejected the foldable
-    // form it exists to protect. A bare identifier (no `VITE_` prefix) is the
-    // thing to catch.
-    expect(src).not.toMatch(/(?<!import\.meta\.env\.VITE_)SELL_AD_REMOVAL \? \["No sponsored breaks/);
+    // The lookbehind is load-bearing: a bare identifier (no `VITE_` prefix)
+    // would be imported, which Rollup cannot constant-fold across modules.
+    expect(src).not.toMatch(/(?<!import\.meta\.env\.VITE_)SIM_BREAKS \? \["No sponsored breaks/);
   });
 
-  it("keeps the bullet in the direct build", async () => {
+  it("keeps the bullet out of the direct build (VITE_SIM_BREAKS is off by default)", async () => {
     const { GOLD } = await import("../Economy");
 
-    expect(GOLD.features.some((f) => /sponsored breaks/i.test(f))).toBe(true);
-    expect(GOLD.features).toHaveLength(7);
+    // VITE_SIM_BREAKS = false in vitest (no VITE_SIM_BREAKS=true env), so
+    // the sponsored-breaks bullet is absent — exactly as the Poki build sees it.
+    expect(GOLD.features.some((f) => /sponsored breaks/i.test(f))).toBe(false);
+    expect(GOLD.features).toHaveLength(6);
   });
 });

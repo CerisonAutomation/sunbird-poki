@@ -1408,7 +1408,7 @@
           "sunbird-poki.zip"
         ]
       },
-      "evidence": "Portal editions ship NO chat: SQUAD_CHAT=false in edition.poki/crazy/generic.ts removes the club chat box, its input and the chat promise from the menu copy, Game/Squad refuse the send, and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07); emotes are the sanctioned alternative and are now reachable in every race state (src/game/__tests__/emote-ui.test.ts)."
+      "evidence": "Portal editions ship NO chat: SQUAD_CHAT=false in src/game/edition.ts removes the club chat box, its input and the chat promise from the menu copy, Game/Squad refuse the send, and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07); emotes are the sanctioned alternative and are now reachable in every race state (src/game/__tests__/emote-ui.test.ts)."
     },
     {
       "id": "REQ-32",
@@ -1574,7 +1574,7 @@
         "path": "src/game/__tests__/pilot-name-moderation.test.ts",
         "pattern": "Scunthorpe problem"
       },
-      "evidence": "Poki forbids chat systems and personal-data collection (external-resources policy: 'Chat systems aren't allowed', 'Games must not collect personal information', 'no email-based logins'), which is SQUAD_CHAT=false — the chat UI is not in the bundle. It does not forbid a chosen display name, so edition.poki.ts sets CUSTOM_PILOT_NAMES=true and the safety work moves to moderation: every write goes through src/game/pilotNameModeration.ts (shape + contact guard + NFKD/leit/homoglyph normalisation + blocklist + a safe-word allowlist so 'Cockpit'/'Classic'/'Assassin' are not caught by their own substrings), asserted by pilot-name-moderation.test.ts (95 cases) and gated at both write paths in Game.ts. crazy/generic keep CUSTOM_PILOT_NAMES=false (no filter there)."
+      "evidence": "Poki forbids chat systems and personal-data collection (external-resources policy: 'Chat systems aren't allowed', 'Games must not collect personal information', 'no email-based logins'), which is SQUAD_CHAT=false — the chat UI is not in the bundle. It does not forbid a chosen display name, so src/game/edition.ts sets CUSTOM_PILOT_NAMES=true and the safety work moves to moderation: every write goes through src/game/pilotNameModeration.ts (shape + contact guard + NFKD/leit/homoglyph normalisation + blocklist + a safe-word allowlist so 'Cockpit'/'Classic'/'Assassin' are not caught by their own substrings), asserted by pilot-name-moderation.test.ts (95 cases) and gated at both write paths in Game.ts."
     },
     {
       "id": "REQ-62",
@@ -2407,10 +2407,10 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/edition.poki.ts",
+        "path": "src/game/edition.ts",
         "pattern": "SQUAD_CHAT = false"
       },
-      "evidence": "The chat UI is not in the portal bundle at all; emotes remain."
+      "evidence": "No in-game chat: SQUAD_CHAT=false in src/game/edition.ts (the single shipped edition) removes the club chat box, its input and the chat promise from the menu copy; Game/Squad refuse the send and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07). Emotes are the sanctioned alternative and are reachable in every race state (src/game/__tests__/emote-ui.test.ts)."
     },
     {
       "id": "SUB-12",

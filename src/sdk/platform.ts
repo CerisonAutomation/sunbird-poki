@@ -22,6 +22,7 @@ import { runLoadingNet } from "./net";
 // is unnecessary; we can instantiate directly and let Rollup DCE the
 // unused branch completely.
 import { PokiAdapter, pokiInitOptions } from "./poki";
+import { BANNER_HOST_ID, hasDisplayAd } from "./banner";
 
 export type PlatformName = "poki" | "none";
 
@@ -220,7 +221,10 @@ export interface PlatformAdapter {
 // union too aggressively inside branches while still being a compile-time
 // constant for minification.
 const TARGET = (import.meta.env.VITE_PORTAL_TARGET ?? "none") as string;
-const PORTAL_BANNER_ID = import.meta.env.VITE_PORTAL_BANNER_ID ?? "";
+// The banner slot has one home (src/sdk/banner.ts). `Game` mounts into it only
+// when this build can fill it, so an unconfigured build never goes looking for
+// an element that was never rendered.
+const PORTAL_BANNER_ID = hasDisplayAd() ? BANNER_HOST_ID : "";
 // URL constants are gated to the matching build target via a compile-time
 // constant so Rollup's dead-code elimination strips them from non-target
 // bundles entirely — a non-Poki build never contains the Poki SDK URL

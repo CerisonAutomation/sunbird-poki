@@ -3,6 +3,8 @@ import { verifyRunSubmission } from "./AntiCheat";
 import { generatePilotName, isPilotNameClean } from "./pilotNameGenerator";
 import { storage } from "./Storage";
 import { createAudsIfConfigured, type PokiAuds } from "../sdk/auds";
+import { BUILD_ID } from "./version";
+import { backendBase } from "./apiBase";
 import { breakerKeyFor, fetchJson } from "./resilience/fetchJson";
 import { OfflineOutbox } from "./resilience/OfflineOutbox";
 
@@ -30,7 +32,9 @@ import { OfflineOutbox } from "./resilience/OfflineOutbox";
 // expression was `?? (import.meta.env.DEV ? "" : "")` — both arms identical, so
 // the comment above it ("dev uses the social server root") described behaviour
 // the code did not have. It does not: dev reads the local board too.
-const API = (import.meta.env.VITE_LEADERBOARD_URL ?? "").replace(/\/$/, "");
+// Root-namespace routes (`/board`, `/score`) — apiBase.ts owns the derivation
+// so the two callers cannot drift apart again.
+const API = backendBase("");
 const SALT = import.meta.env.VITE_LEADERBOARD_SALT ?? "";
 const AUDS: PokiAuds | null =
   (import.meta.env.VITE_PORTAL_TARGET as string | undefined) === "poki"
@@ -433,6 +437,13 @@ export class Leaderboard {
           mode: row.mode,
           seed: row.seed,
           date: row.date,
+          // AUDS has always accepted a `build` field and the client never
+          // filled it, so every row read `build: ""` — after a physics or
+          // scoring change there was no way to tell an old-format score from a
+          // new one on a shared public board. BUILD_ID is deterministic
+          // (`<semver>-<portal>-<sha>`), so it is also the pin a server-side
+          // trust rule can be written against.
+          build: BUILD_ID,
         }).catch(() => {
           /* AUDS failure must not surface — local board always works */
         });

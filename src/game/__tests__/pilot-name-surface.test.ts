@@ -99,19 +99,18 @@ afterEach(() => {
 
 describe("edition policy — who may type a name", () => {
   // The renderer tests above mock the edition module, so they stay green even if
-  // an edition file flips the flag. These read the real files. Poki allows
-  // profanity-filtered free text (isPilotNameClean gates every write); the
-  // unfiltered portal editions must ship the curated call sign instead.
+  // the edition file flips the flag. This reads the real file. Poki allows
+  // profanity-filtered free text (isPilotNameClean gates every write).
   const read = (file: string): string =>
     readFileSync(join(process.cwd(), "src", "game", file), "utf8");
 
-  it("both shipping editions allow free text, and both gate it", () => {
-    // Poki and the direct build are the only editions now. Both allow typed
-    // names — the guard is the filter and the choke point, not a lockout — and
-    // both must declare it, so an edition cannot ship without the decision.
-    expect(read("edition.poki.ts")).toMatch(/export const CUSTOM_PILOT_NAMES = true;/);
+  it("the shipped edition allows free text, and gates it", () => {
+    // There is ONE edition module: `edition.ts` *is* the Poki build. Typed
+    // names are allowed — the guard is the profanity filter and the choke
+    // point, not a lockout — but the flag must still be declared explicitly,
+    // so the build cannot silently inherit a default.
     expect(read("edition.ts")).toMatch(/export const CUSTOM_PILOT_NAMES = true;/);
-    expect(read("edition.poki.ts")).toMatch(/RESERVED_PILOT_NAMES/);
+    expect(read("edition.ts")).toMatch(/RESERVED_PILOT_NAMES/);
   });
 });
 

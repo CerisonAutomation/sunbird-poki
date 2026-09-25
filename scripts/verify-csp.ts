@@ -31,7 +31,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LEGAL_EDITION } from "../src/game/legal.edition.poki";
+import { LEGAL_EDITION } from "../src/game/legal.edition";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 

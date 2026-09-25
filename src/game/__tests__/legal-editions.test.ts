@@ -13,23 +13,17 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  EXTERNAL_HOSTS,
   PRIVACY_POLICY,
   PRIVACY_POLICY_VERSION,
+  TERMS_URL,
   composePolicy,
   privacyPolicyUrl,
   type ExternalHost,
-  type LegalEdition,
-  type PolicyDocument,
 } from "../legal";
 import { LEGAL_EDITION as POKI } from "../legal.edition";
 
 const root = resolve(__dirname, "../../..");
 const read = (p: string): string => readFileSync(resolve(root, p), "utf8");
-
-function policyText(doc: PolicyDocument): string {
-  return JSON.stringify(doc);
-}
 
 describe("host table is the single source of truth", () => {
   it("puts every host in a CSP directive the submission can name", () => {
@@ -77,16 +71,33 @@ describe("document shape", () => {
   });
 });
 
-describe("portal build points at a live, absolute policy URL", () => {
-  it("build:poki sets VITE_PRIVACY_URL to an https URL", () => {
-    const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
-    const value = pkg.scripts["build:poki"]?.match(/VITE_PRIVACY_URL=(\S+)/)?.[1] ?? "";
-    expect(value, "build:poki must pin an absolute URL — inside a portal iframe the game's own origin is the portal CDN").toMatch(
-      /^https:\/\/\S+\/privacy$/,
-    );
+describe("the policy link is absolute, wherever it comes from", () => {
+  // Inside a portal iframe the game's own origin is the portal CDN, so a
+  // relative "/privacy" resolves against Poki and not against us. What protects
+  // the player is the URL that SHIPS, so that is what these assert — not which
+  // file happened to set it.
+  //
+  // These used to grep `build:poki` for `VITE_PRIVACY_URL=...`. That failed
+  // while the shipped URL was already absolute, because the absolute value is
+  // the default in `src/game/legal.ts` rather than a build-script argument: a
+  // test that passed only by duplicating the constant into package.json. Two
+  // homes for one value is exactly how the Poki build ids rotted before, so the
+  // constant stays in one place and the contract is asserted on the outcome.
+  it("resolves to an absolute https URL", () => {
+    expect(privacyPolicyUrl()).toMatch(/^https:\/\/\S+/);
   });
 
-  it("resolves a relative /privacy fallback for local dev", () => {
-    expect(privacyPolicyUrl()).toMatch(/^https?:\/\/|^\/privacy$/);
+  it("keeps the terms link on the same absolute host", () => {
+    // Terms is derived by swapping the leaf, so a relative privacy URL would
+    // silently produce a relative terms URL too.
+    expect(TERMS_URL).toMatch(/^https:\/\/\S+/);
+  });
+
+  it("rejects a relative override, should one ever be configured", () => {
+    // Guards the seam: if a build or a Vercel env later sets VITE_PRIVACY_URL,
+    // it must still be absolute. A bare path here would pass the two tests
+    // above only because the default would then be overridden.
+    const configured = (read(".env.example").match(/^#?\s*VITE_PRIVACY_URL=(.+)$/m)?.[1] ?? "").trim();
+    if (configured) expect(configured).toMatch(/^https:\/\/\S+/);
   });
 });

@@ -9,15 +9,20 @@ import {
 /**
  * Per-language visual invariants.
  *
- * A DOM spec can confirm `#language-select` has 37 options; it cannot see that
- * the Thai menu overflows its button or that Hebrew lost its direction. Each
- * test here covers one phase of the rollout, switching language in-page (the
- * same path a player uses) instead of rebooting per locale.
+ * A DOM spec can confirm `#language-select` has `SUPPORTED_LOCALES.length + 1`
+ * options; it cannot see that the Thai menu overflows its button or that Hebrew
+ * lost its direction. Each test here covers one phase of the rollout, switching
+ * language in-page (the same path a player uses) instead of rebooting per
+ * locale.
  *
  * Phases follow Poki's localization order (`LOC-04`) and then the rest of the
- * platform's 34-language list, grouped by *script* — because what breaks a
- * layout is the writing system, not the language: a new Latin locale inherits
- * every fix its group already has, while a new script needs its own pass.
+ * shipped language list, grouped by *script* — because what breaks a layout is
+ * the writing system, not the language: a new Latin locale inherits every fix
+ * its group already has, while a new script needs its own pass.
+ *
+ * The union of every phase must equal `SUPPORTED_LOCALES` exactly; the test
+ * below enforces it, so a locale added to the app without a phase (or a phase
+ * naming a locale that was removed) fails the run.
  */
 const PHASES: { label: string; codes: SupportedLocale[] }[] = [
   { label: "phase 1 — EFIGS + Turkish", codes: ["en", "es", "de", "fr", "it", "tr"] },

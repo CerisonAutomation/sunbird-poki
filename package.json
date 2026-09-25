@@ -30,7 +30,7 @@
     "test:lookup": "node scripts/smoke-pilot-lookup.mjs",
     "botsim": "node scripts/botsim.mjs",
     "botsim:40": "node scripts/botsim.mjs --players 40 --seconds 15",
-    "build:poki": "pnpm gen-icons && VITE_POKI_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_POKI_NETLIB_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_MULTIPLAYER_URL= VITE_LEADERBOARD_URL= VITE_STRIPE_STARTER_LINK= VITE_STRIPE_GOLD_LINK= VITE_STRIPE_VIP_LINK= VITE_SOCIAL_URL= vite build --outDir dist-poki && node scripts/package-portal.mjs poki",
+    "build:poki": "pnpm gen-icons && VITE_POKI_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_POKI_NETLIB_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_MULTIPLAYER_URL= VITE_LEADERBOARD_URL= VITE_SOCIAL_URL= vite build --outDir dist-poki && node scripts/package-portal.mjs poki",
     "poki:upload": "pnpm build:poki && poki upload --name \"$(git rev-parse --short HEAD)\" --notes \"$(git log -1 --pretty=%B)\"",
     "gen-icons": "node scripts/gen-icons.mjs",
     "gen-animated-icon": "node scripts/gen-animated-icon.mjs",

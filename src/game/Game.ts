@@ -1,3 +1,4 @@
+import { buildStamp } from "./version";
 import { splitLayout, splitViews } from "./Viewport";
 import { iconGlyph } from "./MenuIcons";
 import { equalizedRace } from "./Racer";
@@ -614,6 +615,11 @@ export class Game {
   private readonly loop: (t: number) => void;
 
   constructor(private readonly host: HTMLElement) {
+    // One line per boot naming the exact build. A player-reported bug that says
+    // "it feels different" is only diagnosable against a version, and this is
+    // the one place the id is guaranteed to exist. `console.debug` is the level
+    // `verify:prod` permits in shipped client code.
+    console.debug(buildStamp());
     this.funnel.start();
     this.save = new SaveData();
     this.social = new SocialSystem(this.save);

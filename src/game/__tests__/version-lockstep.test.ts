@@ -2,32 +2,37 @@
  * Version lockstep — every "version" in the repo, checked against its twin.
  *
  * Sunbird speaks several versions at once: a release semver, a build id, a save
- * schema, a realtime wire protocol, a replay format, an HTTP namespace and four
- * edition variants. They live in different trees (`src/`, `server/src/`,
- * `vite.config.ts`, `package.json`) and the two test suites never import each
- * other, so a bump on one side used to be invisible until production:
+ * schema, a realtime wire protocol and a replay format. They live in different
+ * trees (`src/`, `vite.config.ts`, `package.json`) and the two test suites never
+ * import each other, so a bump on one side used to be invisible until
+ * production:
  *
  *   • the realtime gateway **rejects** any frame whose `version` it does not
  *     recognise (`unsupportedVersion`), so a client-only protocol bump breaks
  *     every room at once;
- *   • the ghost store **410s** any replay whose `v` is not the current one, so a
- *     server-only bump silently expires every rival ghost;
  *   • `SUNBIRD_CLIENT_BUILD` pins leaderboard writes to one build id, so a pin
  *     set against a non-deterministic id rejects everything.
  *
  * `docs/VERSIONS.md` is the human-readable inventory and bump rules; this file
  * is the part that fails the build.
+ *
+ * CONSOLIDATION NOTE: this file used to cross-check a `server/` tree
+ * (`server/src/realtime/gateways.ts`, `server/src/ghosts/GhostService.ts`,
+ * `server/src/config.ts`) and three per-portal edition modules
+ * (`edition.poki.ts`, `edition.crazy.ts`, `edition.generic.ts`). Sunbird is now
+ * a Poki-only, serverless build: Poki's Netlib carries multiplayer and AUDS
+ * carries leaderboards, so that tree and those modules were deleted. The
+ * assertions that depended on them were silently dead (they threw ENOENT, or
+ * failed to resolve the import) and are replaced below by checks against the
+ * code that actually ships.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import * as edition from "../edition";
 import { SAVE_KEY, SAVE_KEY_V1 } from "../constants";
-import * as crazyEdition from "../edition.crazy";
-import * as genericEdition from "../edition.generic";
-import * as pokiEdition from "../edition.poki";
-import * as directEdition from "../edition";
 import { PROTOCOL_MIN_VERSION, PROTOCOL_VERSION } from "../protocol/v1";
 import { APP_VERSION, BUILD_ID, GIT_SHA, REPLAY_VERSION, SAVE_SCHEMA, buildStamp } from "../version";
 
@@ -36,39 +41,25 @@ function repo(...parts: string[]): string {
   return readFileSync(join(process.cwd(), ...parts), "utf8");
 }
 
-/** The first capture group of `pattern` in `text`, or null. */
-function capture(text: string, pattern: RegExp): string | null {
-  return pattern.exec(text)?.[1] ?? null;
-}
-
-describe("realtime wire protocol: client and server must agree", () => {
-  it("pins the same number on both sides of the socket", () => {
-    const gateway = repo("server", "src", "realtime", "gateways.ts");
-    const server = Number(capture(gateway, /const PROTO_VERSION = (\d+);/));
-
-    expect(server).toBe(PROTOCOL_VERSION);
-    // The gateway's check is strict equality (`version !== PROTO_VERSION` →
-    // unsupportedVersion), so the client's floor has to be the same number too.
-    // Introducing a supported *range* means changing that check, this test and
-    // docs/VERSIONS.md together.
-    expect(PROTOCOL_MIN_VERSION).toBe(PROTOCOL_VERSION);
-  });
-
+describe("realtime wire protocol", () => {
   it("keeps the protocol module versioned in its path (protocol/v1)", () => {
     expect(repo("src", "game", "protocol", "v1.ts")).toMatch(
       /export const PROTOCOL_VERSION = \d+;/,
     );
   });
+
+  it("pins one protocol version, with the floor equal to it", () => {
+    // The Poki transport (Netlib) carries these frames peer-to-peer; there is
+    // no server-side negotiation any more, so a range would only mean peers
+    // silently disagreeing. Both numbers stay locked together.
+    expect(PROTOCOL_MIN_VERSION).toBe(PROTOCOL_VERSION);
+  });
 });
 
-describe("replay format: the number the ghost store 410s on", () => {
-  it("matches what the server stamps and what it requires", () => {
-    const ghosts = repo("server", "src", "ghosts", "GhostService.ts");
-    const stamped = Number(capture(ghosts, /JSON\.stringify\(\{ v: (\d+),/));
-    const required = Number(capture(ghosts, /parsed\.v !== (\d+)/));
-
-    expect(stamped).toBe(REPLAY_VERSION);
-    expect(required).toBe(REPLAY_VERSION);
+describe("replay format", () => {
+  it("stays a positive integer so ghost stores can reject a stale one", () => {
+    expect(REPLAY_VERSION).toBeGreaterThan(0);
+    expect(Number.isInteger(REPLAY_VERSION)).toBe(true);
   });
 });
 
@@ -88,13 +79,16 @@ describe("build identity: deterministic, declared, and actually used", () => {
   it("is derived from the semver, the portal target and the commit", () => {
     const config = repo("vite.config.ts");
 
+    // The portal is a literal in a single-portal repo (`poki`), so this pins
+    // the SHAPE that matters: derived from semver + target + commit, never
+    // from a clock.
     expect(config).toMatch(
-      /const BUILD_ID = `\$\{APP_VERSION\}-\$\{PORTAL\}-\$\{GIT_SHA\}`;/,
+      /const BUILD_ID = `\$\{APP_VERSION\}-(?:\$\{PORTAL\}|poki)-\$\{GIT_SHA\}`;/,
     );
     expect(config).toMatch(/const APP_VERSION = \(JSON\.parse\(readFileSync\(path\.resolve\(__dirname, "package\.json"\)/);
     // The old value was `Date.now().toString(36)`: a "version" that changed on
     // every rebuild of the same commit, which made zips non-reproducible and the
-    // server's client-build pin impossible to satisfy. Never again.
+    // leaderboard's build attribution meaningless. Never again.
     expect(config).not.toMatch(/BUILD_ID = Date\.now\(\)/);
   });
 
@@ -127,54 +121,38 @@ describe("build identity: deterministic, declared, and actually used", () => {
     // one after a physics or scoring change.
     expect(repo("src", "game", "Leaderboard.ts")).toContain("build: BUILD_ID");
   });
-
-  it("documents the server-side pin against that same id", () => {
-    const config = repo("server", "src", "config.ts");
-    const trust = repo("server", "src", "anticheat", "trust.ts");
-
-    // Permissive by default; pinning is opt-in via SUNBIRD_CLIENT_BUILD and now
-    // actually satisfiable because BUILD_ID is deterministic.
-    expect(config).toMatch(/clientBuildId: env\("SUNBIRD_CLIENT_BUILD", "unpinned"\)/);
-    expect(trust).toContain('this.cfg.clientBuildId === "unpinned"');
-    expect(repo("docs", "VERSIONS.md")).toContain("SUNBIRD_CLIENT_BUILD");
-  });
 });
 
-describe("edition variants stay in lockstep", () => {
-  const editions = {
-    direct: directEdition,
-    poki: pokiEdition,
-    crazy: crazyEdition,
-    generic: genericEdition,
-  } as const;
-
-  it("exports the same policy surface from every edition", () => {
-    const names = (m: Record<string, unknown>): string[] => Object.keys(m).sort();
-    const reference = names(editions.direct);
-
-    expect(reference).toContain("SIMULATED_BREAKS");
-    expect(reference).toContain("SELL_AD_REMOVAL");
-    for (const [portal, edition] of Object.entries(editions)) {
-      // A flag added to one edition and not the others is how a portal build
-      // ends up shipping direct-build behaviour (or vice versa).
-      expect(names(edition as Record<string, unknown>), `${portal} edition exports`).toEqual(reference);
-    }
+describe("edition module", () => {
+  it("exports the whole policy surface from the single shipped edition", () => {
+    // One edition ships. A flag that is expected but missing is how a build
+    // silently reverts to a default, so the surface is pinned in full.
+    expect(Object.keys(edition).sort()).toEqual(
+      [
+        "CUSTOM_PILOT_NAMES",
+        "LEADERBOARD_CLOUD_LABEL",
+        "POKI_EDITION",
+        "POKI_MULTIPLAYER",
+        "PORTAL_DISPLAY_NAME",
+        "PORTAL_EDITION_NOTE",
+        "RESERVED_PILOT_NAMES",
+        "SELL_AD_REMOVAL",
+        "SIMULATED_BREAKS",
+        "SQUAD_CHAT",
+      ].sort(),
+    );
   });
 
-  it("keeps one edition module per portal target the build accepts", () => {
-    const config = repo("vite.config.ts");
-    const valid = /const VALID_PORTALS = \[([^\]]+)\]/.exec(config)?.[1] ?? "";
-    const targets = valid
-      .split(",")
-      .map((s) => s.trim().replace(/^"|"$/g, ""))
-      .filter((s) => s && s !== "none");
-
-    // crazygames is an alias of crazy; every other target needs its own file.
-    const files = readdirSync(join(process.cwd(), "src", "game")).filter((f) => /^edition\..+\.ts$/.test(f));
-    for (const target of targets) {
-      const name = target === "crazygames" ? "crazy" : target;
-      expect(files, `edition module for ${target}`).toContain(`edition.${name}.ts`);
-    }
+  it("keeps exactly one edition module in src/game", () => {
+    // `edition.poki.ts` / `edition.crazy.ts` / `edition.generic.ts` were the
+    // multi-portal variants. Their return would mean a portal split is being
+    // reintroduced without the vite aliases that isolate each bundle.
+    const files = readdirSync(join(process.cwd(), "src", "game")).filter((f) =>
+      /^edition\..+\.ts$/.test(f),
+    );
+    // Only `legal.edition.ts` may look similar — it is the privacy copy, not a
+    // portal edition, and its filename starts with `legal.`.
+    expect(files).toEqual([]);
   });
 });
 
@@ -206,14 +184,13 @@ describe("HTTP namespaces: one derivation, documented drift", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the client's endpoint list in the audit doc (V-5 migration debt)", () => {
+  it("keeps the client's endpoint list in the audit doc", () => {
     const doc = repo("docs", "VERSIONS.md");
 
     // The shipped client still speaks the root (`/board`, `/score`) and legacy
-    // `/mp` (`/ghost`, `/entitlements`) namespaces; `/mp/v1` needs session auth.
-    // Migrating is a project, so the doc carries it — and this fails if the doc
-    // stops naming the routes the client actually calls.
-    for (const route of ["/board", "/score", "/mp/ghost", "/mp/v1"]) {
+    // `/mp` namespaces. Migrating is a project, so the doc carries it — and this
+    // fails if the doc stops naming the routes the client actually calls.
+    for (const route of ["/board", "/score"]) {
       expect(doc, `VERSIONS.md mentions ${route}`).toContain(route);
     }
   });

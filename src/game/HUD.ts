@@ -2879,6 +2879,12 @@ function renderMain(s: HudSnapshot): string {
         <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>${t("onboarding.step3Title", undefined, "Race the flock")}</strong><small>${t("onboarding.step3Sub", undefined, "Choose online or AI when you are ready")}</small></span><i>${t("onboarding.step3Action", undefined, "Race ›")}</i></button>
       </div>
     </section>` : ""}
+    <div class="home-mode-strip" role="group" aria-label="Quick access">
+      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("challenge")}<span>Race</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-progress">${menuIcon("progress")}<span>Goals</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-settings">${menuIcon("settings")}<span>Settings</span></button>
+    </div>
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:
@@ -3736,13 +3742,13 @@ function renderGameOver(s: HudSnapshot): string {
 
     ${renderNextFlight(s)}
     <details class="result-details"><summary>Flight details <span>Landmarks &amp; skill</span></summary><div class="over-stats">
-      <div><span>${t("hud.stat.perfects", undefined, "Perfects")}</span><b>${s.perfects}</b></div>
-      <div><span>${t("hud.stat.moments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
-      <div><span>${t("hud.stat.rings", undefined, "Rings")}</span><b>${s.rings}</b></div>
-      <div><span>${t("hud.stat.balloons", undefined, "Balloons")}</span><b>${s.balloons}</b></div>
-      <div><span>${t("hud.stat.sunflowers", undefined, "Sunflowers")}</span><b>${s.sunflowers}</b></div>
-      <div><span>${t("hud.stat.slopeflow", undefined, "Slope flow")}</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
-      <div><span>${t("hud.stat.islands", undefined, "Islands")}</span><b>${s.island + 1}</b></div>
+      <div><span>Perfects</span><b>${s.perfects}</b></div>
+      <div><span>Skyline moments</span><b>${s.zeniths}</b></div>
+      <div><span>Rings</span><b>${s.rings}</b></div>
+      <div><span>Balloons</span><b>${s.balloons}</b></div>
+      <div><span>Sunflowers</span><b>${s.sunflowers}</b></div>
+      <div><span>Slope flow</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
+      <div><span>Islands</span><b>${s.island + 1}</b></div>
     </div></details>
     ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! 👻` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
     ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}

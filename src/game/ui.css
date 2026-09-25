@@ -2169,7 +2169,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .cup-card.gold { border-color: var(--gold); }
 .cup-card.diamond { border-color: #8ad6ff; box-shadow: 0 0 18px rgba(120, 200, 255, 0.4); }
 .cup-head { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.cup-icon { font-size: 24px; }
+.cup-icon { font-size: 24px; width: 34px; display: flex; align-items: center; justify-content: center; }
+.cup-icon .icon-sm { width: 24px; height: 24px; }
 .cup-head b { display: block; font-size: 15px; }
 .cup-head em { font-style: normal; font-size: 11px; color: var(--muted-rose); }
 .cup-timer { font-size: 11px; font-weight: 700; color: var(--warm-tan); white-space: nowrap; }
@@ -2880,7 +2881,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font: inherit;
 }
 .daily-strip.done { background: linear-gradient(90deg, #e8f6e8, #d8efd8); border-color: rgba(70, 140, 70, 0.35); }
-.daily-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; }
+.daily-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.daily-strip .ds-icon .icon-sm { width: 22px; height: 22px; }
 .daily-strip .ds-body { flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .daily-strip .ds-body b { font-size: 13px; }
 .daily-strip .ds-body em { font-style: normal; font-size: 11px; color: #8a6a4a; }
@@ -2911,7 +2913,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .daily-card.done { background: linear-gradient(135deg, #eef8ee, #ddefdd); border-color: rgba(70, 140, 70, 0.3); }
 .daily-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.daily-head .daily-icon { font-size: 26px; }
+.daily-head .daily-icon { font-size: 26px; display: flex; align-items: center; }
+.daily-head .daily-icon .icon-sm { width: 26px; height: 26px; }
 .daily-head b { display: block; font-size: 14px; }
 .daily-head em { font-style: normal; font-size: 11px; color: #8a6a4a; }
 .daily-head > div { flex: 1; }
@@ -2993,7 +2996,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   margin-bottom: 6px;
   background: #fdfcf9;
 }
-.mastery-row .m-icon { font-size: 20px; width: 26px; text-align: center; }
+.mastery-row .m-icon { font-size: 20px; width: 26px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.mastery-row .m-icon .icon-sm { width: 20px; height: 20px; }
 .mastery-row .m-body { flex: 1; }
 .mastery-row .m-body b { display: block; font-size: 13px; }
 .mastery-row .m-body em { font-style: normal; font-size: 11px; color: #9a8a80; }
@@ -3417,7 +3421,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   text-align: left;
   font: inherit;
 }
-.event-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; }
+.event-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.event-strip .ds-icon .icon-sm { width: 22px; height: 22px; }
 .event-strip .ds-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .event-strip .ds-body b { font-size: 13px; }
 .event-strip .ds-body em { font-style: normal; font-size: 11px; color: #6a4a8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3449,7 +3454,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   border-top: 1px dashed rgba(120, 70, 190, 0.3);
   padding-top: 10px;
 }
-.theme-strip .theme-icon { font-size: 20px; }
+.theme-strip .theme-icon { font-size: 20px; display: flex; align-items: center; }
+.theme-strip .theme-icon .icon-sm { width: 20px; height: 20px; }
 .theme-strip .theme-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .theme-strip .theme-body b { font-size: 13px; }
 .theme-strip .theme-body em { font-style: normal; font-size: 11px; color: #6a4a8a; }
@@ -3471,7 +3477,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .camp-chapter.locked { opacity: 0.55; }
 .camp-chapter.claimed { border-color: rgba(70, 140, 70, 0.35); background: rgba(232, 246, 232, 0.6); }
 .camp-head { display: flex; gap: 10px; align-items: flex-start; }
-.camp-icon { font-size: 24px; width: 32px; text-align: center; }
+.camp-icon { font-size: 24px; width: 32px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.camp-icon .icon-sm { width: 24px; height: 24px; }
 .camp-head b { display: block; font-size: 14px; }
 .camp-head em { display: block; font-style: italic; font-size: 12px; color: #7a6a5a; margin-top: 2px; }
 .camp-goal {
@@ -5313,3 +5320,5 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 @media (prefers-reduced-motion: reduce) {
   .celebration .beat { opacity: 1; }
 }
+
+@import "./menu-polish.css";

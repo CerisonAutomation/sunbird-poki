@@ -33,7 +33,7 @@ import { SlopeChain } from "./SlopeChain";
 import { RoomWatcher, ROOM_POLL_MS, roomSummaryLine, summarizeRooms, type LiveRoom } from "./RoomBrowser";
 import { Leaderboard, loadPilotName, savePilotName, isLeaderboardOnline, type BoardMetric, type BoardPage, type BoardScope } from "./Leaderboard";
 import { generatePilotName, isPilotNameClean, moderatePilotName, pilotNameRejection } from "./pilotNameGenerator";
-import { adoptPortalLocale, setLocale, whenLocaleReady, type SupportedLocale } from "../i18n";
+import { adoptPortalLocale, setLocale, t, whenLocaleReady, type SupportedLocale } from "../i18n";
 import { Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
 import {
   dailyChallenge,
@@ -3982,7 +3982,7 @@ export class Game {
           // Pack loads before the re-render: UI never paints half-switched
           // text, and the confirmation toast lands once strings are live.
           void setLocale(id as SupportedLocale).then(() => {
-            this.hud.toast(`Language updated`, "info");
+            this.hud.toast(t("hud.settings.languageUpdated", undefined, "Language updated"), "info");
             this.bump();
           });
         }

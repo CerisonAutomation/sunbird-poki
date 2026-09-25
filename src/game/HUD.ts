@@ -3363,42 +3363,42 @@ function renderSettings(s: HudSnapshot): string {
   return `
     ${head(t("hud.settings.title", undefined, "Settings"))}
     <p class="settings-intro">Make the flight feel right for you. Changes save automatically.</p>
-    <div class="section-title">Pilot</div>
+    <div class="section-title">${t("hud.settings.section.pilot", undefined, "Pilot")}</div>
     ${CUSTOM_PILOT_NAMES
       ? `<div class="redeem pilot-name-row">
-      <input data-ui data-ref="pilotName" aria-label="Pilot name" maxlength="14" placeholder="Pilot name" value="${escapeHtml(s.pilotName)}" />
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Autogenerate random pilot name">🎲 Random</button>
-      <button class="mini-btn primary" data-ui data-action="rename-pilot">Save</button>
+      <input data-ui data-ref="pilotName" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}" maxlength="14" placeholder="${t("hud.pilot.name", undefined, "Pilot Name")}" value="${escapeHtml(s.pilotName)}" />
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
+      <button class="mini-btn primary" data-ui data-action="rename-pilot">${t("common.save", undefined, "Save")}</button>
     </div>`
       : `<div class="redeem pilot-name-row">
-      <span class="pilot-name-readonly" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Roll a new pilot name">🎲 Random</button>
+      <span class="pilot-name-readonly" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}">${escapeHtml(s.pilotName)}</span>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
     </div>`
     }
-    <div class="section-title">Sound</div>
-    ${toggle("Mute all sound", "mute", s.settings.mute)}
-    ${volumeControl("Effects volume", "sfx-vol", sPct)}
-    ${toggle("Music", "music", s.settings.music)}
-    ${volumeControl("Music volume", "music-vol", mPct)}
+    <div class="section-title">${t("hud.settings.section.sound", undefined, "Sound")}</div>
+    ${toggle(t("hud.settings.mute", undefined, "Mute all sound"), "mute", s.settings.mute)}
+    ${volumeControl(t("hud.settings.effectsVolume", undefined, "Effects volume"), "sfx-vol", sPct)}
+    ${toggle(t("hud.settings.musicToggle", undefined, "Music"), "music", s.settings.music)}
+    ${volumeControl(t("hud.settings.music", undefined, "Music Volume"), "music-vol", mPct)}
     <div class="setting-row setting-select"><label for="music-track">Music track</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>Shuffle all tracks</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
-    <div class="setting-row setting-select"><label for="language-select">Language / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
-    <div class="setting-row"><span>Show distances in</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
-    <div class="section-title">Comfort &amp; controls</div>
-    ${toggle("Haptics", "haptics", s.settings.haptics)}
+    <div class="setting-row setting-select"><label for="language-select">${t("hud.settings.language", undefined, "Language")} / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
+    <div class="setting-row"><span>${t("hud.settings.distancesIn", undefined, "Show distances in")}</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
+    <div class="section-title">${t("hud.settings.section.comfort", undefined, "Comfort &amp; controls")}</div>
+    ${toggle(t("hud.settings.haptics", undefined, "Haptics"), "haptics", s.settings.haptics)}
     ${s.boosts.some((b) => b.def.id === "doubletap" && b.armed) ? toggle("Double-tap boost", "doubletap", s.settings.doubleTapBoost) : ""}
-    ${toggle("Reduce motion", "motion", s.settings.reduceMotion)}
-    ${toggle("Colorblind assist", "colorassist", s.settings.colorAssist)}
-    ${toggle("Large text", "bigtext", s.settings.bigText)}
-    <div class="setting-row setting-select"><label for="render-quality">Render quality</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? "Auto · recommended" : q === "high" ? "High · more detail" : "Low · less GPU work"}</option>`).join("")}</select></div>
-    <div class="setting-row"><span>Flights flown</span><b>${s.runsPlayed}</b></div>
-    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">⛶ Fullscreen mode</button>
+    ${toggle(t("hud.settings.reduceMotion", undefined, "Reduce Motion"), "motion", s.settings.reduceMotion)}
+    ${toggle(t("hud.settings.colorAssist", undefined, "Colorblind assist"), "colorassist", s.settings.colorAssist)}
+    ${toggle(t("hud.settings.largeText", undefined, "Large text"), "bigtext", s.settings.bigText)}
+    <div class="setting-row setting-select"><label for="render-quality">${t("hud.settings.renderQuality", undefined, "Render quality")}</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? t("hud.settings.quality.auto", undefined, "Auto · recommended") : q === "high" ? t("hud.settings.quality.high", undefined, "High · more detail") : t("hud.settings.quality.low", undefined, "Low · less GPU work")}</option>`).join("")}</select></div>
+    <div class="setting-row"><span>${t("hud.settings.flightsFlown", undefined, "Flights flown")}</span><b>${s.runsPlayed}</b></div>
+    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">⛶ ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>
     <!-- Privacy policy, linked from inside the game. The platform guide asks
          for exactly this before it approves an external service (multiplayer,
          storage) for a game: a live policy page the player can reach from the
          build. The URL comes from ./legal.ts so each deploy points at its own
          hosted copy. Kept free of any portal name so this template renders
          identically in every edition. -->
-    <button class="soft-btn wide" data-ui data-action="open-privacy">🔒 Privacy policy</button>
+    <button class="soft-btn wide" data-ui data-action="open-privacy">🔒 ${t("hud.settings.privacy", undefined, "Privacy Policy")}</button>
     ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">⬇ Install Sunbird</button>` : ""}
     <details class="danger-zone"><summary>Manage saved progress</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
     <button class="ghost-btn danger" data-ui data-action="reset-progress">${s.resetArmed ? "Confirm: erase saved progress" : "Reset progress"}</button></details>

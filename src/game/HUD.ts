@@ -3726,7 +3726,7 @@ function renderGameOver(s: HudSnapshot): string {
     </div>
 
     <div class="btn-row result-links">
-      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} ${t("hud.menu.shop", undefined, "Shop")}</button>
+      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
       <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
       <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
     </div>

@@ -1,9 +1,9 @@
 import { browseSkins, newShopBrowse, nextBird, type ShopBrowse } from "./ShopBrowse";
 import { flightTakeaway } from "./FlightGuidance";
-import { menuIcon, menuHorizon, arrowUpRightSvg, arrowRightSvg } from "./MenuIcons";
+import { menuIcon, menuHorizon, arrowUpRightSvg, arrowRightSvg, type MenuIconName } from "./MenuIcons";
 import { paginate } from "./Pagination";
 import { flockLoadingMark } from "./FlockLoading";
-import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, type MenuDestination } from "./MenuCatalog";
+import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, type MenuDestination } from "./MenuCatalog";
 import { OverlayNavigation } from "./OverlayNavigation";
 import { MenuContinuity } from "./MenuContinuity";
 import { MenuSky } from "./MenuSky";
@@ -64,8 +64,46 @@ export const SCREEN = {
   confirmUnlock: "checkout", highGlides: "progress", nestPass: "pass",
   trophyCase: "trophies", account: "account",
 } as const;
+/**
+ * The English heading for each screen key.
+ *
+ * These are the `defaultText` passed to `t()`, so the screen shows correct
+ * English before a pack lands — and they are asserted word-for-word against the
+ * barrel's `sourceText` by screen-titles.test.ts, which keeps the fallback from
+ * drifting away from the thing translators are actually translating.
+ */
+export const SCREEN_HEADINGS: Readonly<Record<keyof typeof SCREEN, string>> = {
+  leaderboard: "Leaderboard",
+  raceLobby: "Race Lobby",
+  aiPvp: "AI PvP",
+  challenges: "Challenges",
+  campaign: "The Long Migration",
+  squad: "Squad",
+  rivalRank: "Rival Rank",
+  tournaments: "Tournaments",
+  gameModes: "Game modes",
+  atlas: "Island Atlas",
+  shop: "Shop",
+  coinStore: "Coin Store",
+  confirmUnlock: "Confirm Unlock",
+  highGlides: "High glides",
+  nestPass: "Nest Pass",
+  trophyCase: "Trophy Case",
+  account: "Account",
+};
+
+/**
+ * Screen id → its barrel key and English fallback.
+ *
+ * `en` used to be set to the camelCase *key* rather than the English heading,
+ * which made the "fallback === sourceText" assertion in screen-titles.test.ts
+ * compare "leaderboard" against "Leaderboard" and fail on every screen.
+ */
 export const SCREEN_TITLES: Readonly<Record<string, { key: string; en: string }>> = Object.fromEntries(
-  Object.entries(SCREEN).map(([key, value]) => [value, { key: `hud.screen.${key}.title`, en: key }]),
+  Object.entries(SCREEN).map(([key, value]) => [
+    value,
+    { key: `hud.screen.${key}.title`, en: SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key },
+  ]),
 );
 
 export type RivalCard = {
@@ -1727,10 +1765,20 @@ export class HUD {
 
 /* ---------- templates ---------- */
 
-function head(title: string, backAction = "back", right = ""): string {
-  const destination = [...PLAY_DESTINATIONS, ...COLLECTION_DESTINATIONS, ...PROGRESS_DESTINATIONS].find(d => d.title === title);
-  const icon = destination?.icon ?? (title === "Race Lobby" ? "online" : title === "Solo modes" ? "compass" : undefined);
-  return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="Back">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${title}</h2><span>${right}</span></div>`;
+/** Icons for screens that exist but are not home destinations. */
+const SCREEN_ICONS: Record<string, MenuIconName> = {
+  raceLobby: "online",
+  aiPvp: "online",
+  coinStore: "shop",
+  confirmUnlock: "shop",
+  highGlides: "trophy",
+};
+
+function head(key: string, backAction = "back", right = ""): string {
+  const icon = destinationByKey(key)?.icon ?? SCREEN_ICONS[key];
+  const title = t(`hud.screen.${key}.title`, undefined, SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key);
+  const back = t("common.back", undefined, "Back");
+  return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
 }
 
 function upsellStrip(): string {
@@ -1906,7 +1954,7 @@ function renderBoard(s: HudSnapshot): string {
       : `<div class="board-row empty">${s.boardLoading ? "Loading…" : "No flights recorded yet — be the first wing on the board"}</div>`;
 
   return `
-    ${head("Leaderboard", "back", status)}
+    ${head(SCREEN.leaderboard, "back", status)}
     <div class="seg">${scopes
       .map((x) => `<button data-ui data-action="board-scope" data-id="${x.id}" class="${s.boardScope === x.id ? "on" : ""}">${x.label}</button>`)
       .join("")}</div>
@@ -1975,7 +2023,7 @@ function renderLive(s: HudSnapshot): string {
   const activeMode = (s.pvpModes || []).find((m) => m.id === s.selectedPvpMode) ?? (s.pvpModes || [])[0] ?? { name: "Sprint GP", icon: "⚡", finish: 1500 };
   const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0] ?? { name: "Emerald Circuit", emoji: "🌿" };
 
-  return `${head("Race Lobby")}
+  return `${head(SCREEN.raceLobby)}
     <p class="tagline">40-pilot live &amp; neural AI racing across 9 scenic worlds.</p>
     ${s.netState === "error" && s.netError ? `<p class="network-notice" role="alert">${escapeHtml(s.netError)}</p>` : ""}
     <p class="race-fairness">${menuIcon("medal")} Equal flight equipment · your bird, your timing. Store boosts are saved for solo play.</p>
@@ -2074,7 +2122,7 @@ function renderLive(s: HudSnapshot): string {
 }
 
 function renderPractice(s: HudSnapshot): string {
-  return `${head("AI PvP")}
+  return `${head(SCREEN.aiPvp)}
     <section class="race-section" aria-label="AI race practice">
       <div class="race-section-head"><h3>Race the AI flock offline</h3><span class="section-step">AI pilots · no waiting</span></div>
       <p>Every format below starts immediately against computer-controlled birds — no server, no room, no rating. Learning the circuits here is the fastest way to win them online.</p>
@@ -2202,7 +2250,7 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   return `
-    ${head("Challenges", "back", `<span class="pill">Daily · Weekly</span>`)}
+    ${head(SCREEN.challenges, "back", `<span class="pill">Daily · Weekly</span>`)}
     <p class="tagline">Same hills as everyone else today. Modifiers change how you fly them.</p>
     ${raceChallenges}
     ${event}
@@ -2240,7 +2288,7 @@ function renderCampaign(s: HudSnapshot): string {
     })
     .join("");
   return `
-    ${head("The Long Migration", "back", `<span class="pill">${s.campaignDone}/${s.campaignTotal}</span>`)}
+    ${head(SCREEN.campaign, "back", `<span class="pill">${s.campaignDone}/${s.campaignTotal}</span>`)}
     <p class="tagline">A journey in eight chapters. Progress accrues from every flight — no separate grind.</p>
     <div class="camp-list">${rows}</div>
   `;
@@ -2420,7 +2468,7 @@ export function renderSquad(s: HudSnapshot): string {
     : "";
 
   return `
-    ${head("Squad", "back", sq.myCode ? `<span class="pill">${escapeHtml(sq.myCode)}</span>` : "")}
+    ${head(SCREEN.squad, "back", sq.myCode ? `<span class="pill">${escapeHtml(sq.myCode)}</span>` : "")}
     <p class="tagline">A little flock. A bigger adventure.</p>
     ${hubBanner}
     ${recovery}
@@ -2437,7 +2485,7 @@ function renderRank(s: HudSnapshot): string {
   const r = s.rival;
   const wl = r.wins + r.losses > 0 ? Math.round((r.wins / (r.wins + r.losses)) * 100) : 0;
   return `
-    ${head("Rival Rank", "back", `<span class="pill">${boardSource(s).chip}</span>`)}
+    ${head(SCREEN.rivalRank, "back", `<span class="pill">${boardSource(s).chip}</span>`)}
     <div class="rank-hero">
       <div class="rank-div-big">${r.divisionIcon}</div>
       <div class="rank-hero-num">${r.rating}</div>
@@ -2520,7 +2568,7 @@ function renderCups(s: HudSnapshot): string {
     : "";
 
   return `
-    ${head("Tournaments", "back", `<span class="pill">Weekly</span>`)}
+    ${head(SCREEN.tournaments, "back", `<span class="pill">Weekly</span>`)}
     <p class="tagline">Two cups run every week. Beat a division cut-off, then claim the prize — it lands in your account immediately.</p>
     <div class="cup-list">${cups}</div>
     ${s.lastPrize ? `<div class="reward-strip">Last prize · ${s.lastPrize}</div>` : ""}
@@ -2531,7 +2579,7 @@ function renderCups(s: HudSnapshot): string {
 
 function renderModes(s: HudSnapshot): string {
   return `
-    ${head("Game modes")}
+    ${head(SCREEN.gameModes)}
     <p class="tagline">Solo flights below are you against the course. A <b>PvP circuit</b> opens the PvP options — ranked and casual online racing, private rooms, or the AI flock. All modes share your unlocks.</p>
     <div class="mode-list">
       ${s.modes
@@ -2600,7 +2648,7 @@ function renderVersusResult(s: HudSnapshot): string {
 
 function renderAtlas(s: HudSnapshot): string {
   return `
-    ${head("Island Atlas", "back", `<span class="pill">Farthest: ${s.farthestIsland + 1}</span>`)}
+    ${head(SCREEN.atlas, "back", `<span class="pill">Farthest: ${s.farthestIsland + 1}</span>`)}
     <p class="tagline">Every island has its own weather. Learn them, then chain them.</p>
     <div class="atlas">
       ${s.atlas
@@ -3045,7 +3093,7 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
   ] as const;
 
   return `
-    ${head("Shop", "back", `<span class="pill coin">● ${s.wallet.toLocaleString()}</span>`)}
+    ${head(SCREEN.shop, "back", `<span class="pill coin">● ${s.wallet.toLocaleString()}</span>`)}
     <p class="shop-intro">YOUR HANGAR <span>Find your wings. Make them yours.</span></p>
 
     <div class="pc pc--gold pc-row">
@@ -3193,7 +3241,7 @@ function renderPaywall(s: HudSnapshot): string {
     </div>`
     : "";
   return `
-    ${head("Coin Store")}
+    ${head(SCREEN.coinStore)}
     <div class="wallet-row" style="margin-bottom:12px"><span class="pill coin">Your Balance: ● ${s.wallet.toLocaleString()}</span></div>
     ${starter}
     <div class="gold-hero"><div class="gold-badge">✦</div><div class="gold-price">${GOLD.price}<small> lifetime</small></div></div>
@@ -3238,7 +3286,7 @@ function renderCheckout(s: HudSnapshot): string {
 
   const canAfford = s.wallet >= item.coinPrice;
   return `
-    ${head("Confirm Unlock", "checkout-cancel")}
+    ${head(SCREEN.confirmUnlock, "checkout-cancel")}
     <div class="sheet">
       <div class="sheet-row"><span>${item.name}</span><b>${item.price}</b></div>
       <p class="tagline">Wallet: ● ${s.wallet.toLocaleString()}</p>
@@ -3309,7 +3357,7 @@ function renderSettings(s: HudSnapshot): string {
 
 function renderScores(s: HudSnapshot): string {
   return `
-    ${head("High glides")}
+    ${head(SCREEN.highGlides)}
     ${renderScoreTable(s.highScores)}
     ${!s.highScores.length ? `<p class="tagline">Your first flight starts your story. Fly a little farther each time.</p><button class="primary-btn" data-ui data-action="pvp-practice">Take your first flight</button>` : ""}
     <div class="menu-stats"><div>Today's best <b>${distanceText(s.todayBest)}</b></div><div>Flights <b>${s.runsPlayed}</b></div></div>
@@ -3326,7 +3374,7 @@ function rewardLabel(r: { kind: string; amount?: number; id?: string }): string 
 function renderPass(s: HudSnapshot): string {
   const pct = Math.min(100, (s.season.have / s.season.need) * 100);
   return `
-    ${head("Nest Pass", "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
+    ${head(SCREEN.nestPass, "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
     <div class="pass-progress"><i style="width:${pct}%"></i></div>
     <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks the premium track." : " Fly to unlock rewards."}</p>
     ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>Double the tier rewards with Gold</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
@@ -3352,7 +3400,7 @@ function renderTrophies(s: HudSnapshot): string {
   for (const v of s.trophies) groups[v.def.rarity]!.push(v);
   const order: (keyof typeof groups)[] = ["bronze", "silver", "gold", "platinum"];
   return `
-    ${head("Trophy Case", "back", `<span class="pill">${s.trophyCounts.unlocked}/${s.trophyCounts.total}</span>`)}
+    ${head(SCREEN.trophyCase, "back", `<span class="pill">${s.trophyCounts.unlocked}/${s.trophyCounts.total}</span>`)}
     ${order
       .map(
         (rarity) => `
@@ -3393,7 +3441,7 @@ function renderAccount(s: HudSnapshot): string {
     </div>`
     : "";
   return `
-    ${head("Account")}
+    ${head(SCREEN.account)}
     ${portalAccount}
     <div class="section-title">Membership</div>
     ${!SELL_AD_REMOVAL ? "" : `

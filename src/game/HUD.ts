@@ -2163,8 +2163,8 @@ function renderLive(s: HudSnapshot): string {
         <button class="destination" data-ui data-action="versus"><span class="destination-art">${menuIcon("versus")}</span><span class="destination-copy"><b>Same-screen 1v1</b><span>Local split-screen flight</span></span></button>
         <button class="destination" data-ui data-action="open-squad"><span class="destination-art">${menuIcon("squad")}</span><span class="destination-copy"><b>Squad</b><span>${SQUAD_CHAT ? "Friends &amp; club chat" : "Friends &amp; clubs"}</span></span></button>
       </nav>`}
-    <button class="soft-btn wide" data-ui data-action="open-shop">Change loadout</button>
-    <p class="fineprint">Hold downhill to build speed. Release uphill to launch. Slipstream behind rivals for slingshot surges!</p>`;
+    <button class="soft-btn wide" data-ui data-action="open-shop">${t("hud.changeLoadout", undefined, "Change loadout")}</button>
+    <p class="fineprint">${t("hud.loadoutTip", undefined, "Hold downhill to build speed. Release uphill to launch. Slipstream behind rivals for slingshot surges!")}</p>`;
 }
 
 function renderPractice(s: HudSnapshot): string {
@@ -2710,9 +2710,9 @@ function renderAtlas(s: HudSnapshot): string {
         .join("")}
     </div>
     <div class="field-guide">
-      <div class="mission-head">Field guide</div>
-      <div class="fg-row"><b>♨ Thermals</b> Shimmering columns. <em>Release</em> inside one to ride it up.</div>
-      <div class="fg-row"><b>🌬 Headwinds</b> Slow you in the air. <em>Hold</em> to tuck and punch through.</div>
+      <div class="mission-head">${t("hud.fieldGuide", undefined, "Field guide")}</div>
+      <div class="fg-row"><b>♨ Thermals</b> Shimmering columns. Release inside one to ride it up.</div>
+      <div class="fg-row"><b>🌬 Headwinds</b> Slow you in the air. Hold to tuck and punch through.</div>
       <div class="fg-row"><b>🌩 Ash storms</b> Sap your speed. Fly beneath them, or dive early.</div>
       <div class="fg-row"><b>❄ Snow caps</b> Just pretty — but the peaks are taller. Build speed before them.</div>
     </div>
@@ -2866,24 +2866,19 @@ function renderMain(s: HudSnapshot): string {
       <div class="hero-title">
         <span class="hero-kicker">chase the daylight</span>
         <h1>SUNBIRD</h1>
-        <p class="hero-sub">Hold to dive. Release to soar.<br>Master the glide across endless islands.</p>
+        <p class="hero-sub">${t("hud.heroSub", undefined, "Hold to dive. Release to soar.")}<br>${t("hud.heroSub2", undefined, "Master the glide across endless islands.")}</p>
       </div>
     </header>
 
-    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="Play free flight now"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>Fly now</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
+    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="Play free flight now"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
     ${s.runsPlayed < 2 ? `<section class="onboarding-route" aria-label="Your first flight plan">
-      <div class="onboarding-route-head"><span>✦ START HERE</span><small>one input · three small wins</small></div>
+      <div class="onboarding-route-head"><span>✦ ${t("onboarding.startHere", undefined, "START HERE")}</span><small>${t("onboarding.startSubtitle", undefined, "one input · three small wins")}</small></div>
       <div class="onboarding-route-steps">
-        <button class="onboarding-route-step active" data-ui data-action="pvp-practice"><b>01</b><span><strong>Feel the glide</strong><small>Hold downhill · release to soar</small></span><i>Fly ›</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-shop"><b>02</b><span><strong>Choose your bird</strong><small>Spend the coins you just earned</small></span><i>Shop ›</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>Race the flock</strong><small>Choose online or AI when you are ready</small></span><i>Race ›</i></button>
+        <button class="onboarding-route-step active" data-ui data-action="pvp-practice"><b>01</b><span><strong>${t("onboarding.step1Title", undefined, "Feel the glide")}</strong><small>${t("onboarding.step1Sub", undefined, "Hold downhill · release to soar")}</small></span><i>${t("onboarding.step1Action", undefined, "Fly ›")}</i></button>
+        <button class="onboarding-route-step" data-ui data-action="open-shop"><b>02</b><span><strong>${t("onboarding.step2Title", undefined, "Choose your bird")}</strong><small>${t("onboarding.step2Sub", undefined, "Spend the coins you just earned")}</small></span><i>${t("onboarding.step2Action", undefined, "Shop ›")}</i></button>
+        <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>${t("onboarding.step3Title", undefined, "Race the flock")}</strong><small>${t("onboarding.step3Sub", undefined, "Choose online or AI when you are ready")}</small></span><i>${t("onboarding.step3Action", undefined, "Race ›")}</i></button>
       </div>
-    </section>` : `<div class="home-mode-strip" role="group" aria-label="Game modes">
-      <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-live">${menuIcon("online")}<span>Race</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-practice">${menuIcon("compass")}<span>vs AI</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("challenge")}<span>Goals</span></button>
-    </div>`}
+    </section>` : ""}
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:
@@ -2896,7 +2891,7 @@ function renderMain(s: HudSnapshot): string {
     <nav class="destination-grid utility-destinations" aria-label="Your hangar">${menuLinks(COLLECTION_DESTINATIONS)}</nav>
     <div class="home-section-title"><span>Progress</span><small>GOALS · RANK · REWARDS</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="Progress">${menuLinks(progressDestinations)}</nav>
-    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><span class="record-pass" data-ui data-action="open-pass">Nest Pass Lv.${s.season.tier}/${s.season.maxTier}</span><span class="record-wallet">● ${s.wallet.toLocaleString()} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
+    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><span class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</span><span class="record-wallet">● ${s.wallet.toLocaleString()} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
   `;
 }
 
@@ -3085,7 +3080,7 @@ function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: n
 
 function renderRivalBanner(banner: string): string {
   const [name, dist] = banner.split("|");
-  return `<div class="rival-banner">🥊 <b>${escapeHtml(name)}</b> challenged you — beat <b>${escapeHtml(dist)} m</b> on their hills. Hold to fly.</div>`;
+  return `<div class="rival-banner">🥊 <b>${escapeHtml(name)}</b> ${t("hud.rivalChallenge", undefined, "challenged you — beat")} <b>${escapeHtml(dist)} m</b> ${t("hud.rivalOnHills", undefined, "on their hills. Hold to fly.")}</div>`;
 }
 
 function renderBoostRow(v: BoostView, wallet: number): string {
@@ -3713,13 +3708,13 @@ function renderGameOver(s: HudSnapshot): string {
       : "";
 
   return `
-    <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
+    <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
     <h2>${t("hud.gameover.title", undefined, "Flight completed")}</h2>
-    <p class="tagline">${s.massRace ? "Your place, your progress, your next race." : "A little farther. A little smoother. One more flight?"}</p>
-    <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? "Back to race lobby" : s.massRace && s.racePlace > 0 ? "Race again · same stakes" : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
-    ${!s.massRace ? `<p class="fineprint replay-note">Fly again replays this exact course so you can race the ghost of the run you just flew 👻</p>` : ""}
-    ${s.newBest ? `<div class="new-best">👑 NEW BEST · ${distanceText(s.distance)}<small>your farthest flight yet</small></div>` : ""}
-    ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">Leaderboard rank · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
+    <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
+    <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
+    ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
+    ${s.newBest ? `<div class="new-best">👑 ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
+    ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">${t("hud.gameover.leaderboardRank", undefined, "Leaderboard rank")} · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
     ${shareBlock}
     ${renderCelebration(s.celebration)}

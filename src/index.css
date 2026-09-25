@@ -412,6 +412,12 @@ textarea {
   box-shadow: 0 3px 0 rgba(42, 28, 40, 0.15);
   transition: background 0.2s, color 0.2s, transform 0.15s;
 }
+.mult-chip {
+  font-size: 15px;
+  min-width: 52px;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
 .mult-chip.hot {
   background: linear-gradient(135deg, #ffd86b, var(--amber));
   color: var(--bark-hot);

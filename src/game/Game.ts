@@ -7238,6 +7238,10 @@ export class Game {
       selectedPvpWorld: this.selectedPvpWorld,
       beatLine: null,
       nextAction: "",
+      // Celebration and proximity are not yet plumbed from game state; provide
+      // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
+      celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
+      proximity: { visible: false, fill: 0, remaining: 0, name: "" },
     };
     this.hud.update(snap);
   }

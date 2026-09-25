@@ -2964,7 +2964,7 @@ function renderProgress(s: HudSnapshot): string {
       <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>
       <span class="rank-sub">${
         s.rival.nextNeeded > 0
-          ? `${Math.round(s.rival.nextNeeded).toLocaleString()} to ${s.rival.nextName}`
+          ? `${s.rival.rating.toLocaleString()} / ${(s.rival.rating + Math.round(s.rival.nextNeeded)).toLocaleString()} to ${s.rival.nextName}`
           : "Top division — defend it"
       } · 🔥${s.rival.streak} streak</span>
     </button>

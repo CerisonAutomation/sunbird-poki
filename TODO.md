@@ -6,7 +6,7 @@ Items identified in `/critique` audit. Fix one per ralph iteration.
 
 - [x] **Locale mixing** — Audit HUD.ts pause screen strings ("Keep flying", "Restart flight", "Exit to menu", "Global Board", "My Scores") and ensure they use t() with barrel keys OR confirm English-only intent and document it. Check translations.barrel.json for coverage gaps on HUD-critical strings.
 
-- [ ] **Multiplier tag legibility** — The `×2.0` multiplier readout in the flight HUD is too small. Find the `.mult` or `.multEl` element in HUD.ts and increase its visual weight (font-size, contrast, or bold treatment) so it's readable during active flight.
+- [x] **Multiplier tag legibility** — The `×2.0` multiplier readout in the flight HUD is too small. Find the `.mult` or `.multEl` element in HUD.ts and increase its visual weight (font-size, contrast, or bold treatment) so it's readable during active flight.
 
 - [ ] **Rank ladder context** — "egg Fledgling · 968" shows no ceiling. Add a rank progress hint to the rank-card on the progress screen and/or the rank hero screen — e.g. "968 / 1,200 to Sparrow" so players know where they stand.
 

@@ -3340,7 +3340,7 @@ function renderSettings(s: HudSnapshot): string {
   return `
     ${head(t("hud.settings.title", undefined, "Settings"))}
     <p class="settings-intro">Make the flight feel right for you. Changes save automatically.</p>
-    <div class="section-title">${t("hud.settings.section.pilot", undefined, "Pilot")}</div>
+    ${sectionTitle(t("hud.settings.section.pilot", undefined, "Pilot"))}
     ${CUSTOM_PILOT_NAMES
       ? `<div class="redeem pilot-name-row">
       <input data-ui data-ref="pilotName" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}" maxlength="14" placeholder="${t("hud.pilot.name", undefined, "Pilot Name")}" value="${escapeHtml(s.pilotName)}" />
@@ -3352,7 +3352,7 @@ function renderSettings(s: HudSnapshot): string {
       <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
     </div>`
     }
-    <div class="section-title">${t("hud.settings.section.sound", undefined, "Sound")}</div>
+    ${sectionTitle(t("hud.settings.section.sound", undefined, "Sound"))}
     ${toggle(t("hud.settings.mute", undefined, "Mute all sound"), "mute", s.settings.mute)}
     ${volumeControl(t("hud.settings.effectsVolume", undefined, "Effects volume"), "sfx-vol", sPct)}
     ${toggle(t("hud.settings.musicToggle", undefined, "Music"), "music", s.settings.music)}
@@ -3360,7 +3360,7 @@ function renderSettings(s: HudSnapshot): string {
     <div class="setting-row setting-select"><label for="music-track">Music track</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>Shuffle all tracks</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
     <div class="setting-row setting-select"><label for="language-select">${t("hud.settings.language", undefined, "Language")} / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.distancesIn", undefined, "Show distances in")}</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
-    <div class="section-title">${t("hud.settings.section.comfort", undefined, "Comfort &amp; controls")}</div>
+    ${sectionTitle(t("hud.settings.section.comfort", undefined, "Comfort &amp; controls"))}
     ${toggle(t("hud.settings.haptics", undefined, "Haptics"), "haptics", s.settings.haptics)}
     ${s.boosts.some((b) => b.def.id === "doubletap" && b.armed) ? toggle("Double-tap boost", "doubletap", s.settings.doubleTapBoost) : ""}
     ${toggle(t("hud.settings.reduceMotion", undefined, "Reduce Motion"), "motion", s.settings.reduceMotion)}
@@ -3457,7 +3457,7 @@ function renderAccount(s: HudSnapshot): string {
   // goes on the board). Sign-in is offered only behind a button — Poki's docs
   // forbid prompting for an account on load.
   const portalAccount = s.portalName !== "none"
-    ? `<div class="section-title">${PORTAL_DISPLAY_NAME} account</div>
+    ? `${sectionTitle(`${PORTAL_DISPLAY_NAME} account`)}
     <div class="sheet">
       ${
         s.portalAccountName
@@ -3471,7 +3471,7 @@ function renderAccount(s: HudSnapshot): string {
   return `
     ${head(SCREEN.account)}
     ${portalAccount}
-    <div class="section-title">Membership</div>
+    ${sectionTitle("Membership")}
     ${!SELL_AD_REMOVAL ? "" : `
     <div class="sheet">
       <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
@@ -3493,7 +3493,7 @@ function renderAccount(s: HudSnapshot): string {
     </div>
     `}
 
-    <div class="section-title">Invite friends</div>
+    ${sectionTitle("Invite friends")}
     <div class="sheet">
       <p class="tagline">Share your code — friends who redeem it get a welcome bonus on their device.</p>
       <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>
@@ -3504,7 +3504,7 @@ function renderAccount(s: HudSnapshot): string {
       }
       ${s.referralMessage ? `<p class="note">${s.referralMessage}</p>` : ""}
     </div>
-    <div class="section-title">Transfer saved progress</div>
+    ${sectionTitle("Transfer saved progress")}
     <div class="sheet">
       <p class="tagline">Copy this code to move your progress to another device.</p>
       <textarea class="cloud-box" data-ui aria-label="Your exportable save code" readonly rows="3">${s.cloudCode}</textarea>
@@ -3670,7 +3670,7 @@ function renderGameOver(s: HudSnapshot): string {
     s.share.available || s.share.loaded || s.share.code
       ? `
     <div class="share-run">
-      <div class="section-title">🔗 Shared run <small>friend's code · async race</small></div>
+      ${sectionTitle("🔗 Shared run", "friend's code · async race")}
       ${
         s.share.code
           ? `<div class="friend-row"><span class="fr-name">Run code</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">Copy code</button></div>`

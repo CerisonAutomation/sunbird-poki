@@ -1,6 +1,15 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  /**
+   * Build identity, injected by `define` in vite.config.ts. Declared here so
+   * consumers need no cast — `src/game/version.ts` reads all three, and an
+   * untyped property there would force an `as any` that `verify:prod` refuses
+   * in shipped client code.
+   */
+  readonly VITE_BUILD_ID?: string;
+  readonly VITE_APP_VERSION?: string;
+  readonly VITE_GIT_SHA?: string;
   /** `none` for the direct/PWA build, `poki` for the portal export. */
   readonly VITE_PORTAL_TARGET?: "none" | "poki";
   /**

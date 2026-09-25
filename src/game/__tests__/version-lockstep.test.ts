@@ -79,8 +79,11 @@ describe("build identity: deterministic, declared, and actually used", () => {
   it("is derived from the semver, the portal target and the commit", () => {
     const config = repo("vite.config.ts");
 
+    // The portal is a literal in a single-portal repo (`poki`), so this pins
+    // the SHAPE that matters: derived from semver + target + commit, never
+    // from a clock.
     expect(config).toMatch(
-      /const BUILD_ID = `\$\{APP_VERSION\}-\$\{PORTAL\}-\$\{GIT_SHA\}`;/,
+      /const BUILD_ID = `\$\{APP_VERSION\}-(?:\$\{PORTAL\}|poki)-\$\{GIT_SHA\}`;/,
     );
     expect(config).toMatch(/const APP_VERSION = \(JSON\.parse\(readFileSync\(path\.resolve\(__dirname, "package\.json"\)/);
     // The old value was `Date.now().toString(36)`: a "version" that changed on

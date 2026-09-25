@@ -2034,7 +2034,7 @@ function renderBoard(s: HudSnapshot): string {
     </div>`
     }
     <div class="prize-card">
-      <div class="section-title">🏆 Tournament Rank Prizes</div>
+      ${sectionTitle("🏆 Tournament Rank Prizes")}
       <div class="prize-grid">
         <div class="prize-tier gold"><span>🥇 1st Place</span><b>500 Coins + Crown</b></div>
         <div class="prize-tier silver"><span>🥈 2nd Place</span><b>250 Coins + 10 Gems</b></div>
@@ -2601,7 +2601,7 @@ function renderCups(s: HudSnapshot): string {
     .join("");
 
   const trails = s.trails.length
-    ? `<div class="section-title">Prize trails</div><div class="btn-row">${s.trails
+    ? `${sectionTitle("Prize trails")}<div class="btn-row">${s.trails
         .map((t) => `<button class="soft-btn ${t.equipped ? "gold" : ""}" data-ui data-action="equip-trail" data-id="${t.id}">${t.equipped ? "✓ " : ""}${t.label}</button>`)
         .join("")}</div>`
     : "";
@@ -2631,7 +2631,7 @@ function renderModes(s: HudSnapshot): string {
         )
         .join("")}
     </div>
-    <div class="section-title">Racing Circuits <small>PVP &amp; AI</small></div>
+    ${sectionTitle("Racing Circuits", "PVP &amp; AI")}
     <div class="mode-list">
       ${PVP_MODES
         .map(
@@ -2643,7 +2643,7 @@ function renderModes(s: HudSnapshot): string {
         )
         .join("")}
     </div>
-    <div class="section-title">Race the flock offline</div>
+    ${sectionTitle("Race the flock offline")}
     <button class="primary-btn gold wide" data-ui data-action="open-practice">🤖 AI PvP · pick a circuit &amp; race the neural flock</button>
     <button class="soft-btn wide" data-ui data-action="versus">👥 Split-screen · 2 players on this device</button>
   `;
@@ -3230,7 +3230,7 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
     <details class="shop-section"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
       <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
       <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
-      <div class="section-title">Nest <small>permanent score multiplier</small></div>
+      ${sectionTitle("Nest", "permanent score multiplier")}
       <div class="boost-list"><div class="boost-row nest-row">
         <span class="bi">${menuIcon("story")}</span>
         <div><div class="mt">Nest upgrade <span class="boost-once">forever</span></div>

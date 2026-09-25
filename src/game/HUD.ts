@@ -3721,12 +3721,12 @@ function renderGameOver(s: HudSnapshot): string {
     ${renderFlightRecap(s.flightPath)}
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>Score</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
+      <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
 
     <div class="btn-row result-links">
-      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
+      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} ${t("hud.menu.shop", undefined, "Shop")}</button>
       <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
       <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
     </div>

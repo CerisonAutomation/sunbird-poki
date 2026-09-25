@@ -3,6 +3,7 @@ import { storage } from "../game/Storage";
 // (see scripts/gen-i18n-packs.mjs). All locales including English are loaded
 // dynamically to avoid circular dependency warnings and improve code splitting.
 import { SUPPORTED_LOCALES, type SupportedLocale } from "./locales";
+import packKeys from "./pack-keys.json";
 
 // Re-exported so every existing `from "./i18n"` import keeps working. The data
 // itself lives in ./locales, which has no imports and so is safe to load in
@@ -171,10 +172,19 @@ export async function loadPack(locale: string): Promise<boolean> {
   if (!load) return false;
   try {
     const mod = await load();
-    packs.set(locale, mod.default);
+    const packArray = (mod.default as unknown) as string[];
+    // Convert array pack to object pack using pack-keys mapping
+    const packObj: Pack = {};
+    for (let i = 0; i < packArray.length; i++) {
+      const key = packKeys[i];
+      if (key) {
+        packObj[key] = packArray[i];
+      }
+    }
+    packs.set(locale, packObj);
     // Also cache as EN if this is English for fallback
     if (locale === "en") {
-      EN = mod.default;
+      EN = packObj;
     }
     packVersion += 1;
     for (const fn of packListeners) fn();

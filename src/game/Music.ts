@@ -33,13 +33,13 @@ const BEAT_BPM = 132;
 /**
  * How many times a section's 8-bar progression plays before the next section.
  *
- * At 132 BPM one pass is ~14.5s. Switching sections every pass meant a new tune
- * every 14 seconds, so nothing ever settled — the ear read it as repetitive
- * even though the underlying tracks are twenty distinct melodies. Three passes
- * (~44s) lets a tune land, and `pass` drives the arrangement change below so a
- * longer stay develops instead of looping.
+ * At 132 BPM one pass is ~14.5s. Two passes (~29s) lets a tune land and then
+ * naturally hands off: pass 0 states the melody, pass 1 lifts it an octave and
+ * the phrase breathes — then a fresh track arrives before the ear tires of the
+ * loop. Tracks rotate more frequently, giving the "constantly discovering music"
+ * feel of viral game soundtracks.
  */
-const PASSES_PER_SECTION = 3;
+const PASSES_PER_SECTION = 2;
 /** How far behind the clock the sequencer may fall before it re-anchors. */
 const MAX_LAG = 0.28;
 
@@ -1151,7 +1151,15 @@ export class Music {
     } else {
       if (this.step === 0) this.bass(t, mtof(BASS_ROOT[chordName]! + this.transpose + stormShift), beat * 0.9);
       if (this.step === 4) this.bass(t, mtof(BASS_ROOT[chordName]! + (this.bar % 2 ? 7 : 0) + this.transpose + stormShift), beat * 0.8);
+      // Walk-up: every 4 bars on step 7 + pass 1 also adds a chromatic passing
+      // tone on step 6, so the second pass has busier bass movement.
       if (this.step === 7 && this.bar % 4 === 3) this.bass(t, mtof(BASS_ROOT[chordName]! + 5 + this.transpose + stormShift), beat * 0.4);
+      if (this.step === 6 && this.pass === 1 && this.bar % 2 === 1) {
+        const nextBar = (this.bar + 1) % 8;
+        const nextChord = sec.prog[nextBar]!;
+        // chromatic passing tone: one semitone below the next root
+        this.bass(t, mtof((BASS_ROOT[nextChord] ?? BASS_ROOT[chordName]!) - 1 + this.transpose + stormShift), beat * 0.35);
+      }
     }
 
     // Melody: the glockenspiel lead on every family (island tracks play it
@@ -1171,11 +1179,21 @@ export class Music {
     // reads as the same instrument grinning rather than a new layer. On the final
     // pass it fills exactly the half-bar the melody now leaves open, so the
     // phrase still breathes — it just breathes upward instead of going quiet.
-    // Tiny phrase-breath marimba tick — just two notes, barely there
-    if (!this.isChipTrack && this.bar === 7 && this.step === 4) {
-      [chord[0]!, chord[2]!].forEach((m, i) =>
-        this.glock(t + i * 0.07, mtof(m + 12 + this.transpose + stormShift), 0.12, this.sparkGain),
-      );
+    // Phrase-end turnaround: a quick 4-note ascending run on the last half of
+    // bar 7 bridges back to the start — the phrase resolves UP instead of just
+    // stopping, which is why real game OSTs never feel looped.
+    if (this.bar === 7 && this.step === 4) {
+      const runNotes = [chord[0]!, chord[1] ?? chord[0]!, chord[2] ?? chord[0]!, chord[3] ?? chord[0]!];
+      const octShift = this.isChipTrack ? 0 : 12;
+      runNotes.forEach((m, i) => {
+        const delay = i * beat * 0.22;
+        const freq = mtof(m + octShift + this.transpose + stormShift);
+        if (this.isChipTrack) {
+          this.chipLead(t + delay, freq, beat * 0.18, 0.55);
+        } else {
+          this.glock(t + delay, freq, 0.28, this.sparkGain);
+        }
+      });
     }
     const lastPass = this.pass === PASSES_PER_SECTION - 1;
     const breath = lastPass && this.bar === 7 && this.step >= 4;
@@ -1203,7 +1221,14 @@ export class Music {
       } else {
         let len = 1;
         while ((sec.mel[idx + len] ?? 0) === -1) len++;
-        this.whistle(t, noteFreq, Math.min(beat * 0.5 * len * 0.95, beat * 1.9), vel);
+        const noteDur = Math.min(beat * 0.5 * len * 0.95, beat * 1.9);
+        this.whistle(t, noteFreq, noteDur, vel);
+        // Harmony voice: a diatonic 3rd below, in play mode, at low volume.
+        // Two voices richer than one lead = "lush island OST" feeling.
+        if ((this.mode === "play" || this.mode === "fever") && len >= 2) {
+          const harmNote = note - 4; // minor 3rd below — always consonant in major/minor
+          this.whistle(t, mtof(harmNote + (this.pass === 1 ? 12 : 0) + this.transpose + stormShift), noteDur, vel * 0.30);
+        }
         // tiny marimba pop on strong beats (1 and 3) only
         if (this.step === 0 || this.step === 4) this.glock(t, noteFreq, vel * 0.09, this.sparkGain);
       }
@@ -1228,6 +1253,12 @@ export class Music {
       if ((this.mode === "play" || this.mode === "fever" || this.mode === "storm") && this.step === 7) this.kick(t, 0.58 * light);
       if (this.mode === "storm" && (this.step === 2 || this.step === 6)) this.kick(t, 0.5 * light);
       if (this.mode === "fever" && this.step === 3) this.hat(t, 0.22 * light, 5200);
+      // Drum fill: on bar 3 and 7 step 6, a burst of quick 16th hats + snare
+      // builds excitement into the next bar — the classic arcade "fill" moment.
+      if ((this.bar === 3 || this.bar === 7) && this.step === 6 && (this.mode === "play" || this.mode === "fever")) {
+        for (let f = 0; f < 3; f++) this.hat(t + f * beat * 0.22, 0.18 * light, 7400);
+        this.snare(t + beat * 0.5, 0.55 * light);
+      }
     } else if (this.mode === "menu" || this.mode === "play" || this.mode === "fever" || this.mode === "storm") {
       // Upbeat pop kit on the island family: kick on 1 & 3, snare/clap on the
       // 2 & 4 backbeat, shaker on the offbeats. The menu runs the same groove
@@ -1277,6 +1308,21 @@ export class Music {
     // Organ: Interstellar-style deep swell on bar starts in play/fever.
     if (!this.isChipTrack && (this.mode === "play" || this.mode === "fever") && this.step === 0 && this.bar % 2 === 0) {
       this.organ(t, chordName, beat * 8);
+    }
+
+    // Biome color: a unique ornament per style so each world sounds distinct.
+    // Airy/reef/crystal → a high sparkle trill on the "and" of bar 2 and 6.
+    // Night/ember → a low sub-tone accent on bar 1 and 5 beat 1.
+    if (!this.isChipTrack && (this.mode === "play" || this.mode === "fever")) {
+      if ((this.biome === "airy" || this.biome === "reef" || this.biome === "crystal") && this.step === 1 && (this.bar === 2 || this.bar === 6)) {
+        const sparkFreq = mtof((chord[0] ?? 60) + 24 + this.transpose + stormShift);
+        this.glock(t, sparkFreq, 0.35, this.sparkGain);
+        this.glock(t + beat * 0.24, sparkFreq * Math.pow(2, 2 / 12), 0.22, this.sparkGain);
+      }
+      if ((this.biome === "night" || this.biome === "ember") && this.step === 0 && (this.bar === 1 || this.bar === 5)) {
+        // Low organ accent — warmth without drums
+        this.organ(t, chordName, beat * 2);
+      }
     }
 
     // Bell arpeggio. In fever it is a Celeste-style fill on both offbeats; the
@@ -1520,10 +1566,28 @@ export class Music {
     const g = this.ctx.createGain();
     o.type = "sine";
     o2.type = "triangle";
-    o.frequency.setValueAtTime(freq, t);
-    o2.frequency.setValueAtTime(freq * 1.003, t); // barely detuned = vocal warmth
     fl.type = "lowpass";
     fl.frequency.value = 1400;
+
+    // Vibrato on held notes (dur > 0.3s): a 5 Hz LFO ±7 cents — the human
+    // touch that separates "performed" from "sequenced".
+    if (dur > 0.30) {
+      const lfo = this.ctx.createOscillator();
+      const lfoG = this.ctx.createGain();
+      lfo.type = "sine";
+      lfo.frequency.value = 5;
+      const depthCents = 7;
+      // cents → frequency multiplier via semitone ratio: Δf ≈ f * depth/1200
+      lfoG.gain.value = freq * (depthCents / 1200) * 2 * Math.PI;
+      lfo.connect(lfoG);
+      lfoG.connect(o.frequency);
+      lfoG.connect(o2.frequency);
+      lfo.start(t + 0.06); // slight delay before vibrato kicks in
+      lfo.stop(t + dur + 0.1);
+    }
+
+    o.frequency.setValueAtTime(freq, t);
+    o2.frequency.setValueAtTime(freq * 1.003, t); // barely detuned = vocal warmth
     o.connect(fl); o2.connect(fl); fl.connect(g);
     g.connect(this.whistleGain);
     const peak = 0.5 * vel;

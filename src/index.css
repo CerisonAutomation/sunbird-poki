@@ -1376,9 +1376,39 @@ fieldset.squad-fields {
   margin: 6px 2px 12px;
 }
 
+.missions-details {
+  margin-top: 8px;
+}
+.missions-details > summary.mission-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 8px 4px;
+  border-radius: 8px;
+}
+.missions-details > summary.mission-head::-webkit-details-marker { display: none; }
+.missions-details > summary.mission-head::after {
+  content: "▸";
+  font-size: 10px;
+  color: #b08a72;
+  transition: transform .2s;
+}
+.missions-details[open] > summary.mission-head::after { transform: rotate(90deg); }
+.mission-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7a5a3a;
+  background: rgba(255,255,255,0.6);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-right: auto;
+  margin-left: 6px;
+}
 .missions {
   text-align: left;
-  margin-top: 8px;
 }
 
 .mission-head {
@@ -1387,6 +1417,10 @@ fieldset.squad-fields {
   text-transform: uppercase;
   color: #b08a72;
   margin-bottom: 6px;
+}
+
+.section-title.progress-do-now {
+  margin-top: 0;
 }
 
 .mission {

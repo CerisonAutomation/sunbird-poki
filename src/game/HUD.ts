@@ -1833,7 +1833,8 @@ function upsellStrip(): string {
 }
 
 function renderMissions(list: MissionView[], newly: string[] = []): string {
-  return `<div class="missions"><div class="mission-head">Nest missions</div>${list
+  const done = list.filter((m) => m.done).length;
+  const rows = list
     .map((m) => {
       const fresh = newly.includes(m.def.id);
       return `<div class="mission ${m.done ? "done" : ""} ${fresh ? "fresh" : ""}">
@@ -1842,7 +1843,8 @@ function renderMissions(list: MissionView[], newly: string[] = []): string {
         <span class="mp">${Math.min(m.progress, m.def.target)}/${m.def.target}</span>
       </div>`;
     })
-    .join("")}</div>`;
+    .join("");
+  return `<details class="missions-details"><summary class="mission-head">Nest missions <span class="mission-count">${done}/${list.length}</span></summary><div class="missions">${rows}</div></details>`;
 }
 
 function renderQuests(list: QuestView[]): string {
@@ -2266,7 +2268,7 @@ function renderChallenges(s: HudSnapshot): string {
             <em>${
               m.maxed
                 ? `Mastered · ${m.skillDesc} — always on in this mode`
-                : `${m.runs} runs · next level at ${m.nextAt}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
+                : `${m.runs} runs · next level at ${Math.round(m.nextAt).toLocaleString()}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
             }</em>
             ${m.maxed ? "" : `<div class="qb"><i style="width:${Math.round(m.progress * 100)}%"></i></div>`}</div>
             <span class="m-stars">${"★".repeat(m.level)}${"☆".repeat(Math.max(0, 5 - m.level))}</span>
@@ -2533,7 +2535,7 @@ function renderRank(s: HudSnapshot): string {
       <div class="rank-hero-num">${r.rating}</div>
       <div class="rank-hero-div">${r.division}</div>
       <div class="rank-bar big"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
-      <div class="rank-hero-next">${r.nextNeeded > 0 ? `${r.nextNeeded} rating to ${r.nextName}` : "Top division — defend it"}</div>
+      <div class="rank-hero-next">${r.nextNeeded > 0 ? `${Math.round(r.nextNeeded).toLocaleString()} rating to ${r.nextName}` : "Top division — defend it"}</div>
     </div>
     <div class="rank-stats">
       <div><span>W–L</span><b>${r.wins}–${r.losses}</b></div>
@@ -2634,7 +2636,7 @@ function renderModes(s: HudSnapshot): string {
         )
         .join("")}
     </div>
-    <div class="section-title">PvAI Circuits</div>
+    <div class="section-title">Racing Circuits <small>PVP &amp; AI</small></div>
     <div class="mode-list">
       ${PVP_MODES
         .map(
@@ -2917,11 +2919,24 @@ function renderProgress(s: HudSnapshot): string {
   // source→barrel coverage test (i18n/__tests__/locales.test.ts) fails on
   // exactly that now; until a real translation exists for every shipped
   // locale, a plain literal is the honest representation of its state.
+  // --- Do This Now: time-sensitive actions ---
+  const doNow: string[] = [];
+  if (!s.calendar.claimedToday) doNow.push(`<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>`);
+  if (s.canFreeSpin) doNow.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>Daily Lucky Wheel</b><span>Free spin available now!</span></div><button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button></div>`);
+  if (s.piggyCoins >= PIGGY_BANK_MIN_SMASH) doNow.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>Piggy Bank ready</b><span>● ${s.piggyCoins} coins saved — smash it!</span></div><button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button></div>`);
+
+  // --- Collect section: non-urgent systems ---
+  const collectSections: string[] = [];
+  if (!s.canFreeSpin) collectSections.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>Daily Lucky Wheel</b><span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys</span></div><button class="soft-btn" disabled>🎡 Tomorrow</button></div>`);
+  if (s.piggyCoins < PIGGY_BANK_MIN_SMASH) collectSections.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>Coin Piggy Bank</b><span>+20% flight bonus: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span></div><span class="tag need">Fly to fill</span></div>`);
+  if (s.nestLevel >= 5 || s.prestigeLevel > 0) collectSections.push(`<div class="pc pc--purple pc-row"><span class="pc-icon">👑</span><div class="pc-body"><b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b><span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span></div><button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth 👑</button></div>`);
+
   return `${head(t("hud.progress.title", undefined, "Your progress"))}
-    <p class="tagline">Missions and rewards from all your flights, in one place.</p>
     <div class="hero-meta">
       <span class="pill seed-pill">${s.seedLabel}</span>
       <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${menuIconSm(s.wings.icon)} ${s.wings.name}</span>
+      <span class="pill">● ${s.wallet.toLocaleString()}</span>
+      <span class="pill">🔥 ${s.streakDays}d</span>
     </div>
     ${
       s.wings.nextNeeded > 0
@@ -2929,71 +2944,40 @@ function renderProgress(s: HudSnapshot): string {
         : ""
     }
     ${s.rivalBanner ? renderRivalBanner(s.rivalBanner) : ""}
-    ${seedPicker}
 
-    <div class="pc pc--blue pc-row">
-      <span class="pc-icon">🎡</span>
-      <div class="pc-body">
-        <b>Daily Lucky Wheel</b>
-        <span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys!</span>
-      </div>
-      ${s.canFreeSpin
-        ? `<button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button>`
-        : `<button class="soft-btn" disabled>🎡 Tomorrow</button>`}
-    </div>
+    ${doNow.length > 0 ? `<div class="section-title progress-do-now"><span>Do this now</span></div>${doNow.join("")}` : ""}
 
-    <div class="pc pc--pink pc-row">
-      <span class="pc-icon">🐷</span>
-      <div class="pc-body">
-        <b>Coin Piggy Bank</b>
-        <span>+20% flight bonus accumulated: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span>
-      </div>
-      ${s.piggyCoins >= PIGGY_BANK_MIN_SMASH
-        ? `<button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button>`
-        : `<span class="tag need">Fly to fill</span>`}
-    </div>
-
-    ${s.nestLevel >= 5 || s.prestigeLevel > 0
-      ? `<div class="pc pc--purple pc-row">
-          <span class="pc-icon">👑</span>
-          <div class="pc-body">
-            <b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b>
-            <span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span>
-          </div>
-          <button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth 👑</button>
-        </div>`
-      : ""}
-
-    <div class="section-title">Local rank <small>practice field · not global</small></div>
-    <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
-      <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
-      <span class="rank-num">${s.rival.rating}</span>
-      <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>
-      <span class="rank-sub">${
-        s.rival.nextNeeded > 0
-          ? `${s.rival.nextNeeded} to ${s.rival.nextName}`
-          : "Top division — defend it"
-      } · 🔥${s.rival.streak} streak</span>
-    </button>
+    <div class="section-title">Today <small>QUESTS &amp; GOALS</small></div>
+    ${renderGoalList(s.sessionGoals)}
+    ${renderQuests(s.quests)}
 
     <button class="event-strip" data-ui data-action="play-event">
       <span class="ds-icon">${menuIconSm(s.weeklyEvent.icon)}</span>
       <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${menuIconSm(s.monthlyTheme.icon)} ${s.monthlyTheme.name} · fly ${s.weeklyEvent.target.toLocaleString()} m · ● ${s.weeklyEvent.reward}</em></span>
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
-    ${!s.calendar.claimedToday ? `<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>` : ""}
 
+    <div class="section-title">Career <small>RANK &amp; WINGS</small></div>
+    <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
+      <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
+      <span class="rank-num">${s.rival.rating}</span>
+      <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>
+      <span class="rank-sub">${
+        s.rival.nextNeeded > 0
+          ? `${Math.round(s.rival.nextNeeded).toLocaleString()} to ${s.rival.nextName}`
+          : "Top division — defend it"
+      } · 🔥${s.rival.streak} streak</span>
+    </button>
     <div class="wallet-row">
-      <span class="pill coin">● ${s.wallet}</span>
-      <span class="pill">🔥 ${s.streakDays}-day streak</span>
       <span class="pill">Nest Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)}</span>
-       ${!portal && s.gold ? '<span class="pill gold">✦ Gold</span>' : ""}
-       ${!portal && s.vip ? '<span class="pill vip">♛ VIP</span>' : ""}
+      ${!portal && s.gold ? '<span class="pill gold">✦ Gold</span>' : ""}
+      ${!portal && s.vip ? '<span class="pill vip">♛ VIP</span>' : ""}
       <span class="pill skill">${s.skillLabel}</span>
     </div>
 
-    ${renderGoalList(s.sessionGoals)}
-    ${renderQuests(s.quests)}
+    ${collectSections.join("")}
+    ${seedPicker}
+
     ${renderMissions(s.missions)}
     <div class="menu-stats"><div>Best <b>${distanceText(s.bestDistance)}</b></div><div>Today <b>${distanceText(s.todayBest)}</b></div></div>
 `;

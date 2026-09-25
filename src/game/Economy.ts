@@ -623,10 +623,15 @@ export const SHOP_TRAILS: ShopTrailDef[] = BASE_SHOP_TRAILS.map((trail) => ({
   price: Math.ceil((trail.price * 1.5) / 25) * 25,
 }));
 
+function djb2(str: string, seed: number): number {
+  let h = seed;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 /** Deterministic daily deal: one boost at half price, same for everyone all day. */
 export function dailyDealBoost(dateStr: string): { id: string; price: number } {
-  let h = 5381;
-  for (let i = 0; i < dateStr.length; i++) h = ((h << 5) + h + dateStr.charCodeAt(i)) >>> 0;
+  const h = djb2(dateStr, 5381);
   const def = BOOSTS[h % BOOSTS.length]!;
   return { id: def.id, price: Math.max(10, Math.floor(def.price / 2 / 5) * 5) };
 }
@@ -634,8 +639,7 @@ export function dailyDealBoost(dateStr: string): { id: string; price: number } {
 /** Deterministic daily flash sale: one bird skin at 40% off, same for all pilots each day. */
 export function dailyFlashBird(dateStr: string): { id: string; price: number; originalPrice: number; discountPct: number } {
   const candidates = SKINS.filter(s => s.price > 0 && !s.goldOnly && !s.vipOnly && !s.prizeOnly);
-  let h = 7919;
-  for (let i = 0; i < dateStr.length; i++) h = ((h << 5) + h + dateStr.charCodeAt(i)) >>> 0;
+  const h = djb2(dateStr, 7919);
   const def = candidates[h % candidates.length] || candidates[0]!;
   const price = Math.max(50, Math.floor((def.price * 0.6) / 5) * 5);
   return { id: def.id, price, originalPrice: def.price, discountPct: 40 };

@@ -16,9 +16,9 @@ Items identified in `/critique` audit. Fix one per ralph iteration.
 
 - [x] **Flight HUD: distance label always white** — hud-contrast.test.ts 10/10 passing — Confirm `.stat-value` and `.stat-label` still render white (not overridden by any recent CSS changes). Run hud-contrast.test.ts in isolation and verify it passes. If not, fix the cascade.
 
-- [ ] **Remove duplicate "Personalize" destinations from quick-strip** — The quick-strip has "Shop" and "Settings" buttons that duplicate the Personalize section grid below. Consider replacing "Shop" and "Settings" in the strip with "Goals" and "Leaderboard" to make the strip complement rather than duplicate the grid, OR add visual differentiation (strip = shortcuts, grid = full nav). Document the intent in a CSS comment.
+- [x] **Remove duplicate "Personalize" destinations from quick-strip** — replaced Settings with Board — The quick-strip has "Shop" and "Settings" buttons that duplicate the Personalize section grid below. Consider replacing "Shop" and "Settings" in the strip with "Goals" and "Leaderboard" to make the strip complement rather than duplicate the grid, OR add visual differentiation (strip = shortcuts, grid = full nav). Document the intent in a CSS comment.
 
-- [ ] **`×` multiplier inline SVG size** — In the flight HUD, the multiplier combo element uses menuIcon or a text glyph. Verify it renders cleanly at the intended size and is not cropped or oversized.
+- [x] **`×` multiplier inline SVG size** — text glyph (not SVG), covered by iteration 2 font-size fix — In the flight HUD, the multiplier combo element uses menuIcon or a text glyph. Verify it renders cleanly at the intended size and is not cropped or oversized.
 
 ## Completion
-- [ ] ALL_TASKS_COMPLETE
+- [x] ALL_TASKS_COMPLETE

@@ -38,7 +38,13 @@ const NETLIB_ID = idIn(BUILD_POKI, "VITE_POKI_NETLIB_GAME_ID");
 
 describe("poki build ids", () => {
   it("build:poki wires both ids, and both are canonical UUIDs", () => {
-    expect(BUILD_POKI).toContain("VITE_PORTAL_TARGET=poki");
+    // VITE_PORTAL_TARGET lives in vite.config.ts (`const PORTAL = "poki"`), not
+    // in the build script — this repo IS the Poki build, so the target is a
+    // fact of the config rather than an argument each script must remember.
+    // Duplicating it into package.json would give the value two homes to rot
+    // apart, which is the failure mode the id checks below exist to prevent.
+    const config = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8");
+    expect(config).toMatch(/const PORTAL = "poki";/);
     expect(isNetlibGameId(AUDS_ID)).toBe(true);
     expect(isNetlibGameId(NETLIB_ID)).toBe(true);
     // Guards against a placeholder being shipped as if it were issued.

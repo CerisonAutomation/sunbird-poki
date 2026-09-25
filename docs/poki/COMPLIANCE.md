@@ -1,7 +1,7 @@
 # Poki compliance report
 
 **Generated:** 2026-09-25 by `pnpm poki:audit` — do not edit by hand.
-**Result:** ❌ 1 problem(s) · 166/188 rules verified · 131 of them hard requirements.
+**Result:** ✅ every satisfied rule verified · 167/188 rules verified · 131 of them hard requirements.
 
 **Scope:** the extracted guide corpus in this folder (`requirements.json`, version 2026-09-22). Rules marked *action* are human/submission steps, *deferred* are accepted gaps with a recorded reason — both are listed so nothing is silently skipped.
 
@@ -11,10 +11,6 @@
 | action (submission step) | 0 |
 | deferred (accepted) | 0 |
 | informational | 21 |
-
-## Problems
-
-- SUB-11: missing file src/game/edition.poki.ts
 
 ## GK — Developer Guide overview
 
@@ -312,7 +308,7 @@
 | `SUB-07` | requirement | The privacy policy must also be linked from inside the game. | ✅ | src/game/HUD.ts matches /open-privacy/ |
 | `SUB-08` | recommendation | Dashboard description and engine field describe the game and the tech. | ✅ | docs/poki/SUBMISSION.md matches /three-js/ |
 | `SUB-09` | requirement | External resources are requested in Settings → CSP; assets are bundled, not fetched from CDNs. | ✅ | gate wired: pnpm verify:portals |
-| `SUB-11` | requirement | No in-game chat systems; emoji/quick messages are the sanctioned alternative. | ❌ | missing file src/game/edition.poki.ts |
+| `SUB-11` | requirement | No in-game chat systems; emoji/quick messages are the sanctioned alternative. | ✅ | src/game/edition.ts matches /SQUAD_CHAT = false/ |
 | `SUB-12` | requirement | No external account systems and no collection of personal information. | ✅ | src/game/pilotNameModeration.ts matches /const CONTACT/ |
 | `SUB-13` | requirement | Content must stay family-friendly (no violence, gambling, adult or scary themes). | ✅ attested | Game content: birds, islands, weather; currency earned only by flying. |
 | `SUB-14` | requirement | Controls offer alternatives so players who cannot use WASD are not excluded. | ✅ | src/game/Input.ts matches /pointerdown/ |
@@ -439,7 +435,7 @@
 | `REQ-23` | Local ad pacing logic is excluded from portal builds. |
 | `REQ-24` | Zero external links in portal bundles (og:url stripped, store links scrubbed). |
 | `REQ-30` | POKI_COMPLIANCE_AUDIT.md C12 |
-| `REQ-31` | Portal editions ship NO chat: SQUAD_CHAT=false in edition.poki/crazy/generic.ts removes the club chat box, its input and the chat promise from the menu copy, Game/Squad refuse the send, and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07); emotes are the sanctioned alternative and are now reachable in every race state (src/game/__tests__/emote-ui.test.ts). |
+| `REQ-31` | Portal editions ship NO chat: SQUAD_CHAT=false in src/game/edition.ts removes the club chat box, its input and the chat promise from the menu copy, Game/Squad refuse the send, and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07); emotes are the sanctioned alternative and are now reachable in every race state (src/game/__tests__/emote-ui.test.ts). |
 | `REQ-32` | Passive getUser() only, never persisted; no email/social login. |
 | `REQ-33` | POKI_COMPLIANCE_AUDIT.md C13 |
 | `REQ-34` | Bundle sweep for watermark/prompt strings (audit-zips.mjs) |
@@ -452,7 +448,7 @@
 | `REQ-52` | Inspector QA modules mapped to gates: folder/root index (verify:upload), External Resources (audit:zips), Image Optimization (verify:thumbnail); scaling and mobile are covered by test:orientation and test:mobile in `pnpm gate`. |
 | `REQ-53` | docs/poki/09-platform-requirements.md |
 | `REQ-60` | Pill moved clear of the flight HUD at SDK boot. |
-| `REQ-61` | Poki forbids chat systems and personal-data collection (external-resources policy: 'Chat systems aren't allowed', 'Games must not collect personal information', 'no email-based logins'), which is SQUAD_CHAT=false — the chat UI is not in the bundle. It does not forbid a chosen display name, so edition.poki.ts sets CUSTOM_PILOT_NAMES=true and the safety work moves to moderation: every write goes through src/game/pilotNameModeration.ts (shape + contact guard + NFKD/leit/homoglyph normalisation + blocklist + a safe-word allowlist so 'Cockpit'/'Classic'/'Assassin' are not caught by their own substrings), asserted by pilot-name-moderation.test.ts (95 cases) and gated at both write paths in Game.ts. crazy/generic keep CUSTOM_PILOT_NAMES=false (no filter there). |
+| `REQ-61` | Poki forbids chat systems and personal-data collection (external-resources policy: 'Chat systems aren't allowed', 'Games must not collect personal information', 'no email-based logins'), which is SQUAD_CHAT=false — the chat UI is not in the bundle. It does not forbid a chosen display name, so src/game/edition.ts sets CUSTOM_PILOT_NAMES=true and the safety work moves to moderation: every write goes through src/game/pilotNameModeration.ts (shape + contact guard + NFKD/leit/homoglyph normalisation + blocklist + a safe-word allowlist so 'Cockpit'/'Classic'/'Assassin' are not caught by their own substrings), asserted by pilot-name-moderation.test.ts (95 cases) and gated at both write paths in Game.ts. |
 | `REQ-62` | GOLD's "No sponsored breaks, ever" bullet is emitted only when edition SELL_AD_REMOVAL is true (direct build); portal bundles fold the ternary to [] and contain no such string. Portal builds never inject their own interstitials (dueAd is gated on portalEnabled()), so the claim was untrue there as well as forbidden. |
 | `REQ-63` | PORTAL_FORBIDDEN_MARKERS rejects /No sponsored breaks/i and ad-removal phrasing in every portal zip; the direct build keeps both (dist/assets/Game-*.js). data-ref="pilotName" is a FOREIGN marker for crazy/generic (CUSTOM_PILOT_NAMES=false there, so a typed field in those bundles means the flag regressed) and an allowed surface on Poki, which moderates it. |
 | `REQ-64` | The Account screen's "Sponsored breaks respect a hard cap: N left today" line is now gated on portalName === "none"; e2e/portal-policy.spec.ts (pnpm test:policy) boots poki-upload/ in a real browser and scans the rendered text of 17 reachable screens for ad-removal/ad-schedule copy on desktop and phone. |
@@ -517,7 +513,7 @@
 | `SUB-07` | Settings links it through platform.openExternalLink(). |
 | `SUB-08` | Description and engine field prepared in SUBMISSION.md (engine: three-js); pasting them into the dashboard is the submission step. |
 | `SUB-09` | Bundled fonts/images + the portal external-URL gate. |
-| `SUB-11` | The chat UI is not in the portal bundle at all; emotes remain. |
+| `SUB-11` | No in-game chat: SQUAD_CHAT=false in src/game/edition.ts (the single shipped edition) removes the club chat box, its input and the chat promise from the menu copy; Game/Squad refuse the send and the polling loop never runs. Enforced by the PORTAL_FORBIDDEN_MARKERS table in scripts/portal-markers.mjs (checked by verify-portal, audit-zips and verify-upload ROOT-07). Emotes are the sanctioned alternative and are reachable in every race state (src/game/__tests__/emote-ui.test.ts). |
 | `SUB-12` | No email/social login in any portal build: identity comes from Poki's own getUser() (docs/poki/15-user-accounts.md), and the null/throwing case simply keeps the generated call sign. A typed pilot name is allowed, but CONTACT in src/game/pilotNameModeration.ts rejects anything shaped like an address, link, @handle or long digit run, so a public leaderboard cannot be used to publish contact details. |
 | `SUB-13` | Reviewed against the content list; nothing to remove. |
 | `SUB-14` | Pointer drag, touch drag, keyboard and auto-glide all steer; menus are mouse/touch/keyboard navigable. |

@@ -75,21 +75,17 @@ describe("pilot-name moderation — the categories a platform actions", () => {
     expect(isPilotNameClean("Pokifan")).toBe(true);
   });
 
-  it("reserves the platform's name per edition, so no bundle carries another's", () => {
-    // The platform name cannot live in this shared module: a literal "poki" in a
-    // module every build imports ships a Poki marker into the CrazyGames and
-    // generic bundles, and the portal gate fails on exactly that. It is checked
-    // here by injecting the list, which is also the proof the mechanism works.
+  it("reserves the platform's name, so no player can impersonate it", () => {
+    // The platform name cannot live in this shared module: it is checked here by
+    // injecting the list, which is also the proof the mechanism works.
     expect(moderatePilotName("Poki42", ["poki"]).ok, "the injected platform name must be refused").toBe(false);
     expect(moderatePilotName("Poki42", []).ok, "with no platform reserved, it is only a word").toBe(true);
-    // And the editions declare their own.
+    // The single shipped edition declares both: the portal's name and the
+    // game's own, so neither can be worn by a player.
     const fs = readFileSync;
     const joinPath = join;
     const read = (file: string): string => fs(joinPath(process.cwd(), "src", "game", file), "utf8");
-    expect(read("edition.poki.ts")).toMatch(/RESERVED_PILOT_NAMES: readonly string\[\] = \["poki", "sunbird"\]/);
-    // The neutral build has no platform to impersonate, so it reserves only the
-    // game's own name — and one portal means one bundle that must stay clean.
-    expect(read("edition.ts")).toMatch(/RESERVED_PILOT_NAMES: readonly string\[\] = \["sunbird"\]/);
+    expect(read("edition.ts")).toMatch(/RESERVED_PILOT_NAMES: readonly string\[\] = \["poki", "sunbird"\]/);
   });
 });
 

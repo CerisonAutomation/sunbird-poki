@@ -71,12 +71,64 @@ const RUNTIME_ONLY = POKI_SDK_RUNTIME_ONLY.map((m) => m.name as string);
 const CANONICAL = new Set([...officialMethods(), ...RUNTIME_ONLY]);
 
 /**
+ * Remove comments and string literals, leaving only code.
+ *
+ * The guard scans source for `sdk.x` / `getPoki().x`. Without this, a URL in a
+ * comment is indistinguishable from a call — and two were, which is why this
+ * suite failed before it was fixed:
+ *
+ *   • `sdk.poki.com/html5` (a doc link in the adapter's header) matched the
+ *     member `poki`;
+ *   • `https://game-cdn.poki.com/.../poki-sdk.js` (the CDN path) matched the
+ *     member `js`, because `-` is a word boundary.
+ *
+ * A guard that cries wolf is a guard that gets ignored, which is exactly how
+ * real drift slips past. This is a character scanner rather than a stack of
+ * regexes because the three constructs nest: a string can hold `/*`, a comment
+ * can hold a quote, and `//` appears inside every URL.
+ */
+function stripNonCode(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (c === "/" && next === "*") {
+      const close = src.indexOf("*/", i + 2);
+      i = close === -1 ? src.length : close + 2;
+      out += " ";
+      continue;
+    }
+    if (c === "/" && next === "/") {
+      const eol = src.indexOf("\n", i);
+      i = eol === -1 ? src.length : eol;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      i += 1;
+      while (i < src.length && src[i] !== quote) {
+        if (src[i] === "\\") i += 1; // skip the escaped character
+        i += 1;
+      }
+      i += 1;
+      out += '""';
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}
+
+/**
  * Every `PokiSDK` member the code actually touches, per file. The patterns are
  * the two access routes that exist: `this.sdk?.x()` inside the adapter and
- * `getPoki()?.x()` on the boot path.
+ * `getPoki()?.x()` on the boot path. Comments and strings are stripped first so
+ * that prose about the SDK is never mistaken for a call into it.
  */
 function referencedMembers(file: string, accessor: RegExp): string[] {
-  return [...new Set([...read(file).matchAll(accessor)].map((m) => m[1]))].sort();
+  return [...new Set([...stripNonCode(read(file)).matchAll(accessor)].map((m) => m[1]))].sort();
 }
 
 const ADAPTER_ACCESS = /\bsdk\s*\??\.([A-Za-z_$][\w$]*)/g;
@@ -113,8 +165,10 @@ describe("Poki SDK canonical surface", () => {
   });
 
   it("keeps every invented member out of the Poki code path", () => {
-    const poki = read("src/sdk/poki.ts");
-    const boot = read("src/sdk/platform.ts");
+    // Stripped, so a name mentioned in prose (this file's own comments name
+    // them all) is not mistaken for a call.
+    const poki = stripNonCode(read("src/sdk/poki.ts"));
+    const boot = stripNonCode(read("src/sdk/platform.ts"));
     const offenders: string[] = [];
     for (const name of POKI_SDK_NON_CANONICAL) {
       // Only SDK-object accesses count: `isMuted()` is a legitimate *interface*
@@ -128,8 +182,8 @@ describe("Poki SDK canonical surface", () => {
   });
 
   it("keeps the runtime-only registry in sync with what is wired", () => {
-    const poki = read("src/sdk/poki.ts");
-    const boot = read("src/sdk/platform.ts");
+    const poki = stripNonCode(read("src/sdk/poki.ts"));
+    const boot = stripNonCode(read("src/sdk/platform.ts"));
     for (const entry of POKI_SDK_RUNTIME_ONLY) {
       const called = new RegExp(`\\b(?:sdk|getPoki\\(\\))\\s*\\??\\.${entry.name}\\b`).test(poki + boot);
       expect(called, `${entry.name}: registry says wired=${entry.wired} but the code disagrees`).toBe(entry.wired);

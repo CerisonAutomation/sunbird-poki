@@ -2056,7 +2056,7 @@ function renderLive(s: HudSnapshot): string {
 
   const modePills = (s.pvpModes || []).map((m) => `
     <button class="pvp-pill ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="select-pvp-mode" data-id="${m.id}" title="${m.blurb}">
-      <span>${m.icon}</span> <b>${m.name}</b> <small>${m.finish}m</small>
+      <span>${iconGlyph(m.icon)}</span> <b>${m.name}</b> <small>${m.finish}m</small>
     </button>
   `).join("");
 
@@ -2179,7 +2179,7 @@ function renderPractice(s: HudSnapshot): string {
       <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${(s.pvpModes || []).find((m) => m.id === s.selectedPvpMode)?.name ?? "Sprint GP"}</button>
       <div class="practice-formats"><h3>Race formats</h3>
         <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
-        ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${m.icon} ${m.name} · ${m.blurb}</button>`).join("")}
+        ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${iconGlyph(m.icon)} ${m.name} · ${m.blurb}</button>`).join("")}
         <button class="soft-btn wide" data-ui data-action="pvp-duel">⚔ 1v1 Seeded Rival Duel</button>
         <button class="soft-btn wide" data-ui data-action="practice-storm">⛈ Stormfront Race · wild weather</button>
         <button class="soft-btn wide" data-ui data-action="practice-ranked">🏆 40-Pilot Flock Grand Prix</button>
@@ -2195,7 +2195,7 @@ function renderChallenges(s: HudSnapshot): string {
   const c = s.calendar;
   const modePills = (s.pvpModes || []).map((m) => `
     <button class="pvp-pill ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="select-pvp-mode" data-id="${m.id}" title="${escapeHtml(m.blurb)}">
-      <span>${escapeHtml(m.icon)}</span> <b>${escapeHtml(m.name)}</b> <small>${m.finish}m</small>
+      <span>${iconGlyph(escapeHtml(m.icon))}</span> <b>${escapeHtml(m.name)}</b> <small>${m.finish}m</small>
     </button>`).join("");
   const worldPills = (s.pvpWorlds || []).map((w) => `
     <button class="world-pill ${s.selectedPvpWorld === w.id ? "on" : ""}" data-ui data-action="select-pvp-world" data-id="${w.id}" title="${escapeHtml(w.tagline)}">
@@ -2205,21 +2205,18 @@ function renderChallenges(s: HudSnapshot): string {
   const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0];
   const raceChallenges = `
     <section class="race-section challenge-races" aria-label="Race challenges">
-      <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched format</span></div>
-      <p class="fineprint">Pick your world. Format is auto-matched to whoever's available — get racing faster.</p>
-      <div class="lobby-selector-label"><span>World</span><b>${activeWorld ? escapeHtml(activeWorld.name) : "Any world"}</b></div>
-      <div class="pills-scroll challenge-pills">${worldPills}</div>
+      <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched</span></div>
+      <p class="fineprint">World and format are matched to whoever's available — jump in and race.</p>
       <div class="quick-match-btns challenge-actions">
-        <button class="primary-btn gold wide" data-ui data-action="quick-match-instant">⚡ Race Now</button>
-        <button class="soft-btn" data-ui data-action="quick-match-shuffle">🎲 Random world &amp; format</button>
-        <button class="soft-btn" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">🤖 vs AI flock · no wait</button>
+        <button class="primary-btn gold wide" data-ui data-action="quick-match-shuffle">⚡ Race Now · random match</button>
+        <button class="soft-btn wide" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">🤖 vs AI flock · instant</button>
       </div>
     </section>`;
   const daily = `
     <div class="section-title">Daily challenge <small>resets at midnight</small></div>
     <div class="daily-card ${d.done ? "done" : ""}">
-      <div class="daily-head"><span class="daily-icon">${d.modeIcon}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
-      <div class="daily-mod"><b>${d.modifierIcon} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
+      <div class="daily-head"><span class="daily-icon">${iconGlyph(d.modeIcon)}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
+      <div class="daily-mod"><b>${iconGlyph(d.modifierIcon)} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
       ${
         d.done
           ? `<div class="reward-strip">✓ Complete · come back tomorrow (${d.dailiesDone} lifetime)</div>`
@@ -2234,7 +2231,7 @@ function renderChallenges(s: HudSnapshot): string {
         .map(
           (st) => `<div class="g-stage ${st.done ? "done" : ""}">
             <span class="g-num">${st.done ? "✓" : st.index + 1}</span>
-            <div class="g-body"><b>${st.modeIcon} ${escapeHtml(st.label)}</b><em>${st.modeName} · ${escapeHtml(st.metric)} ≥ ${st.target}</em></div>
+            <div class="g-body"><b>${iconGlyph(st.modeIcon)} ${escapeHtml(st.label)}</b><em>${st.modeName} · ${escapeHtml(st.metric)} ≥ ${st.target}</em></div>
             ${st.done ? `<span class="tag on">Clear</span>` : `<button class="mini-btn" data-ui data-action="play-gauntlet" data-id="${st.index}">Fly · ● ${st.reward}</button>`}
           </div>`,
         )
@@ -2284,11 +2281,11 @@ function renderChallenges(s: HudSnapshot): string {
   const event = `
     <div class="section-title">Live event <small>new twist every week</small></div>
     <div class="event-card">
-      <div class="daily-head"><span class="daily-icon">${ev.icon}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
+      <div class="daily-head"><span class="daily-icon">${iconGlyph(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
       <div class="event-meta"><span>Fly ${ev.target.toLocaleString()} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
-      <button class="primary-btn" data-ui data-action="play-event">${ev.icon} FLY THE EVENT</button>
+      <button class="primary-btn" data-ui data-action="play-event">${iconGlyph(ev.icon)} FLY THE EVENT</button>
       <div class="theme-strip ${trailDone ? "done" : ""}">
-        <span class="theme-icon">${th.icon}</span>
+        <span class="theme-icon">${iconGlyph(th.icon)}</span>
         <div class="theme-body"><b>${th.name}</b><em>${escapeHtml(th.tagline)}</em></div>
         <span class="theme-prog">${trailDone ? "✨ trail claimed" : `${Math.min(s.eventClearsMonth, s.themeTrailNeed)}/${s.themeTrailNeed} clears → trail`}</span>
       </div>
@@ -2326,7 +2323,7 @@ function renderCampaign(s: HudSnapshot): string {
             ? `<button class="mini-btn gold" data-ui data-action="claim-campaign" data-id="${ch.def.id}">CLAIM ● ${ch.def.rewardCoins}</button>`
             : `<span class="tag">● ${ch.def.rewardCoins} on completion</span>`;
       return `<div class="camp-chapter ${!ch.unlocked ? "locked" : ""} ${ch.claimed ? "claimed" : ""}">
-        <div class="camp-head"><span class="camp-icon">${ch.def.icon}</span><div><b>Chapter ${ch.index + 1} · ${escapeHtml(ch.def.title)}</b><em>${escapeHtml(ch.def.story)}</em></div></div>
+        <div class="camp-head"><span class="camp-icon">${iconGlyph(ch.def.icon)}</span><div><b>Chapter ${ch.index + 1} · ${escapeHtml(ch.def.title)}</b><em>${escapeHtml(ch.def.story)}</em></div></div>
         ${ch.unlocked ? goals : ""}
         <div class="camp-foot">${cta}</div>
       </div>`;
@@ -2590,7 +2587,7 @@ function renderCups(s: HudSnapshot): string {
       const tierLabel = c.tier ? c.tier.toUpperCase() : "UNRANKED";
       const prize = c.tier ? c.def.prizes[c.tier] : null;
       return `<div class="cup-card ${c.tier ?? ""}">
-        <div class="cup-head"><span class="cup-icon">${c.def.icon}</span>
+        <div class="cup-head"><span class="cup-icon">${iconGlyph(c.def.icon)}</span>
           <div><b>${c.def.name}</b><em>${c.def.blurb}</em></div>
           <span class="cup-timer">${hrs(c.endsInMs)} left</span>
         </div>
@@ -2599,7 +2596,7 @@ function renderCups(s: HudSnapshot): string {
         <div class="cup-next">${c.nextTier ? `Next: ${c.nextTier} at ${Math.round(c.nextCut)}` : "Diamond secured"}</div>
         ${
           c.claimable && prize
-            ? `<button class="mini-btn gold" data-ui data-action="claim-cup" data-id="${c.def.id}">Claim ${prize.icon} ${prize.label}</button>`
+            ? `<button class="mini-btn gold" data-ui data-action="claim-cup" data-id="${c.def.id}">Claim ${iconGlyph(prize.icon)} ${prize.label}</button>`
             : `<button class="mini-btn" data-ui data-action="pick-mode" data-id="${c.def.mode}">Fly ${c.def.mode}</button>`
         }
       </div>`;
@@ -2630,7 +2627,7 @@ function renderModes(s: HudSnapshot): string {
       ${s.modes
         .map(
           (m) => `<button class="mode-card ${m.id === s.modeId ? "on" : ""}" data-ui data-action="pick-mode" data-id="${m.id}">
-            <span class="mode-icon">${m.icon}</span>
+            <span class="mode-icon">${iconGlyph(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
           </button>`,
@@ -2642,7 +2639,7 @@ function renderModes(s: HudSnapshot): string {
       ${PVP_MODES
         .map(
           (m) => `<button class="mode-card ${m.id === s.modeId ? "on" : ""}" data-ui data-action="pick-mode" data-id="${m.id}">
-            <span class="mode-icon">${m.icon}</span>
+            <span class="mode-icon">${iconGlyph(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
           </button>`,
@@ -2924,7 +2921,7 @@ function renderProgress(s: HudSnapshot): string {
     <p class="tagline">Missions and rewards from all your flights, in one place.</p>
     <div class="hero-meta">
       <span class="pill seed-pill">${s.seedLabel}</span>
-      <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${s.wings.icon} ${s.wings.name}</span>
+      <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${iconGlyph(s.wings.icon)} ${s.wings.name}</span>
     </div>
     ${
       s.wings.nextNeeded > 0
@@ -2980,8 +2977,8 @@ function renderProgress(s: HudSnapshot): string {
     </button>
 
     <button class="event-strip" data-ui data-action="play-event">
-      <span class="ds-icon">${s.weeklyEvent.icon}</span>
-      <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${s.monthlyTheme.icon} ${s.monthlyTheme.name} · fly ${s.weeklyEvent.target.toLocaleString()} m · ● ${s.weeklyEvent.reward}</em></span>
+      <span class="ds-icon">${iconGlyph(s.weeklyEvent.icon)}</span>
+      <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${iconGlyph(s.monthlyTheme.icon)} ${s.monthlyTheme.name} · fly ${s.weeklyEvent.target.toLocaleString()} m · ● ${s.weeklyEvent.reward}</em></span>
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
     ${!s.calendar.claimedToday ? `<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>` : ""}

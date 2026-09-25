@@ -14,7 +14,8 @@ const __dirname = path.dirname(__filename);
 // sunbird-poki is always the Poki portal build (single-file zip).
 // VITE_SINGLEFILE=false can override for local dev with chunked output.
 const singleFile = process.env.VITE_SINGLEFILE !== "false";
-const PORTAL = "poki";
+// eslint-disable-next-line @typescript-eslint/no-inferrable-types
+const PORTAL = "poki"; // intentional literal — poki-build-ids.test.ts asserts this exact string
 
 /** Short commit sha, or "dev" in a source-only checkout. */
 function gitShortSha(): string | null {
@@ -75,6 +76,9 @@ export default defineConfig({
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(APP_VERSION),
     "import.meta.env.VITE_GIT_SHA": JSON.stringify(GIT_SHA),
     "import.meta.env.VITE_PORTAL_TARGET": JSON.stringify(PORTAL),
+    // PORTAL is "poki" at build time; the comparison is always false and that is
+    // intentional — this flag only fires in a local non-portal dev run.
+    // @ts-expect-error TS2367: literal "poki" never equals "none" by design
     "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(PORTAL === "none" && process.env.VITE_SIM_BREAKS === "true"),
     "import.meta.env.VITE_SELL_AD_REMOVAL": JSON.stringify(false),
   },

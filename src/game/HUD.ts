@@ -2195,16 +2195,6 @@ function renderChallenges(s: HudSnapshot): string {
   const d = s.daily;
   const g = s.gauntlet;
   const c = s.calendar;
-  const modePills = (s.pvpModes || []).map((m) => `
-    <button class="pvp-pill ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="select-pvp-mode" data-id="${m.id}" title="${escapeHtml(m.blurb)}">
-      <span>${menuIconSm(m.icon)}</span> <b>${escapeHtml(m.name)}</b> <small>${m.finish}m</small>
-    </button>`).join("");
-  const worldPills = (s.pvpWorlds || []).map((w) => `
-    <button class="world-pill ${s.selectedPvpWorld === w.id ? "on" : ""}" data-ui data-action="select-pvp-world" data-id="${w.id}" title="${escapeHtml(w.tagline)}">
-      <span>${escapeHtml(w.emoji)}</span> <b>${escapeHtml(w.name)}</b> <small>${escapeHtml(w.difficulty)}</small>
-    </button>`).join("");
-  const activeMode = (s.pvpModes || []).find((m) => m.id === s.selectedPvpMode) ?? (s.pvpModes || [])[0];
-  const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0];
   const raceChallenges = `
     <section class="race-section challenge-races" aria-label="Race challenges">
       <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched</span></div>
@@ -2268,7 +2258,7 @@ function renderChallenges(s: HudSnapshot): string {
             <em>${
               m.maxed
                 ? `Mastered · ${m.skillDesc} — always on in this mode`
-                : `${m.runs} runs · next level at ${Math.round(m.nextAt).toLocaleString()}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
+                : `${m.runs} runs · next level at ${Math.round(m.nextAt ?? 0).toLocaleString()}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
             }</em>
             ${m.maxed ? "" : `<div class="qb"><i style="width:${Math.round(m.progress * 100)}%"></i></div>`}</div>
             <span class="m-stars">${"★".repeat(m.level)}${"☆".repeat(Math.max(0, 5 - m.level))}</span>

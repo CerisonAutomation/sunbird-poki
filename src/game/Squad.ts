@@ -9,7 +9,6 @@
  * offline UI rather than breaking the menu.
  */
 import { directoryAvailable, lookupDirectoryPilot, publishPilot, type DirectoryPilot } from "./PilotDirectory";
-import { SQUAD_CHAT } from "./edition";
 
 const ENV: Record<string, string | undefined> = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
 const API = (ENV.VITE_SOCIAL_URL ?? (ENV.DEV ? "/social" : "")).replace(/\/$/, "");

@@ -2468,13 +2468,13 @@ export function renderSquad(s: HudSnapshot): string {
     : "";
   const clubs = myClub
     ? `
-    <div class="section-title">Your club <small>${myClub.members}/30 members</small></div>
+    ${sectionTitle("Your club", `${myClub.members}/30 members`)}
     <div class="club-card mine">
       <div class="daily-head"><span class="daily-icon">🏰</span><div><b>${escapeHtml(myClub.name)}</b><em>${escapeHtml(myClub.motto)}</em></div><button class="mini-btn ghost" data-ui data-action="squad-leave-club">Leave</button></div>
     </div>
     ${clubChat}`
     : `
-    <div class="section-title">Flight Clubs <small>join or found one</small></div>
+    ${sectionTitle("Flight Clubs", "join or found one")}
     ${
       sq.clubs.length
         ? `<div class="club-list">${clubPage.items
@@ -2496,7 +2496,7 @@ export function renderSquad(s: HudSnapshot): string {
   // is an explicit, confirmed re-enrollment into a fresh profile.
   const recovery = sq.credentialError && !sq.isAutonomous
     ? `<section class="squad-recovery" role="region" aria-label="Squad profile recovery">
-        <div class="section-title">Squad profile recovery <small>key missing</small></div>
+        ${sectionTitle("Squad profile recovery", "key missing")}
         <p>${escapeHtml(sq.error || "This browser cannot unlock the saved Squad profile.")} Your flight progress, coins and birds are untouched — only the Squad identity is locked.</p>
         <label class="recovery-consent"><input type="checkbox" data-ui /> I understand this creates a separate Squad profile.</label>
         <div class="room-actions-bar">
@@ -2542,7 +2542,7 @@ function renderRank(s: HudSnapshot): string {
       <div class="season-head"><b>Season</b><span class="pill">${r.season.daysLeft}d left</span></div>
       <div class="season-body">Peak ${r.season.peakIcon} ${r.season.peak} · pays <b>● ${r.season.rewardCoins}</b> at reset, then ratings drift halfway back to 1000.</div>
     </div>
-    <div class="section-title">Recent races <small>this device only</small></div>
+    ${sectionTitle("Recent races", "this device only")}
     ${
       r.matches.length
         ? `<div class="match-list">${[...r.matches]
@@ -2554,7 +2554,7 @@ function renderRank(s: HudSnapshot): string {
             .join("")}</div>`
         : `<p class="fineprint">No ranked races yet. Your first 40-bird finish sets the tone.</p>`
     }
-    <div class="section-title">Duels <small>ranked 1v1 · ±16 rating</small></div>
+    ${sectionTitle("Duels", "ranked 1v1 · ±16 rating")}
     <div class="duel-card">
       <div class="vs-stage slim">
         <div class="vs-you"><span class="bird-badge you">${sunbirdSVG({ width: 62, flap: 0.55, title: "Your sunbird" })}</span><b>YOU</b><span class="vs-sub">${r.rating}</span></div>

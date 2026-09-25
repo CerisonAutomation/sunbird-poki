@@ -17,27 +17,25 @@ const LOCALE_STORAGE_KEY = "sunbird.i18n.locale";
  * the player's browser language and serve the content accordingly").
  *
  * Exact tag → same-language region variant → base language, so a Brazilian
- * player sending `pt` or `pt-PT` still lands on `pt-BR`, `zh-Hant` lands on
- * `zh-CN` rather than English, and `ru-RU` lands on `ru`. Returns null when
- * nothing matches (the caller falls back to English).
+ * player sending `pt-BR` and a Portuguese player sending `pt-PT` both land on
+ * `pt`, `zh-Hant` lands on `zh` rather than English, and `ru-RU` lands on `ru`.
+ * Returns null when nothing matches (the caller falls back to English).
  */
 export function matchLocale(tag: string | null | undefined): SupportedLocale | null {
   if (!tag) return null;
   const normalized = tag.trim().replace(/_/g, "-").toLowerCase();
   if (!normalized) return null;
-  // Keep the selector on the canonical BCP-47 labels even though the compact
-  // runtime packs retain `pt` and `zh` filenames for backwards compatibility.
-  if (normalized === "pt" || normalized.startsWith("pt-")) return "pt-BR";
-  if (normalized === "zh" || normalized.startsWith("zh-")) return "zh-CN";
   const exact = SUPPORTED_LOCALES.find((l) => l.code.toLowerCase() === normalized);
   if (exact) return exact.code;
   const prefix = SUPPORTED_LOCALES.find((l) => normalized.startsWith(`${l.code.toLowerCase()}-`));
   if (prefix) return prefix.code;
+  // Fold a regional tag down to its base language: `pt-BR`, `zh-Hant-TW`,
+  // `ru-RU` and `nb-NO` all resolve here rather than falling through to
+  // English. An earlier revision short-circuited `no`/`nb`/`nn` to `null`,
+  // which made Norwegian permanently unmatchable even though it ships.
   const base = normalized.split("-")[0];
   const sameLanguage = SUPPORTED_LOCALES.find((l) => l.code.toLowerCase().split("-")[0] === base);
   if (sameLanguage) return sameLanguage.code;
-  // Regional spellings the base tag does not cover directly.
-  if (base === "nb" || base === "nn" || base === "no") return null;
   return null;
 }
 
@@ -123,13 +121,6 @@ export async function setLocale(locale: SupportedLocale): Promise<void> {
   for (const fn of packListeners) fn();
 }
 
-// Initial document direction set
-if (typeof window !== "undefined") {
-  updateDocumentDirection();
-  // Preload English pack as fallback
-  void loadPack("en");
-}
-
 /* --------------------------------------------------------- pack registry */
 
 type Pack = Record<string, string>;
@@ -149,15 +140,34 @@ const PACK_MODULES = import.meta.glob("./packs/*.json") as Record<
 let packVersion = 0;
 const packListeners = new Set<() => void>();
 
+/**
+ * Initial document direction set.
+ *
+ * This calls `loadPack` during module evaluation, so it MUST stay below the
+ * registry above: `const packs`, `packVersion` and `packListeners` are in the
+ * temporal dead zone until their declarations are evaluated, and calling
+ * `loadPack("en")` from above them threw
+ * `ReferenceError: Cannot access 'packs' before initialization` on every cold
+ * boot — in the real game and in 24 test files.
+ */
+if (typeof window !== "undefined") {
+  updateDocumentDirection();
+  // Preload English pack as fallback
+  void loadPack("en");
+}
+
 /** Resolves when `locale`'s pack is resident (immediately when already
  * loaded, e.g. English or a repeat switch). False when the pack cannot be
  * fetched — callers keep English text rather than raw keys. */
 export async function loadPack(locale: string): Promise<boolean> {
   if (packs.has(locale)) return true;
-  
-  // Special case for English - load from same pattern as other locales
-  const packLocale = locale === "pt-BR" ? "pt" : locale === "zh-CN" ? "zh" : locale;
-  const load = PACK_MODULES[`./packs/${packLocale}.json`];
+
+  // One pack per supported locale, same filename as the code. The old mapping
+  // special-cased `pt-BR` → `pt` and `zh-CN` → `zh` because the locale list
+  // carried region codes; `matchLocale()` already folds a regional tag
+  // ("pt-BR", "zh-CN") down to its base before this runs, so the indirection
+  // only ever hid a missing pack.
+  const load = PACK_MODULES[`./packs/${locale}.json`];
   if (!load) return false;
   try {
     const mod = await load();

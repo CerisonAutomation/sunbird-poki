@@ -13,23 +13,16 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  EXTERNAL_HOSTS,
   PRIVACY_POLICY,
   PRIVACY_POLICY_VERSION,
   composePolicy,
   privacyPolicyUrl,
   type ExternalHost,
-  type LegalEdition,
-  type PolicyDocument,
 } from "../legal";
 import { LEGAL_EDITION as POKI } from "../legal.edition";
 
 const root = resolve(__dirname, "../../..");
 const read = (p: string): string => readFileSync(resolve(root, p), "utf8");
-
-function policyText(doc: PolicyDocument): string {
-  return JSON.stringify(doc);
-}
 
 describe("host table is the single source of truth", () => {
   it("puts every host in a CSP directive the submission can name", () => {

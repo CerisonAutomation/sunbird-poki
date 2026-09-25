@@ -22,27 +22,46 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import * as directEdition from "../edition";
-import * as pokiEdition from "../edition.poki";
+import * as edition from "../edition";
 
+/**
+ * There is ONE edition module. `src/game/edition.ts` *is* the Poki build — the
+ * per-portal `edition.poki.ts` / `edition.crazy.ts` / `edition.generic.ts`
+ * variants were deleted with the multi-portal tree, and this file used to
+ * import `edition.poki` (a module that no longer exists) alongside it. Every
+ * assertion below is therefore a straight Poki policy contract, not a
+ * comparison between portals.
+ */
 describe("edition policy flags", () => {
-  it("direct build keeps free-text names and may sell ad removal", () => {
-    expect(directEdition.CUSTOM_PILOT_NAMES).toBe(true);
-    expect(directEdition.SELL_AD_REMOVAL).toBe(true);
+  it("allows free-text pilot names, because they are profanity-filtered", () => {
+    // Poki permits player-authored text once it is moderated; the leaderboard
+    // name goes through isPilotNameClean() before it can be broadcast.
+    expect(edition.CUSTOM_PILOT_NAMES).toBe(true);
   });
 
-  // Poki now allows free-text pilot names with profanity filtering (isPilotNameClean).
-  // crazy/generic still forbid them (no filter shipped there).
-  it("poki edition allows free-text names (profanity-filtered) but forbids ad-removal sales", () => {
-    expect(pokiEdition.CUSTOM_PILOT_NAMES).toBe(true);
-    expect(pokiEdition.SELL_AD_REMOVAL).toBe(false);
+  it("forbids selling ad removal (Poki rule REQ-20)", () => {
+    // No in-app purchases of any kind, and no UI implying one — including no
+    // "remove ads" offer. Portals own ad frequency.
+    expect(edition.SELL_AD_REMOVAL).toBe(false);
   });
 
-  it("the direct/web edition forbids neither, which is the contrast that matters", () => {
-    // The other portal editions are gone — Poki is the only portal this game
-    // ships to — so the contrast is now Poki's policy against the neutral build.
-    expect(directEdition.CUSTOM_PILOT_NAMES).toBe(true);
-    expect(directEdition.SELL_AD_REMOVAL).toBe(true);
+  it("ships no in-game chat (emotes are the sanctioned alternative)", () => {
+    expect(edition.SQUAD_CHAT).toBe(false);
+  });
+
+  it("never simulates its own ad breaks — the portal schedules them", () => {
+    // The game must not inject interstitials on Poki; `dueAd` is gated on
+    // `portalEnabled()` for the same reason.
+    expect(edition.SIMULATED_BREAKS).toBe(false);
+  });
+
+  it("declares itself the Poki edition with Poki multiplayer", () => {
+    expect(edition.POKI_EDITION).toBe(true);
+    expect(edition.POKI_MULTIPLAYER).toBe(true);
+  });
+
+  it("reserves portal-owned names so no player can impersonate them", () => {
+    expect(edition.RESERVED_PILOT_NAMES).toContain("poki");
   });
 });
 

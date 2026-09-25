@@ -1,7 +1,7 @@
 # Poki compliance report
 
-**Generated:** 2026-09-24 by `pnpm poki:audit` — do not edit by hand.
-**Result:** ✅ every satisfied rule verified · 167/188 rules verified · 131 of them hard requirements.
+**Generated:** 2026-09-25 by `pnpm poki:audit` — do not edit by hand.
+**Result:** ❌ 1 problem(s) · 166/188 rules verified · 131 of them hard requirements.
 
 **Scope:** the extracted guide corpus in this folder (`requirements.json`, version 2026-09-22). Rules marked *action* are human/submission steps, *deferred* are accepted gaps with a recorded reason — both are listed so nothing is silently skipped.
 
@@ -12,6 +12,10 @@
 | deferred (accepted) | 0 |
 | informational | 21 |
 
+## Problems
+
+- SUB-11: missing file src/game/edition.poki.ts
+
 ## GK — Developer Guide overview
 
 *Source page: [`00-guide-overview.md`](./00-guide-overview.md)*
@@ -21,7 +25,7 @@
 | `GK-01` | recommendation | Choose a web game engine deliberately (2D/3D + multiplayer needs) and understand player-hardware insights so the build stays compatible and performant. | ✅ | docs/poki/01-web-game-engines.md |
 | `GK-02` | recommendation | Success on web depends on fast onboarding, high engagement strategies, and localization. | ✅ | src/game/__tests__/firstflight.test.ts |
 | `GK-03` | recommendation | Integrate monetization early so rewarded placements land at natural moments. | ✅ | src/game/Game.ts matches /rewardedBreak\|continue-ad/ |
-| `GK-04` | recommendation | Thumbnails are the primary acquisition surface; make them impactful. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
+| `GK-04` | recommendation | Thumbnails are the primary acquisition surface; make them impactful. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
 | `GK-05` | informational | The guide is the starting point for optimising games for the web environment. | ℹ️ info | docs/poki/README.md |
 
 ## ENG — Choosing your web game engine
@@ -43,7 +47,7 @@
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
 | `EA-01` | requirement | Mobile first: prioritise mobile compatibility early, not as a late port. | ✅ | src/game/Game.ts matches /isCoarsePointer\(\)/ |
-| `EA-02` | requirement | Keep it small: target an 8–10 MB game file for older hardware and slow connections. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `EA-02` | requirement | Keep it small: target an 8–10 MB game file for older hardware and slow connections. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `EA-03` | recommendation | Skip the menu: let first-time players reach gameplay without splash/title/level-select detours. | ✅ | src/game/HUD.ts matches /home-launch/ |
 | `EA-04` | requirement | Loading screens must be visually engaging and include a progress bar. | ✅ | index.html matches /role="progressbar"/ |
 | `EA-05` | recommendation | Progressive loading: ship essential initial assets first, load the rest in the background. | ✅ | src/game/__tests__/boot-progress.test.ts |
@@ -113,16 +117,16 @@
 
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
-| `THB-01` | requirement | A high-quality thumbnail is essential for attracting players. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
+| `THB-01` | requirement | A high-quality thumbnail is essential for attracting players. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
 | `THB-02` | requirement | The thumbnail must accurately reflect the game's content. | ✅ attested | Thumbnail uses the game's sky/sun/ridge palette and the player's bird in the pose seen in the first five seconds. |
 | `THB-03` | recommendation | Embrace simplicity: one clear foreground object. | ✅ attested | Single hero subject (bird) over a two-layer background; no clutter or screenshot chrome. |
 | `THB-04` | recommendation | Keep a series visually consistent across thumbnails. | ✅ attested | One palette and hero pose reused across icon sizes, store card and video frame. |
-| `THB-05` | requirement | Full-bleed square, minimum 628 x 628 px. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
-| `THB-06` | requirement | Do not cut corners: rounded corners are applied by the platform mask. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
-| `THB-07` | requirement | Details and typography must stay legible when scaled down. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
-| `THB-08` | requirement | High contrast; avoid colours close to the Poki Playground background #83FFE7. | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
+| `THB-05` | requirement | Full-bleed square, minimum 628 x 628 px. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
+| `THB-06` | requirement | Do not cut corners: rounded corners are applied by the platform mask. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
+| `THB-07` | requirement | Details and typography must stay legible when scaled down. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
+| `THB-08` | requirement | High contrast; avoid colours close to the Poki Playground background #83FFE7. | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
 | `THB-09` | requirement | Static thumbnail for the player-fit test; animated 3-5 s gameplay loop before global release. | ✅ | assets/submission/sunbird-thumbnail-animated.gif |
-| `THB-10` | recommendation | Keep delivered image weight sane (Inspector warns on heavy images). | ✅ verified (executed) | executed: node scripts/verify-thumbnail.mjs |
+| `THB-10` | recommendation | Keep delivered image weight sane (Inspector warns on heavy images). | ✅ | gate wired: node scripts/verify-thumbnail.mjs |
 
 ## DEV — Poki Player Device Report
 
@@ -148,13 +152,13 @@
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
 | `TOOL-01` | informational | The Inspector evaluates a web build against the platform's success factors. | ℹ️ info | Submission-time tool run. |
-| `TOOL-02` | requirement | The build must survive the Inspector's mobile and technical-optimisation passes (no external resources, no console errors, sane image weights). | ✅ verified (executed) | executed: node scripts/audit-zips.mjs |
-| `TOOL-03` | requirement | Uploadable as a folder with index.html at the root, working from any sub-path. | ✅ verified (executed) | executed: node scripts/verify-upload.mjs |
+| `TOOL-02` | requirement | The build must survive the Inspector's mobile and technical-optimisation passes (no external resources, no console errors, sane image weights). | ✅ | gate wired: node scripts/audit-zips.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
+| `TOOL-03` | requirement | Uploadable as a folder with index.html at the root, working from any sub-path. | ✅ | gate wired: node scripts/verify-upload.mjs (needs poki-upload/index.html, sunbird-poki.zip, dist-poki/index.html — run with --run after build:portals) |
 | `TOOL-04` | informational | Netlib is a WebRTC-datachannel P2P library for web games. | ℹ️ info | src/game/PokiNetlib.ts |
 | `TOOL-05` | informational | Netlib is usable whether or not the game is hosted on Poki. | ℹ️ info | Availability note. |
 | `TOOL-06` | requirement | Feature-detect WebRTC and keep a non-P2P path when using Netlib. | ✅ | src/game/PokiMpUtils.ts matches /RTCPeerConnection/ |
 | `TOOL-07` | informational | AUDS stores user-generated content and returns shareable codes, enabling non-real-time multiplayer. | ℹ️ info | src/sdk/auds.ts |
-| `TOOL-08` | requirement | AUDS is exclusive to Poki-hosted games and needs a live game id, so it cannot be a dependency of portable builds. | ✅ verified (executed) | executed: node scripts/verify-upload.mjs |
+| `TOOL-08` | requirement | AUDS is exclusive to Poki-hosted games and needs a live game id, so it cannot be a dependency of portable builds. | ✅ | gate wired: node scripts/verify-upload.mjs |
 
 ## REQ — Platform requirements, policies & release
 
@@ -165,8 +169,8 @@
 | `REQ-01` | requirement | Scale to 640x360, 836x470 and 1031x580 (plus real devices) with no crop or scroll. | ✅ | e2e/scaling.spec.ts (pinned: /640\|836\|1031/) |
 | `REQ-02` | requirement | Run inside a cross-origin iframe: no top-level navigation, window.open, dialogs, or console errors. | ✅ | src/rejection-guard.ts matches /unhandledrejection\|rejection/ |
 | `REQ-03` | requirement | Fully playable in incognito / with storage blocked. | ✅ | src/game/__tests__/storage.test.ts |
-| `REQ-04` | requirement | Initial download under ~5 MB, total under ~8 MB. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
-| `REQ-05` | requirement | No service worker or manifest inside portal builds. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `REQ-04` | requirement | Initial download under ~5 MB, total under ~8 MB. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
+| `REQ-05` | requirement | No service worker or manifest inside portal builds. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-06` | requirement | Fixed non-scrolling page with the canvas filling the viewport; portrait and landscape supported. | ✅ | src/index.css matches /position: fixed/ |
 | `REQ-10` | requirement | Lifecycle order init -> gameLoadingStart -> gameLoadingFinished, each phase marker once. | ✅ | src/sdk/__tests__/platform-failsafe.test.ts |
 | `REQ-11` | requirement | gameplayStart on real play start, gameplayStop on stop; never duplicated or inverted. | ✅ | e2e/poki-artifact.spec.ts |
@@ -175,28 +179,28 @@
 | `REQ-14` | requirement | Rewarded placements emit visible when shown and interact when chosen. | ✅ | src/game/Game.ts matches /continue-ad/ |
 | `REQ-15` | requirement | Mute audio and disable input for the whole ad break. | ✅ | src/game/Game.ts matches /beginPortalAd/ |
 | `REQ-16` | requirement | Work when the SDK is unavailable: boot anyway, never block on the portal. | ✅ | src/game/__tests__/journey-reliability.test.ts |
-| `REQ-20` | requirement | No in-app purchases on the platform and no UI implying them. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `REQ-20` | requirement | No in-app purchases on the platform and no UI implying them. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-21` | requirement | No secondary spendable currencies. | ✅ | src/game/__tests__/economy.test.ts |
-| `REQ-22` | requirement | No third-party ad systems. | ✅ verified (executed) | executed: node scripts/audit-zips.mjs |
+| `REQ-22` | requirement | No third-party ad systems. | ✅ | gate wired: node scripts/audit-zips.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-23` | requirement | No ad-timer or cooldown manipulation. | ✅ | src/game/Game.ts matches /portalEnabled\(\)/ |
-| `REQ-24` | requirement | External links only through the platform API; portal builds should have none. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `REQ-24` | requirement | External links only through the platform API; portal builds should have none. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-30` | requirement | All-ages content: no violence, sexual content, gambling, substances, fear or bullying. | ✅ attested | Family-friendly bird flight; no combat, no gore, no casino framing (the lucky wheel is a free daily gift, not a paid spin), no substances, no chat. |
-| `REQ-31` | requirement | No chat in multiplayer surfaces; emotes are the recommended alternative. | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `REQ-31` | requirement | No chat in multiplayer surfaces; emotes are the recommended alternative. | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-32` | requirement | No PII collection; platform identity is display-only. | ✅ | src/sdk/poki.ts matches /getIdentity/ |
 | `REQ-33` | requirement | Originality: art, UI, mechanics, characters, audio and name must be the developer's own. | ✅ attested | Procedural biomes, custom UI, original bird/characters, procedural score; no third-party art or audio. |
 | `REQ-34` | requirement | AI-assisted production: no watermarks or prompt text; process documentable on request. | ✅ attested | No AI-generated asset files ship (art is procedural, audio is synthesized); production history is the git log. |
-| `REQ-35` | recommendation | External resources policy: prefer zero external requests; bundle assets and avoid CDNs. | ✅ verified (executed) | executed: node scripts/audit-zips.mjs |
+| `REQ-35` | recommendation | External resources policy: prefer zero external requests; bundle assets and avoid CDNs. | ✅ | gate wired: node scripts/audit-zips.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-40` | requirement | Identity is passive: never force a login at boot. | ✅ attested | login() is deliberately not called at boot (Poki's login reloads the page on first use); getUser() is passive with a local fallback name. |
 | `REQ-41` | recommendation | Platform tokens are short-lived and must be verified server-side immediately, never stored. | ✅ | src/sdk/poki.ts matches /getToken/ |
 | `REQ-42` | requirement | A player who is not signed in must still play the full game. | ✅ | src/game/__tests__/save.test.ts |
 | `REQ-50` | informational | Revenue split: 100% on search/owned traffic, 50/50 on platform-driven traffic. | ℹ️ info | Business term; nothing to implement. |
-| `REQ-51` | requirement | The submitted build is web-exclusive: no store build that double-serves the Poki artifact. | ✅ verified (executed) | executed: node scripts/audit-zips.mjs |
-| `REQ-52` | informational | Release flow: folder upload -> Inspector QA -> player-fit test -> web-fit test -> review. | ✅ verified (executed) | executed: node scripts/verify-inspector-qa.mjs |
+| `REQ-51` | requirement | The submitted build is web-exclusive: no store build that double-serves the Poki artifact. | ✅ | gate wired: node scripts/audit-zips.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
+| `REQ-52` | informational | Release flow: folder upload -> Inspector QA -> player-fit test -> web-fit test -> review. | ✅ | gate wired: node scripts/verify-inspector-qa.mjs |
 | `REQ-53` | informational | Web-fit metrics: C2P (click-to-play), CTR (thumbnail), time on page. | ℹ️ info | C2P is minimised by the sub-1 MB boot and immediate first frame; CTR by the specification-compliant thumbnail; time-on-page by the daily/weekly retention loops. |
 | `REQ-60` | requirement | Do not place HUD under the mobile platform pill; use movePill() to relocate it. | ✅ | src/sdk/platform.ts matches /movePill/ |
 | `REQ-61` | requirement | Player-authored text is limited to the pilot's own display name: no chat system, no personal-data collection, and the name is moderated before it can be broadcast or stored, because it reaches other players (netlib rosters, name tags) and a public leaderboard. | ✅ | src/game/__tests__/pilot-name-moderation.test.ts (pinned: /Scunthorpe problem/) |
 | `REQ-62` | requirement | No offer to remove or disable ads, and no ad-frequency claim in a portal paywall. | ✅ | src/game/__tests__/portal-policy.test.ts (pinned: /sponsored breaks/) |
-| `REQ-63` | requirement | Portal bundles must contain no ad-removal copy, and no portal may ship a name surface it does not moderate (bundle-level enforcement of REQ-20 and the pilot-name policy). | ✅ verified (executed) | executed: node scripts/verify-portal.mjs |
+| `REQ-63` | requirement | Portal bundles must contain no ad-removal copy, and no portal may ship a name surface it does not moderate (bundle-level enforcement of REQ-20 and the pilot-name policy). | ✅ | gate wired: node scripts/verify-portal.mjs (needs sunbird-poki.zip — run with --run after build:portals) |
 | `REQ-64` | requirement | A portal build must not describe or count ad breaks it does not schedule — the platform owns ad frequency. | ✅ | e2e/portal-policy.spec.ts (pinned: /must not offer ad removal/) |
 | `REQ-65` | requirement | A portal build must issue no request that can fail on the host origin (no relative calls to absent backends). | ✅ | e2e/portal-policy.spec.ts (pinned: /HTTP \$\{r.status/) |
 
@@ -220,7 +224,7 @@
 | `SDK-12` | requirement | External navigation goes through openExternalLink() — the game frame never navigates away. | ✅ | src/game/Game.ts matches /openExternalLink/ |
 | `SDK-13` | recommendation | movePill(topPercent, topPx) keeps the mobile pill clear of the UI; topPercent is 0–50. | ✅ | src/sdk/platform.ts matches /movePill/ |
 | `SDK-14` | informational | Pill is 46x62 below 1211px wide and 92x64 at 1211px and up. | ℹ️ info | Platform-drawn element; sizing is informational for layout decisions. |
-| `SDK-15` | requirement | The build is uploaded as a folder with index.html at the root and its event log checked in the Inspector. | ✅ verified (executed) | executed: pnpm verify:upload |
+| `SDK-15` | requirement | The build is uploaded as a folder with index.html at the root and its event log checked in the Inspector. | ✅ | gate wired: pnpm verify:upload |
 
 ## EV — SDK overview & events
 
@@ -265,7 +269,7 @@
 | `NL-06` | requirement | The UI says whether the player is in a live room or a local/AI fallback. | ✅ | src/game/Game.ts matches /multiplayerLive/ |
 | `NL-07` | requirement | A dropped connection must not end the session; degrade to the local flock. | ✅ | src/game/PokiNetlib.ts matches /closedByUs/ |
 | `NL-08` | requirement | Netlib is loaded lazily so it never lands in the boot path. | ✅ | src/game/net-transport.poki.ts matches /import\("\./PokiNetlib"\)/ |
-| `NL-09` | requirement | A Netlib build must not contain another platform's transport names or endpoints. | ✅ verified (executed) | executed: pnpm isolation:check |
+| `NL-09` | requirement | A Netlib build must not contain another platform's transport names or endpoints. | ✅ | gate wired: pnpm isolation:check |
 | `NL-10` | requirement | Lobby codes are short and unambiguous to read aloud. | ✅ | src/game/PokiMpUtils.ts matches /ABCDEFGHJKLMNPQRSTUVWXYZ/ |
 
 ## AU — AUDS: Arbitrary User Data Store
@@ -301,14 +305,14 @@
 
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
-| `SUB-01` | requirement | Upload a web build: folder with index.html at the root, working on desktop, mobile and tablet. | ✅ verified (executed) | executed: pnpm verify:upload |
-| `SUB-04` | requirement | Thumbnail: full-bleed square >=628px, one subject, minimal text, high contrast, not near #83FFE7. | ✅ verified (executed) | executed: pnpm verify:thumbnail |
+| `SUB-01` | requirement | Upload a web build: folder with index.html at the root, working on desktop, mobile and tablet. | ✅ | gate wired: pnpm verify:upload |
+| `SUB-04` | requirement | Thumbnail: full-bleed square >=628px, one subject, minimal text, high contrast, not near #83FFE7. | ✅ | gate wired: pnpm verify:thumbnail |
 | `SUB-05` | recommendation | Suggested categories: up to four chosen for genuine fit. | ✅ | docs/poki/SUBMISSION.md matches /Suggested Categories/ |
 | `SUB-06` | requirement | A live privacy policy page is required before an external service can be approved. | ✅ | public/privacy.html |
 | `SUB-07` | requirement | The privacy policy must also be linked from inside the game. | ✅ | src/game/HUD.ts matches /open-privacy/ |
 | `SUB-08` | recommendation | Dashboard description and engine field describe the game and the tech. | ✅ | docs/poki/SUBMISSION.md matches /three-js/ |
-| `SUB-09` | requirement | External resources are requested in Settings → CSP; assets are bundled, not fetched from CDNs. | ✅ verified (executed) | executed: pnpm verify:portals |
-| `SUB-11` | requirement | No in-game chat systems; emoji/quick messages are the sanctioned alternative. | ✅ | src/game/edition.poki.ts matches /SQUAD_CHAT = false/ |
+| `SUB-09` | requirement | External resources are requested in Settings → CSP; assets are bundled, not fetched from CDNs. | ✅ | gate wired: pnpm verify:portals |
+| `SUB-11` | requirement | No in-game chat systems; emoji/quick messages are the sanctioned alternative. | ❌ | missing file src/game/edition.poki.ts |
 | `SUB-12` | requirement | No external account systems and no collection of personal information. | ✅ | src/game/pilotNameModeration.ts matches /const CONTACT/ |
 | `SUB-13` | requirement | Content must stay family-friendly (no violence, gambling, adult or scary themes). | ✅ attested | Game content: birds, islands, weather; currency earned only by flying. |
 | `SUB-14` | requirement | Controls offer alternatives so players who cannot use WASD are not excluded. | ✅ | src/game/Input.ts matches /pointerdown/ |
@@ -322,7 +326,7 @@
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
 | `PAR-02` | informational | Web exclusivity: the same game may not be published on other web portals or aggregators. | ℹ️ info | Separate per-target artifacts; the exclusivity decision is a publishing choice. |
-| `PAR-05` | informational | Baseline signals: quality, player fit, and tech (load time, frame rate, file size). | ℹ️ info | executed: pnpm audit:zips |
+| `PAR-05` | informational | Baseline signals: quality, player fit, and tech (load time, frame rate, file size). | ℹ️ info | gate wired: pnpm audit:zips |
 | `PAR-06` | recommendation | Beyond the baseline: originality, depth, first impression, cross-device feel, room to grow. | ℹ️ info | Documented in REBUILD_REPORT.md (30 tracks, seasons, wings, daily goals, endless/solo/race). |
 | `PAR-08` | informational | After final review: agreement, legal, QA, Soft Release, Global Release (~2-3 months). | ℹ️ info | Tracked in docs/poki/SUBMISSION.md as the roadmap after upload. |
 

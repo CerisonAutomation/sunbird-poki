@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { crossCheckBundle, originsIn, REFERENCE_ONLY } from "../../../scripts/verify-csp";
-import { LEGAL_EDITION } from "../legal.edition.poki";
+import { LEGAL_EDITION } from "../legal.edition";
 
 const declared = LEGAL_EDITION.hosts.filter((h) => h.edition === "poki");
 const PRIVACY = "sunbird-snowy.vercel.app";

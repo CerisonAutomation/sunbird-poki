@@ -6,7 +6,7 @@ import barrel from "../translations.barrel.json";
 
 /**
  * Poki localization rules LOC-02 (one file, centralized) and LOC-04 (phase
- * order: EFIGS + Turkish, then CJK, then pt-BR + Russian) plus LOC-05
+ * order: EFIGS + Turkish, then CJK, then Portuguese + Russian) plus LOC-05
  * (browser-language detection). A missing string in one locale is exactly the
  * kind of defect that only shows up on a device the developer does not own, so
  * it is a build failure here instead.
@@ -14,8 +14,8 @@ import barrel from "../translations.barrel.json";
 const entries = Object.entries((barrel as { barrel: Record<string, { placeholders: string[]; translations: Record<string, string> }> }).barrel);
 
 const PHASE_1 = ["en", "fr", "it", "de", "es", "tr"];
-const PHASE_2_CJK = ["zh-CN", "ja", "ko"];
-const PHASE_3 = ["pt-BR", "ru"];
+const PHASE_2_CJK = ["zh", "ja", "ko"];
+const PHASE_3 = ["pt", "ru"];
 
 describe("translation barrel (LOC-02)", () => {
   it("keeps every shipped locale complete", () => {
@@ -66,7 +66,7 @@ describe("locale coverage (LOC-04)", () => {
     const codes = SUPPORTED_LOCALES.map((l) => l.code);
     const efigs = codes.indexOf("en");
     expect(codes.indexOf("tr")).toBeGreaterThan(efigs);
-    expect(codes.indexOf("ru")).toBeGreaterThan(codes.indexOf("pt-BR") - 1);
+    expect(codes.indexOf("ru")).toBeGreaterThan(codes.indexOf("pt") - 1);
   });
 });
 
@@ -150,7 +150,7 @@ describe("localized number formatting (the coin counters)", () => {
     // German swaps the separator roles; a hardcoded en-US toLocaleString got
     // this wrong for every player whose language was not English.
     expect(formatNumberLocalized(12_480, "de")).toBe("12.480");
-    expect(formatNumberLocalized(12_480, "pt-BR")).toBe("12.480");
+    expect(formatNumberLocalized(12_480, "pt")).toBe("12.480");
   });
 
   it("leaves amounts under a thousand untouched in every shipped locale", () => {

@@ -6,7 +6,7 @@ Simplification opportunities found by whole-codebase audit. One per iteration.
 
 - [x] **`(s.pvpModes || [])` redundant guards** — `pvpModes` is typed `ModeDef[]` (non-optional), so `|| []` is unnecessary defensive code. Remove all 3 instances and the `(s.pvpWorlds || [])` instances too.
 
-- [ ] **Inline `s.pvpModes.find(...)` at line 2181** — The AI flock button re-runs `.find()` inline even though `activeMode` already holds the result. Replace with `activeMode.name`.
+- [x] **Inline `s.pvpModes.find(...)` at line 2181** — The AI flock button re-runs `.find()` inline even though `activeMode` already holds the result. Replace with `activeMode.name`.
 
 - [ ] **`SocialSystem.ts` 170-char single-line methods** — `currentWeekKey()` (line 169) and `dateSeedDaysLater()` (line 170) are unreadable single-liners. Break into multi-line for maintainability.
 

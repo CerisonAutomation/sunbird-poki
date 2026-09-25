@@ -2342,7 +2342,7 @@ export function renderSquad(s: HudSnapshot): string {
   const notice = s.squadNotice ? `<div class="reward-strip">${escapeHtml(s.squadNotice)}</div>` : "";
 
   const quests = `
-    <div class="section-title">Squadron Team Quests <small>Co-Op Milestones</small></div>
+    ${sectionTitle("Squadron Team Quests", "Co-Op Milestones")}
     <div class="squad-quests">
       ${SQUAD_QUESTS.map((q) => {
         const prog = q.id === "migration" ? Math.min(q.target, Math.round(s.bestDistance * 1.5)) : q.id === "drafting" ? Math.min(q.target, Math.round(s.runsPlayed * 5)) : Math.min(q.target, Math.round(s.todayBest / 100));
@@ -2402,11 +2402,11 @@ export function renderSquad(s: HudSnapshot): string {
       ...sq.requestsOut.map((r) => `<div class="friend-row"><span class="fr-name">📤 ${escapeHtml(r.name)}</span><span class="fr-code">request pending</span><button class="mini-btn ghost" data-ui data-action="req-cancel" data-id="${escapeHtml(r.requestId)}">Cancel</button></div>`),
     ];
     if (!rows.length) return "";
-    return `<div class="section-title">Requests <small>${rows.length} waiting</small></div><div class="friend-list">${rows.join("")}</div>`;
+    return `${sectionTitle("Requests", `${rows.length} waiting`)}<div class="friend-list">${rows.join("")}</div>`;
   })();
 
   const lookupPanel = `
-    <div class="section-title">🔍 Pilot Lookup <small>${sq.live && !sq.isAutonomous ? "online directory" : "offline build"}</small></div>
+    ${sectionTitle("🔍 Pilot Lookup", sq.live && !sq.isAutonomous ? "online directory" : "offline build")}
     <p class="fineprint">Look a pilot up by their exact code. Results come from the pilot directory — nothing here is invented, and an unknown or unreachable code says so.</p>
     <div class="redeem">
       <input data-ui data-ref="pilotCode" data-enter-action="pilot-add" aria-label="Friend code" placeholder="Friend code (SUN-9F3K2A)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${escapeHtml(sq.pilotQuery)}" />
@@ -2418,11 +2418,11 @@ export function renderSquad(s: HudSnapshot): string {
   const wingmen = (() => {
     const page = sq.friends.length > 0 ? friendPage : { items: [], page: 0, pages: 0 };
     if (!sq.friends.length) {
-      return `<div class="section-title">🪽 Wingmen <small>0</small></div>
+      return `${sectionTitle("🪽 Wingmen", "0")}
         <div class="empty-note">No wingmen yet. Look one up by code above, or save a pilot you have actually raced with below. Your code is <b>${escapeHtml(sq.myCode || "…")}</b>.</div>`;
     }
     return `
-    <div class="section-title">🪽 Wingmen <small>${sq.friends.length}</small></div>
+    ${sectionTitle("🪽 Wingmen", String(sq.friends.length))}
     <div class="friend-list">${(page.items as typeof sq.friends)
       .map((f) => {
         const presence = f.local ? "met in a race" : f.online ? "● online" : "○ offline";
@@ -2436,7 +2436,7 @@ export function renderSquad(s: HudSnapshot): string {
   const flewWith = (() => {
     const mates = s.recentPilots.filter((m) => !sq.friends.some((f) => f.name.toLowerCase() === m.name.toLowerCase()));
     if (!s.recentPilots.length) {
-      return `<div class="section-title">🛫 Flew with <small>0</small></div><div class="empty-note">Pilots who share a room with you appear here — real rooms, real names, remembered on this device.</div>`;
+      return `${sectionTitle("🛫 Flew with", "0")}<div class="empty-note">Pilots who share a room with you appear here — real rooms, real names, remembered on this device.</div>`;
     }
     const rows = mates.slice(0, 8).map((m) => `<div class="friend-row">
       <span class="fr-name">🐦 ${escapeHtml(m.name)}</span>
@@ -2445,7 +2445,7 @@ export function renderSquad(s: HudSnapshot): string {
       <button class="mini-btn ghost" data-ui data-action="mate-invite" data-id="${escapeHtml(m.name)}">Invite</button>
       <button class="mini-btn ghost" data-ui data-action="mate-forget" data-id="${escapeHtml(m.name)}" aria-label="Forget ${escapeHtml(m.name)}">✕</button>
     </div>`).join("");
-    return `<div class="section-title">🛫 Flew with <small>${s.recentPilots.length} remembered</small></div>
+    return `${sectionTitle("🛫 Flew with", `${s.recentPilots.length} remembered`)}
       <p class="fineprint">Kept on this device from races you actually flew together.</p>
       <div class="friend-list">${rows || `<div class="empty-note">Everyone you flew with is already in your wingmen.</div>`}</div>`;
   })();

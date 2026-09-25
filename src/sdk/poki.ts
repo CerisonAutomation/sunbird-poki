@@ -41,14 +41,11 @@ import type {
 } from "./platform";
 import { localCloudFallback } from "./local";
 import { setLoadingNet } from "./net";
+import { POKI_DISPLAY_AD_SIZE } from "./banner";
 
 
-/**
- * Display-ad format for this game, or "" to leave the slot empty. Poki's
- * `displayAd(container, size)` needs a size the game cannot infer (the format
- * is chosen per game on the Poki side), so it is configuration, not code.
- */
-const POKI_DISPLAY_AD_SIZE = (import.meta.env.VITE_POKI_DISPLAY_AD_SIZE as string | undefined)?.trim() ?? "";
+// Display-ad format lives in ./banner — one home, shared with the React shell
+// that renders the container and with the boot path that mounts into it.
 
 type PokiShareableData = Record<string, string | number | boolean>;
 

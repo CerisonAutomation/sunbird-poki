@@ -203,16 +203,18 @@ export const MANUAL_BOOST_COOLDOWN = 3.5;
 export const STALL_SPEED = 8;
 export const HEADSTART_DISTANCE = 300;
 
-/* ---------- Stripe (see .env.example) ---------- */
-// import.meta.env only exists under Vite — plain Node runners (tsx harnesses
-// like scripts/physcheck.ts) import this module too, so read it defensively.
-const ENV: Record<string, string | undefined> = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
-export const STRIPE_PUBLISHABLE_KEY = ENV.VITE_STRIPE_PUBLISHABLE_KEY ?? "";
-export const STRIPE_GOLD_LINK = ENV.VITE_STRIPE_GOLD_LINK ?? "";
-export const STRIPE_VIP_LINK = ENV.VITE_STRIPE_VIP_LINK ?? "";
-export const STRIPE_STARTER_LINK = ENV.VITE_STRIPE_STARTER_LINK ?? "";
-export const STRIPE_RETURN_KEY = "sunbird_stripe";
-
+/**
+ * Payments were removed with the multi-portal/Stripe tree.
+ *
+ * These four `STRIPE_*` constants had no consumers anywhere in `src/` — the
+ * portal build routes payments through `Payments.portal.ts`, which is a coin
+ * economy with no provider at all, because Poki rule REQ-20 forbids in-app
+ * purchases outright. They lingered only because nothing failed: an unused
+ * export is invisible to the type checker, and `scripts/package-portal.mjs`
+ * scrubs the literal "stripe" from the shipped HTML, so the dead code never
+ * even reached a bundle. A payment-provider name in a portal build is exactly
+ * the marker the zip audit exists to catch, so the constants go.
+ */
 export const VIP_DAYS = 30;
 export const ADS_PER_DAY = 4;
 export const AD_MIN_RUN_GAP = 2;

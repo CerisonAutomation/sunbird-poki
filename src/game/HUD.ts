@@ -574,7 +574,7 @@ export class HUD {
   private lastStandingsAt = 0;
   private lastVersusKey = "";
   private lastGoals = "";
-  private lastBeatLine = "";
+
   private lastGoalPop = "";
   private lastPowers = "";
   private lastBanner = "";

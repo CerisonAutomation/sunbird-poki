@@ -26,7 +26,7 @@
 export type MusicMode = "off" | "menu" | "play" | "fever" | "sleep" | "storm";
 export type BiomeMusicStyle = "bright" | "warm" | "airy" | "wide" | "night" | "crystal" | "reef" | "ember" | "canyon";
 import { TICK_MS, LOOKAHEAD, MAX_STEPS_PER_TICK } from "./audio-constants";
-import { runPhase as computeRunPhase, arrangement, arrangementGlide, ARR, type RunPhase } from "./MusicArrangement";
+import { runPhase as computeRunPhase, arrangement, ARR, type RunPhase } from "./MusicArrangement";
 
 type Voicing = number[];
 

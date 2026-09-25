@@ -735,7 +735,7 @@ export class HUD {
               <i data-ref="pauseMuteIco">${menuIcon("sound")}</i><span data-ref="pauseMuteLbl">Sound on</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="settings">
-              <i>${menuIcon("settings")}</i><span>Settings</span>
+              <i>${menuIcon("settings")}</i><span>${t("hud.menu.settings", undefined, "Settings")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="shop">
               <i>${menuIcon("shop")}</i><span>Shop</span>
@@ -3736,13 +3736,13 @@ function renderGameOver(s: HudSnapshot): string {
 
     ${renderNextFlight(s)}
     <details class="result-details"><summary>Flight details <span>Landmarks &amp; skill</span></summary><div class="over-stats">
-      <div><span>Perfects</span><b>${s.perfects}</b></div>
-      <div><span>Skyline moments</span><b>${s.zeniths}</b></div>
-      <div><span>Rings</span><b>${s.rings}</b></div>
-      <div><span>Balloons</span><b>${s.balloons}</b></div>
-      <div><span>Sunflowers</span><b>${s.sunflowers}</b></div>
-      <div><span>Slope flow</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
-      <div><span>Islands</span><b>${s.island + 1}</b></div>
+      <div><span>${t("hud.stat.perfects", undefined, "Perfects")}</span><b>${s.perfects}</b></div>
+      <div><span>${t("hud.stat.moments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
+      <div><span>${t("hud.stat.rings", undefined, "Rings")}</span><b>${s.rings}</b></div>
+      <div><span>${t("hud.stat.balloons", undefined, "Balloons")}</span><b>${s.balloons}</b></div>
+      <div><span>${t("hud.stat.sunflowers", undefined, "Sunflowers")}</span><b>${s.sunflowers}</b></div>
+      <div><span>${t("hud.stat.slopeflow", undefined, "Slope flow")}</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
+      <div><span>${t("hud.stat.islands", undefined, "Islands")}</span><b>${s.island + 1}</b></div>
     </div></details>
     ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! 👻` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
     ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}

@@ -2881,7 +2881,7 @@ function renderMain(s: HudSnapshot): string {
       <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("online")}<span>PvP · AI</span></button>
       <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
       <button class="home-mode-btn" data-ui data-action="open-progress">${menuIcon("progress")}<span>Goals</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-settings">${menuIcon("settings")}<span>Settings</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-board">${menuIcon("board")}<span>Board</span></button>
     </div>
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the

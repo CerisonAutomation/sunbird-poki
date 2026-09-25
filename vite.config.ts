@@ -78,6 +78,14 @@ export default defineConfig({
     "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(false),
     "import.meta.env.VITE_SELL_AD_REMOVAL": JSON.stringify(false),
   },
+  // The dev server runs behind a proxied preview host whose name is generated
+  // per session, so a fixed allowlist cannot name it. `server` affects `vite
+  // dev` only — it is not read by `vite build`, so this cannot loosen the
+  // shipped bundle.
+  server: {
+    host: "0.0.0.0",
+    allowedHosts: true,
+  },
   build: {
     sourcemap: false,
     rollupOptions: {

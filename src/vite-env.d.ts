@@ -1,13 +1,23 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_STRIPE_PUBLISHABLE_KEY?: string;
-  readonly VITE_STRIPE_GOLD_LINK?: string;
-  readonly VITE_STRIPE_VIP_LINK?: string;
+  /**
+   * Build identity, injected by `define` in vite.config.ts. Declared here so
+   * consumers need no cast — `src/game/version.ts` reads all three, and an
+   * untyped property there would force an `as any` that `verify:prod` refuses
+   * in shipped client code.
+   */
+  readonly VITE_BUILD_ID?: string;
+  readonly VITE_APP_VERSION?: string;
+  readonly VITE_GIT_SHA?: string;
   /** `none` for the direct/PWA build, `poki` for the portal export. */
   readonly VITE_PORTAL_TARGET?: "none" | "poki";
-  /** Optional CrazyGames dashboard banner placement id. */
-  readonly VITE_PORTAL_BANNER_ID?: string;
+  /**
+   * Poki display-ad format (e.g. "728x90", "300x250"), or unset to leave the
+   * in-game ad slot empty. Chosen per game on the Poki side and handed to the
+   * developer, so it is configuration. See src/sdk/banner.ts.
+   */
+  readonly VITE_POKI_DISPLAY_AD_SIZE?: string;
   /** Optional HTTPS base URL for the global leaderboard (see LEADERBOARD_API.md). */
   readonly VITE_LEADERBOARD_URL?: string;
   /** Optional WebSocket URL enabling real networked rivals in Mass Race. */

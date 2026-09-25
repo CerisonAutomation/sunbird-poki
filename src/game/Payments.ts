@@ -1,4 +1,5 @@
 import { AD_DURATION } from "./constants";
+import { backendBase } from "./apiBase";
 import { storage } from "./Storage";
 
 export type Sku = "sunbird_gold" | "sunbird_vip" | "sunbird_starter";
@@ -10,8 +11,9 @@ const RECEIPT_KEY = "sunbird.receipts";
  * Server-verified entitlements or local coin receipt checks.
  */
 export async function fetchServerEntitlements(deviceId: string): Promise<Sku[]> {
-  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-  const base = (env.VITE_LEADERBOARD_URL ?? (env.DEV ? "/mp" : "")).replace(/\/$/, "");
+  // The `/mp` namespace's dev prefix — see apiBase.ts for why the two
+  // namespaces genuinely differ, and why this must not be hand-rolled here.
+  const base = backendBase("/mp");
   if (!base) return [];
   try {
     const ctrl = new AbortController();

@@ -4,6 +4,7 @@ import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState 
 // dynamic import inside the mount effect, behind the inline boot loader.
 import type { Game } from "./game/Game";
 import { bootStage } from "./game/BootProgress";
+import { BANNER_HOST_ID, hasDisplayAd } from "./sdk/banner";
 import { crashReporter } from "./game/resilience/CrashReporter";
 import { GameShell } from "./GameShell";
 
@@ -98,11 +99,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
 export default function App() {
   const ref = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  // Portal ad-banner host: the CrazyGames adapter mounts its 320x50 banner
-  // into this container once the SDK is ready. Rendered only when a banner
-  // placement id is configured (portal builds), so direct/PWA builds carry
-  // no extra node.
-  const bannerId = import.meta.env.VITE_PORTAL_BANNER_ID ?? "";
+  // Portal display-ad host: the Poki adapter mounts its Gamebar display ad
+  // into this container once the SDK is ready. Rendered only when this build
+  // can actually fill it (see src/sdk/banner.ts), so a build with no
+  // configured format carries no empty node and requests nothing.
+  const bannerId = hasDisplayAd() ? BANNER_HOST_ID : "";
 
   useEffect(() => {
     const el = ref.current;

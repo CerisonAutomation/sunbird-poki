@@ -7,10 +7,11 @@ import { ALT_CEILING, ALT_CEILING_FADE } from "./constants";
  * TUNED 2026-09-24: starts 1.2s, hits 0.15 by 3.7s, 0.08 by 6s — no more
  * endless glides, constant hill-to-hill decisions. */
 export function glideLiftScale(airSeconds: number): number {
-  if (airSeconds < 1.2) return 1;
-  if (airSeconds < 3.7) return lerp(1, 0.15, clamp((airSeconds - 1.2) / 2.5, 0, 1));
-  // After 3.7s, sink hard: 0.15 → 0.06 over next 2.3s
-  return lerp(0.15, 0.06, clamp((airSeconds - 3.7) / 2.3, 0, 1));
+  // Plateau for 2.5s — a good launch stays exciting; then decay to 0.32 over 4s
+  // so long passive glides become boring and the player must dive and re-launch.
+  // Floor of 0.32 (not near-zero) keeps the bird controllable even on a lazy glide.
+  if (airSeconds < 2.5) return 1;
+  return lerp(1, 0.32, clamp((airSeconds - 2.5) / 4.0, 0, 1));
 }
 
 /**

@@ -61,10 +61,10 @@ export const BIOMES: BiomeDef[] = [
     name: "Green Hills",
     tagline: "Quick rollers — learn dive → release, sunflower trampolines",
     emoji: "leaf",
-    amp: 0.60,
-    wave: 0.62,
+    amp: 0.52,
+    wave: 0.50,
     skew: 0.0,       // symmetric — pure teaching rhythm
-    roughness: 0.05, // almost no noise — read-ahead is easy
+    roughness: 0.02, // almost no noise — read-ahead is easy
     top: 0x86dc7e,
     ridge: 0x4aa85c,
     mid: 0x2f7d5b,

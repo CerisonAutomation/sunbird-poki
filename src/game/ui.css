@@ -1968,6 +1968,33 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .gs.close b { background: linear-gradient(90deg, #ffc14a, #fff1a0); box-shadow: 0 0 10px #ffb030; }
 .gs.close em::after { content: " — almost!"; color: #ffe08a; }
 
+.gs u {
+  display: block;
+  font-style: normal;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 500;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  margin-bottom: 3px;
+  opacity: 0.82;
+}
+
+.gs-beat em { color: var(--coin-gold); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+.gs-beat b { background: linear-gradient(90deg, var(--coin-gold), #fff8c0); }
+
+.gs-career { opacity: 0.8; }
+.gs-career b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
+
+.next-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-on-sky);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  margin: 6px 0 10px;
+}
+
 .goal-pop {
   position: absolute;
   left: 50%;

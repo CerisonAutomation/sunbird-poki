@@ -9,7 +9,7 @@ export const PHYS_DT = 1 / PHYS_HZ;
 export const GRAVITY_GLIDE = 16;
 export const GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
-export const GROUND_G_GLIDE = 22;
+export const GROUND_G_GLIDE = 14;  // reduced: less deceleration on uphill slopes
 export const GROUND_G_DIVE = 88;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
@@ -27,7 +27,7 @@ export const STICK_ACCEL_GLIDE = 13;
 export const MAX_SPEED = 108;
 export const MAX_SPEED_FEVER = 128;
 export const BIRD_RADIUS = 0.9;
-export const MIN_KEEP_SPEED = 6;
+export const MIN_KEEP_SPEED = 12; // higher floor: bird never stalls on uphill terrain
 
 /* Sunflower bounce pads — land on a bloom and spring straight back into the
  * sky. Gentler than the balloon (an airborne rare), so they reward line
@@ -79,8 +79,8 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 190;
-export const ALT_CEILING_FADE = 40;
+export const ALT_CEILING = 260;
+export const ALT_CEILING_FADE = 50;
 /**
  * Upward speed the Zenith mode's ascent thermal may reach, in m/s.
  *

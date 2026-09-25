@@ -466,8 +466,8 @@ export class Bird {
     const targetAngle = this.grounded
       ? Math.atan(terrain.slopeAt(this.x))
       : clamp(Math.atan2(this.vy, Math.max(6, this.vx)), -1.15, 0.95) + (diving ? -0.12 : 0);
-    // snappier on the ground so the bird reads as glued; softer in the air
-    this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.0004 : 0.02, dt));
+    // ground: fast snap to slope; air: responsive to velocity direction
+    this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.00008 : 0.003, dt));
   }
 
   syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number): void {
@@ -481,7 +481,7 @@ export class Bird {
     const bankX = Math.sin(time * 3.2) * 0.04 + clamp(this.vy * 0.012, -0.22, 0.22);
     const bankY = clamp(this.vx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
     this.root.position.set(px, py, 0);
-    this.root.rotation.z = this.rotation * 0.92;
+    this.root.rotation.z = this.rotation; // visual matches physics — no lag factor
     this.root.rotation.x = bankX;
     this.root.rotation.y = bankY;
 

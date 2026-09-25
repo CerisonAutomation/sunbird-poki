@@ -242,6 +242,10 @@ export type HudSnapshot = {
   raceFinish: number;
   /* --- engagement --- */
   sessionGoals: SessionGoal[];
+  /** Nearest beat-the-mark flag in the cue window, or null when nothing is close. */
+  beatLine: { kind: string; label: string; metres: string; gap: number } | null;
+  /** One-line next-action message shown on the results card; empty string = omit. */
+  nextAction: string;
   goalPop: string;
   goalPopKind: "goal" | "quest";
   rankUp: string;
@@ -532,6 +536,7 @@ export class HUD {
   private lastStandingsAt = 0;
   private lastVersusKey = "";
   private lastGoals = "";
+  private lastBeatLine = "";
   private lastGoalPop = "";
   private lastPowers = "";
   private lastBanner = "";
@@ -1288,22 +1293,44 @@ export class HUD {
         }
       }
 
-      // Surface only the goal nearest completion — a single, always-open loop.
+      // Goal strip: max 2 rows — beat row + closest goal, OR closest goal + career.
       let lead: SessionGoal | null = null;
       for (const g of s.sessionGoals) {
         if (g.done) continue;
         if (!lead || g.progress / g.target > lead.progress / lead.target) lead = g;
       }
+      const bl = s.beatLine;
+      const blKey = bl ? `${bl.kind}:${Math.ceil(bl.gap / 25)}` : "";
       const gk = lead ? `${lead.id}:${Math.floor((lead.progress / lead.target) * 20)}` : "";
-      if (gk !== this.lastGoals) {
-        this.lastGoals = gk;
-        if (lead) {
+      const wk = s.wings ? `${Math.round(s.wings.progress * 100)}:${s.wings.nextNeeded}` : "";
+      const stripKey = `${blKey}|${gk}|${wk}`;
+      if (stripKey !== this.lastGoals) {
+        this.lastGoals = stripKey;
+        const rows: string[] = [];
+
+        // Row 1: beat countdown row (always first when inside cue window)
+        if (bl) {
+          const BEAT_WIN = 400;
+          const bpct = Math.min(100, Math.max(0, (BEAT_WIN - bl.gap) / BEAT_WIN * 100));
+          const bClose = bl.gap <= 100;
+          const bSteps = Math.ceil(bl.gap / 25) * 25;
+          rows.push(`<span class="gs gs-beat ${bClose ? "close" : ""}"><em>${escapeHtml(bl.label)}</em><u>${bSteps} m to go</u><i><b style="width:${bpct.toFixed(1)}%"></b></i></span>`);
+        }
+
+        // Row 2a: closest goal (if beat row is showing) or Row 1: closest goal
+        if (lead && (!bl || rows.length < 2)) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
-          this.goalStrip.innerHTML = `<span class="gs ${close ? "close" : ""}"><em>${lead.label}</em><i><b style="width:${pct}%"></b></i></span>`;
-        } else {
-          this.goalStrip.innerHTML = "";
+          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${lead.progress}/${lead.target} · +${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
+
+        // Career rung: only when no beat row and there's a next rank to chase
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
+          const cpct = Math.min(100, s.wings.progress * 100);
+          rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${s.wings.nextNeeded} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
+        }
+
+        this.goalStrip.innerHTML = rows.join("");
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;
@@ -3642,6 +3669,7 @@ function renderGameOver(s: HudSnapshot): string {
       <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
 
     </div>
+    ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
     <details class="result-details"><summary>Progress &amp; rewards <span>Goals, quests &amp; records</span></summary>
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}

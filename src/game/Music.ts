@@ -26,6 +26,7 @@
 export type MusicMode = "off" | "menu" | "play" | "fever" | "sleep" | "storm";
 export type BiomeMusicStyle = "bright" | "warm" | "airy" | "wide" | "night" | "crystal" | "reef" | "ember" | "canyon";
 import { TICK_MS, LOOKAHEAD, MAX_STEPS_PER_TICK } from "./audio-constants";
+import { runPhase as computeRunPhase, arrangement, arrangementGlide, ARR, type RunPhase } from "./MusicArrangement";
 
 type Voicing = number[];
 
@@ -615,7 +616,10 @@ function mtof(m: number): number {
 }
 
 export class Music {
-  private runPhase = 0;
+  private phase: RunPhase = "menu";
+  private runSeconds = 0;
+  private sinceEnd = Infinity;
+  private lastEndTime = 0;
   private mode: MusicMode = "off";
   private targetMode: MusicMode = "off";
   private timer: number | null = null;
@@ -692,14 +696,17 @@ export class Music {
     this.filter.type = "lowpass";
     this.filter.frequency.value = 9000;
     this.filter.Q.value = 0.4;
-    this.saturate = ctx.createWaveShaper();
-    const tapeCurve = new Float32Array(44100);
-    for (let i = 0; i < 44100; i++) {
-      const x = (i * 2) / 44100 - 1;
-      tapeCurve[i] = Math.tanh(x * 3) / Math.tanh(3);
+    const hasSaturate = typeof ctx.createWaveShaper === "function";
+    this.saturate = hasSaturate ? ctx.createWaveShaper() : (ctx.createGain() as unknown as WaveShaperNode);
+    if (hasSaturate && this.saturate.curve !== undefined) {
+      const tapeCurve = new Float32Array(44100);
+      for (let i = 0; i < 44100; i++) {
+        const x = (i * 2) / 44100 - 1;
+        tapeCurve[i] = Math.tanh(x * 3) / Math.tanh(3);
+      }
+      this.saturate.curve = tapeCurve;
+      this.saturate.oversample = "4x";
     }
-    this.saturate.curve = tapeCurve;
-    this.saturate.oversample = "4x";
     this.duckGain = ctx.createGain();
     this.duckGain.gain.value = 1;
     this.bus.connect(this.filter);
@@ -766,11 +773,29 @@ export class Music {
 
   /** Arrangement phase hook used by gameplay and deterministic music tests. */
   setRunPhase(inRun: boolean, runSeconds: number): void {
-    this.runPhase = inRun ? Math.max(0, runSeconds) : 0;
+    this.runSeconds = inRun ? Math.max(0, runSeconds) : 0;
+    if (!inRun && this.sinceEnd === Infinity) {
+      this.lastEndTime = this.ctx.currentTime;
+    }
+    const elapsed = inRun ? Infinity : (this.ctx.currentTime - this.lastEndTime);
+    this.sinceEnd = inRun ? Infinity : Math.max(0, elapsed);
+    const context = this.mode === "sleep" ? "sleep" : inRun ? "flight" : this.sinceEnd < ARR.resolveSeconds ? "flight" : "menu";
+    const prev = this.phase;
+    this.phase = computeRunPhase({
+      context: context as "menu" | "flight" | "sleep",
+      inRun,
+      runSeconds: this.runSeconds,
+      sinceEnd: this.sinceEnd,
+      intensity: this.intensityTarget,
+      previous: this.phase,
+    });
+    if (this.phase !== prev && this.mode !== "off") {
+      this.apply();
+    }
   }
 
-  getRunPhase(): number {
-    return this.runPhase;
+  getRunPhase(): RunPhase {
+    return this.phase;
   }
 
   setNight(t: number): void {
@@ -979,48 +1004,31 @@ export class Music {
     // the mix, with the glock shimmer on top.
     // Ukulele / pad / organ are island colours: silent under the arcade chiptune.
     const island = this.isChipTrack ? 0 : 1;
-    this.ukeGain.gain.setTargetAtTime(song ? (m === "menu" ? 0.30 : m === "fever" ? 0.26 : 0.32) * style.uke * island : 0, t, 0.4);
+    const arr = arrangement(this.phase);
+    this.ukeGain.gain.setTargetAtTime(song ? (m === "menu" ? 0.30 : m === "fever" ? 0.26 : 0.32) * style.uke * island * arr.uke : 0, t, 0.4);
     // Marimba/xylophone accent — a subtle woody pop under the lead, not a
     // voice of its own. Kept very low so the square lead (chip), whistle
     // (island), or Tron synth can actually be heard.
     this.glockGain.gain.setTargetAtTime(
-      song ? (m === "menu" ? 0.04 : m === "fever" ? 0.06 : 0.05) * style.glock : 0,
+      song ? (m === "menu" ? 0.04 : m === "fever" ? 0.06 : 0.05) * style.glock * arr.glock : 0,
       t,
       0.4,
     );
-    this.bassGain.gain.setTargetAtTime(song ? (m === "fever" ? 0.48 : 0.42) * style.bass : 0, t, 0.4);
-    // Kit: every family gets drums in the menu, because a silent menu reads as
-    // "something is broken". Arcade keeps the busier pattern below.
+    this.bassGain.gain.setTargetAtTime(song ? (m === "fever" ? 0.48 : 0.42) * style.bass * arr.bass : 0, t, 0.4);
     const percBase = m === "play" ? (this.isChipTrack ? 0.22 : 0.18) : m === "fever" ? 0.36 : m === "storm" ? 0.46 : m === "menu" ? (this.isChipTrack ? 0.30 : 0.14) : 0;
-    this.percGain.gain.setTargetAtTime(percBase * style.perc, t, 0.3);
-    // Whistle: the soaring counter-line. Fever is its solo, play gives it a
-    // gentle harmony line, menu leaves it out.
-    // Whistle: island lead voice *and* the counter-line, so it is the loudest
-    // melodic element on those tracks.
-    // Whistle: island lead voice *and* the counter-line, so it is the loudest
-    // melodic element on those tracks. Raised as the bells came down: it is the
-    // voice that should carry the tune on the island families.
-    this.whistleGain.gain.setTargetAtTime((m === "fever" ? 0.58 : m === "play" ? 0.50 : m === "menu" ? 0.36 : 0) * style.whistle * island, t, 0.3);
-    this.arpGain.gain.setTargetAtTime((m === "fever" ? 0.06 : m === "play" ? 0.03 : m === "menu" ? 0.015 : 0) * style.glock * island, t, 0.5);
-    // Organ: deep pad under play and fever only — never a drone on the menu.
-    this.organGain.gain.setTargetAtTime((m === "play" ? 0.10 : m === "fever" ? 0.18 : m === "menu" ? 0.05 : 0) * island, t, 1.2);
-    // Warm pad bed: strongest on the menu, subtle underneath play.
-    // Sleep keeps a warm bed under the lullaby bells, so the dozing-off screen
-    // is the same band playing quietly rather than a different, thinner one.
+    this.percGain.gain.setTargetAtTime(percBase * style.perc * arr.perc, t, 0.3);
+    this.whistleGain.gain.setTargetAtTime((m === "fever" ? 0.58 : m === "play" ? 0.50 : m === "menu" ? 0.36 : 0) * style.whistle * island * arr.whistle, t, 0.3);
+    this.arpGain.gain.setTargetAtTime((m === "fever" ? 0.06 : m === "play" ? 0.03 : m === "menu" ? 0.015 : 0) * style.glock * island * arr.arp, t, 0.5);
+    this.organGain.gain.setTargetAtTime((m === "play" ? 0.10 : m === "fever" ? 0.18 : m === "menu" ? 0.05 : 0) * island * arr.organ, t, 1.2);
     this.padGain.gain.setTargetAtTime(
-      m === "sleep" ? 0.18 : (m === "menu" ? 0.16 : m === "play" ? 0.06 : 0) * island,
+      m === "sleep" ? 0.18 : (m === "menu" ? 0.16 : m === "play" ? 0.06 : 0) * island * arr.pad,
       t,
       0.8,
     );
-    // Tron synth: the lead on the Grid tracks, as it always was.
-    this.tronGain.gain.setTargetAtTime(this.isTronTrack && song ? (m === "fever" ? 0.36 : 0.30) : 0, t, 0.4);
-    // Arcade chiptune lead: carries the hook again — with a warmer voice than
-    // the one that used to sound thin (see chipLead), not by handing the tune
-    // to the bells.
-    this.chipGain.gain.setTargetAtTime(this.isChipTrack && song ? (m === "menu" ? 0.38 : m === "fever" ? 0.52 : 0.44) : 0, t, 0.4);
-    // Sparkle shimmer: a tiny octave decoration. Barely audible by design.
+    this.tronGain.gain.setTargetAtTime(this.isTronTrack && song ? (m === "fever" ? 0.36 : 0.30) * arr.tron : 0, t, 0.4);
+    this.chipGain.gain.setTargetAtTime(this.isChipTrack && song ? (m === "menu" ? 0.38 : m === "fever" ? 0.52 : 0.44) * arr.chip : 0, t, 0.4);
     this.sparkGain.gain.setTargetAtTime(
-      song ? (this.isChipTrack ? (m === "fever" ? 0.06 : 0.04) : (m === "fever" ? 0.04 : 0.03) * style.glock) : 0,
+      song ? (this.isChipTrack ? (m === "fever" ? 0.06 : 0.04) : (m === "fever" ? 0.04 : 0.03) * style.glock) * arr.spark : 0,
       t,
       0.45,
     );

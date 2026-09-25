@@ -2164,7 +2164,7 @@ fieldset.squad-fields {
   .hud-header .stat-value { font-size: 20px; }
   .hud-header .mid-meta > * { font-size: 10px; padding: 2px 6px; }
   .hud-header { gap: 4px; }
-  .flight-footer .goal-strip { display: none; }
+  .flight-footer .goal-strip .gs:not(:first-child) { display: none; }
   .flight-footer { gap: 4px; bottom: calc(8px + env(safe-area-inset-bottom)); }
   /* Same rule on short landscape: the chain pills still occupy H+4 .. H+66,
      so the coaching band keeps its clearance instead of snapping back up. */
@@ -2253,7 +2253,7 @@ fieldset.squad-fields {
   .hud-header .pu { padding: 3px 5px; gap: 3px; min-width: 0; }
   .hud-header .pu u { max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
   .hud-header .pu i { font-size: 12px; }
-  .flight-footer .goal-strip { display: none; }
+  .flight-footer .goal-strip .gs:not(:first-child) { display: none; }
   .flight-messages > .hint, .flight-messages > .launch-banner { font-size: 18px; }
 }
 @media (max-height: 600px) {

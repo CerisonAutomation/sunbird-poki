@@ -73,3 +73,8 @@ poki-upload/
 sunbird-poki.zip
 scripts-tmp/
 *.tsbuildinfo
+
+# Kilo agent worktrees — a full nested copy of the repo, plus agent session
+# state. Never version it: it duplicates src/ wholesale and churns on every
+# agent run.
+.kilo/

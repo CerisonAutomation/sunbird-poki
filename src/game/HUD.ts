@@ -728,7 +728,7 @@ export class HUD {
             <span class="prs"><em>Combo</em><b data-ref="pauseCombo">×1</b></span>
           </div>
           <div class="pause-actions">
-            <button class="primary-btn pause-resume" data-ui data-action="resume"><span class="pause-action-icon">${menuIcon("flight")}</span>Keep flying</button>
+            <button class="primary-btn pause-resume" data-ui data-action="resume"><span class="pause-action-icon">${menuIcon("flight")}</span>${t("hud.pause.resume", undefined, "Keep flying")}</button>
           </div>
           <div class="pause-quick-grid" role="group" aria-label="Quick access">
             <button class="pause-q pause-mute" data-ui data-action="set-mute" data-ref="pauseMute" aria-pressed="false">
@@ -741,10 +741,10 @@ export class HUD {
               <i>${menuIcon("shop")}</i><span>Shop</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="board">
-              <i>${menuIcon("board")}</i><span>Global Board</span>
+              <i>${menuIcon("board")}</i><span>${t("hud.pause.globalBoard", undefined, "Global Board")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="scores">
-              <i>${menuIcon("scores")}</i><span>My Scores</span>
+              <i>${menuIcon("scores")}</i><span>${t("hud.pause.myScores", undefined, "My Scores")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="pass">
               <i>${menuIcon("pass")}</i><span>Nest Pass</span>
@@ -763,8 +763,8 @@ export class HUD {
             </button>
           </div>
           <div class="pause-exit-row">
-            <button class="soft-btn" data-ui data-action="restart-flight"><span class="pause-inline-icon">${menuIcon("flight")}</span>Restart flight</button>
-            <button class="ghost-btn danger-btn" data-ui data-action="menu"><span class="pause-inline-icon">${menuIcon("daily")}</span>Exit to menu</button>
+            <button class="soft-btn" data-ui data-action="restart-flight"><span class="pause-inline-icon">${menuIcon("flight")}</span>${t("hud.pause.restart", undefined, "Restart flight")}</button>
+            <button class="ghost-btn danger-btn" data-ui data-action="menu"><span class="pause-inline-icon">${menuIcon("daily")}</span>${t("hud.pause.exitMenu", undefined, "Exit to menu")}</button>
           </div>
           <p class="pause-exit-note">Resume keeps your momentum. Restart begins a fresh flight. Exit returns you to the launch pad.</p>
         </div>

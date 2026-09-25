@@ -11934,6 +11934,86 @@
         "vi": "Tên & chuyển dữ liệu",
         "zh": "名称与存档转移"
       }
+    },
+    "hud.pause.resume": {
+      "sourceText": "Keep flying",
+      "meta": { "file": "src/game/HUD.ts", "context": "Pause screen resume button" },
+      "placeholders": [],
+      "translations": {
+        "en": "Keep flying", "es": "Sigue volando", "de": "Weiter fliegen", "fr": "Continuer à voler",
+        "it": "Continua a volare", "pt": "Continue voando", "ar": "استمر في الطيران", "zh": "繼續飛行",
+        "ja": "飛び続ける", "mt": "Keep flying", "tr": "Uçmaya devam et", "ru": "Продолжить полёт",
+        "ko": "계속 날기", "nl": "Blijf vliegen", "pl": "Leć dalej", "hi": "उड़ते रहें",
+        "id": "Terus terbang", "vi": "Tiếp tục bay", "th": "บินต่อไป", "sv": "Fortsätt flyga",
+        "bg": "Продължи да летиш", "bn": "উড়তে থাকুন", "cs": "Pokračuj v létání", "da": "Bliv ved med at flyve",
+        "el": "Συνέχισε να πετάς", "fi": "Jatka lentämistä", "he": "המשך לטוס", "hu": "Repülj tovább",
+        "ms": "Terus terbang", "no": "Fortsett å fly", "ro": "Continuă să zbori", "sk": "Pokračuj v lietaní",
+        "sr": "Nastavi da letiš", "tl": "Patuloy lumilipad", "uk": "Продовжуй летіти", "uz": "Uchishni davom eting"
+      }
+    },
+    "hud.pause.restart": {
+      "sourceText": "Restart flight",
+      "meta": { "file": "src/game/HUD.ts", "context": "Pause screen restart button" },
+      "placeholders": [],
+      "translations": {
+        "en": "Restart flight", "es": "Reiniciar vuelo", "de": "Flug neu starten", "fr": "Recommencer le vol",
+        "it": "Ricomincia il volo", "pt": "Reiniciar voo", "ar": "إعادة بدء الرحلة", "zh": "重新開始",
+        "ja": "フライトをやり直す", "mt": "Restart flight", "tr": "Uçuşu yeniden başlat", "ru": "Начать полёт заново",
+        "ko": "비행 다시 시작", "nl": "Vlucht herstarten", "pl": "Zacznij lot od nowa", "hi": "उड़ान फिर शुरू करें",
+        "id": "Mulai ulang penerbangan", "vi": "Bắt đầu lại chuyến bay", "th": "เริ่มบินใหม่", "sv": "Starta om flygningen",
+        "bg": "Рестартирай полета", "bn": "ফ্লাইট পুনরায় শুরু করুন", "cs": "Znovu začít let", "da": "Genstart flyvningen",
+        "el": "Επανεκκίνηση πτήσης", "fi": "Käynnistä lento uudelleen", "he": "התחל מחדש את הטיסה", "hu": "Újraindítás",
+        "ms": "Mulakan semula penerbangan", "no": "Start flyvningen på nytt", "ro": "Repornește zborul", "sk": "Znova začni let",
+        "sr": "Ponovo pokreni let", "tl": "I-restart ang lipad", "uk": "Перезапустити політ", "uz": "Uchishni qayta boshlash"
+      }
+    },
+    "hud.pause.exitMenu": {
+      "sourceText": "Exit to menu",
+      "meta": { "file": "src/game/HUD.ts", "context": "Pause screen exit to main menu button" },
+      "placeholders": [],
+      "translations": {
+        "en": "Exit to menu", "es": "Salir al menú", "de": "Zum Menü", "fr": "Quitter vers le menu",
+        "it": "Esci al menu", "pt": "Sair para o menu", "ar": "الخروج إلى القائمة", "zh": "退出到選單",
+        "ja": "メニューに戻る", "mt": "Exit to menu", "tr": "Menüye çık", "ru": "Выйти в меню",
+        "ko": "메뉴로 나가기", "nl": "Naar menu gaan", "pl": "Wyjdź do menu", "hi": "मेनू पर जाएं",
+        "id": "Keluar ke menu", "vi": "Thoát về menu", "th": "ออกไปที่เมนู", "sv": "Gå till menyn",
+        "bg": "Към менюто", "bn": "মেনুতে যান", "cs": "Zpět do menu", "da": "Gå til menu",
+        "el": "Έξοδος στο μενού", "fi": "Poistu valikkoon", "he": "יציאה לתפריט", "hu": "Kilépés a menübe",
+        "ms": "Keluar ke menu", "no": "Gå til menyen", "ro": "Ieși la meniu", "sk": "Späť do menu",
+        "sr": "Izlaz u meni", "tl": "Lumabas sa menu", "uk": "Вийти до меню", "uz": "Menyuga chiqish"
+      }
+    },
+    "hud.pause.globalBoard": {
+      "sourceText": "Global Board",
+      "meta": { "file": "src/game/HUD.ts", "context": "Pause screen global leaderboard shortcut" },
+      "placeholders": [],
+      "translations": {
+        "en": "Global Board", "es": "Tabla Global", "de": "Globale Rangliste", "fr": "Classement Mondial",
+        "it": "Classifica Globale", "pt": "Tabela Global", "ar": "اللوحة العالمية", "zh": "全球排行",
+        "ja": "グローバルランキング", "mt": "Global Board", "tr": "Küresel Sıralama", "ru": "Мировой рейтинг",
+        "ko": "글로벌 순위", "nl": "Wereldranglijst", "pl": "Globalna lista", "hi": "वैश्विक बोर्ड",
+        "id": "Papan Global", "vi": "Bảng xếp hạng toàn cầu", "th": "กระดานระดับโลก", "sv": "Globalt leaderboard",
+        "bg": "Глобална класация", "bn": "বৈশ্বিক বোর্ড", "cs": "Globální žebříček", "da": "Global rangliste",
+        "el": "Παγκόσμιος Πίνακας", "fi": "Maailman rankinglista", "he": "לוח גלובלי", "hu": "Globális lista",
+        "ms": "Papan Global", "no": "Global rangliste", "ro": "Clasament Global", "sk": "Globálny rebríček",
+        "sr": "Globalna tabla", "tl": "Global na Board", "uk": "Глобальний рейтинг", "uz": "Global jadval"
+      }
+    },
+    "hud.pause.myScores": {
+      "sourceText": "My Scores",
+      "meta": { "file": "src/game/HUD.ts", "context": "Pause screen my scores shortcut" },
+      "placeholders": [],
+      "translations": {
+        "en": "My Scores", "es": "Mis Puntuaciones", "de": "Meine Wertungen", "fr": "Mes Scores",
+        "it": "I Miei Punteggi", "pt": "Minhas Pontuações", "ar": "نتائجي", "zh": "我的分數",
+        "ja": "マイスコア", "mt": "My Scores", "tr": "Puanlarım", "ru": "Мои очки",
+        "ko": "내 점수", "nl": "Mijn Scores", "pl": "Moje wyniki", "hi": "मेरे स्कोर",
+        "id": "Skor Saya", "vi": "Điểm của tôi", "th": "คะแนนของฉัน", "sv": "Mina poäng",
+        "bg": "Моите резултати", "bn": "আমার স্কোর", "cs": "Moje skóre", "da": "Mine resultater",
+        "el": "Τα Σκορ Μου", "fi": "Tulokseni", "he": "הניקודים שלי", "hu": "Pontjaim",
+        "ms": "Skor Saya", "no": "Mine poeng", "ro": "Scorurile Mele", "sk": "Moje skóre",
+        "sr": "Moji rezultati", "tl": "Aking mga Score", "uk": "Мої рахунки", "uz": "Mening natijalarim"
+      }
     }
   }
 }

@@ -2170,6 +2170,7 @@ function renderLive(s: HudSnapshot): string {
 }
 
 function renderPractice(s: HudSnapshot): string {
+  const currentMode = s.pvpModes.find((m) => m.id === s.selectedPvpMode) ?? s.pvpModes[0] ?? { name: "Sprint GP" };
   return `${head(SCREEN.aiPvp)}
     <section class="race-section" aria-label="AI race practice">
       <div class="race-section-head"><h3>Race the AI flock offline</h3><span class="section-step">AI pilots · no waiting</span></div>
@@ -2178,7 +2179,7 @@ function renderPractice(s: HudSnapshot): string {
         <div class="room-ctl"><span class="room-ctl-label">AI opponents <small>plus you</small></span><div class="seg" role="group" aria-label="AI opponents">${[5, 10, 20, 40].map((n) => `<button data-ui data-action="room-size" data-id="${n}" aria-pressed="${s.roomSize === n}" class="${s.roomSize === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
         <div class="room-ctl"><span class="room-ctl-label">AI skill</span><div class="seg" role="group" aria-label="AI skill">${(["chill", "sharp", "ace"] as const).map((k) => `<button data-ui data-action="room-skill" data-id="${k}" aria-pressed="${s.roomSkill === k}" class="${s.roomSkill === k ? "on" : ""}">${k === "chill" ? "Chill" : k === "sharp" ? "Sharp" : "Ace"}</button>`).join("")}</div></div>
       </div>
-      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${s.pvpModes.find((m) => m.id === s.selectedPvpMode)?.name ?? "Sprint GP"}</button>
+      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${currentMode.name}</button>
       <div class="practice-formats"><h3>Race formats</h3>
         <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
         ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${menuIconSm(m.icon)} ${m.name} · ${m.blurb}</button>`).join("")}

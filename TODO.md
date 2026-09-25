@@ -8,7 +8,7 @@ Items identified in `/critique` audit. Fix one per ralph iteration.
 
 - [x] **Multiplier tag legibility** — The `×2.0` multiplier readout in the flight HUD is too small. Find the `.mult` or `.multEl` element in HUD.ts and increase its visual weight (font-size, contrast, or bold treatment) so it's readable during active flight.
 
-- [ ] **Rank ladder context** — "egg Fledgling · 968" shows no ceiling. Add a rank progress hint to the rank-card on the progress screen and/or the rank hero screen — e.g. "968 / 1,200 to Sparrow" so players know where they stand.
+- [x] **Rank ladder context** — "egg Fledgling · 968" shows no ceiling. Add a rank progress hint to the rank-card on the progress screen and/or the rank hero screen — e.g. "968 / 1,200 to Sparrow" so players know where they stand.
 
 - [ ] **Shop: separate Today's Offers from catalog** — The shop opens with Daily Stipend / Watch Ad / Flash Sale / equipped bird / bundle / vault all in one scroll before the actual catalog. Add a clear `<div class="section-title">` separator before the catalog section (Birds/Boosts/Trails) so offers and browsing are visually distinct zones.
 

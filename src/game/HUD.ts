@@ -3220,6 +3220,7 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
       }
     </div>
 
+    <div class="section-title shop-catalog-divider">Browse catalog <small>Birds · Boosts · Trails</small></div>
     <nav class="shop-jumps" aria-label="Shop sections">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
 
     <section class="shop-browser" aria-label="Browse birds">

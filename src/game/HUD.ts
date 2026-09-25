@@ -1354,7 +1354,7 @@ export class HUD {
         if (lead && (!bl || rows.length < 2)) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
-          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${lead.progress}/${lead.target} · +${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
 
         // Career rung: only when no beat row and there's a next rank to chase
@@ -2859,7 +2859,12 @@ function renderMain(s: HudSnapshot): string {
         <button class="onboarding-route-step" data-ui data-action="open-shop"><b>02</b><span><strong>Choose your bird</strong><small>Spend the coins you just earned</small></span><i>Shop ›</i></button>
         <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>Race the flock</strong><small>Choose online or AI when you are ready</small></span><i>Race ›</i></button>
       </div>
-    </section>` : ""}
+    </section>` : `<div class="home-mode-strip" role="group" aria-label="Game modes">
+      <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-live">${menuIcon("online")}<span>Race</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-practice">${menuIcon("compass")}<span>vs AI</span></button>
+      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("challenge")}<span>Goals</span></button>
+    </div>`}
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:
@@ -3690,6 +3695,13 @@ function renderGameOver(s: HudSnapshot): string {
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
 
+    <div class="btn-row result-links">
+      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
+      <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
+      <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
+    </div>
+    ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
+
     ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
 
     ${renderNextFlight(s)}
@@ -3717,13 +3729,6 @@ function renderGameOver(s: HudSnapshot): string {
          <button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>`
       : `<button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>
          <button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>`}
-    <div class="btn-row result-links">
-      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
-      <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
-      <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
-
-    </div>
-    ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
     <details class="result-details"><summary>Progress &amp; rewards <span>Goals, quests &amp; records</span></summary>
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}

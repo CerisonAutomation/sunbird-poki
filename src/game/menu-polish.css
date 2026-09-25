@@ -278,6 +278,13 @@
 .onboarding-route-step small { margin-top:4px; color:#806b4e; font-size:10px; line-height:1.25; }
 .onboarding-route-step i { grid-column:2; color:#a36a16; font:700 11px var(--body); font-style:normal; }
 @media (max-width:620px) { .onboarding-route-steps { grid-template-columns:1fr; } .onboarding-route-step { min-height:52px; grid-template-columns:auto 1fr auto; align-items:center; } .onboarding-route-step i { grid-column:auto; } }
+
+/* Quick-access mode strip — visible for returning players (runs ≥ 2) */
+.home-mode-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 14px; }
+.home-mode-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:10px 6px; border:1px solid #e0d4b4; border-radius:14px; background:#fffdf5; color:#4a3825; font:700 11px/1 var(--body); cursor:pointer; transition:background .15s,border-color .15s; }
+.home-mode-btn:hover,.home-mode-btn:focus-visible { background:#fff0bd; border-color:#d4a830; }
+.home-mode-btn svg,.home-mode-btn img { width:26px; height:26px; }
+.home-mode-btn span { color:#7a5c2e; font-size:11px; }
 /* Desktop hangar layout: scan-friendly columns, compact enough to keep the
    daily course and first reward visible without scrolling. */
 @media (min-width: 900px) {

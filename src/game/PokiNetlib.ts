@@ -26,7 +26,7 @@ import type {
 import { truncate } from "./math";
 import { PROTOCOL_VERSION } from "./protocol/v1";
 import { isPokiMultiplayerAvailable, makePokiRoomCode as makeRoomCode, POKI_NETLIB_GAME_ID as NETLIB_GAME_ID } from "./PokiMpUtils";
-import { gradeStateCadence } from "./RacePolish";
+import { gradeStateCadence } from "./Racer";
 import { normalizeRooms, sortRooms, type LiveRoom } from "./RoomBrowser";
 
 /** Outbound state rate — same 15 Hz cadence as the WS transport. */

@@ -23,7 +23,7 @@ import { weekKey } from "../Tournaments";
 /** A pinned Thursday, so `weekKey` cannot drift with the run date. */
 const WEEK = weekKey(new Date("2026-09-24T12:00:00Z"));
 
-const SEASON = { daysLeft: 9, peak: 1410, peakDivision: "Silver", peakIcon: "🥈", rewardCoins: 250 };
+const SEASON = { daysLeft: 9, peak: 1410, peakDivision: "Silver", peakIcon: "trophy", rewardCoins: 250 };
 
 function rival(over: Partial<RivalState> = {}): RivalState {
   return { ...defaultRival(), ...over };

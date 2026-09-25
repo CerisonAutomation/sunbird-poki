@@ -72,9 +72,11 @@
 .menu-hero .hangar-nav { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .menu-hero .home-more .mode-cards { grid-template-columns: minmax(0,1fr); }
 .menu-hero .home-more .mode-card-main { min-height: 80px; }
-/* Settings: meaningful state, continuous volume, explicit choices. */
+/* Settings: meaningful state, continuous volume, explicit choices.
+   The canonical .setting-row shape lives in the FINAL PASS block near the end
+   of this file (flat flex rows); here only the spacing that block keeps. */
 .settings-intro { font-size: 13px; color: #71574c; line-height: 1.5; text-align: left; margin: 0 0 14px; }
-.overlay .setting-row { gap: 12px; min-height: 60px; box-shadow: none; border: 1px solid #e5d8c8; background: #fffdf8; padding: 8px 12px; text-align: left; }
+.overlay .setting-row { gap: 12px; min-height: 60px; text-align: left; }
 .overlay .setting-row > span, .overlay .setting-row > label { font-size: 13px; font-weight: 600; }
 .overlay .setting-volume, .overlay .setting-select { display: grid; grid-template-columns: minmax(0,1fr); gap: 4px; }
 .volume-control { display: flex; gap: 12px; align-items: center; }
@@ -241,17 +243,26 @@
 /* Full-width rows. The 2-up grid left a dead cell next to every odd tile and
    made half-width tiles on a phone, which read as gaps rather than a menu;
    one column means every destination spans the card edge to edge. */
-.destination-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:7px; margin:0 0 12px; }
-.destination { min-width:0; min-height:68px; padding:12px; text-align:left; border:1px solid #decebb; border-radius:14px; background:#fffaf1; color:#352c27; font-family:inherit; cursor:pointer; box-shadow:none; }
-.destination b { display:block; font-size:14px; line-height:1.3; }
-.destination span { display:block; margin-top:5px; color:#5c4f42; font-size:12px; line-height:1.45; }
+.destination-grid { display:grid; grid-template-columns:minmax(0,1fr); grid-auto-rows:1fr; gap:8px; margin:0 0 12px; }
+.destination { min-width:0; min-height:70px; height:100%; padding:13px 14px; text-align:left; border:1.5px solid #decebb; border-radius:16px; background:#fffaf1; color:#352c27; font-family:inherit; cursor:pointer; box-shadow:0 2px 0 rgba(42,28,40,0.07); transition:transform 0.12s, box-shadow 0.12s, border-color 0.12s; }
+.destination:active { transform:translateY(2px); box-shadow:0 0 0 rgba(42,28,40,0.07); }
+.destination b { display:block; font-size:15px; font-weight:700; line-height:1.3; }
+.destination span { display:block; margin-top:4px; color:#5c4f42; font-size:12px; line-height:1.45; }
 .destination:hover { border-color:#b68a63; background:#fff1db; }
-.play-destinations .destination:first-child { background:#e2f1ed; border-color:#a5cabe; }
-.play-destinations .destination:nth-child(2) { background:#e6edfa; border-color:#b5c6e3; }
-.utility-destinations { grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid #dfd0bd; padding-top:16px; }
-.utility-destinations .destination { min-height:62px; padding:10px 8px; }
-.home-section-title { text-align:left; font-size:12px; font-weight:700; color:#78614c; letter-spacing:.04em; margin:20px 0 10px; }
-.progress-destinations .destination { min-height:60px; background:transparent; }
+
+/* Play section — highest priority, richest visual weight */
+.play-destinations .destination { min-height:72px; border-width:1.5px; height:100%; }
+/* 1: Multiplayer — blue (competitive, online) */
+.play-destinations .destination:first-child { background:linear-gradient(145deg,#e8f0ff,#d4e4ff); border-color:#8ab4e8; box-shadow:0 3px 0 rgba(60,100,210,0.12); }
+/* 2: Solo — green (growth, nature, personal) */
+.play-destinations .destination:nth-child(2) { background:linear-gradient(145deg,#e8f7f1,#d4f0e4); border-color:#8cc4b0; box-shadow:0 3px 0 rgba(50,140,110,0.12); }
+/* 3: Ghost race — warm gold (chase, replay) */
+.play-destinations .destination:nth-child(3) { background:linear-gradient(145deg,#fef5e0,#ffecc4); border-color:#d4a855; box-shadow:0 3px 0 rgba(160,120,30,0.12); }
+
+.utility-destinations { grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1.5px solid #dfd0bd; padding-top:16px; }
+.utility-destinations .destination { min-height:64px; padding:10px 10px; }
+.home-section-title { text-align:left; font-size:11px; font-weight:800; color:#a08060; letter-spacing:.08em; text-transform:uppercase; margin:22px 0 10px; }
+.progress-destinations .destination { min-height:60px; background:rgba(255,255,255,0.5); border-color:#e8dfd0; }
 .home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid #dfd0bd; padding-top:14px; }
 .onboarding-route { margin: 0 0 14px; padding: 12px; border: 1px solid #e1bd67; border-radius: 16px; background: linear-gradient(145deg,#fff7d6,#fffdf4); text-align: left; box-shadow: 0 4px 0 rgba(180,130,30,.12); }
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
@@ -474,7 +485,8 @@
 /* Every group is single-column (see .destination-grid); kept explicit so a
    later edit to the base rule cannot silently re-grid the Play block. */
 .play-destinations, .play-destinations.solo-destinations,
-.utility-destinations, .progress-destinations { grid-template-columns:minmax(0,1fr); }
+.utility-destinations { grid-template-columns:minmax(0,1fr); }
+.play-destinations { grid-auto-rows: 1fr; }
 /* Odd tiles need no special case any more: a single column has no cell to
    leave dead. The rule is kept as a no-op guard for any future re-grid. */
 .destination-grid > .destination:last-child:nth-child(odd) { grid-column:1 / -1; }
@@ -826,8 +838,8 @@
   min-height: 44px;
 }
 
-/* Settings components */
-.setting-row,
+/* Settings components — .setting-row itself is owned by the FINAL PASS block
+   near the end of this file; only .volume-control keeps the card treatment. */
 .volume-control {
   background: rgba(255, 255, 255, 0.72) !important;
   border: 1px solid rgba(255, 255, 255, 0.70) !important;
@@ -1225,29 +1237,10 @@ button,
 }
 
 /* ── Progress destinations: Challenges + Board as featured full-width tiles ── */
+/* Progress destinations: always single-column, equal-height rows everywhere */
 .progress-destinations {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.progress-destinations .destination[data-action="open-challenges"],
-.progress-destinations .destination[data-action="open-board"] {
-  grid-column: span 2 !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 14px !important;
-  min-height: 72px !important;
-  padding: 14px 16px !important;
-  border-radius: 16px !important;
-  background: linear-gradient(145deg, #fffdf5, #fff4d8) !important;
-  border: 1.5px solid #d4aa44 !important;
-  border-top-color: #fffbe8 !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,220,0.9),
-    0 3px 0 rgba(160,120,20,0.2),
-    0 6px 16px rgba(140,100,20,0.1) !important;
-}
-.progress-destinations .destination[data-action="open-board"] {
-  background: linear-gradient(145deg, #fffcf0, #fff0c8) !important;
-  border-color: #c9943c !important;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: 1fr;
 }
 
 /* FINAL HOME NAV CONTRACT: portal shells can render a narrow menu card inside
@@ -1645,19 +1638,10 @@ button,
   border-color: #d4aa44 !important;
 }
 
-/* ── Setting rows: warmer, lifted feel ─────────────────────────────────────── */
-.overlay .setting-row {
-  background: linear-gradient(155deg, #fffdf5, #fff6e2) !important;
-  border: 1px solid #d5c4a0 !important;
-  border-top-color: #fffef8 !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.9),
-    0 2px 0 rgba(160,130,60,0.12),
-    0 4px 10px rgba(80,60,20,0.05) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-radius: 14px !important;
-}
+/* ── Setting rows: the FINAL PASS block near the end of this file owns the
+ *  canonical flat-row shape; the warmer lifted card defined here was fully
+ *  overridden (background/border/shadow/radius all reset there), so it is
+ *  gone — one home for the row style. ───────────────────────────────────── */
 
 /* ── Collection headers in shop: bolder heading ─────────────────────────────── */
 .overlay .collection .coll-head b {

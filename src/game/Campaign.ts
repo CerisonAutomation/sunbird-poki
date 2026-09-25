@@ -35,7 +35,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch1",
     title: "Leaving the Nest",
     story: "Every migration starts with one brave hop. Yours was mostly falling — but stylish falling.",
-    icon: "🥚",
+    icon: "egg",
     goals: [
       { id: "ch1-fly", label: "Fly 1,000 m lifetime", target: 1000, metric: (s) => s.state.lifetime.distance },
       { id: "ch1-coin", label: "Collect 50 coins lifetime", target: 50, metric: (s) => s.state.lifetime.coins },
@@ -48,7 +48,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch2",
     title: "The First Ridge",
     story: "The hills whisper a rhythm: dive, release, rise. The birds who listen go far.",
-    icon: "⛰",
+    icon: "mountain",
     goals: [
       { id: "ch2-best", label: "Fly 1,500 m in one run", target: 1500, metric: (s) => s.state.bestDistance },
       { id: "ch2-perf", label: "Land a perfect slide", target: 1, metric: (s) => (s.state.bestCombo >= 1 ? 1 : 0) },
@@ -61,7 +61,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch3",
     title: "Songs of the Reef",
     story: "Pastel lagoons, updrafts warm as soup. The locals are shellfish but welcoming.",
-    icon: "🐚",
+    icon: "shell",
     goals: [
       { id: "ch3-alt", label: "Reach 80 m altitude", target: 80, metric: (s) => s.state.bestAltitude },
       { id: "ch3-dist", label: "Fly 10,000 m lifetime", target: 10_000, metric: (s) => s.state.lifetime.distance },
@@ -74,7 +74,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch4",
     title: "Race the Flock",
     story: "Forty wings, one gate. Draft, dive, and remember: the photo finish flatters no one.",
-    icon: "🏁",
+    icon: "flag",
     goals: [
       { id: "ch4-race", label: "Fly 5 mass races", target: 5, metric: (s) => s.state.racesRun },
       { id: "ch4-place", label: "Finish top 10 in a race", target: 1, metric: (s) => (s.state.bestPlace > 0 && s.state.bestPlace <= 10 ? 1 : 0) },
@@ -87,7 +87,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch5",
     title: "Night over Midnight Coast",
     story: "The moon keeps score too. Glowing coins, quiet ocean, zero refunds on splashdowns.",
-    icon: "🌙",
+    icon: "moon",
     goals: [
       { id: "ch5-zen", label: "Hit 10 zeniths lifetime", target: 10, metric: (s) => s.state.lifetime.zeniths },
       { id: "ch5-biome", label: "Visit 5 biomes", target: 5, metric: (s) => s.state.biomesSeen.length },
@@ -100,7 +100,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch6",
     title: "The Cinder Gauntlet",
     story: "Ash in the air, springs in the slopes. The forge respects only momentum.",
-    icon: "🌋",
+    icon: "volcano",
     goals: [
       { id: "ch6-duel", label: "Win 2 ranked duels", target: 2, metric: (s) => s.state.duel.wins },
       { id: "ch6-daily", label: "Complete 3 daily challenges", target: 3, metric: (s) => s.state.challenges.dailiesDone },
@@ -113,7 +113,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch7",
     title: "Skyreach",
     story: "Canyon walls like cathedral doors. Ramps the size of legends. Send it.",
-    icon: "🏜",
+    icon: "dunes",
     goals: [
       { id: "ch7-ghost", label: "Beat your ghost 3 times", target: 3, metric: (s) => s.state.lifetime.ghostBeats },
       { id: "ch7-dist", label: "Fly 50,000 m lifetime", target: 50_000, metric: (s) => s.state.lifetime.distance },
@@ -126,7 +126,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     id: "ch8",
     title: "The Sun Itself",
     story: "There is no finish line. There is only how gloriously you chase it.",
-    icon: "☀",
+    icon: "sun",
     goals: [
       { id: "ch8-gaunt", label: "Clear a weekly gauntlet", target: 1, metric: (s) => s.state.challenges.gauntletsCleared },
       { id: "ch8-coin", label: "Earn 2,000 coins lifetime", target: 2000, metric: (s) => s.state.lifetime.coins },

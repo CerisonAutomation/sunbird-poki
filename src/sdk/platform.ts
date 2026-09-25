@@ -227,7 +227,7 @@ const PORTAL_BANNER_ID = import.meta.env.VITE_PORTAL_BANNER_ID ?? "";
 // string (or vice-versa), and `scriptFor()` can never return the wrong URL.
 const POKI_SRC = TARGET === "poki" ? "https://game-cdn.poki.com/scripts/v2/poki-sdk.js" : "";
 /** If the portal SDK can't load in this long, boot the game without it. */
-const SDK_LOAD_TIMEOUT_MS = 6000;
+const SDK_LOAD_TIMEOUT_MS = 4000;
 
 /**
  * Route runtime failures to the portal's error dashboard (`captureError`).

@@ -65,7 +65,7 @@ const CATALOG: {
   {
     name: "Long Haul Cup",
     blurb: "One sunset. Push the furthest line you can hold.",
-    icon: "🏁",
+    icon: "flag",
     mode: "distance",
     metric: "distance",
     cuts: { bronze: 600, silver: 1400, gold: 2600, diamond: 4200 },
@@ -73,7 +73,7 @@ const CATALOG: {
   {
     name: "Skyline Trials",
     blurb: "Chain launches and touch the stratosphere.",
-    icon: "🚀",
+    icon: "rocket",
     mode: "zenith",
     metric: "altitude",
     cuts: { bronze: 60, silver: 130, gold: 220, diamond: 330 },
@@ -81,7 +81,7 @@ const CATALOG: {
   {
     name: "Perfect Circuit",
     blurb: "Only flawless lips count. Time every release.",
-    icon: "✦",
+    icon: "star",
     mode: "perfect",
     metric: "perfects",
     cuts: { bronze: 4, silver: 10, gold: 18, diamond: 28 },
@@ -89,7 +89,7 @@ const CATALOG: {
   {
     name: "Gold Rush Open",
     blurb: "Sixty seconds. Every coin on the ideal line.",
-    icon: "💰",
+    icon: "coin",
     mode: "coinrush",
     metric: "coins",
     cuts: { bronze: 25, silver: 60, gold: 110, diamond: 180 },
@@ -100,20 +100,20 @@ const TIER_ORDER: TrophyTier[] = ["bronze", "silver", "gold", "diamond"];
 
 const TIER_PRIZES: Record<TrophyTier, Prize[]> = {
   bronze: [
-    { kind: "coins", id: "coins_bronze", amount: 120, label: "120 coins", icon: "💰" },
-    { kind: "boost", id: "sunflask", amount: 1, label: "Sun Flask", icon: "☀" },
+    { kind: "coins", id: "coins_bronze", amount: 120, label: "120 coins", icon: "coin" },
+    { kind: "boost", id: "sunflask", amount: 1, label: "Sun Flask", icon: "sun" },
   ],
   silver: [
-    { kind: "coins", id: "coins_silver", amount: 320, label: "320 coins", icon: "💰" },
-    { kind: "boost", id: "headstart", amount: 1, label: "Head Start", icon: "🚀" },
+    { kind: "coins", id: "coins_silver", amount: 320, label: "320 coins", icon: "coin" },
+    { kind: "boost", id: "headstart", amount: 1, label: "Head Start", icon: "rocket" },
   ],
   gold: [
-    { kind: "trail", id: "trail_comet", amount: 1, label: "Comet Trail", icon: "☄" },
-    { kind: "coins", id: "coins_gold", amount: 700, label: "700 coins", icon: "💰" },
+    { kind: "trail", id: "trail_comet", amount: 1, label: "Comet Trail", icon: "comet" },
+    { kind: "coins", id: "coins_gold", amount: 700, label: "700 coins", icon: "coin" },
   ],
   diamond: [
-    { kind: "trail", id: "trail_prism", amount: 1, label: "Prism Trail", icon: "🌈" },
-    { kind: "title", id: "title_ace", amount: 1, label: "“Ace” title", icon: "🎖" },
+    { kind: "trail", id: "trail_prism", amount: 1, label: "Prism Trail", icon: "rainbow" },
+    { kind: "title", id: "title_ace", amount: 1, label: "“Ace” title", icon: "badge" },
   ],
 };
 

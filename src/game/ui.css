@@ -964,27 +964,46 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .pchip {
-  background: rgba(20, 16, 40, 0.45);
+  background: rgba(20, 16, 40, 0.55);
   color: #fff;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 5px 12px;
+  font-size: 13px;
   font-weight: 700;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
   animation: hintpop 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
+.pchip .icon-sm { width: 15px; height: 15px; }
+
 .pchip.boost {
-  background: rgba(255, 90, 58, 0.8);
+  background: linear-gradient(135deg, rgba(255,110,60,0.9), rgba(220,60,20,0.85));
+  box-shadow: 0 2px 10px rgba(255,80,30,0.35);
 }
 
 .pchip.magnet {
-  background: rgba(122, 92, 255, 0.8);
+  background: linear-gradient(135deg, rgba(150,110,255,0.9), rgba(100,60,220,0.85));
+  box-shadow: 0 2px 10px rgba(120,80,255,0.35);
 }
 
 .pchip.shield {
-  background: rgba(74, 208, 255, 0.85);
-  color: #0a2a3a;
+  background: linear-gradient(135deg, rgba(74, 208, 255, 0.9), rgba(40,160,220,0.85));
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(40,180,255,0.35);
+}
+
+.pchip.gust {
+  background: linear-gradient(135deg, rgba(100,180,255,0.85), rgba(60,130,220,0.8));
+  box-shadow: 0 2px 8px rgba(60,130,255,0.3);
+}
+
+.pchip.thermal {
+  background: linear-gradient(135deg, rgba(255,180,40,0.9), rgba(220,120,20,0.85));
+  box-shadow: 0 2px 10px rgba(255,160,30,0.35);
 }
 
 .toast.zenith {
@@ -1277,14 +1296,15 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   position: absolute;
   right: 18px;
   top: 22%;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 700;
   color: #fff4c8;
-  text-shadow: 0 0 14px #ffb030, 0 3px 0 #a64a12;
+  text-shadow: 0 0 18px #ffb030, 0 3px 0 #a64a12;
   opacity: 0;
   transform: scale(0.8);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease, color 0.25s, text-shadow 0.25s;
   pointer-events: none;
+  letter-spacing: -0.01em;
 }
 
 .combo.show {
@@ -1292,13 +1312,36 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   transform: scale(1);
 }
 
+.combo.hot {
+  color: #ffdd4a;
+  text-shadow: 0 0 22px #ff9a20, 0 0 40px #ffb030, 0 3px 0 #7a3000;
+  font-size: 38px;
+}
+
+.combo.fire {
+  color: #fff;
+  text-shadow: 0 0 20px #ff6a20, 0 0 44px #ff3c00, 0 0 80px rgba(255,80,0,0.4), 0 3px 0 #7a1000;
+  font-size: 42px;
+  animation: firecombo 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes firecombo {
+  from { text-shadow: 0 0 20px #ff6a20, 0 0 44px #ff3c00, 0 3px 0 #7a1000; }
+  to   { text-shadow: 0 0 30px #ffaa00, 0 0 60px #ff6000, 0 0 90px rgba(255,120,0,0.5), 0 3px 0 #7a1000; }
+}
+
 .combo.pop {
   animation: combopop 0.35s cubic-bezier(0.2, 1.4, 0.3, 1);
 }
 
+.combo.hot.pop,
+.combo.fire.pop {
+  animation: combopop 0.4s cubic-bezier(0.15, 1.5, 0.3, 1);
+}
+
 @keyframes combopop {
   0% {
-    transform: scale(1.5) rotate(-6deg);
+    transform: scale(1.6) rotate(-8deg);
   }
   100% {
     transform: scale(1) rotate(0);
@@ -1840,27 +1883,42 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .vs-stat .w { color: #2d8a4a; }
 
 /* ---------------- mode select ---------------- */
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .mode-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.mode-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.mode-actions .wide { flex: 1; min-width: 0; }
 .mode-card {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   text-align: left;
   font-family: inherit;
   border: 2px solid transparent;
   background: rgba(255, 255, 255, 0.6);
   border-radius: 14px;
-  padding: 10px;
+  padding: 12px;
   cursor: pointer;
   color: var(--ink);
 }
+.mode-list .mode-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
 .mode-card.on { border-color: #ff8a4a; background: #fff3e2; }
 .mode-card:active { transform: translateY(2px); }
-.mode-icon { font-size: 24px; text-align: center; }
+.mode-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; }
+.mode-icon .icon-sm { width: 40px; height: 40px; }
+.mode-list .mode-icon { width: 32px; height: 32px; }
+.mode-list .mode-icon .icon-sm { width: 32px; height: 32px; }
+.mode-body { flex: 1; min-width: 0; }
 .mode-body b { display: block; font-size: 15px; }
 .mode-body em { font-style: normal; font-size: 11px; color: #8a6a62; }
-.mode-meta { font-size: 11px; font-weight: 700; color: #a07860; }
+.mode-grid .mode-body b { font-size: 14px; }
+.mode-meta { font-size: 11px; font-weight: 700; color: #a07860; align-self: flex-end; }
+.mode-grid .mode-meta { align-self: flex-start; }
 .soft-btn.wide2 { flex: 1; }
 
 @media (max-width: 640px) {
@@ -3235,8 +3293,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   height: 19px;
   vertical-align: middle;
 }
-.home-hub-grid { margin-bottom: 6px; }
-.home-hub-grid .destination { min-height: 58px; }
+.home-hub-grid { margin-bottom: 6px; grid-auto-rows: 1fr; }
+.home-hub-grid .destination { min-height: 58px; height: 100%; align-items: flex-start; }
 @media (max-width: 460px) {
   .challenge-actions { grid-template-columns: 1fr; }
 }
@@ -5173,3 +5231,42 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .link-quality.fair { color: #654500; background: #ffe6a0; }
 .link-quality.poor { color: #7b2020; background: #ffc6c6; }
 .sb-reduce-motion .reward-strip.photo { animation: none; }
+
+/* ---------- Race Hub — two-track layout (PvP vs PvAI) ---------- */
+.race-track-picker { margin-bottom: 12px; }
+.race-track-picker .lobby-selector-label.compact { margin: 4px 0 4px; }
+.race-two-tracks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.race-track { background: rgba(255,255,255,0.7); border: 1.5px solid rgba(180,150,120,0.3); border-radius: 16px; padding: 13px 12px 12px; display: flex; flex-direction: column; gap: 7px; }
+.pvp-track { border-color: rgba(80,130,210,0.4); background: linear-gradient(145deg, rgba(230,240,255,0.8), rgba(210,225,255,0.6)); }
+.ai-track { border-color: rgba(180,120,40,0.35); background: linear-gradient(145deg, rgba(255,248,230,0.8), rgba(255,240,200,0.6)); }
+.track-head { font: 700 12px var(--display); color: #2b1d16; display: flex; align-items: center; gap: 5px; }
+.track-head .icon-sm { width: 16px; height: 16px; flex-shrink: 0; }
+.track-sub { font: 400 11px/1.4 var(--body); color: #6d5a4a; flex: 1; }
+.ai-track .room-controls { margin: 0; }
+.ai-track .room-ctl { padding: 4px 0; }
+.ai-track .room-ctl-label { font-size: 10.5px; }
+.ai-track .seg button { font-size: 11px; padding: 4px 8px; }
+.race-private-room { margin-bottom: 10px; }
+.race-private-room summary { cursor: pointer; list-style: none; font: 600 12px var(--display); color: #7a6352; padding: 8px 12px; border: 1px dashed rgba(180,150,120,0.4); border-radius: 12px; background: rgba(255,255,255,0.4); display: flex; align-items: center; gap: 6px; }
+.race-private-room summary::-webkit-details-marker { display: none; }
+.race-private-inner { padding: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+.race-fairness-sm { font: 400 11px var(--body); color: #8b7a68; display: flex; align-items: center; gap: 5px; margin-top: 6px; }
+.race-fairness-sm .icon-sm { width: 14px; height: 14px; }
+.room-header-card { background: rgba(255,255,255,0.7); border: 1.5px solid rgba(100,160,100,0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; }
+.room-code-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+.lobby-selector-box.tight { margin: 8px 0 12px; padding: 8px 10px; }
+
+/* ---------- Challenge screen race picker ---------- */
+.challenge-track-picker { margin-bottom: 8px; }
+.challenge-track-picker .lobby-selector-label.compact { margin: 3px 0 3px; }
+.challenge-track-picker .pills-scroll { margin-bottom: 4px; }
+
+/* ---------- Solo screen — Daily hero button ---------- */
+.daily-hero-btn { display: flex; align-items: center; gap: 10px; width: 100%; background: linear-gradient(135deg, rgba(255,220,80,0.25), rgba(255,180,40,0.18)); border: 1.5px solid rgba(220,160,20,0.4); border-radius: 16px; padding: 12px 14px; cursor: pointer; margin-bottom: 12px; text-align: left; }
+.daily-hero-btn:hover, .daily-hero-btn:focus-visible { background: linear-gradient(135deg, rgba(255,220,80,0.38), rgba(255,180,40,0.28)); border-color: rgba(220,160,20,0.65); }
+.daily-hero-icon { flex-shrink: 0; width: 28px; height: 28px; }
+.daily-hero-icon .icon-sm { width: 28px; height: 28px; }
+.daily-hero-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.daily-hero-text b { font: 700 13px var(--display); color: #4a3010; }
+.daily-hero-text span { font: 400 11px var(--body); color: #7a5a28; }
+.daily-hero-arrow { font: 700 18px var(--display); color: #c08820; flex-shrink: 0; }

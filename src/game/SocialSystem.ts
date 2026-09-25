@@ -92,7 +92,7 @@ export class SocialSystem {
   createClub(name: string, tagline: string, emblem: string): ClubDef | null {
     const s = this.social; if (s.club) return null;
     const club: ClubDef = { id: `club_${Date.now().toString(36)}`, name: name.slice(0, 20),
-      tagline: tagline.slice(0, 60), emblem: emblem || "🐦", maxMembers: 30, createdAt: dateSeed(),
+        tagline: tagline.slice(0, 60), emblem: emblem || "bird", maxMembers: 30, createdAt: dateSeed(),
       founderDeviceId: this.save.state.deviceId,
       members: [{ deviceId: this.save.state.deviceId, name: this.save.state.pilotName || "Pilot", role: "owner",
         joinedAt: dateSeed(), contribution: 0, lastActive: dateSeed() }],

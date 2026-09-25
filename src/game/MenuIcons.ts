@@ -1,3 +1,98 @@
+/**
+ * Small inline icons (20×20 viewBox). Used anywhere an emoji would otherwise
+ * appear — powerup bar, mode buttons, event/chapter headers, wings pill, etc.
+ * Palette follows the game's warm earthy tones so they integrate naturally.
+ */
+const smArtwork = {
+  // ── nature / sky ───────────────────────────────────────────────────────────
+  sun:        '<circle cx="10" cy="10" r="4" fill="#ffd86b"/><path d="M10 3v1.5M10 15.5V17M3 10h1.5M15.5 10H17M5.3 5.3l1.1 1.1M12.6 12.6l1.1 1.1M5.3 14.7l1.1-1.1M12.6 7.4l1.1-1.1" stroke="#f5a623" stroke-width="1.5" stroke-linecap="round"/>',
+  moon:       '<path d="M14 10a5 5 0 1 1-5-5 3.5 3.5 0 0 0 5 5Z" fill="#fff0c9" stroke="#f5a623" stroke-width=".8"/>',
+  star:       '<path d="M10 3l1.5 3.4H15l-2.7 2 1 3.6L10 10.5l-3.3 1.5 1-3.6L5 6.4h3.5Z" fill="#ffd86b"/>',
+  cloud:      '<path d="M5.5 14a3 3 0 0 1 .5-6 3.5 3.5 0 0 1 6.5 1 2.5 2.5 0 0 1 .5 5Z" fill="#c8e8ff"/>',
+  aurora:     '<path d="M2 13q3-7 8-3t8-6" fill="none" stroke="#a292cf" stroke-width="2.2" stroke-linecap="round"/><path d="M2 10.5q3-6 8-2t8-4" fill="none" stroke="#e2d5f4" stroke-width="1.5" stroke-linecap="round"/>',
+  leaf:       '<path d="M16 4C5 4 3 14 3 17q3-2 5-5-1 4 4 7C11 9 16 4 16 4Z" fill="#72a28c"/>',
+  snowflake:  '<path d="M10 3v14M4.1 6.5l11.8 7M4.1 13.5l11.8-7" stroke="#c8e8ff" stroke-width="1.6" stroke-linecap="round"/><path d="M7.5 4l2.5 1.5L12.5 4M4 9.5l1.5 2L4 13.5M16 9.5l-1.5 2L16 13.5M7.5 16l2.5-1.5L12.5 16" stroke="#c8e8ff" stroke-width="1.1" stroke-linecap="round"/>',
+  half_day:   '<path d="M4.5 13a5.5 5.5 0 0 1 11 0Z" fill="#ffd86b"/><path d="M2 13h16" stroke="#f5a623" stroke-width="1.5" stroke-linecap="round"/>',
+  fire:       '<path d="M10 18c-4 0-6.5-3.5-5-7 0 0 1 2 2 2C6 9 9 4 10 4c0 2 2.5 3.5 3 6 1-1 1-2 1-3 2 2 2 4.5 1 7 1 0 2-1 2-2 0 2.5-2 6-7 6Z" fill="#ed974a"/>',
+  // ── objects / items ────────────────────────────────────────────────────────
+  coin:       '<circle cx="10" cy="10" r="7" fill="#ffd86b"/><circle cx="10" cy="10" r="4.5" fill="none" stroke="#f5a623" stroke-width="1.3"/>',
+  gem:        '<path d="M10 3L4.5 8.5l5.5 8.5 5.5-8.5Z" fill="#8dbfb0"/><path d="M4.5 8.5h11" stroke="white" stroke-width=".9"/><path d="M7 8.5L10 3l3 5.5" fill="#a9d2aa"/>',
+  crystal:    '<path d="M10 2L5.5 7l4.5 11 4.5-11Z" fill="#a292cf"/><path d="M5.5 7h9M7.5 7L10 2l2.5 5" stroke="#e2d5f4" stroke-width=".9"/>',
+  crown:      '<path d="M3 14.5l1.5-8 3 4 2.5-7 2.5 7 3-4 1.5 8Z" fill="#ffd86b"/><rect x="3" y="14.5" width="14" height="2.5" rx=".5" fill="#f5a623"/>',
+  shield:     '<path d="M10 2.5L3 6v5Q3 16.5 10 18 17 16.5 17 11V6Z" fill="#5ad8ff"/><path d="M6.5 8.5l3 3.5 4.5-5" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  feather:    '<path d="M5.5 17C4 8 15.5 2 17 4c-3.5 1-4.5 3.5-5.5 6.5l4-4.5-1.5 2L11 11.5l2-1.5L8.5 17" fill="none" stroke="#d2bd96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  rocket:     '<path d="M10 2c-2 4-2 8-2 10l2 5 2-5c0-2 0-6-2-10Z" fill="#ed974a"/><path d="M7 12l-2 4h10l-2-4" fill="#e87853"/><circle cx="10" cy="8" r="1.3" fill="#fff0c9" stroke="none"/>',
+  comet:      '<circle cx="13.5" cy="6.5" r="3" fill="#ffd86b"/><path d="M10.7 9.3l-7 7M9.3 11l-5 5.5" stroke="#f5a623" stroke-width="1.6" stroke-linecap="round"/>',
+  magnet:     '<path d="M5 5.5h3v6a2 2 0 0 0 4 0v-6h3" fill="none" stroke="#a292cf" stroke-width="2.5" stroke-linecap="round"/><path d="M5 5.5v3.5M15 5.5v3.5" stroke="#7a70d0" stroke-width="2.5" stroke-linecap="round"/>',
+  badge:      '<path d="M10 2l2 4h4.5l-3.7 2.7 1.4 4.3L10 10.5l-4.2 2.5 1.4-4.3L3.5 6H8Z" fill="#ffd86b"/><path d="M7 12l-1.5 5.5 4.5-2.5 4.5 2.5L13 12" fill="#f5a623"/>',
+  dice:       '<rect x="2.5" y="2.5" width="15" height="15" rx="2.5" fill="#a4c7ac"/><circle cx="7" cy="7" r="1.3" fill="white"/><circle cx="13" cy="7" r="1.3" fill="white"/><circle cx="7" cy="13" r="1.3" fill="white"/><circle cx="13" cy="13" r="1.3" fill="white"/><circle cx="10" cy="10" r="1.3" fill="white"/>',
+  trophy:     '<path d="M6.5 4h7v5.5Q13.5 14 10 14T6.5 9.5Z" fill="#ffd86b"/><path d="M5 4H3v3q0 4 3.5 4M15 4h2v3q0 4-3.5 4" fill="none" stroke="#f5a623" stroke-width="1.5"/><path d="M8.5 14h3v3h3.5v2H5V17h3.5Z" fill="#b9874b"/>',
+  rainbow:    '<path d="M3.5 16.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="#e87853" stroke-width="2.5"/><path d="M5.5 16.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="#ffd86b" stroke-width="2"/><path d="M7.5 16.5a2.5 2.5 0 0 1 5 0" fill="none" stroke="#72a28c" stroke-width="1.5"/>',
+  // ── navigation / symbols ───────────────────────────────────────────────────
+  swords:     '<path d="M5 5l10 10M15 5L5 15" stroke="#9bb7b0" stroke-width="2.5" stroke-linecap="round"/><path d="M5 5l2.5.5-.5-2.5M15 5l-2.5.5.5-2.5M5 15l2.5-.5-.5 2.5M15 15l-2.5-.5.5 2.5" fill="#9bb7b0" stroke="none"/>',
+  flag:       '<path d="M5 2.5v15" stroke="#695541" stroke-width="1.8" stroke-linecap="round"/><rect x="5" y="2.5" width="12" height="8" fill="#f1c285"/><rect x="5" y="2.5" width="4" height="4" fill="#695541" opacity=".65"/><rect x="9" y="6.5" width="4" height="4" fill="#695541" opacity=".65"/><rect x="13" y="2.5" width="4" height="4" fill="#695541" opacity=".65"/>',
+  lightning:  '<path d="M13 2L7 10.5h5.5L6 18l10.5-9.5H11Z" fill="#ffd86b"/>',
+  infinity:   '<path d="M13.5 8.5a1.5 1.5 0 0 1 0 3 4.5 4.5 0 0 1-3.5-1.5 4.5 4.5 0 0 1-3.5 1.5 1.5 1.5 0 0 1 0-3 4.5 4.5 0 0 1 3.5 1.5A4.5 4.5 0 0 1 13.5 8.5Z" fill="none" stroke="#a292cf" stroke-width="2.5" stroke-linecap="round"/>',
+  target:     '<circle cx="10" cy="10" r="7.5" fill="none" stroke="#ed974a" stroke-width="1.5"/><circle cx="10" cy="10" r="4.5" fill="none" stroke="#ed974a" stroke-width="1.5"/><circle cx="10" cy="10" r="1.5" fill="#ed974a"/>',
+  spiral:     '<path d="M10 10a2 2 0 0 0 0 3.5 4 4 0 0 0 0-6.5 6 6 0 0 0 0 9 8 8 0 1 1-2-15" fill="none" stroke="#a292cf" stroke-width="2" stroke-linecap="round"/>',
+  // ── geography ──────────────────────────────────────────────────────────────
+  mountain:   '<path d="M10 3L2.5 17h15Z" fill="#9bb7b0"/><path d="M10 3L7 11.5l3-2 3 2L10 3Z" fill="white" opacity=".3"/>',
+  volcano:    '<path d="M10 3L2.5 17h15Z" fill="#b9874b"/><path d="M8 3.5C7 2 6 3.5 6 3.5s2-2.5 4 0c2-2.5 4 0 4 0s-1.5-1.5-2 0" fill="#ed974a"/>',
+  island:     '<ellipse cx="10" cy="16" rx="7" ry="2" fill="#5ad8ff" opacity=".8"/><path d="M10 15.5V8.5" stroke="#b9874b" stroke-width="1.8" stroke-linecap="round"/><path d="M10 8.5C9 4.5 5.5 5.5 5.5 5.5s3 4 4.5 3" fill="#72a28c"/><path d="M10 8.5c1-4 4.5-3 4.5-3s-3 4-4.5 3" fill="#72a28c" opacity=".8"/>',
+  dunes:      '<path d="M1.5 17q3-7.5 5-5t4-3.5 5.5 8.5Z" fill="#f1c285"/><path d="M5.5 17q2-6 4-3.5t4-1.5 5 5Z" fill="#e8b86d" opacity=".7"/>',
+  buildings:  '<path d="M2.5 17V9h3.5v8M6 17V6h4v11M10 17V11h3v6M13 17V8h4v9" fill="#a4c7ac"/><path d="M2.5 17h15" stroke="#72a28c" stroke-width="1.2"/>',
+  shell:      '<path d="M10 4.5a5.5 5.5 0 0 1 5.5 5.5 4.5 4.5 0 0 1-4.5 4.5 3.5 3.5 0 0 1-3.5-3.5 2.5 2.5 0 0 1 2.5-2.5 2 2 0 0 1 2 2" fill="none" stroke="#b9874b" stroke-width="2" stroke-linecap="round"/>',
+  // ── creatures ──────────────────────────────────────────────────────────────
+  bird:       '<path d="M3 10q3.5-7 7 0t7 0" fill="none" stroke="#ed974a" stroke-width="2.8" stroke-linecap="round"/><path d="M10 10q0 3.5 1 5" fill="none" stroke="#ed974a" stroke-width="1.5" stroke-linecap="round"/>',
+  ghost:      '<path d="M10 3a5.5 5.5 0 0 0-5.5 5.5V17l2 1.5 1.8-1.5 1.7 1.5 1.8-1.5L13.5 18.5 15.5 17V8.5A5.5 5.5 0 0 0 10 3Z" fill="#eef2f5"/><circle cx="8" cy="8.5" r="1.1" fill="#3d4739"/><circle cx="12" cy="8.5" r="1.1" fill="#3d4739"/>',
+  flock:      '<path d="M2 9q2-3.5 3.5 0t3.5 0M9 6.5q2.5-4 4 0t4 0M5 13q2-3.5 3.5 0t3.5 0" fill="none" stroke="#ed974a" stroke-width="1.8" stroke-linecap="round"/>',
+  egg:        '<ellipse cx="10" cy="11" rx="5.5" ry="7" fill="#ffd86b"/><ellipse cx="10" cy="11" rx="3.5" ry="5" fill="none" stroke="#f5a623" stroke-width=".9" opacity=".5"/>',
+  eagle:      '<path d="M2 10.5q4.5-5.5 8-2t8 2" fill="#9bb7b0"/><path d="M10 8.5v7M7.5 13l-5.5 4M12.5 13l5.5 4" stroke="#695541" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
+  // ── wing types ─────────────────────────────────────────────────────────────
+  glide:      '<path d="M2 14q5.5-10 13-9-3 4.5-5.5 6l5.5-1.5q-2.5 4-6 5.5Q6 15.5 2 14Z" fill="#72a28c"/>',
+  wing:       '<path d="M2.5 13q5-9.5 11.5-8.5-3 4.5-5 5.5l5-1q-2.5 3.5-5.5 5.5Q5.5 14.5 2.5 13Z" fill="#a4c7ac"/>',
+  weight:     '<rect x="7" y="10" width="6" height="7" rx="1" fill="#9bb7b0"/><path d="M5.5 8.5h9l-1 1.5H6.5Z" fill="#a4c7ac"/><path d="M10 2.5v6M8.5 4l1.5-1.5L11.5 4" stroke="#9bb7b0" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
+  paper_wing: '<path d="M2 14.5L10 2.5l8 12-8-3Z" fill="#f1c285"/><path d="M10 2.5L2 14.5l8-3 8 3L10 2.5Z" fill="none" stroke="#d2bd96" stroke-width=".9"/><path d="M10 11.5v4.5" stroke="#d2bd96" stroke-width=".9"/>',
+  // ── ui chrome ──────────────────────────────────────────────────────────────
+  pause:      '<rect x="4.5" y="4" width="4" height="12" rx="1.2" fill="#a4c7ac"/><rect x="11.5" y="4" width="4" height="12" rx="1.2" fill="#a4c7ac"/>',
+  check:      '<path d="M3 10l5 5.5 9-10.5" stroke="#72a28c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  question:   '<path d="M7.5 7.5a2.5 2.5 0 0 1 5 .5c0 2-2.5 2.5-2.5 4.5" stroke="#9bb7b0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="10" cy="15.5" r="1.3" fill="#9bb7b0"/>',
+  castle:     '<path d="M4.5 17V8.5h3V7h-3V5H3v3.5h1.5V17M11.5 17V8.5h3V7h-3V5H10v3.5h1.5V17M4.5 17h11M7.5 17v-4.5h5V17" fill="none" stroke="#9bb7b0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  hourglass:  '<path d="M5 3h10M5 17h10" stroke="#a4c7ac" stroke-width="1.5" stroke-linecap="round"/><path d="M5.5 3l4.5 6 4.5-6M5.5 17l4.5-6 4.5 6" fill="#a4c7ac"/>',
+  spin:       '<path d="M10 3a7 7 0 1 1-5 2" fill="none" stroke="#ffd86b" stroke-width="2.5" stroke-linecap="round"/><path d="M5 2v3.5H1.5" fill="none" stroke="#ffd86b" stroke-width="2" stroke-linecap="round"/>',
+  piggy:      '<ellipse cx="10.5" cy="10.5" rx="7" ry="6" fill="#ffa8e0"/><circle cx="8" cy="9" r="1.2" fill="#fff" opacity=".7"/><path d="M7 13q3 2 6 0" fill="none" stroke="#d07fb0" stroke-width="1.2" stroke-linecap="round"/><path d="M17 8.5l1.5-2" stroke="#d07fb0" stroke-width="1.5" stroke-linecap="round"/>',
+} as const;
+
+export type SmIconName = keyof typeof smArtwork;
+
+/** Small inline SVG icon (20×20). Safe to insert as innerHTML — no user data. */
+export function menuIconSm(name: string): string {
+  const art = smArtwork[name as SmIconName];
+  if (!art) return "";
+  return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
+}
+
+/** One-character text glyph for a named icon — used in plain-text contexts
+ *  (toasts rendered via textContent, aria-label fragments). Glyphs are chosen
+ *  from text-presentation code points only (★ ● ◆ ▲ ↯); emoji-presentation
+ *  characters are never used here so toasts read identically on every device. */
+const smGlyph: Record<SmIconName, string> = {
+  sun: "☀︎", moon: "☽", star: "★", cloud: "◌", aurora: "≋", leaf: "✿",
+  snowflake: "✻", half_day: "◑", fire: "◉",
+  coin: "●", gem: "◆", crystal: "✦", crown: "♛", shield: "◈",
+  feather: "❧", rocket: "▲", comet: "☄︎", magnet: "⊕", badge: "⬟",
+  dice: "⚄", trophy: "◎", rainbow: "〜",
+  swords: "✕", flag: "⚑", lightning: "↯", infinity: "∞", target: "⊚", spiral: "◎",
+  mountain: "△", volcano: "▲", island: "◬", dunes: "≈", buildings: "⊞", shell: "◐",
+  bird: "⬨", ghost: "◍", flock: "⬩", egg: "○", eagle: "⬦",
+  glide: "⟿", wing: "≫", weight: "▼", paper_wing: "△",
+  pause: "❙❙", check: "✓", question: "?", castle: "⛫︎", hourglass: "⧖", spin: "◷", piggy: "○",
+};
+
+export function iconGlyph(name: string): string {
+  return smGlyph[name as SmIconName] ?? name;
+}
+
 /** Original Sunbird miniature illustrations. Local SVG, no icon font, remote
  * asset request, filter graph or duplicated gradient IDs. Labels remain HTML. */
 const artwork = {

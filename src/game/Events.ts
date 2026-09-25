@@ -36,7 +36,7 @@ export type WeeklyEvent = {
 const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   {
     name: "Gold Rush",
-    icon: "🤑",
+    icon: "coin",
     desc: "Every coin counts double. The geese are furious",
     mods: { coinMult: 2, gravityMult: 1, windMult: 1, daylightMult: 1 },
     target: 1800,
@@ -44,7 +44,7 @@ const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   },
   {
     name: "Feather Week",
-    icon: "🐦",
+    icon: "feather",
     desc: "Gravity took the week off — float like a rumour",
     mods: { coinMult: 1, gravityMult: 0.82, windMult: 1, daylightMult: 1 },
     target: 2600,
@@ -52,7 +52,7 @@ const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   },
   {
     name: "Storm Surge",
-    icon: "🌪",
+    icon: "spiral",
     desc: "Double wind. Hold your hat. You don't have a hat",
     mods: { coinMult: 1.5, gravityMult: 1, windMult: 2, daylightMult: 1 },
     target: 1500,
@@ -60,7 +60,7 @@ const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   },
   {
     name: "Endless Noon",
-    icon: "🌞",
+    icon: "sun",
     desc: "The sun is showing off — 40% longer days",
     mods: { coinMult: 1, gravityMult: 1, windMult: 1, daylightMult: 1.4 },
     target: 3200,
@@ -68,7 +68,7 @@ const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   },
   {
     name: "Heavy Metal",
-    icon: "🏋️",
+    icon: "weight",
     desc: "Chunky gravity. Massive dives. Earn your lift",
     mods: { coinMult: 1.8, gravityMult: 1.18, windMult: 1, daylightMult: 1 },
     target: 1300,
@@ -76,7 +76,7 @@ const WEEKLY_POOL: Omit<WeeklyEvent, "id" | "week">[] = [
   },
   {
     name: "Twilight Sprint",
-    icon: "🌆",
+    icon: "half_day",
     desc: "Short days, fat rewards. Blink and it's night",
     mods: { coinMult: 2.2, gravityMult: 1, windMult: 1, daylightMult: 0.65 },
     target: 1100,
@@ -97,12 +97,12 @@ export type MonthlyTheme = {
 };
 
 const THEME_POOL: Omit<MonthlyTheme, "id" | "month">[] = [
-  { name: "Harvest Skies", icon: "🍂", tagline: "Amber light over golden hills", biome: "desert", prizeTrail: "trail_harvest" },
-  { name: "Frostreach", icon: "❄", tagline: "The peaks put on their winter coats", biome: "aurora", prizeTrail: "trail_frost" },
-  { name: "Carnival of Wings", icon: "🎪", tagline: "Every sunset is a parade", biome: "sunset", prizeTrail: "trail_carnival" },
-  { name: "Reef Days", icon: "🐚", tagline: "Warm lagoons and lazy thermals", biome: "reef", prizeTrail: "trail_harvest" },
-  { name: "Forge Nights", icon: "🌋", tagline: "The mountain hums. Fly anyway", biome: "volcano", prizeTrail: "trail_frost" },
-  { name: "Canyon Calling", icon: "🏜", tagline: "Big walls, bigger launches", biome: "canyon", prizeTrail: "trail_carnival" },
+  { name: "Harvest Skies", icon: "leaf", tagline: "Amber light over golden hills", biome: "desert", prizeTrail: "trail_harvest" },
+  { name: "Frostreach", icon: "snowflake", tagline: "The peaks put on their winter coats", biome: "aurora", prizeTrail: "trail_frost" },
+  { name: "Carnival of Wings", icon: "rainbow", tagline: "Every sunset is a parade", biome: "sunset", prizeTrail: "trail_carnival" },
+  { name: "Reef Days", icon: "shell", tagline: "Warm lagoons and lazy thermals", biome: "reef", prizeTrail: "trail_harvest" },
+  { name: "Forge Nights", icon: "volcano", tagline: "The mountain hums. Fly anyway", biome: "volcano", prizeTrail: "trail_frost" },
+  { name: "Canyon Calling", icon: "mountain", tagline: "Big walls, bigger launches", biome: "canyon", prizeTrail: "trail_carnival" },
 ];
 
 function hashStr(s: string): number {

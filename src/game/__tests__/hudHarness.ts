@@ -39,7 +39,7 @@ export function goal(over: Partial<SessionGoal> = {}): SessionGoal {
   return { id: "g0", kind: "distance", target: 900, label: "Fly 900 m in one run", reward: 52, progress: 0, done: false, ...over };
 }
 
-export const WINGS = { icon: "🪽", name: "Fledgling", progress: 0.42, nextName: "Sky Racer", nextNeeded: 340, lifetime: 12_400 };
+export const WINGS = { icon: "paper_wing", name: "Fledgling", progress: 0.42, nextName: "Sky Racer", nextNeeded: 340, lifetime: 12_400 };
 
 /**
  * Mount the HUD with a snapshot stub and hand back the root. Callers query what

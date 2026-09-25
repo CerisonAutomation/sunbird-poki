@@ -17,8 +17,8 @@
  *   • It never blocks: a `null` result just means the continue screen shows its
  *     neutral framing ("Second Wind"), which is exactly what it showed before.
  *   • Copy rules: standard options stay in the primary position, the rewarded
- *     button is never green (style layer), and every rewarded label carries the
- *     🎬 clapperboard icon (added by the HUD where the button is rendered).
+  *     button is never green (style layer), and every rewarded label carries the
+  *     clapperboard icon (added by the HUD where the button is rendered).
  */
 
 export type ContinueContext = {

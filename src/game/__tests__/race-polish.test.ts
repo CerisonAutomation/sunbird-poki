@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeStateCadence, photoFinishMessage } from "../RacePolish";
+import { gradeStateCadence, photoFinishMessage } from "../Racer";
 
 describe("race polish", () => {
   it("keeps link quality unknown until cadence has evidence", () => {

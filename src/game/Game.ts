@@ -1,5 +1,6 @@
 import { splitLayout, splitViews } from "./Viewport";
-import { equalizedRace } from "./RaceRules";
+import { iconGlyph } from "./MenuIcons";
+import { equalizedRace } from "./Racer";
 import { terrainCue, landingLookAhead } from "./FlightGuidance";
 import { ScreenHistory } from "./ScreenHistory";
 import { copyText, shareText } from "./Clipboard";
@@ -26,7 +27,7 @@ import { MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, makeRoomCode, type AnyRealtimeClient } from "./Realtime";
 import { createNetTransport, prewarmNetTransport } from "./net-transport";
-import { photoFinishMessage } from "./RacePolish";
+import { photoFinishMessage } from "./Racer";
 import { SlopeChain } from "./SlopeChain";
 import { RoomWatcher, ROOM_POLL_MS, roomSummaryLine, summarizeRooms, type LiveRoom } from "./RoomBrowser";
 import { Leaderboard, loadPilotName, savePilotName, isLeaderboardOnline, type BoardMetric, type BoardPage, type BoardScope } from "./Leaderboard";
@@ -52,6 +53,7 @@ import { continueOffer, continuePlacementLabel, type ContinueOffer } from "./Con
 import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
 import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews, CAMPAIGN } from "./Campaign";
+import { GameFeel } from "./GameFeel";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
 import { emptySquadState, SquadClient } from "./Squad";
 import { PowerUps } from "./PowerUps";
@@ -263,6 +265,7 @@ export class Game {
   private timeScale = 1;
   private zenithTimer = 0;
   private hitStopTimer = 0;
+  private readonly feel = new GameFeel();
   private frameEma = 1 / 60;
   /** Wall-clock ms of the last emitted frame_error telemetry (throttled). */
   private frameErrAt = 0;
@@ -820,7 +823,7 @@ export class Game {
         this.modeId = rival.mode as ModeId;
         this.mode = modeById(this.modeId);
       }
-      this.hud.toast(`🥊 ${rival.name} challenged you: beat ${rival.distance} m on their hills`, "quest");
+      this.hud.toast(`${iconGlyph("swords")} ${rival.name} challenged you: beat ${rival.distance} m on their hills`, "quest");
       this.telemetry.track("rival_received", { distance: rival.distance, mode: this.modeId });
     }
 
@@ -891,7 +894,7 @@ export class Game {
       if (this.konamiBuffer.length > KONAMI.length) this.konamiBuffer.shift();
       if (this.konamiBuffer.join(",") === KONAMI.join(",")) {
         this.konamiBuffer = [];
-        this.hud.toast("✨ Cheat mode activated — you found the secret!", "gold");
+        this.hud.toast(`${iconGlyph("star")} Cheat mode activated — you found the secret!`, "gold");
         this.save.addCoins(500);
         if (this.state === "playing") this.particles.emitConfetti(0, 0);
       }
@@ -959,7 +962,7 @@ export class Game {
     const vipGift = this.save.claimVipDaily(this.today);
     window.setTimeout(() => {
       if (this.disposed) return;
-      if (this.save.recoveredFromCorruption) this.hud.toast("⚠ Save couldn't be read — kept a backup, starting fresh", "warn");
+      if (this.save.recoveredFromCorruption) this.hud.toast("Save couldn't be read — kept a backup, starting fresh", "warn");
       if (streakReward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${streakReward} coins`, "gold");
       if (vipGift > 0) this.hud.toast(`VIP daily gift · +${vipGift} coins`, "vip");
     }, 700);
@@ -1045,7 +1048,7 @@ export class Game {
         this.joiningRemoteRoom = true;
         this.pendingRoomInvite = portalInvite;
         this.telemetry.track("portal_invite", { code: portalInvite });
-        this.hud.toast(`🕊 Invited to room ${portalInvite}`, "quest");
+        this.hud.toast(`${iconGlyph("bird")} Invited to room ${portalInvite}`, "quest");
       }
 
       // Portal identity → pilot name. The portal user's handle is their
@@ -1069,7 +1072,7 @@ export class Game {
       }
       this.bump();
     });
-    if (seasonEnd) this.hud.toast(`⚔ Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
+    if (seasonEnd) this.hud.toast(`${iconGlyph("swords")} Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
     // Warm the embedded main-menu leaderboard on boot so it isn't empty on
     // the first frame. EA-05: this is background work — it is queued as idle
     // work so the first interactive frame (and the boot bar's last stage) does
@@ -1090,7 +1093,7 @@ export class Game {
     // nothing to confirm — it is one screen and one tap between the visitor and
     // the first `gameplayStart()`, and that first gameplay event is exactly what
     // Poki measures as conversion to play. The generated name is accepted
-    // silently instead; the 🎲 on the board page can still reroll it, and
+    // silently instead; the dice button on the board page can still reroll it, and
     // `pilotNameChosen` stays false so a signed-in player is still adopted by
     // `adoptPortalIdentity()` when the portal identity resolves.
     if (!this.save.state.pilotNameCustomized && this.state === "menu") {
@@ -1216,7 +1219,7 @@ export class Game {
       this.roomCode = code;
       this.setScreen("live");
       this.preseatLobby();
-      this.hud.toast(`🎟 Invited to room ${code} — ready up together to race`, "gold");
+      this.hud.toast(`${iconGlyph("badge")} Invited to room ${code} — ready up together to race`, "gold");
       this.telemetry.track("room_invite_opened", { room: code });
     }
     // Club chat: light polling only while the Squad screen is on screen, and
@@ -1238,6 +1241,8 @@ export class Game {
       this.pushHud();
       return;
     }
+    // GameFeel tick — updates trauma shake, fov kick, timescale.
+    this.feel.update(raw);
     if (this.resetArmed) {
       this.resetTimer -= raw;
       if (this.resetTimer <= 0) {
@@ -1488,7 +1493,7 @@ export class Game {
         this.save.state.firstFlightDone = true;
         this.save.addCoins(50);
         this.save.persist();
-        this.hud.toast("🕊 First flight complete · +50 coins — the sky is yours", "gold");
+        this.hud.toast(`${iconGlyph("bird")} First flight complete · +50 coins — the sky is yours`, "gold");
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
       }
     }
@@ -1499,7 +1504,7 @@ export class Game {
       const rx = this.rivalGhostPlayer.update(this.runTime, dt);
       if (rx !== null && !this.rivalGhostPassed && this.bird.x > rx + 0.5 && this.runTime > 4) {
         this.rivalGhostPassed = true;
-        this.hud.toast(`👻 Passed ${this.rivalGhostName}'s flight!`, "gold");
+        this.hud.toast(`${iconGlyph("ghost")} Passed ${this.rivalGhostName}'s flight!`, "gold");
         this.audio.ding();
         this.bonus += 60;
       }
@@ -1515,7 +1520,7 @@ export class Game {
           const newTrophies = this.achievements.checkNew();
           for (const t of newTrophies) this.hud.toast(`Trophy: ${t.title}`, "gold");
           if (newTrophies.length > 0) this.audio.trophy();
-          this.hud.toast("Passed your ghost! 👻", "quest");
+          this.hud.toast(`Passed your ghost! ${iconGlyph("ghost")}`, "quest");
           this.audio.ding();
           this.bonus += 30;
           this.awardXp(XP_RULES.ghostBeat);
@@ -1586,7 +1591,7 @@ export class Game {
           if (this.bird.speed() > 18) {
             this.audio.chirp();
             this.haptic([15, 10, 25]);
-            this.popupAtBird("SLINGSHOT! 🚀", "perfect");
+            this.popupAtBird(`SLINGSHOT! ${iconGlyph("rocket")}`, "perfect");
             this.bird.vx = Math.min(234, this.bird.vx + 6);
             this.particles.emitWind(this.bird.x, this.bird.y + 0.5, 1.6);
           }
@@ -1615,7 +1620,7 @@ export class Game {
       // Sky Slalom launch surge
       if (this.modeId === "pvp_slalom" && this.bird.justLaunched && this.lastLaunch?.rating === "perfect") {
         this.bird.vx = Math.min(240, this.bird.vx + 6.5);
-        this.popupAtBird("WARP SLALOM! ⚡", "fever");
+        this.popupAtBird(`WARP SLALOM! ${iconGlyph("lightning")}`, "fever");
         this.particles.emitWind(this.bird.x, this.bird.y, 1.4);
       }
 
@@ -1634,7 +1639,7 @@ export class Game {
           if (dist >= this.nextKnockoutDist - 60 && dist < this.nextKnockoutDist - 15) {
             if (!this.knockoutWarned) {
               this.knockoutWarned = true;
-              this.hud.toast(`⚠️ ELIMINATION IN ${Math.round(this.nextKnockoutDist - dist)}m — OUTFLY THE PACK!`, "warn");
+              this.hud.toast(`ELIMINATION IN ${Math.round(this.nextKnockoutDist - dist)}m — OUTFLY THE PACK!`, "warn");
               this.audio.chirp();
               this.haptic([15, 15, 30]);
             }
@@ -1645,7 +1650,7 @@ export class Game {
             this.nextKnockoutDist += 500;
             const standings = this.massRace.standings(this.bird.x, this.startX, this.pilotName, 40);
             if (standings.place === standings.total) {
-              this.hud.toast(`💥 ELIMINATED at ${targetDist}m!`, "warn");
+              this.hud.toast(`${iconGlyph("fire")} ELIMINATED at ${targetDist}m!`, "warn");
               this.audio.rivalDown();
               this.finishRun();
             } else {
@@ -1657,11 +1662,11 @@ export class Game {
                 this.raceField = standings.total;
                 this.raceFinishTime = this.runTime;
                 this.save.noteRacePlace(1, standings.total);
-                this.hud.toast(`👑 ROYALE VICTORY! SOLE SURVIVOR!`, "gold");
+                this.hud.toast(`${iconGlyph("crown")} ROYALE VICTORY! SOLE SURVIVOR!`, "gold");
                 this.audio.fanfare();
                 this.finishRun();
               } else {
-                this.hud.toast(`💥 ELIMINATED: ${victim.name}! ${remaining} remain`, "gold");
+                this.hud.toast(`${iconGlyph("fire")} ELIMINATED: ${victim.name}! ${remaining} remain`, "gold");
                 this.audio.ding();
                 this.haptic(10);
               }
@@ -1678,10 +1683,10 @@ export class Game {
         const place = this.massRace.standings(this.bird.x, this.startX, this.pilotName, 8).place;
         if (this.lastPlace > 0 && place > 0 && place < this.lastPlace) {
           const gain = this.lastPlace - place;
-          this.hud.toast(place === 1 ? "👑 LEAD! Hold it!" : `P${this.lastPlace} → P${place}!`, "gold");
+          this.hud.toast(place === 1 ? `${iconGlyph("crown")} LEAD! Hold it!` : `P${this.lastPlace} → P${place}!`, "gold");
           if (place === 1) {
             this.flash("perfect");
-            this.popupAtBird("👑 P1 LEAD!", "fever");
+            this.popupAtBird(`${iconGlyph("crown")} P1 LEAD!`, "fever");
             this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
             this.audio.purchase();
             this.haptic([25, 15, 45]);
@@ -1888,7 +1893,7 @@ export class Game {
         this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
         this.audio.island();
         this.audio.duckMusic(0.5, 0.6);
-        this.hud.toast(`${b.emoji} ${b.name}`, "island");
+        this.hud.toast(`${iconGlyph(b.emoji)} ${b.name}`, "island");
         this.flash("island");
         this.glow(0.75);
         this.shake(0.7);
@@ -1920,7 +1925,7 @@ export class Game {
         this.bonus += 4 * COIN_VALUE * value;
         if (this.modeId === "pvp_coinrush") {
           this.bird.vx = Math.min(225, this.bird.vx + 2.5);
-          this.popupAtBird("COIN TURBO! ⚡", "splash");
+          this.popupAtBird(`COIN TURBO! ${iconGlyph("lightning")}`, "splash");
         }
         this.awardXp(XP_RULES.coin);
         this.audio.ding(gem);
@@ -1990,7 +1995,7 @@ export class Game {
     if (!this.distanceRecordCrossed && this.bestAtStart > 0 && runDist > this.bestAtStart) {
       this.distanceRecordCrossed = true;
       this.audio.fanfare();
-      this.hud.toast("👑 NEW DISTANCE RECORD — keep flying!", "gold");
+      this.hud.toast(`${iconGlyph("crown")} NEW DISTANCE RECORD — keep flying!`, "gold");
       this.flash("perfect");
       this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
       this.glow(0.9);
@@ -2012,7 +2017,7 @@ export class Game {
         this.audio.storm();
         this.shake(0.8);
         this.camera.punch(2);
-        this.hud.toast("🌀 EYE WALL — survive to the line. Coins ×2 from here", "warn");
+        this.hud.toast(`${iconGlyph("spiral")} EYE WALL — survive to the line. Coins ×2 from here`, "warn");
       }
     }
     // The moment you pass a rival's posted mark, gloat immediately — don't
@@ -2020,7 +2025,7 @@ export class Game {
     if (this.rival && !this.rivalBeatenToast && this.seed === this.rival.seed && runDist >= this.rival.distance) {
       this.rivalBeatenToast = true;
       this.audio.rivalDown();
-      this.hud.toast(`🥊 Passed ${this.rival.name}'s mark — keep flying!`, "gold");
+      this.hud.toast(`${iconGlyph("swords")} Passed ${this.rival.name}'s mark — keep flying!`, "gold");
     }
 
     // Finish line (Race / Mass Race) — reached by distance, not by clock.
@@ -2056,7 +2061,7 @@ export class Game {
         }
 
         if (s.place <= 3) {
-          this.popupAtBird(s.place === 1 ? "🥇 VICTORY!" : s.place === 2 ? "🥈 2ND PLACE!" : "🥉 3RD PLACE!", "fever");
+          this.popupAtBird(s.place === 1 ? `${iconGlyph("crown")} VICTORY!` : s.place === 2 ? `${iconGlyph("trophy")} 2ND PLACE!` : `${iconGlyph("trophy")} 3RD PLACE!`, "fever");
           this.flash("perfect");
           this.haptic([40, 20, 60, 20, 100]);
           this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
@@ -2073,14 +2078,14 @@ export class Game {
           this.lastRatingDelta = res.delta;
           this.lastRatingBonus = 0;
           this.hud.toast(
-            won ? `⚔ Duel won! +${res.delta} rating` : `⚔ Duel lost · ${res.delta} rating`,
+            won ? `${iconGlyph("swords")} Duel won! +${res.delta} rating` : `${iconGlyph("swords")} Duel lost · ${res.delta} rating`,
             won ? "gold" : "warn",
           );
-          if (won && res.streak > 0 && res.streak % 5 === 0) this.hud.toast(`🔥 ${res.streak} duel wins in a row!`, "gold");
+          if (won && res.streak > 0 && res.streak % 5 === 0) this.hud.toast(`${iconGlyph("fire")} ${res.streak} duel wins in a row!`, "gold");
           // Duel prize skin: 10 lifetime duel wins earns the Hummingbird.
           if (this.save.state.duel.wins >= 10 && !this.save.state.ownedSkins.includes("hummingbird")) {
             this.save.ownSkin("hummingbird");
-            this.hud.toast("🐦 Jewel Hummingbird unlocked — 10 duel wins!", "gold");
+            this.hud.toast(`${iconGlyph("bird")} Jewel Hummingbird unlocked — 10 duel wins!`, "gold");
           }
           if (won && this.save.ownTrail("trail_duelist")) this.hud.toast("✨ Duelist trail unlocked!", "gold");
           this.audio.purchase();
@@ -2116,7 +2121,7 @@ export class Game {
       if (goldenNow && !this.goldenHour) {
         this.goldenHour = true;
         this.audio.goldenHour();
-        this.hud.toast("🌇 GOLDEN HOUR — coins are worth double", "gold");
+        this.hud.toast(`${iconGlyph("half_day")} GOLDEN HOUR — coins are worth double`, "gold");
         this.flash("fever");
         this.glow(0.8);
       } else if (!goldenNow && this.goldenHour) {
@@ -2267,7 +2272,7 @@ export class Game {
     this.particles.emitConfetti(this.bird.x, this.bird.y + 1);
     this.popupAtBird(this.bopWord(), "bop");
     this.camera.punch(4);
-    this.hud.toast("🌻 Sunflower bounce +80", "gold");
+    this.hud.toast(`${iconGlyph("sun")} Sunflower bounce +80`, "gold");
     this.glow(0.55);
     this.haptic([20, 10, 40]);
     this.telemetry.track("sunflower", {});
@@ -2408,7 +2413,7 @@ export class Game {
     this.popupAtBird(this.bopWord(), "bop");
     this.camera.punch(6);
     this.shake(0.3);
-    this.hud.toast("🎈 Balloon bounce! +150", "gold");
+    this.hud.toast(`${iconGlyph("star")} Balloon bounce! +150`, "gold");
     this.flash("fever");
     this.glow(0.7);
     this.haptic([20, 10, 40, 20, 60]);
@@ -2494,7 +2499,7 @@ export class Game {
     this.flash("perfect");
     this.glow(0.7);
     this.haptic([50, 30, 50, 30, 120]);
-    this.hud.toast(`⭐ WISH GRANTED — ${PICKUP_STYLE[wish].label}`, "gold");
+    this.hud.toast(`${iconGlyph("star")} WISH GRANTED — ${PICKUP_STYLE[wish].label}`, "gold");
   }
 
   private onPickup(kind: PickupKind, x: number, y: number): void {
@@ -2528,7 +2533,7 @@ export class Game {
         this.shake(0.55);
       }
       this.particles.burstRing(x, y, 0xffffff);
-      this.hud.toast(`⚡ OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "zenith");
+      this.hud.toast(`${iconGlyph("lightning")} OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "zenith");
       this.shake(0.3);
       return;
     }
@@ -2544,32 +2549,32 @@ export class Game {
         this.bird.vy += 7;
         this.particles.burstRing(x, y, 0xff5a3a);
         this.audio.boost();
-        this.hud.toast("Rocket Speed 🚀", "power");
+        this.hud.toast(`${iconGlyph("rocket")} Rocket Speed`, "power");
         this.shake(0.55);
         break;
       case "magnet":
         this.magnetTimer = MAGNET_TIME;
         this.particles.burstRing(x, y, 0x8a6cff);
         this.audio.magnetOn();
-        this.hud.toast(`Coin Magnet ${MAGNET_TIME}s 🧲`, "power");
+        this.hud.toast(`${iconGlyph("magnet")} Coin Magnet ${MAGNET_TIME}s`, "power");
         break;
       case "shield":
         this.shield = Math.min(2, this.shield + 1);
         this.powers.shield = this.shield;
         this.particles.burstRing(x, y, 0x5ad8ff);
-        this.hud.toast("Sea Shield Active 🛡", "power");
+        this.hud.toast(`${iconGlyph("shield")} Sea Shield Active`, "power");
         break;
       case "longglide":
         this.particles.burstRing(x, y, 0x7fe8c8);
-        this.hud.toast("Long Glide 🪁 Low Drag", "power");
+        this.hud.toast(`${iconGlyph("glide")} Long Glide · Low Drag`, "power");
         break;
       case "wingboost":
         this.particles.burstRing(x, y, 0xffa8e0);
-        this.hud.toast("Wing Boost 🕊 Super Lift", "power");
+        this.hud.toast(`${iconGlyph("bird")} Wing Boost · Super Lift`, "power");
         break;
       case "feather":
         this.particles.burstRing(x, y, 0xfff0c0);
-        this.hud.toast("Feather 🐦 Butter Landings", "power");
+        this.hud.toast(`${iconGlyph("feather")} Feather · Butter Landings`, "power");
         break;
       case "goldenwings":
         this.particles.burstRing(x, y, 0xffd76a);
@@ -3002,16 +3007,16 @@ export class Game {
     for (const id of armed) this.applyBoost(id);
     if (this.eventRun) {
       const ev = weeklyEvent();
-      this.hud.toast(`${ev.icon} ${ev.name} · fly ${ev.target.toLocaleString()} m`, "quest");
+      this.hud.toast(`${iconGlyph(ev.icon)} ${ev.name} · fly ${ev.target.toLocaleString()} m`, "quest");
       this.audio.eventStinger();
     }
     if (this.challengeRun === "daily") {
       const c = dailyChallenge(this.today);
-      this.hud.toast(`${c.modifier.icon} ${c.title} · ${c.modifier.label}`, "quest");
+      this.hud.toast(`${iconGlyph(c.modifier.icon)} ${c.title} · ${c.modifier.label}`, "quest");
     } else if (this.challengeRun.startsWith("gauntlet")) {
       const idx = Number(this.challengeRun.slice(8)) || 0;
       const st = weeklyGauntlet(weekKey()).stages[idx];
-      if (st) this.hud.toast(`🌩 Gauntlet ${idx + 1}/3 · ${st.label}`, "quest");
+      if (st) this.hud.toast(`${iconGlyph("lightning")} Gauntlet ${idx + 1}/3 · ${st.label}`, "quest");
     }
     this.setState("playing");
     this.setScreen("main");
@@ -3059,7 +3064,7 @@ export class Game {
       default:
         return;
     }
-    if (def) this.hud.toast(`${def.icon} ${def.name} armed`, "power");
+    if (def) this.hud.toast(`${iconGlyph(def.icon)} ${def.name} armed`, "power");
   }
 
   private onDaylightOut(): void {
@@ -3183,7 +3188,7 @@ export class Game {
       this.duelResult = "lost";
       this.duelDelta = res.delta;
       this.lastRatingDelta = res.delta;
-      this.hud.toast(`⚔ Duel lost — never reached the line · ${res.delta} rating`, "warn");
+      this.hud.toast(`${iconGlyph("swords")} Duel lost — never reached the line · ${res.delta} rating`, "warn");
     }
 
     this.nearMiss = evaluateNearMiss(
@@ -3246,7 +3251,7 @@ export class Game {
       perfects: this.perfects,
       coins: this.runCoins,
     });
-    for (const cup of improvedCups) this.hud.toast(`${cup.icon} ${cup.name} — new personal best`, "gold");
+    for (const cup of improvedCups) this.hud.toast(`${iconGlyph(cup.icon)} ${cup.name} — new personal best`, "gold");
     if (improvedCups.length > 0) this.audio.personalBest();
     this.save.persist();
 
@@ -3264,11 +3269,11 @@ export class Game {
       if (won) {
         const bounty = this.save.isVipActive() ? 300 : 150;
         this.save.addCoins(bounty);
-        this.challengeOutcome = `🥊 Challenge won! Out-flew ${this.rival.name} (${this.rival.distance} m) · +${bounty} coins`;
+        this.challengeOutcome = `${iconGlyph("swords")} Challenge won! Out-flew ${this.rival.name} (${this.rival.distance} m) · +${bounty} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         this.audio.island();
       } else {
-        this.challengeOutcome = `🥊 ${this.rival.name} still leads — ${Math.round(stats.distance)} m of ${this.rival.distance} m`;
+        this.challengeOutcome = `${iconGlyph("swords")} ${this.rival.name} still leads — ${Math.round(stats.distance)} m of ${this.rival.distance} m`;
         this.hud.toast("Their mark stands. Fly again.", "warn");
       }
       this.telemetry.track("rival_settled", { won });
@@ -3277,7 +3282,7 @@ export class Game {
       const c = dailyChallenge(this.today);
       if (dailyDone(stats, c) && this.save.completeDaily(this.today)) {
         this.save.addCoins(c.reward);
-        this.challengeOutcome = `☀ Daily challenge complete · +${c.reward} coins`;
+        this.challengeOutcome = `${iconGlyph("sun")} Daily challenge complete · +${c.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         this.audio.island();
       } else if (!dailyDone(stats, c)) {
@@ -3291,18 +3296,18 @@ export class Game {
         const res = this.save.completeGauntletStage(g.week, idx);
         if (res) {
           this.save.addCoins(st.reward);
-          this.challengeOutcome = `🌩 Gauntlet stage ${idx + 1} clear · +${st.reward} coins`;
+          this.challengeOutcome = `${iconGlyph("lightning")} Gauntlet stage ${idx + 1} clear · +${st.reward} coins`;
           this.hud.toast(this.challengeOutcome, "gold");
           if (res === "clear") {
             this.save.addCoins(g.clearBonus);
-            this.hud.toast(`🏆 GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
+            this.hud.toast(`${iconGlyph("trophy")} GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
             this.platform?.measure("event", "gauntlet-clear", "complete");
             this.platform?.happyTime();
             if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
             // Gauntlet prize skin: 5 lifetime clears earns the Stormcrow.
             if (this.save.state.challenges.gauntletsCleared >= 5 && !this.save.state.ownedSkins.includes("stormcrow")) {
               this.save.ownSkin("stormcrow");
-              this.hud.toast("🐦 Stormcrow unlocked — 5 gauntlets cleared!", "gold");
+              this.hud.toast(`${iconGlyph("bird")} Stormcrow unlocked — 5 gauntlets cleared!`, "gold");
             }
             this.audio.island();
           }
@@ -3318,7 +3323,7 @@ export class Game {
       if (stats.distance >= ev.target) {
         const counts = this.save.recordEventClear(ev.week, monthKey());
         this.save.addCoins(ev.reward);
-        this.challengeOutcome = `${ev.icon} ${ev.name} clear ×${counts.week} · +${ev.reward} coins`;
+        this.challengeOutcome = `${iconGlyph(ev.icon)} ${ev.name} clear ×${counts.week} · +${ev.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         this.platform?.measure("event", "weekly-clear", "complete");
         this.platform?.happyTime();
@@ -3327,14 +3332,14 @@ export class Game {
         const th = monthlyTheme();
         if (counts.month >= THEME_TRAIL_CLEARS && this.save.claimThemeTrail(th.month)) {
           if (this.save.ownTrail(th.prizeTrail)) {
-            this.hud.toast(`${th.icon} ${th.name} · ✨ ${TRAILS[th.prizeTrail]?.label ?? th.prizeTrail} trail unlocked!`, "gold");
+            this.hud.toast(`${iconGlyph(th.icon)} ${th.name} · ${iconGlyph("star")} ${TRAILS[th.prizeTrail]?.label ?? th.prizeTrail} trail unlocked!`, "gold");
           } else {
             this.save.addCoins(300);
-            this.hud.toast(`${th.icon} ${th.name} complete · trail owned, +300 coins`, "gold");
+            this.hud.toast(`${iconGlyph(th.icon)} ${th.name} complete · trail owned, +300 coins`, "gold");
           }
         }
       } else {
-        this.challengeOutcome = `${ev.icon} ${ev.name} missed — needed ${ev.target.toLocaleString()} m`;
+        this.challengeOutcome = `${iconGlyph(ev.icon)} ${ev.name} missed — needed ${ev.target.toLocaleString()} m`;
       }
     }
 
@@ -3347,7 +3352,7 @@ export class Game {
         this.hud.toast(`★ ${this.mode.name} MASTERED · skill unlocked: ${mastery.skill.name} (${mastery.skill.desc}) · +${mastery.coins} coins`, "gold");
         this.audio.chapterFanfare();
       } else {
-        this.hud.toast(`${this.mode.icon} ${this.mode.name} mastery Lv.${mastery.level} · +2% coins in mode · +${mastery.coins} coins`, "gold");
+        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name} mastery Lv.${mastery.level} · +2% coins in mode · +${mastery.coins} coins`, "gold");
         this.audio.milestone();
       }
     }
@@ -3372,11 +3377,11 @@ export class Game {
     // CAREER WINGS promotion — a lifetime rank-up is rare; make it land.
     const promo = wingsPromotion(lifetimeBefore, this.save.state.lifetime.distance);
     if (promo) {
-      this.rankUp = `${promo.icon} ${promo.name}`;
+      this.rankUp = `${iconGlyph(promo.icon)} ${promo.name}`;
       this.rankUpT = 3.2;
       this.audio.fanfare();
       this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
-      this.hud.toast(`${promo.icon} ${promo.name.toUpperCase()} — lifetime rank earned`, "gold");
+      this.hud.toast(`${iconGlyph(promo.icon)} ${promo.name.toUpperCase()} — lifetime rank earned`, "gold");
       this.telemetry.track("wings_promo", { tier: promo.id });
     }
     this.save.addLifetimeZeniths(stats.zenith);
@@ -3440,7 +3445,7 @@ export class Game {
     const div = divisionFor(this.save.state.rival.rating);
     if (div.id === "legend" && !this.save.state.ownedSkins.includes("solstice")) {
       this.save.ownSkin("solstice");
-      this.hud.toast("🐦 Solstice unlocked — welcome to Sunbird Legend!", "gold");
+      this.hud.toast(`${iconGlyph("bird")} Solstice unlocked — welcome to Sunbird Legend!`, "gold");
       this.flash("perfect");
     }
   }
@@ -3476,7 +3481,7 @@ export class Game {
     const gift = this.save.claimVipDaily(today);
     // Monthly ranked season rollover: soft reset + peak-division reward.
     const seasonEnd = this.save.ensureRankSeason();
-    if (seasonEnd) this.hud.toast(`⚔ Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
+    if (seasonEnd) this.hud.toast(`${iconGlyph("swords")} Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
     // Only swap hills while resting in the menu — a midnight rollover mid-run
     // must never yank the terrain out from under a live flight.
     if (this.state === "menu" && this.seedMode === "today") this.rebuildWorld(today);
@@ -3594,7 +3599,7 @@ export class Game {
         });
         this.rivalGhostName = pace.name;
         this.rivalGhostPlayer.loadRecord(pace.record);
-        this.hud.toast(`👻 Chase ${pace.name} — pass it before the finish`, "quest");
+        this.hud.toast(`${iconGlyph("ghost")} Chase ${pace.name} — pass it before the finish`, "quest");
 
         // Prefer an actual player's compatible ghost when one exists.
         const epoch = this.runEpoch;
@@ -3602,7 +3607,7 @@ export class Game {
           if (!rg || this.disposed || epoch !== this.runEpoch || this.state !== "playing") return;
           this.rivalGhostName = rg.name;
           this.rivalGhostPlayer.loadRecord({ seed: this.seed, distance: rg.distance, samples: rg.samples });
-          this.hud.toast(`👻 ${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest");
+          this.hud.toast(`${iconGlyph("ghost")} ${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest");
         });
       }
     }
@@ -3661,13 +3666,13 @@ export class Game {
         this.save.recordWheelSpin(this.today);
         if (sector.kind === "coins" && typeof sector.value === "number") {
           this.save.addCoins(sector.value);
-          this.hud.toast(`🎡 Wheel landed on ${sector.label}! +● ${sector.value}`, "gold");
+          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${sector.label}! +● ${sector.value}`, "gold");
         } else if (sector.kind === "boost") {
           this.save.armBoost("sunflask");
-          this.hud.toast(`🎡 Wheel landed on ${sector.label}! Sun Flask Armed!`, "gold");
+          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${sector.label}! Sun Flask Armed!`, "gold");
         } else if (sector.kind === "vault") {
           this.buyMysteryVault();
-          this.hud.toast(`🎰 Wheel landed on Vault Key!`, "gold");
+          this.hud.toast(`${iconGlyph("castle")} Wheel landed on Vault Key!`, "gold");
         }
         this.audio.fanfare();
         this.bump();
@@ -3677,7 +3682,7 @@ export class Game {
         const smashed = this.save.smashPiggyBank();
         if (smashed > 0) {
           this.audio.fanfare();
-          this.hud.toast(`🐷 Smashed Piggy Bank! +● ${smashed} coins!`, "gold");
+          this.hud.toast(`${iconGlyph("piggy")} Smashed Piggy Bank! +● ${smashed} coins!`, "gold");
         } else {
           this.hud.toast("Piggy Bank is empty!", "info");
         }
@@ -3688,7 +3693,7 @@ export class Game {
         if (this.save.performPrestige()) {
           this.audio.chapterFanfare();
           const p = this.save.state.prestige?.multiplier ?? 1.0;
-          this.hud.toast(`👑 Reborn with Solar Crown! Permanent ×${p.toFixed(1)} Coin Multiplier!`, "gold");
+          this.hud.toast(`${iconGlyph("crown")} Reborn with Solar Crown! Permanent ×${p.toFixed(1)} Coin Multiplier!`, "gold");
         } else {
           this.hud.toast("Need ● 50,000 coins to ascend Solar Crown prestige!", "warn");
         }
@@ -3735,7 +3740,7 @@ export class Game {
           if (circuit) {
             this.selectedPvpMode = circuit;
             this.mode = modeById(circuit);
-            this.hud.toast(`${this.mode.icon} ${this.mode.name} selected — ranked, casual, a room, or the AI flock`, "gold");
+            this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name} selected — ranked, casual, a room, or the AI flock`, "gold");
           }
           this.setScreen("challenges");
           this.bump();
@@ -3760,7 +3765,7 @@ export class Game {
         this.disconnectRace();
         this.roomCode = "";
         this.rankedRace = false;
-        this.hud.toast(`🤖 AI PvP · ${m.icon} ${m.name} vs the flock`, "info");
+        this.hud.toast(`${iconGlyph("flock")} AI PvP · ${iconGlyph(m.icon)} ${m.name} vs the flock`, "info");
         this.launchMatch({ ranked: false, storm: m.id === "pvp_typhoon" }, true);
         break;
       }
@@ -4001,11 +4006,11 @@ export class Game {
         // Easter egg: secret pilot names
         const nameLower = next.toLowerCase();
         if (nameLower === "icarus") {
-          this.hud.toast("🌊 Too close to the sun, Icarus…", "warn");
+          this.hud.toast(`${iconGlyph("island")} Too close to the sun, Icarus…`, "warn");
         } else if (nameLower === "phoenix") {
-          this.hud.toast("🔥 Rise from the ashes, Phoenix!", "gold");
+          this.hud.toast(`${iconGlyph("fire")} Rise from the ashes, Phoenix!`, "gold");
         } else if (nameLower === "sunbird") {
-          this.hud.toast("🌟 You ARE the Sunbird.", "gold");
+          this.hud.toast(`${iconGlyph("star")} You ARE the Sunbird.`, "gold");
           this.save.addCoins(DAILY_STIPEND);
         } else {
           this.hud.toast(`Welcome, ${next}!`, "info");
@@ -4052,7 +4057,7 @@ export class Game {
         this.save.state.rankPrizeSeason = season;
         this.save.persist();
         this.save.addCoins(reward.coins);
-        this.hud.toast(`Claimed ${reward.coins} Coins for ${reward.division.name} Rank! 🏆`, "achievement");
+        this.hud.toast(`Claimed ${reward.coins} Coins for ${reward.division.name} Rank! ${iconGlyph("trophy")}`, "achievement");
         this.audio.fanfare();
         this.bump();
         break;
@@ -4135,10 +4140,10 @@ export class Game {
           this.roomCode = this.roomCode ? makeRoomCode() : "";
           if (this.roomCode) {
             this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.mode.icon} ${this.mode.name}`, "gold");
+            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
           }
         }
-        this.hud.toast(`${this.mode.icon} ${this.mode.name}`, "gold");
+        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
         this.bump();
         break;
       }
@@ -4154,10 +4159,10 @@ export class Game {
           this.roomCode = this.roomCode ? makeRoomCode() : "";
           if (this.roomCode) {
             this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.selectedCourse.emoji} ${this.selectedCourse.name}`, "gold");
+            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
           }
         }
-        this.hud.toast(`${this.selectedCourse.emoji} ${this.selectedCourse.name}`, "gold");
+        this.hud.toast(`${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
         this.bump();
         break;
       }
@@ -4171,7 +4176,7 @@ export class Game {
         this.selectedCourse = w;
         this.modeId = m.id;
         this.mode = m;
-        this.hud.toast(`🎲 ${m.icon} ${m.name} on ${w.emoji} ${w.name}`, "gold");
+        this.hud.toast(`${iconGlyph("dice")} ${iconGlyph(m.icon)} ${m.name} on ${iconGlyph(w.emoji)} ${w.name}`, "gold");
         this.bump();
         break;
       }
@@ -4298,15 +4303,15 @@ export class Game {
         const r = calendarReward(day);
         if (r.kind === "coins") {
           this.save.addCoins(r.amount);
-          this.hud.toast(`📅 Day ${day} gift · +${r.amount} coins`, "gold");
+          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · +${r.amount} coins`, "gold");
         } else if (r.kind === "boost") {
           this.save.armBoost(r.id);
-          this.hud.toast(`📅 Day ${day} gift · boost armed for next flight`, "gold");
+          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · boost armed for next flight`, "gold");
         } else {
-          if (this.save.ownTrail(r.id)) this.hud.toast(`📅 Day ${day} gift · ✨ ${TRAILS[r.id]?.label ?? r.id} trail!`, "gold");
+          if (this.save.ownTrail(r.id)) this.hud.toast(`${iconGlyph("star")} Day ${day} gift · ${TRAILS[r.id]?.label ?? r.id} trail!`, "gold");
           else {
             this.save.addCoins(200);
-            this.hud.toast(`📅 Day ${day} · trail already owned, +200 coins instead`, "gold");
+            this.hud.toast(`${iconGlyph("star")} Day ${day} · trail already owned, +200 coins instead`, "gold");
           }
         }
         this.audio.purchase();
@@ -4335,7 +4340,7 @@ export class Game {
           break;
         }
         this.save.addCoins(ch.rewardCoins);
-        this.hud.toast(`${ch.icon} ${ch.title} · +${ch.rewardCoins} coins — ${ch.rewardLabel}`, "gold");
+        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins — ${ch.rewardLabel}`, "gold");
         this.audio.chapterFanfare();
         this.bump();
         break;
@@ -4348,7 +4353,7 @@ export class Game {
         this.save.state.lastStipendClaimed = this.today;
         this.audio.chapterFanfare();
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`🪙 Daily Flight Stipend Claimed! +● ${DAILY_STIPEND} coins!`, "gold");
+        this.hud.toast(`${iconGlyph("coin")} Daily Flight Stipend Claimed! +● ${DAILY_STIPEND} coins!`, "gold");
         this.bump();
         break;
       }
@@ -4382,7 +4387,7 @@ export class Game {
         this.save.addCoins(DAILY_STIPEND);
         this.audio.chapterFanfare();
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`📦 Ace Wingman Crate Unlocked! 3 Boosts + Tideglass Trail + ${DAILY_STIPEND} Coins!`, "gold");
+        this.hud.toast(`${iconGlyph("badge")} Ace Wingman Crate Unlocked! 3 Boosts + Tideglass Trail + ${DAILY_STIPEND} Coins!`, "gold");
         this.bump();
         break;
       }
@@ -4403,7 +4408,7 @@ export class Game {
         this.save.addCoins(coins);
         this.audio.chapterFanfare();
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`🎁 Squadron Goal Claimed! +● ${coins} coins!`, "gold");
+        this.hud.toast(`${iconGlyph("star")} Squadron Goal Claimed! +● ${coins} coins!`, "gold");
         this.bump();
         break;
       }
@@ -4481,7 +4486,7 @@ export class Game {
           this.runShareBusy = false;
           if (code) {
             this.shareCode = code;
-            this.hud.toast("🔗 Run shared — send the code to a friend", "gold");
+            this.hud.toast(`${iconGlyph("check")} Run shared — send the code to a friend`, "gold");
           } else {
             // Platform-neutral copy: this string ships in every edition, and
             // the isolation gates reject the platform's name in other builds.
@@ -4537,7 +4542,7 @@ export class Game {
           }
           // Count the play — the AUDS counter endpoint is public by design.
           void countSharePlay(code);
-          this.hud.toast(`🥊 ${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest");
+          this.hud.toast(`${iconGlyph("swords")} ${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest");
           this.telemetry.track("shared_run_loaded", { mode: this.modeId, distance: run.distance });
           this.bump();
         });
@@ -4790,8 +4795,8 @@ export class Game {
         const dist = Math.max(1, Math.round(this.lastRunDistance()));
         const mode = flag("modeAwareChallenge") ? this.modeId : undefined;
         const url = buildChallengeUrl(this.seed, dist, this.pilotName, mode);
-        const text = `Beat my ${dist} m flight on these hills 🐦 → ${url}`;
-        this.shareText(text, `🥊 Challenge link copied — send it to a rival`);
+        const text = `Beat my ${dist} m flight on these hills → ${url}`;
+        this.shareText(text, `${iconGlyph("swords")} Challenge link copied — send it to a rival`);
         this.telemetry.track("rival_thrown", { distance: dist, mode: this.modeId });
         break;
       }
@@ -5079,7 +5084,7 @@ export class Game {
     const def = skinById(id);
     const st = this.save.state;
     if (def.prizeOnly && !st.ownedSkins.includes(id)) {
-      this.hud.toast(`🏆 Earn it: ${def.prizeOnly}`, "info");
+      this.hud.toast(`${iconGlyph("trophy")} Earn it: ${def.prizeOnly}`, "info");
       return;
     }
     if ((def.goldOnly && !st.gold) || (def.vipOnly && !st.vip)) {
@@ -5128,7 +5133,7 @@ export class Game {
     if (def.permanent) this.save.ownUpgrade(id);
     else this.save.armBoost(id);
     this.audio.purchase();
-    this.hud.toast(`${def.icon} ${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power");
+    this.hud.toast(`${iconGlyph(def.icon)} ${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power");
     this.telemetry.track("boost_bought", { id, price });
     this.bump();
   }
@@ -5183,7 +5188,7 @@ export class Game {
     const runs = this.save.state.runsPlayed;
     if (runs < 3 || runs > 12) return;
     this.starterNudged = true;
-    this.hud.toast(`🎁 First Flight Pack · ${STARTER_PACK.price} — 1,200 coins + Goldleaf trail`, "gold");
+    this.hud.toast(`${iconGlyph("star")} First Flight Pack · ${STARTER_PACK.price} — 1,200 coins + Goldleaf trail`, "gold");
     this.telemetry.track("starter_nudge", { runs });
   }
 
@@ -5215,7 +5220,7 @@ export class Game {
     this.save.equipTrail(STARTER_PACK.trailId);
     this.save.armBoost("sunflask");
     this.audio.fanfare();
-    this.hud.toast(`🎁 First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold");
+    this.hud.toast(`${iconGlyph("star")} First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold");
     this.telemetry.track("purchase_ok", { sku: "sunbird_starter", source });
     this.bump();
   }
@@ -5441,17 +5446,17 @@ export class Game {
       const pick = unownedSkins[Math.floor(Math.random() * unownedSkins.length)]!;
       this.save.ownSkin(pick);
       const skinDef = skinById(pick);
-      this.hud.toast(`🥚 Vault Hatched: ${skinDef.name} Bird Skin!`, "gold");
+      this.hud.toast(`${iconGlyph("egg")} Vault Hatched: ${skinDef.name} Bird Skin!`, "gold");
       this.audio.eggHatch();
     } else if (rng < 0.70 && unownedTrails.length > 0) {
       const pick = unownedTrails[Math.floor(Math.random() * unownedTrails.length)]!;
       this.save.ownTrail(pick);
-      this.hud.toast(`🥚 Vault Hatched: ${pick.replace("trail_", "").toUpperCase()} Trail!`, "gold");
+      this.hud.toast(`${iconGlyph("egg")} Vault Hatched: ${pick.replace("trail_", "").toUpperCase()} Trail!`, "gold");
       this.audio.eggHatch();
     } else {
       const reward = 300 + Math.floor(Math.random() * 300);
       this.save.addCoins(reward);
-      this.hud.toast(`🥚 Vault Jackpot: +● ${reward} bonus coins!`, "gold");
+      this.hud.toast(`${iconGlyph("egg")} Vault Jackpot: +● ${reward} bonus coins!`, "gold");
     }
     this.bump();
   }
@@ -5654,6 +5659,7 @@ export class Game {
   }
 
   private shake(amount: number): void {
+    this.feel.addTrauma(amount * 0.5);
     this.camera.bump(amount);
   }
 
@@ -6197,12 +6203,12 @@ export class Game {
     for (const e of net.drainEvents()) {
       switch (e.type) {
         case "join":
-          this.hud.toast(`🕊 ${e.name} joined the race`, "island");
+          this.hud.toast(`${iconGlyph("bird")} ${e.name} joined the race`, "island");
           this.audio.chirp();
           this.recordRoomPilots();
           break;
         case "leave":
-          this.hud.toast(`👋 ${e.name} left`, "warn");
+          this.hud.toast(`${e.name} left`, "warn");
           break;
         case "ready":
           this.hud.toast(`✅ ${e.name} is ready`, "cloud");
@@ -6212,7 +6218,7 @@ export class Game {
           // cross, the pack keeps finishing behind the results card — up to
           // ~40 toasts that each re-render the whole card. The referee's
           // official ordering already landed via `myPlace`, so stay silent.
-          if (this.state === "playing") this.hud.toast(`🏁 ${e.name} finished P${e.place}`, "gold");
+          if (this.state === "playing") this.hud.toast(`${iconGlyph("flag")} ${e.name} finished P${e.place}`, "gold");
           break;
         case "interrupted":
           this.serverPlaceApplied = false;
@@ -6318,7 +6324,7 @@ export class Game {
     const grant = (id: string, msg: string): void => {
       if (st.ownedSkins.includes(id)) return;
       this.save.ownSkin(id);
-      this.hud.toast(`🐦 ${msg}`, "gold");
+      this.hud.toast(`${iconGlyph("bird")} ${msg}`, "gold");
       this.audio.fanfare();
     };
     if (st.lifetime.ghostBeats >= 10) grant("ghost", "Ghost unlocked — 10 ghost wins!");
@@ -6340,7 +6346,7 @@ export class Game {
       const bonus = 100 + members.length * 25;
       this.save.addCoins(bonus);
       this.save.persist();
-      this.hud.toast(`${c.icon} ${c.name} collection complete · +${bonus} coins`, "gold");
+      this.hud.toast(`${iconGlyph(c.icon)} ${c.name} collection complete · +${bonus} coins`, "gold");
       this.audio.fanfare();
     }
   }
@@ -6355,7 +6361,7 @@ export class Game {
     this.lastPrize = grant;
     this.audio.purchase();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-    this.hud.toast(`${p.icon} ${p.label} — ${grant.tier} in ${grant.cup}`, "gold");
+    this.hud.toast(`${iconGlyph(p.icon)} ${p.label} — ${grant.tier} in ${grant.cup}`, "gold");
     this.telemetry.track("cup_prize", { tier: grant.tier, kind: p.kind, id: p.id });
     this.checkPrizeSkins();
     this.bump();
@@ -6476,7 +6482,7 @@ export class Game {
       const payout = Math.min(SHOP_AD_COINS, 60);
       this.save.addCoins(payout);
       this.audio.chapterFanfare();
-      this.hud.toast(`🍪 Here's a little flying fuel — +● ${payout} coins`, "gold");
+      this.hud.toast(`${iconGlyph("coin")} Here's a little flying fuel — +● ${payout} coins`, "gold");
       this.bump();
     } else {
       this.hud.toast("No reward this time — try again next hour", "info");
@@ -7102,7 +7108,7 @@ export class Game {
         label: TRAILS[id]?.label ?? id,
         equipped: st.activeTrail === id,
       })),
-      lastPrize: this.lastPrize ? `${this.lastPrize.prize.icon} ${this.lastPrize.prize.label}` : "",
+        lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
       standings:
         this.massRace.active && this.state === "playing"
           ? this.massRace.standings(this.bird.x, this.startX, this.pilotName, 6).rows

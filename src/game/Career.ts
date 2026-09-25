@@ -19,12 +19,12 @@ export type WingsTier = {
 };
 
 export const WINGS: WingsTier[] = [
-  { id: "paper", name: "Paper Wings", icon: "🪁", min: 0 },
-  { id: "bronze", name: "Bronze Wings", icon: "🥉", min: 25_000 },
-  { id: "silver", name: "Silver Wings", icon: "🥈", min: 100_000 },
-  { id: "gold", name: "Gold Wings", icon: "🥇", min: 400_000 },
-  { id: "platinum", name: "Platinum Wings", icon: "💠", min: 1_000_000 },
-  { id: "aurora", name: "Aurora Wings", icon: "🌈", min: 2_500_000 },
+  { id: "paper",    name: "Paper Wings",    icon: "paper_wing", min: 0 },
+  { id: "bronze",   name: "Bronze Wings",   icon: "wing",       min: 25_000 },
+  { id: "silver",   name: "Silver Wings",   icon: "eagle",      min: 100_000 },
+  { id: "gold",     name: "Gold Wings",     icon: "star",       min: 400_000 },
+  { id: "platinum", name: "Platinum Wings", icon: "gem",        min: 1_000_000 },
+  { id: "aurora",   name: "Aurora Wings",   icon: "aurora",     min: 2_500_000 },
 ];
 
 /**

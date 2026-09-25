@@ -9,6 +9,7 @@
  */
 
 import { t } from "../i18n";
+import { iconGlyph } from "./MenuIcons";
 
 export type CoachState = {
   /** Big instruction line, empty when the coach is idle/done. */
@@ -75,7 +76,7 @@ export class FirstFlight {
     const text = [
       `⬇ ${t("onboarding.holdToDive", undefined, "HOLD to dive down the hill")}`,
       `⬆ ${t("onboarding.releaseToLaunch", undefined, "RELEASE at the top to launch")}`,
-      `🕊 ${t("onboarding.soarInAir", undefined, "RELEASE & SOAR — stay airborne!")}`,
+      `${iconGlyph("bird")} ${t("onboarding.soarInAir", undefined, "RELEASE & SOAR — stay airborne!")}`,
     ][this.step]!;
     return { text, step: this.step, steps: STEPS, justCompleted: false };
   }

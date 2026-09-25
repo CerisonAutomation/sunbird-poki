@@ -6,10 +6,10 @@ export const PHYS_DT = 1 / PHYS_HZ;
  *   hold  -> heavier gravity + strong ground suction (carve the valley)
  *   release -> light gravity + lift from speed (ride the arc)
  */
-export const GRAVITY_GLIDE = 18;
+export const GRAVITY_GLIDE = 16;
 export const GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
-export const GROUND_G_GLIDE = 30;
+export const GROUND_G_GLIDE = 22;
 export const GROUND_G_DIVE = 88;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
@@ -18,7 +18,7 @@ export const AIR_DRAG_DIVE = 0.00016;
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;
 /** Speed-borne lift while gliding: cancels up to this fraction of gravity. */
-export const GLIDE_LIFT_MAX = 0.55;
+export const GLIDE_LIFT_MAX = 0.45;
 export const GLIDE_LIFT_SPEED = 62;
 /** Downforce that keeps a diving bird glued through convex crests. */
 export const STICK_ACCEL_DIVE = 190;
@@ -79,8 +79,8 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 260;
-export const ALT_CEILING_FADE = 50;
+export const ALT_CEILING = 190;
+export const ALT_CEILING_FADE = 40;
 /**
  * Upward speed the Zenith mode's ascent thermal may reach, in m/s.
  *

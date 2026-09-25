@@ -55,7 +55,7 @@ export function buildGauntletCard(week: string, doneStages: number[], lifetimeCl
     // this code: the old rule counted the *array*, so a duplicated or stale
     // stage index (a save written against a different week's gauntlet) reported
     // a clear that did not happen — and the HUD renders this flag as
-    // "🏆 Gauntlet cleared this week · +N paid". Every stage of *this* gauntlet
+    // "Gauntlet cleared this week · +N paid". Every stage of *this* gauntlet
     // done is the claim the text makes, so that is what is computed. Stage
     // indices are 0-based (`weeklyGauntlet` maps with `index: i`).
     cleared: stages.every((st) => st.done),

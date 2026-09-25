@@ -1,6 +1,6 @@
 import type { NetTransport, RemoteSnapshot } from "./MassRace";
 import { truncate } from "./math";
-import { gradeStateCadence, type LinkQuality } from "./RacePolish";
+import { gradeStateCadence, type LinkQuality } from "./Racer";
 import { PROTOCOL_VERSION } from "./protocol/v1";
 import { normalizeRooms, roomListUrl, type LiveRoom } from "./RoomBrowser";
 import { POKI_MULTIPLAYER } from "./edition";

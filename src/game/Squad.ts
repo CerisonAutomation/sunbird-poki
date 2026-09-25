@@ -27,9 +27,9 @@ export type SquadQuest = {
 };
 
 export const SQUAD_QUESTS: SquadQuest[] = [
-  { id: "migration", title: "🦅 Flock Migration", desc: "Glide 4,000 m across championship circuits", target: 4000, rewardCoins: 150 },
-  { id: "drafting", title: "🌪 Slipstream Drafting", desc: "Hold slipstream behind wingmates for 25s", target: 25, rewardCoins: 120 },
-  { id: "precision", title: "✦ Perfect Formations", desc: "Chain 8 perfect kinetic carve launches", target: 8, rewardCoins: 100 },
+  { id: "migration", title: "Flock Migration", desc: "Glide 4,000 m across championship circuits", target: 4000, rewardCoins: 150 },
+  { id: "drafting", title: "Slipstream Drafting", desc: "Hold slipstream behind wingmates for 25s", target: 25, rewardCoins: 120 },
+  { id: "precision", title: "Perfect Formations", desc: "Chain 8 perfect kinetic carve launches", target: 8, rewardCoins: 100 },
 ];
 
 /** One row of the wingman list — real data from the social service. */
@@ -595,9 +595,9 @@ export class SquadClient {
           friend: { name: string; code: string };
         }>("/friends/add", { method: "POST", body: JSON.stringify({ deviceId: this.deviceId, code: clean }) });
         await this.load();
-        if (r.status === "friends") return `🪽 ${r.friend.name} is already a wingman.`;
-        if (r.status === "accepted") return `🪽 ${r.friend.name} had asked you first — added!`;
-        return `📨 Request sent to ${r.friend.name}. They will see it under Wingmen → Requests.`;
+        if (r.status === "friends") return `✓ ${r.friend.name} is already a wingman.`;
+        if (r.status === "accepted") return `✓ ${r.friend.name} had asked you first — added!`;
+        return `→ Request sent to ${r.friend.name}. They will see it under Wingmen → Requests.`;
       } catch (err) {
         if ((err as { status?: number })?.status === 404) {
           this.state.error = `No pilot has the code ${clean}.`;
@@ -661,7 +661,7 @@ export class SquadClient {
     this.state.friends = [...this.state.friends, { name: clean, code: "", club_id: null, local: true } as Wingman];
     this.persistLocalFriends();
     this.onChange();
-    return `🪽 ${clean} saved to your wingmen (met in a race).`;
+    return `✓ ${clean} saved to your wingmen (met in a race).`;
   }
 
   async removeFriend(ref: string): Promise<void> {

@@ -1615,6 +1615,52 @@
         "uz": "kunduzgi yorug‘lik"
       }
     },
+    "hud.stat.score": {
+      "sourceText": "Score",
+      "meta": {
+        "file": "src/game/HUD.ts",
+        "context": "Play HUD score stat header"
+      },
+      "placeholders": [],
+      "translations": {
+        "en": "Score",
+        "es": "Puntos",
+        "de": "Punkte",
+        "fr": "Score",
+        "it": "Punteggio",
+        "pt": "Pontos",
+        "ar": "النقاط",
+        "zh": "得分",
+        "ja": "スコア",
+        "mt": "Punteġġ",
+        "tr": "Skor",
+        "ru": "Очки",
+        "ko": "점수",
+        "nl": "Score",
+        "pl": "Wynik",
+        "hi": "स्कोर",
+        "id": "Skor",
+        "vi": "Điểm",
+        "th": "คะแนน",
+        "sv": "Poäng",
+        "bg": "Точки",
+        "bn": "স্কোর",
+        "cs": "Skóre",
+        "da": "Point",
+        "el": "Σκορ",
+        "fi": "Pisteet",
+        "he": "ניקוד",
+        "hu": "Pontszám",
+        "ms": "Skor",
+        "no": "Poeng",
+        "ro": "Scor",
+        "sk": "Skóre",
+        "sr": "Poeni",
+        "tl": "Puntos",
+        "uk": "Очки",
+        "uz": "Ochko"
+      }
+    },
     "hud.progress.title": {
       "sourceText": "Your progress",
       "meta": {
@@ -7176,6 +7222,52 @@
         "tl": "Trophy Case",
         "uk": "Вітрина трофеїв",
         "uz": "Kuboklar javoni"
+      }
+    },
+    "onboarding.flyNow": {
+      "sourceText": "Fly now",
+      "meta": {
+        "file": "src/game/HUD.ts",
+        "context": "Home launch button call to action"
+      },
+      "placeholders": [],
+      "translations": {
+        "en": "Fly now",
+        "es": "Vuela ahora",
+        "de": "Jetzt fliegen",
+        "fr": "Voler",
+        "it": "Vola ora",
+        "pt": "Voar agora",
+        "ar": "طِر الآن",
+        "zh": "立即飞行",
+        "ja": "今すぐ飛ぶ",
+        "mt": "Tir issa",
+        "tr": "Şimdi uç",
+        "ru": "Лети",
+        "ko": "지금 날기",
+        "nl": "Vlieg nu",
+        "pl": "Leć teraz",
+        "hi": "अभी उड़ो",
+        "id": "Terbang sekarang",
+        "vi": "Bay ngay",
+        "th": "บินเลย",
+        "sv": "Flyg nu",
+        "bg": "Лети сега",
+        "bn": "এখন ওড়ো",
+        "cs": "Leť teď",
+        "da": "Flyv nu",
+        "el": "Πέτα τώρα",
+        "fi": "Lennä nyt",
+        "he": "עוף עכשיו",
+        "hu": "Repülj most",
+        "ms": "Terbang sekarang",
+        "no": "Fly nå",
+        "ro": "Zboară acum",
+        "sk": "Leť teraz",
+        "sr": "Leti sada",
+        "tl": "Lumipad na",
+        "uk": "Лети зараз",
+        "uz": "Hozir uch"
       }
     },
     "onboarding.gotIt": {

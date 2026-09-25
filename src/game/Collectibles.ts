@@ -34,18 +34,18 @@ type Ring = { x: number; y: number; r: number; taken: boolean; slot: number };
 type Balloon = { x: number; y: number; taken: boolean; root: THREE.Group; phase: number; drift: number };
 
 export const PICKUP_STYLE: Record<PickupKind, { color: number; emissive: number; icon: string; label: string }> = {
-  sun: { color: 0xffd24a, emissive: 0xff8a00, icon: "☀", label: "Sunlight" },
-  rocket: { color: 0xff5a3a, emissive: 0x8a1400, icon: "🚀", label: "Speed Boost" },
-  magnet: { color: 0x8a6cff, emissive: 0x2a10a0, icon: "🧲", label: "Magnet" },
-  shield: { color: 0x5ad8ff, emissive: 0x0a5a8a, icon: "🛡", label: "Sea Shield" },
-  longglide: { color: 0x7fe8c8, emissive: 0x0a6a58, icon: "🪁", label: "Long Glide" },
-  wingboost: { color: 0xffa8e0, emissive: 0x8a1060, icon: "🕊", label: "Wing Boost" },
-  feather: { color: 0xfff0c0, emissive: 0x6a5a10, icon: "🐦", label: "Feather" },
-  goldenwings: { color: 0xffd76a, emissive: 0xa06000, icon: "✨", label: "Golden Wings" },
-  cloudboost: { color: 0xc8e8ff, emissive: 0x2a5a8a, icon: "☁", label: "Cloud Boost" },
+  sun:         { color: 0xffd24a, emissive: 0xff8a00, icon: "sun",     label: "Sunlight" },
+  rocket:      { color: 0xff5a3a, emissive: 0x8a1400, icon: "rocket",  label: "Speed Boost" },
+  magnet:      { color: 0x8a6cff, emissive: 0x2a10a0, icon: "magnet",  label: "Magnet" },
+  shield:      { color: 0x5ad8ff, emissive: 0x0a5a8a, icon: "shield",  label: "Sea Shield" },
+  longglide:   { color: 0x7fe8c8, emissive: 0x0a6a58, icon: "glide",   label: "Long Glide" },
+  wingboost:   { color: 0xffa8e0, emissive: 0x8a1060, icon: "wing",    label: "Wing Boost" },
+  feather:     { color: 0xfff0c0, emissive: 0x6a5a10, icon: "feather", label: "Feather" },
+  goldenwings: { color: 0xffd76a, emissive: 0xa06000, icon: "star",    label: "Golden Wings" },
+  cloudboost:  { color: 0xc8e8ff, emissive: 0x2a5a8a, icon: "cloud",   label: "Cloud Boost" },
   // Warm core, cool cast: reads as starlight against the stratosphere's dark
   // blue rather than as another gold coin.
-  star: { color: 0xfff8e6, emissive: 0x5a78ff, icon: "⭐", label: "Star Wish" },
+  star:        { color: 0xfff8e6, emissive: 0x5a78ff, icon: "crystal", label: "Star Wish" },
 };
 
 const SPAWN_CELL = 26;

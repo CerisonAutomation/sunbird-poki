@@ -1,4 +1,5 @@
 import { SeededRandom } from "./math";
+import { iconGlyph } from "./MenuIcons";
 import type { ModeId } from "./Modes";
 import type { RunStats, StatKey } from "./Missions";
 
@@ -22,10 +23,10 @@ export type Modifier = {
 };
 
 export const MODIFIERS: Modifier[] = [
-  { id: "pure_sky", label: "Pure Sky", desc: "Power-ups are inert. Skill only.", icon: "🕊" },
-  { id: "short_day", label: "Short Day", desc: "Only 65% of the usual daylight.", icon: "🌗" },
-  { id: "heavy_wings", label: "Heavy Wings", desc: "Top speed cut by 5%.", icon: "⛰️" },
-  { id: "gold_rush", label: "Gold Rush", desc: "Every coin counts double.", icon: "💰" },
+  { id: "pure_sky",    label: "Pure Sky",    desc: "Power-ups are inert. Skill only.", icon: "bird"     },
+  { id: "short_day",  label: "Short Day",   desc: "Only 65% of the usual daylight.", icon: "half_day"  },
+  { id: "heavy_wings",label: "Heavy Wings", desc: "Top speed cut by 5%.",            icon: "weight"    },
+  { id: "gold_rush",  label: "Gold Rush",   desc: "Every coin counts double.",        icon: "coin"      },
 ];
 
 export type ChallengeMods = {
@@ -166,6 +167,6 @@ export function calendarReward(day: number): CalendarReward {
 export function calendarRewardLabel(day: number): string {
   const r = calendarReward(day);
   if (r.kind === "coins") return `● ${r.amount}`;
-  if (r.kind === "boost") return r.id === "headstart" ? "🚀 boost" : "☀ boost";
-  return "✨ trail";
+  if (r.kind === "boost") return r.id === "headstart" ? `${iconGlyph("rocket")} boost` : `${iconGlyph("sun")} boost`;
+  return `${iconGlyph("star")} trail`;
 }

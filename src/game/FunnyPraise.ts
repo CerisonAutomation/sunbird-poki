@@ -87,7 +87,7 @@ export function getPraise(kind: PraiseKind, seed: number): PraiseMessage {
   const key = pickRandom(pool, seed);
   const text = t(key, undefined, key);
   const tone = kind === "perfect" || kind === "record" ? "zenith" : kind === "fever" || kind === "beating" ? "gold" : kind === "slow" ? "warn" : "power";
-  const icon = text.split(" ")[0] ?? "✨";
+  const icon = text.split(" ")[0] ?? "★";
   return { kind, text, icon, tone: tone as "gold" | "power" | "info" | "warn" | "zenith" };
 }
 

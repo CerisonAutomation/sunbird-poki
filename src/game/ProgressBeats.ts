@@ -264,7 +264,7 @@ export function beatCopy(beat: Beat): BeatCopy {
       return {
         key: "hud.toast.newRecord",
         params: undefined,
-        fallback: "👑 NEW DISTANCE RECORD — keep flying!",
+        fallback: "♛ NEW DISTANCE RECORD — keep flying!",
       };
     case "mastery":
       return e.maxed
@@ -288,37 +288,38 @@ export function beatCopy(beat: Beat): BeatCopy {
       return { key: "hud.progress.cosmetic", params: { label: e.label }, fallback: "Unlocked · {{label}}" };
     case "challenge":
       return e.variant === "gauntlet"
-        ? { key: "hud.toast.gauntletCleared", params: { n: e.coins }, fallback: "🏆 GAUNTLET CLEARED · +{{n}} coins" }
+        ? { key: "hud.toast.gauntletCleared", params: { n: e.coins }, fallback: "◎ GAUNTLET CLEARED · +{{n}} coins" }
         : { key: "hud.progress.challenge", params: { label: e.label, c: e.coins }, fallback: "{{label}} · +{{c}} coins" };
     default:
       return { key: "hud.progress.challenge", params: undefined, fallback: "" };
   }
 }
 
-/** The chip glyph for a beat. Rarity is carried by colour, never by the icon. */
+/** The icon *name* for a beat (see MenuIcons). Rarity is carried by colour,
+ *  never by the icon. Callers render it with menuIconSm (HTML) or iconGlyph. */
 export function beatIcon(beat: Beat): string {
   const e = beat.event;
   switch (e.kind) {
     case "wings":
-      return e.icon || "🪶";
+      return e.icon || "feather";
     case "trophy":
-      return "🏅";
+      return "trophy";
     case "record":
-      return "👑";
+      return "crown";
     case "mastery":
-      return e.icon || "🎖";
+      return e.icon || "badge";
     case "pass":
-      return "🎫";
+      return "badge";
     case "nest":
-      return "🪺";
+      return "egg";
     case "quest":
-      return "📜";
+      return "star";
     case "cosmetic":
-      return e.icon || "✨";
+      return e.icon || "star";
     case "challenge":
-      return e.icon || "🏁";
+      return e.icon || "flag";
     default:
-      return "✨";
+      return "star";
   }
 }
 

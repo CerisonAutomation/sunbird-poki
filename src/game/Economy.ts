@@ -29,14 +29,14 @@ export type SkinDef = {
 
 /** Display metadata for skin collections, in shop order. */
 export const COLLECTIONS: { id: CollectionId; name: string; icon: string }[] = [
-  { id: "starter", name: "Starter", icon: "🐣" },
-  { id: "nature", name: "Nature", icon: "🌿" },
-  { id: "elements", name: "Elements", icon: "🌪" },
-  { id: "cosmic", name: "Cosmic", icon: "🌌" },
-  { id: "seasonal", name: "Seasonal", icon: "🍂" },
-  { id: "premium", name: "Premium", icon: "✦" },
-  { id: "tournament", name: "Tournament", icon: "🏆" },
-  { id: "achievement", name: "Achievement", icon: "🎖" },
+  { id: "starter", name: "Starter", icon: "egg" },
+  { id: "nature", name: "Nature", icon: "leaf" },
+  { id: "elements", name: "Elements", icon: "spiral" },
+  { id: "cosmic", name: "Cosmic", icon: "star" },
+  { id: "seasonal", name: "Seasonal", icon: "half_day" },
+  { id: "premium", name: "Premium", icon: "gem" },
+  { id: "tournament", name: "Tournament", icon: "trophy" },
+  { id: "achievement", name: "Achievement", icon: "badge" },
 ];
 
 const BASE_SKINS: SkinDef[] = [
@@ -569,13 +569,13 @@ export type BoostDef = {
 };
 
 const BASE_BOOSTS: BoostDef[] = [
-  { id: "shield", name: "Sea Shield", desc: "Bounce off the ocean once", price: 60, icon: "🛡" },
-  { id: "magnet", name: "Coin Magnet", desc: "Take off with 15 s of magnet", price: 40, icon: "🧲" },
-  { id: "sunflask", name: "Sun Flask", desc: "+12 s daylight at takeoff", price: 50, icon: "☀" },
-  { id: "headstart", name: "Head Start", desc: "Launch from 300 m at full speed", price: 90, icon: "🚀" },
-  { id: "stormward", name: "Storm Ward", desc: "Ash clouds and gusts barely touch you", price: 70, icon: "🌩" },
-  { id: "hotwings", name: "Hot Wings", desc: "Take off already in Fever", price: 80, icon: "🔥" },
-  { id: "doubletap", name: "Sunburst Trigger", desc: "Double-tap in flight for a powerful burst", price: 420, icon: "⚡", permanent: true },
+  { id: "shield", name: "Sea Shield", desc: "Bounce off the ocean once", price: 60, icon: "shield" },
+  { id: "magnet", name: "Coin Magnet", desc: "Take off with 15 s of magnet", price: 40, icon: "magnet" },
+  { id: "sunflask", name: "Sun Flask", desc: "+12 s daylight at takeoff", price: 50, icon: "sun" },
+  { id: "headstart", name: "Head Start", desc: "Launch from 300 m at full speed", price: 90, icon: "rocket" },
+  { id: "stormward", name: "Storm Ward", desc: "Ash clouds and gusts barely touch you", price: 70, icon: "cloud" },
+  { id: "hotwings", name: "Hot Wings", desc: "Take off already in Fever", price: 80, icon: "fire" },
+  { id: "doubletap", name: "Sunburst Trigger", desc: "Double-tap in flight for a powerful burst", price: 420, icon: "lightning", permanent: true },
 ];
 
 /** Permanent coin multipliers, applied centrally by SaveData.addCoins. */
@@ -751,12 +751,12 @@ export type WheelSector = {
 };
 
 export const WHEEL_SECTORS: WheelSector[] = [
-  { id: "c100", label: "100 Coins", icon: "●", kind: "coins", value: 100, color: "#ff8c00" },
-  { id: "c250", label: "250 Coins", icon: "●", kind: "coins", value: 250, color: "#e0392a" },
-  { id: "magnet", label: "Coin Magnet", icon: "🧲", kind: "boost", value: "magnet", color: "#3d8bf2" },
-  { id: "c500", label: "500 Coins", icon: "●", kind: "coins", value: 500, color: "#2f855a" },
-  { id: "headstart", label: "Head Start", icon: "🚀", kind: "boost", value: "headstart", color: "#6b46c1" },
-  { id: "c1000", label: "1,000 JACKPOT!", icon: "💎", kind: "coins", value: 1000, color: "#d69e2e" },
-  { id: "vault", label: "Vault Key", icon: "🥚", kind: "vault", value: 1, color: "#d63384" },
-  { id: "c150", label: "150 Coins", icon: "●", kind: "coins", value: 150, color: "#00a3c4" },
+  { id: "c100", label: "100 Coins", icon: "coin", kind: "coins", value: 100, color: "#ff8c00" },
+  { id: "c250", label: "250 Coins", icon: "coin", kind: "coins", value: 250, color: "#e0392a" },
+  { id: "magnet", label: "Coin Magnet", icon: "magnet", kind: "boost", value: "magnet", color: "#3d8bf2" },
+  { id: "c500", label: "500 Coins", icon: "coin", kind: "coins", value: 500, color: "#2f855a" },
+  { id: "headstart", label: "Head Start", icon: "rocket", kind: "boost", value: "headstart", color: "#6b46c1" },
+  { id: "c1000", label: "1,000 JACKPOT!", icon: "gem", kind: "coins", value: 1000, color: "#d69e2e" },
+  { id: "vault", label: "Vault Key", icon: "castle", kind: "vault", value: 1, color: "#d63384" },
+  { id: "c150", label: "150 Coins", icon: "coin", kind: "coins", value: 150, color: "#00a3c4" },
 ];

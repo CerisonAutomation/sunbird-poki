@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { browseSkins, newShopBrowse, nextBird } from "../ShopBrowse";
-import { equalizedRace } from "../RaceRules";
+import { equalizedRace } from "../Racer";
 import { flightTakeaway, terrainCue } from "../FlightGuidance";
 import { SKINS, type SkinView } from "../Economy";
 import { DROP_START, RAMP_START, GAP_START } from "../constants";

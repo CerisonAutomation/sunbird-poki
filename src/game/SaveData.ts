@@ -503,16 +503,11 @@ export class SaveData {
         tutorialRuns: num(p.tutorialRuns),
         firstFlightDone: Boolean(p.firstFlightDone),
         onboardingSeen: strArr(p.onboardingSeen),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenShop: Boolean((p as any).seenShop),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenPvp: Boolean((p as any).seenPvp),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenPve: Boolean((p as any).seenPve),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenLeaderboards: Boolean((p as any).seenLeaderboards),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenChallenges: Boolean((p as any).seenChallenges),
+        seenShop: Boolean(p.seenShop),
+        seenPvp: Boolean(p.seenPvp),
+        seenPve: Boolean(p.seenPve),
+        seenLeaderboards: Boolean(p.seenLeaderboards),
+        seenChallenges: Boolean(p.seenChallenges),
         skill: p.skill === undefined ? 0.25 : num(p.skill),
         skillSamples: num(p.skillSamples),
         bestAltitude: num(p.bestAltitude),

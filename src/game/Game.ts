@@ -51,7 +51,7 @@ import { FirstFlight } from "./FirstFlight";
 import { bootStage, defer } from "./BootProgress";
 import { continueOffer, continuePlacementLabel, type ContinueOffer } from "./ContinueOffer";
 import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
-import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, type DeviceProfile } from "../sdk/device-report";
+import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews, CAMPAIGN } from "./Campaign";
 import { GameFeel } from "./GameFeel";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
@@ -805,7 +805,7 @@ export class Game {
       if (this.state === "menu" || this.state === "playing") this.hud.toast(`♪ ${name}`, "info");
     });
 
-    this.terrain = new TerrainSystem(this.seed);
+    this.terrain = new TerrainSystem(this.seed, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.terrain.group);
     bootStage("world");
 
@@ -826,7 +826,7 @@ export class Game {
     this.scene.add(this.sky.group);
     this.sky.addLights(this.scene);
 
-    this.collect = new Collectibles(this.terrain.seedN);
+    this.collect = new Collectibles(this.terrain.seedN, undefined, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.collect.group);
     this.weather = new Weather(this.terrain.seedN);
     this.weather.addTo(this.scene);
@@ -5757,9 +5757,9 @@ export class Game {
     this.collect.dispose();
     this.scene.remove(this.weather.group);
     this.weather.dispose();
-    this.terrain = new TerrainSystem(seed);
+    this.terrain = new TerrainSystem(seed, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.terrain.group);
-    this.collect = new Collectibles(this.terrain.seedN);
+    this.collect = new Collectibles(this.terrain.seedN, undefined, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.collect.group);
     this.weather = new Weather(this.terrain.seedN);
     this.weather.addTo(this.scene);

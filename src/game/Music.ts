@@ -692,15 +692,15 @@ export const BIOME_MIX: Record<BiomeMusicStyle, BiomeMix> = {
   // Dreamy, open, magical — slower base tempos let the ocarina breathe.
   // Fever still surges hard; the contrast is what makes it feel like a
   // transformation instead of just a tempo bump.
-  bright:  { bpm: 130, fever: 158, cutoff: 5500, transpose: 0,  uke: 0.88, glock: 0.60, bass: 0.92, perc: 0.96, whistle: 1.00, arp: 0.60, organ: 1.00, pad: 1.00, spark: 1.00 },
-  warm:    { bpm: 124, fever: 150, cutoff: 4500, transpose: -2, uke: 1.04, glock: 0.52, bass: 1.00, perc: 0.92, whistle: 0.90, arp: 0.52, organ: 1.00, pad: 1.00, spark: 1.00 },
-  airy:    { bpm: 132, fever: 160, cutoff: 6000, transpose: 2,   uke: 0.72, glock: 0.62, bass: 0.80, perc: 1.06, whistle: 1.08, arp: 0.62, organ: 1.00, pad: 1.00, spark: 1.00 },
-  wide:    { bpm: 126, fever: 154, cutoff: 5000, transpose: -3,  uke: 0.78, glock: 0.54, bass: 1.10, perc: 0.94, whistle: 1.06, arp: 0.54, organ: 1.00, pad: 1.00, spark: 1.00 },
-  night:   { bpm: 118, fever: 144, cutoff: 4000, transpose: -3,  uke: 0.56, glock: 0.44, bass: 0.74, perc: 0.80, whistle: 0.88, arp: 0.44, organ: 1.00, pad: 1.00, spark: 1.00 },
-  crystal: { bpm: 130, fever: 158, cutoff: 6000, transpose: 3,   uke: 0.66, glock: 0.58, bass: 0.84, perc: 0.98, whistle: 1.18, arp: 0.58, organ: 1.00, pad: 1.00, spark: 1.00 },
-  reef:    { bpm: 132, fever: 160, cutoff: 6500, transpose: 3,   uke: 0.70, glock: 0.58, bass: 0.78, perc: 0.88, whistle: 1.10, arp: 0.58, organ: 1.00, pad: 1.00, spark: 1.00 },
-  ember:   { bpm: 122, fever: 148, cutoff: 4000, transpose: -4,  uke: 0.62, glock: 0.62, bass: 1.20, perc: 1.08, whistle: 0.88, arp: 0.62, organ: 1.00, pad: 1.00, spark: 1.00 },
-  canyon:  { bpm: 128, fever: 156, cutoff: 5000, transpose: -2,  uke: 0.70, glock: 0.64, bass: 1.10, perc: 0.96, whistle: 1.08, arp: 0.64, organ: 1.00, pad: 1.00, spark: 1.00 },
+  bright:  { bpm: 130, fever: 158, cutoff: 5500, transpose: 0,  uke: 0.88, glock: 0.60, bass: 0.92, perc: 0.96, whistle: 1.00, arp: 1.00, organ: 0.85, pad: 0.70, spark: 1.00 },
+  warm:    { bpm: 124, fever: 150, cutoff: 4500, transpose: -2,  uke: 1.04, glock: 0.52, bass: 1.00, perc: 0.92, whistle: 0.90, arp: 0.70, organ: 1.30, pad: 1.15, spark: 0.80 },
+  airy:    { bpm: 132, fever: 160, cutoff: 6000, transpose: 2,   uke: 0.72, glock: 0.62, bass: 0.80, perc: 1.06, whistle: 1.08, arp: 1.35, organ: 0.60, pad: 1.25, spark: 1.10 },
+  wide:    { bpm: 126, fever: 154, cutoff: 5000, transpose: -3,  uke: 0.78, glock: 0.54, bass: 1.10, perc: 0.94, whistle: 1.06, arp: 0.55, organ: 1.00, pad: 1.45, spark: 0.75 },
+  night:   { bpm: 118, fever: 144, cutoff: 4000, transpose: -3,  uke: 0.56, glock: 0.44, bass: 0.74, perc: 0.80, whistle: 0.88, arp: 0.45, organ: 0.70, pad: 1.05, spark: 0.55 },
+  crystal: { bpm: 130, fever: 158, cutoff: 6000, transpose: 3,   uke: 0.66, glock: 0.58, bass: 0.84, perc: 0.98, whistle: 1.18, arp: 1.20, organ: 0.65, pad: 0.90, spark: 1.45 },
+  reef:    { bpm: 132, fever: 160, cutoff: 6500, transpose: 3,   uke: 0.70, glock: 0.58, bass: 0.78, perc: 0.88, whistle: 1.10, arp: 1.30, organ: 0.90, pad: 0.85, spark: 1.25 },
+  ember:   { bpm: 122, fever: 148, cutoff: 4000, transpose: -4,  uke: 0.62, glock: 0.62, bass: 1.20, perc: 1.08, whistle: 0.88, arp: 0.60, organ: 1.40, pad: 0.60, spark: 0.70 },
+  canyon:  { bpm: 128, fever: 156, cutoff: 5000, transpose: -2,  uke: 0.70, glock: 0.64, bass: 1.10, perc: 0.96, whistle: 1.08, arp: 0.95, organ: 1.15, pad: 1.30, spark: 1.00 },
 };
 
 /** Keep every biome/night combination inside WebAudio's usable filter range. */

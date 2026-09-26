@@ -5,7 +5,7 @@
  * verify-portal.mjs is the shippability GATE (fast, per-zip). This script is
  * the forensic inspection: zip anatomy, cross-zip separation, banned-string
  * sweep, full external-URL inventory, lifecycle-signal presence, and the
- * sandbox-storage fix. Run it after `pnpm build:portals`:
+ * sandbox-storage fix. Run it after `pnpm build:poki`:
  *
  *   node scripts/audit-zips.mjs
  *
@@ -17,7 +17,7 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { foreignMarkersIn, missingMarkersIn } from "./portal-markers.mjs";
+import { foreignMarkersIn, missingMarkersIn, PAYMENT_PROVIDER_MARKERS } from "./portal-markers.mjs";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
 const PORTALS = ["poki"];
@@ -45,7 +45,7 @@ const zips = {};
 for (const portal of PORTALS) {
   const zipPath = join(root, `sunbird-${portal}.zip`);
   if (!existsSync(zipPath)) {
-    fail(portal, "zip missing — run `pnpm build:portals` first.");
+    fail(portal, "zip missing — run `pnpm build:poki` first.");
     continue;
   }
   const html = unzip(portal, "html");
@@ -56,9 +56,23 @@ for (const portal of PORTALS) {
 
 if (PORTALS.every((p) => zips[p])) {
   /* ------------------------------------------------- cross-zip separation */
+  // "No two portals ship the same bundle" is a property of a SET of bundles, so
+  // with PORTALS = ["poki"] it is vacuous: new Set([h]).size === 1 === PORTALS.length
+  // is an identity, and the failure message was unreachable. Printing "distinct"
+  // there flattered the result, so the single-portal case now reports N/A and the
+  // logic stays armed for the day a second portal is built in this fork.
+  //
+  // What enforces per-portal separation TODAY is the marker sweep below: each
+  // bundle must carry its OWN SDK and none of any other portal's, so two identical
+  // bundles cannot both pass it. This check is the belt to those braces.
   const hashes = PORTALS.map((p) => zips[p].hash);
   if (new Set(hashes).size !== PORTALS.length) {
     fail("-", "portal zips are NOT distinct — at least two bundles are identical (portals got cross-wired).");
+  } else if (PORTALS.length < 2) {
+    note(
+      `cross-zip separation: N/A — this fork builds ${PORTALS.length} portal (${PORTALS.join(", ")}), ` +
+        "so there is no pair to compare. Enforced instead by the per-portal marker sweep below.",
+    );
   } else {
     note(`distinct bundles: ${PORTALS.map((p) => `${p}=${zips[p].hash}`).join("  ")}`);
   }
@@ -120,12 +134,13 @@ for (const portal of PORTALS) {
   // and method-name strings (sendBeacon) are NOT violations and are reported
   // as notes below instead of failures.
   const banned = [
-    [/stripe/i, "payment-provider marker 'stripe' (scrubbed by package-portal.mjs)"],
+    // Staged-artifact hygiene only. The real coin-only gate is the pre-scrub check
+    // in package-portal.mjs, which fails the build; by the time a zip exists the
+    // name has been scrubbed, so this can only catch a packaging regression.
+    ...PAYMENT_PROVIDER_MARKERS.map(([re, why]) => [re, `payment-processor marker ${why}`]),
     [/cerison\.itch\.io|itch\.io/i, "external itch.io store reference (must be stripped from portal bundles)"],
     [/sunbird\.receipts/, "direct-build coin receipt storage (must not ship in portal editions)"],
     [/upstash/i, "Upstash backend marker"],
-    [/pk_(live|test)_/, "Stripe publishable key"],
-    [/api\.stripe\.com|hooks\.stripe\.com|js\.stripe\.com/, "Stripe endpoint"],
     [/<link[^>]+rel=["']manifest/i, "PWA manifest reference"],
     [/navigator\.serviceWorker/, "service worker API usage (portals forbid workers in their iframes)"],
     [/\bsw\.js\b/, "service worker script reference (the portal zip ships no sw.js)"],
@@ -140,7 +155,17 @@ for (const portal of PORTALS) {
     // Loopback/private addresses are allowed: they appear inside the vendored
     // WebRTC candidate filtering (loopback candidates are dropped on purpose).
     // A public IP literal in the bundle would still be a finding.
-    [/\b(?!127\.|10\.|192\.168\.|0\.0\.0\.0)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "public IP address literal"],
+    // A dotted quad is only a finding in a HOST position. Matched bare, this
+    // pattern fired on SVG path geometry: the bundle contains
+    // `d="M5 5l2.5.5-.5-2.5…"` and the loose form read `2.5.5.5` out of it as a
+    // public IP. audit:zips had never been run against a real artifact, so the
+    // false positive had never been observed — the gate was not merely lying by
+    // omission, it would have cried wolf on the first honest run. Each shape
+    // below is a real way an endpoint gets hardcoded, and none of them can be
+    // produced by path data.
+    [/\b(?:https?|wss?):\/\/(?!(?:127|10)\.)(?!(?:192\.168)\.)(?:\d{1,3}\.){3}\d{1,3}\b/, "public IP address literal in a URL"],
+    [/(?:^|[\s"'=(,;])(?!(?:127|10)\.)(?!192\.168\.)(?:\d{1,3}\.){3}\d{1,3}:\d{1,5}\b/, "public IP address literal with a port"],
+    [/\b(?:host|hostname|server|origin|endpoint|addr)\s*[:=]\s*["']?(?!(?:127|10)\.)(?:\d{1,3}\.){3}\d{1,3}\b/i, "public IP address literal assigned to a host variable"],
     [/sourceMappingURL/, "source map reference (build ships sourcemap:false)"],
     [/window\.open\(/, "window.open (popups are banned on portals)"],
     [/document\.write\(/, "document.write"],

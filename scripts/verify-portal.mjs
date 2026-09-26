@@ -6,7 +6,9 @@
  * Checks the shipped zip (sunbird-poki.zip):
  *   1. Zip exists and fits the size bar (Poki's 8 MB initial-load target).
  *   2. Staged index.html carries no manifest link (portals are not installable).
- *   3. No js.stripe.com request URL (external payments are banned on portals).
+ *   3. No payment-processor marker in the staged bundle. NOTE: the real
+ *      coin-only gate is the PRE-scrub check in package-portal.mjs, which fails
+ *      the build; this is the post-scrub hygiene tripwire on the artifact.
  *   4. No absolute href="/…"/src="/…" (portals serve from deep CDN subpaths).
  *   5. Correct SDK profile: the Poki bundle ships its portal integration.
  *      The ONLY static remote reference any zip may carry is the target
@@ -21,13 +23,16 @@
  *      must not survive into any portal zip.
  */
 import { execFileSync } from "node:child_process";
-import { foreignMarkersIn, missingMarkersIn } from "./portal-markers.mjs";
+import { foreignMarkersIn, missingMarkersIn, paymentMarkersIn } from "./portal-markers.mjs";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(import.meta.url), "..", "..");
 const MAX_ZIP_BYTES = 8_000_000; // Poki initial-download target (strictest bar)
+// This fork is the Poki-only build, so this is the whole list. It used to hold
+// three portals while the banner still said "all three zips shippable" — the
+// gate was reporting a claim about bundles that do not exist here.
 const PORTALS = ["poki"];
 const SDK_URL = {
   poki: "game-cdn.poki.com",
@@ -58,7 +63,7 @@ function zipHtml(portal) {
       maxBuffer: 32 * 1024 * 1024,
     }).toString("utf8");
   } catch {
-    fail(`sunbird-${portal}.zip is missing or has no index.html — run pnpm build:portals first.`);
+    fail(`sunbird-${portal}.zip is missing or has no index.html — run pnpm build:poki first.`);
   }
 }
 
@@ -74,7 +79,7 @@ const failures = [];
 for (const portal of PORTALS) {
   const zipPath = join(root, `sunbird-${portal}.zip`);
   if (!existsSync(zipPath)) {
-    failures.push(`${portal}: zip missing — run pnpm build:portals.`);
+    failures.push(`${portal}: zip missing — run pnpm build:poki.`);
     continue;
   }
   const zipBytes = statSync(zipPath).size;
@@ -84,7 +89,14 @@ for (const portal of PORTALS) {
   const html = zipHtml(portal);
   const list = zipList(portal);
   if (/manifest/i.test(html)) failures.push(`${portal}: manifest reference survived in staged index.html.`);
-  if (/stripe/i.test(html)) failures.push(`${portal}: payment-provider marker survived (portal builds are coin-only).`);
+  // Staged-artifact hygiene, NOT the coin-only gate. The packaging step already
+  // proved the pre-scrub bundle carried no payment provider (package-portal.mjs
+  // fails the build otherwise) and then scrubbed the name; this catches a
+  // regression in that step, or a hand-edited zip. It cannot see a processor
+  // that was never spelled this way, and does not pretend to.
+  for (const hit of paymentMarkersIn(html)) {
+    failures.push(`${portal}: payment-processor marker in the staged bundle — ${hit} (portal builds are coin-only).`);
+  }
   if (/(href|src)="\/[^"]*"/.test(html)) failures.push(`${portal}: absolute /asset reference (breaks CDN subpaths).`);
   if (!/icons\//.test(list) || !/fonts\//.test(list)) failures.push(`${portal}: icons/ or fonts/ missing from zip.`);
   // SDK profile: the build must SHIP its own portal integration, and must not
@@ -142,4 +154,4 @@ for (const portal of PORTALS) {
 }
 
 if (failures.length) fail(failures.join("\n"));
-console.log("\n✅ PORTAL GATE PASSED — all three zips shippable.\n");
+console.log(`\n✅ PORTAL GATE PASSED — ${PORTALS.length} zip(s) shippable: ${PORTALS.join(", ")}.\n`);

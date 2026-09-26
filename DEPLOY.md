@@ -1,7 +1,8 @@
 # Deploying Sunbird
 
-One codebase, four targets. All builds are single-file (`vite-singlefile`):
-everything inlines into `index.html` except icons/manifest/sw.
+All builds are single-file (`vite-singlefile`): everything inlines into
+`index.html` except icons/manifest/sw. This checkout is the **Poki-only** fork,
+so the portal target here is Poki (§2); §3 explains why CrazyGames is not one.
 
 ## 1. Vercel (or Netlify/Pages — any static host)
 
@@ -99,15 +100,21 @@ Upload the zip via Poki for Developers (Inspector). The build:
 - registers **no** service worker and ships **no** manifest link
 - shows portal-safe monetization only (no external checkout)
 
-## 3. CrazyGames
+## 3. CrazyGames — not a target in this checkout
 
-```bash
-npm run build:crazy       # → sunbird-crazy.zip
-```
+This checkout is the **Poki-only** fork (see the note at the top of `README.md`).
+There is no `build:crazy` script here, and adding one would work against the
+submission this fork exists to produce:
 
-Upload via the CrazyGames developer portal. Uses SDK v3 (`game.loadingStart/
-Stop`, `gameplayStart/Stop`, `ad.requestAd`, optional `banner.requestBanner`
-via `VITE_PORTAL_BANNER_ID`). Same graceful-degradation guarantees as Poki.
+- `REQ-51` / `PAR-02` require the submitted build to be **web-exclusive**. Shipping
+  the same game to a second aggregator is a human decision about the publisher's
+  channel strategy, not a build step.
+- `pnpm audit:zips` **fails** any Poki bundle carrying an itch.io or second-portal
+  marker, precisely so the two artifacts cannot cross-contaminate.
+
+The other portal editions are built in the parent monorepo, which is where
+`package-portal.mjs`'s `crazy` / `generic` arguments are used. If you need a
+second channel, get the exclusivity decision first — then build it there.
 
 ## 4. Self-hosted / itch.io style
 

@@ -116,11 +116,16 @@ function checkCommand(verify) {
   }
   const requires = (verify.requires ?? []).filter((file) => !existsSync(join(root, file)));
   if (!RUN_COMMANDS) {
-    const note = requires.length ? ` (needs ${requires.join(", ")} — run with --run after build:portals)` : "";
-    return { ok: true, detail: `gate wired: ${verify.cmd}${note}`, deferredRun: requires.length > 0 };
+    const note = requires.length ? ` (needs ${requires.join(", ")} — run with --run after build:poki)` : "";
+    // `deferredRun` is unconditional, and that is the point: when --run is
+    // absent this gate did NOT execute, whatever artifacts happen to be lying
+    // around. It used to be `requires.length > 0`, so a command rule with no
+    // `requires` list reported ok:true with nothing behind it and was counted
+    // as a machine-verified rule. "The gate is attached" is not "the gate ran".
+    return { ok: true, detail: `gate wired: ${verify.cmd}${note}`, deferredRun: true };
   }
   if (requires.length) {
-    return { ok: false, detail: `cannot execute: ${requires.join(", ")} missing — run pnpm build:portals first` };
+    return { ok: false, detail: `cannot execute: ${requires.join(", ")} missing — run pnpm build:poki first` };
   }
   try {
     execFileSync(verify.cmd, { cwd: root, shell: true, stdio: "pipe" });
@@ -173,18 +178,51 @@ for (const rule of requirements.rules) {
   results.push({ rule, result, enforced });
 }
 
+// "verified" was one number for three different things, which is how
+// "167/188 rules verified" came to mean 155 machine-checked + 12 human-
+// attested. Every satisfied rule now lands in exactly one bucket:
+//
+//   machineVerified — a file/grep/test/barrel check actually ran and passed,
+//                     or a command rule ran and exited 0.
+//   wiredNotRun     — a command rule whose gate is wired but was NOT run,
+//                     because this invocation lacked --run (or its artifact
+//                     was missing). It still reports ok:true, so counting it
+//                     as verified is how a rule with no evidence becomes one.
+//   attested        — verify.type === "manual", or no verify block at all
+//                     (runVerify defaults a missing block to manual). A human
+//                     signed off and no machine ran. Right instrument for "is
+//                     the art accurate?", wrong one for "did a gate check it".
+//
+// `verified` is kept as an alias of machineVerified so a --json consumer
+// cannot read the flattering number by accident.
 const counts = results.reduce(
   (acc, { rule, result }) => {
     acc.total += 1;
     acc.status[rule.status] = (acc.status[rule.status] ?? 0) + 1;
     if (rule.kind === "requirement") acc.requirements += 1;
-    if (rule.status === "satisfied" && result.ok) acc.verified += 1;
+    if (rule.status === "satisfied" && result.ok) {
+      if (result.manual) acc.attested += 1;
+      else if (result.deferredRun) acc.wiredNotRun += 1;
+      else {
+        acc.machineVerified += 1;
+        if (result.executed) acc.byCommand += 1;
+      }
+    }
     if (rule.status === "action") acc.actions += 1;
     if (rule.status === "deferred") acc.deferred += 1;
     return acc;
   },
-  { total: 0, requirements: 0, verified: 0, actions: 0, deferred: 0, status: {} },
+  { total: 0, requirements: 0, machineVerified: 0, attested: 0, wiredNotRun: 0, byCommand: 0, actions: 0, deferred: 0, status: {} },
 );
+counts.verified = counts.machineVerified;
+
+// How many DISTINCT scripts stand behind the command-gated rules. Rule count
+// overstates independent checking: N rules off one script all fail together.
+counts.commandScripts = new Set(
+  results
+    .filter(({ rule, result }) => result.executed && result.ok && rule.verify?.cmd)
+    .map(({ rule }) => rule.verify.cmd),
+).size;
 
 /* --------------------------------------------------------------- report */
 
@@ -199,8 +237,17 @@ function renderReport() {
   lines.push("");
   lines.push(`**Generated:** ${date} by \`pnpm poki:audit\` — do not edit by hand.`);
   lines.push(
-    `**Result:** ${problems.length === 0 ? "✅ every satisfied rule verified" : `❌ ${problems.length} problem(s)`} · ${counts.verified}/${counts.total} rules verified · ${counts.requirements} of them hard requirements.`,
+    `**Result:** ${problems.length === 0 ? "✅ no machine-checked rule failed" : `❌ ${problems.length} problem(s)`} · **${counts.machineVerified}/${counts.total} machine-verified** · **${counts.attested} human-attested**${counts.wiredNotRun ? ` · ${counts.wiredNotRun} wired but not run` : ""} · ${counts.requirements} hard requirements.`,
+    `**Read the difference.** _Machine-verified_ means a check ran and passed — that is a gate result. _Human-attested_ means nothing ran: a person signed the rule off, which is the right instrument for "is the art accurate?" and no evidence at all for "did a gate check it". _Wired but not run_ means a gate is attached that this invocation did not execute, so the rule has no evidence yet. Only the first number is a gate result.`,
   );
+  // Only meaningful once commands have actually run. Without --run every command
+  // rule sits in wiredNotRun, and "0 rules are produced by 0 scripts" would be a
+  // vacuous sentence in a report whose entire subject is vacuous sentences.
+  if (counts.byCommand > 0) {
+    lines.push(
+      `**Rule count overstates independent checking.** ${counts.byCommand} machine-verified rules are produced by ${counts.commandScripts} distinct gate commands (several of which are pnpm aliases of the same script), so one failing takes down all of its rules at once.`,
+    );
+  }
   lines.push("");
   lines.push(
     `**Scope:** the extracted guide corpus in this folder (\`requirements.json\`, version ${requirements.version}). Rules marked *action* are human/submission steps, *deferred* are accepted gaps with a recorded reason — both are listed so nothing is silently skipped.`,
@@ -208,7 +255,10 @@ function renderReport() {
   lines.push("");
   lines.push("| Status | Rules |");
   lines.push("|---|---|");
-  lines.push(`| satisfied | ${counts.status.satisfied ?? 0} |`);
+  lines.push(`| satisfied — machine-verified | ${counts.machineVerified} |`);
+  lines.push(`| satisfied — human-attested (no machine check) | ${counts.attested} |`);
+  lines.push(`| satisfied — gate wired but not run this invocation | ${counts.wiredNotRun} |`);
+  lines.push(`| _satisfied, total_ | _${counts.status.satisfied ?? 0}_ |`);
   lines.push(`| action (submission step) | ${counts.status.action ?? 0} |`);
   lines.push(`| deferred (accepted) | ${counts.status.deferred ?? 0} |`);
   lines.push(`| informational | ${counts.status.informational ?? 0} |`);
@@ -234,11 +284,13 @@ function renderReport() {
       const badge =
         rule.status === "satisfied"
           ? result.ok
-            ? result.executed
-              ? "✅ verified (executed)"
-              : result.manual
-                ? "✅ attested"
-                : "✅"
+            ? result.manual
+              ? "🖐 attested (no machine check)"
+              : result.deferredRun
+                ? "🔌 wired, not run"
+                : result.executed
+                  ? "✅ verified (executed)"
+                  : "✅ verified"
             : "❌"
           : rule.status === "action"
             ? "📋 action"
@@ -297,7 +349,14 @@ if (AS_JSON) {
     ),
   );
 } else {
-  console.log(`Poki compliance audit — ${counts.verified}/${counts.total} rules verified (${counts.requirements} requirements)`);
+  console.log(
+    `Poki compliance audit — ${counts.machineVerified}/${counts.total} machine-verified` +
+      `${counts.attested ? `, ${counts.attested} human-attested` : ""}` +
+      `${counts.wiredNotRun ? `, ${counts.wiredNotRun} wired but not run` : ""}` +
+      ` (${counts.requirements} requirements)` +
+      `\n  "${counts.machineVerified}/${counts.total} verified" counts only the machine-checked rules;` +
+      `\n   the ${counts.attested} attested rules had no check run against them.`,
+  );
   console.log(`  satisfied ${counts.status.satisfied ?? 0} · action ${counts.actions} · deferred ${counts.deferred} · informational ${counts.status.informational ?? 0}`);
   for (const group of requirements.groups) {
     const groupRules = results.filter((r) => r.rule.group === group.id);

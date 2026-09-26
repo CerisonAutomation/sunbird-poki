@@ -33,19 +33,13 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Typecheck (social backend)
-        run: pnpm typecheck:server
-
       - name: Test
         run: pnpm test
-
-      - name: Test (social backend)
-        run: pnpm test:server
 
       - name: Build (Vercel / direct / PWA)
         env:
           VITE_PORTAL_TARGET: none
-        run: pnpm build:vercel
+        run: pnpm build
 
       - name: Upload dist artifact (Vercel)
         uses: actions/upload-artifact@v4

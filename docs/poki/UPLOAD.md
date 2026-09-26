@@ -61,7 +61,7 @@ node -e 'console.log(Object.keys(require(process.env.HOME+"/.config/poki/auth.js
 | `poki-upload/` | `pnpm build:poki` (every build) | **The Inspector, and the CLI.** Select this folder: `index.html`, `icons/`, `fonts/`, `i18n/` and nothing else. `poki.json`'s `build_dir` names it, so `pnpm poki:upload` ships exactly this tree. |
 | `sunbird-poki.zip` | `pnpm build:poki` | The archive equivalent — identical `index.html`, no wrapping directory. Use it for CDN/review pipelines that take an archive. |
 | `dist-poki/` | vite (before packaging) | The raw build output. **Not an upload artifact** — it is the tree the packaging step tightens up, and it lacks the `SDK-01` head tag. Never point `build_dir` at it (`ROOT-09`). |
-| `sunbird-crazy.zip`, `sunbird-generic.zip` | `pnpm build:portals` | Other portals. Never upload these to Poki (web exclusivity, `REQ-51`). |
+| `sunbird-crazy.zip`, `sunbird-generic.zip` | *(not built in this checkout)* | This is the Poki-only fork, so there is no `build:portals` to produce them. A second aggregator is also a web-exclusivity decision (`REQ-51`/`PAR-02`) for a human, not a build step — do not add one to satisfy this row. |
 
 `poki-upload/` and the zips are **generated** (git-ignored). There is no
 hand-maintained copy to go stale — that was the bug behind the original

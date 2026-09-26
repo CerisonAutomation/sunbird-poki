@@ -2872,12 +2872,6 @@ function renderMain(s: HudSnapshot): string {
         <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>${t("onboarding.step3Title", undefined, "Race the flock")}</strong><small>${t("onboarding.step3Sub", undefined, "Choose online or AI when you are ready")}</small></span><i>${t("onboarding.step3Action", undefined, "Race ›")}</i></button>
       </div>
     </section>` : ""}
-    <div class="home-mode-strip" role="group" aria-label="Quick access">
-      <button class="home-mode-btn" data-ui data-action="open-challenges">${menuIcon("online")}<span>PvP · AI</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-shop">${menuIcon("shop")}<span>Shop</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-progress">${menuIcon("progress")}<span>Goals</span></button>
-      <button class="home-mode-btn" data-ui data-action="open-board">${menuIcon("board")}<span>Board</span></button>
-    </div>
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:

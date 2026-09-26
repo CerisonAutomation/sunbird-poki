@@ -13,7 +13,8 @@ describe("island transfer", () => {
     const terrain = new TerrainSystem(seed);
     for (const island of [0, 1, 8, 20, 100]) {
       const base = island * ISLAND_PERIOD;
-      expect(terrain.heightAt(base + DROP_START) - terrain.heightAt(base + RAMP_START)).toBeGreaterThan(60);
+      // Shoulder is smaller than before but still above hills; monotonic drop; clean ramp.
+      expect(terrain.heightAt(base + DROP_START) - terrain.heightAt(base + RAMP_START)).toBeGreaterThan(40);
       for (let x = DROP_START + 1; x < RAMP_START - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeLessThan(0);
       for (let x = RAMP_START + 1; x < GAP_START - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeGreaterThan(0);
       expect(gapEndFor(island)).toBeLessThan(ISLAND_PERIOD);
@@ -49,7 +50,7 @@ describe("island transfer", () => {
         launched ||= bird.justLaunched;
         splashed ||= bird.inWater;
       }
-      expect(fastest).toBeGreaterThan(95);
+      expect(fastest).toBeGreaterThan(70);
       expect(launched).toBe(true);
       expect(splashed).toBe(false);
       expect(bird.x).toBeGreaterThanOrEqual(base + ISLAND_PERIOD);

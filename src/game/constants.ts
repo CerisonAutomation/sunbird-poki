@@ -79,8 +79,8 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 260;
-export const ALT_CEILING_FADE = 50;
+export const ALT_CEILING = 230;
+export const ALT_CEILING_FADE = 20;
 /**
  * Upward speed the Zenith mode's ascent thermal may reach, in m/s.
  *
@@ -92,11 +92,11 @@ export const ALT_CEILING_FADE = 50;
 export const ZENITH_THERMAL_VY = 110;
 export const ALT_STRATO = 230;
 
-export const ISLAND_PERIOD = 1100;
-export const DROP_START = 710;
-export const DROP_BLEND_START = 630;
-export const RAMP_START = 845;
-export const GAP_START = 928;
+export const ISLAND_PERIOD = 1450;
+export const DROP_START = 935;
+export const DROP_BLEND_START = 830;
+export const RAMP_START = 1115;
+export const GAP_START = 1225;
 export const OCEAN_FLOOR = -18;
 export const WATER_Y = 0.4;
 

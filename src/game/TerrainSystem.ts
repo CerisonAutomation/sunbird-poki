@@ -4,8 +4,8 @@ import { biomeForIsland, gapEndFor, rampPeakFor, type BiomeDef, type DecoKind, t
 import {
   CHUNK_RES,
   CHUNK_SIZE,
-  DROP_START,
   DROP_BLEND_START,
+  DROP_START,
   GAP_START,
   ISLAND_PERIOD,
   OCEAN_FLOOR,
@@ -158,11 +158,10 @@ export class TerrainSystem {
     const hills = this.hills(x, island);
 
     const lip = rampPeakFor(island) + 14;
-    // One authored transfer per island: high shoulder -> huge clean descent
-    // -> wide bowl -> launch lip. No noise bumps to steal downhill momentum.
-    // Deeper valley = more vertical drop = more speed arriving at the launch ramp.
-    // Shoulder raised slightly so the initial descent cliff feels dramatic.
-    const shoulder = lip + 38 + hash01(island, this.seedN) * 8;
+    // End-of-island authored transfer: gentle shoulder → long drop → launch ramp.
+    // Shoulder is kept small (hills + ~16) so the rise is barely visible — just
+    // enough height to guarantee momentum through the ramp.
+    const shoulder = lip + 16 + hash01(island, this.seedN) * 6;
     const valley = 1.2; // skim just above water — the bird nearly touches the ocean
     if (lx >= GAP_START && lx < gapEnd) {
       // Start at the actual ramp height, NOT the unrelated procedural hills.

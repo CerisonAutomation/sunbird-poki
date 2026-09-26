@@ -60,7 +60,7 @@ describe("PvP Variants and Offline Neural AI Engine", () => {
 
       // Start coordinate mapping
       const startX = course.island * ISLAND_PERIOD + 64;
-      expect(startX).toBe(i * 1100 + 64);
+      expect(startX).toBe(i * ISLAND_PERIOD + 64);
     }
   });
 

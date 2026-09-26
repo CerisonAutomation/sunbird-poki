@@ -55,9 +55,9 @@ describe("attract pilot over water", () => {
     // Mid-ocean, low and slow: diving splashes inside the horizon while
     // soaring stays dry past it — ranked clean > dry miss > splash.
     for (const p of [
-      { x: 1000, y: 6, vx: 25, vy: -4 },
-      { x: 995, y: 8, vx: 30, vy: -5 },
-      { x: 1010, y: 5, vx: 22, vy: -3 },
+      { x: 1320, y: 6, vx: 25, vy: -4 },
+      { x: 1315, y: 8, vx: 30, vy: -5 },
+      { x: 1330, y: 5, vx: 22, vy: -3 },
     ]) {
       const bird = new Bird();
       bird.reset(p.x, p.y);

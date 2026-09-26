@@ -406,7 +406,7 @@ export function tierForIsland(island: number): number {
  */
 export function gapEndFor(island: number): number {
   // Reserve a real landing shelf: a local-x gap must never wrap past the island.
-  return Math.min(ISLAND_PERIOD - 24, GAP_START + 132 + Math.max(0, island) * 4);
+  return Math.min(ISLAND_PERIOD - 24, GAP_START + 200 + Math.max(0, island) * 4);
 }
 
 /** Ramp height grows with the crossing, capped to preserve a rideable slope. */

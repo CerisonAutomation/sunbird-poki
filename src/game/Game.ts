@@ -1518,6 +1518,20 @@ export class Game {
       this.terrain,
     );
 
+
+    this.stepLaunchAndGhosts(dt, diving);
+    this.stepWeather(dt, diving);
+    this.stepRivalField(dt);
+    this.stepTerrainAndFeel(dt, diving);
+    this.stepSurprisesAndIslands(dt);
+    this.stepCollectAndPickups(dt);
+    this.stepScoreAndFinish(dt);
+    this.stepSettleAndGoals(dt, diving);
+  }
+
+  /** Flight cues, the launch/landing reactions, the first-flight coach and
+   *  the two ghost players. */
+  private stepLaunchAndGhosts (dt: number, diving: boolean) {
     const cue = this.flightCues.update(dt, this.bird, this.terrain.islandIndex(this.bird.x), this.terrain.localX(this.bird.x));
     if (cue === "runup") this.audio.runup();
     else if (cue === "apex") this.audio.apexChime();
@@ -1575,7 +1589,10 @@ export class Game {
         }
       }
     }
+  }
 
+  /** Biome weather for this step: thermals, gusts, ash storms. */
+  private stepWeather (dt: number, diving: boolean) {
     // biome weather: thermals, headwinds, ash storms
     this.weather.update(dt, this.elapsed, this.bird, this.terrain, diving, {
       onThermalEnter: () => {
@@ -1614,7 +1631,13 @@ export class Game {
         this.particles.emitWind(this.bird.x, this.bird.y, this.weather.gust);
       }
     }
+  }
 
+  /** The rival field's fixed step. Same contract as the player's, and the
+   *  single largest block in the tick — it was previously buried in the
+   *  middle of fixedUpdate where nothing about it was visible from the
+   *  call site. */
+  private stepRivalField (dt: number) {
     // The rival field runs the same fixed-step contract as the player.
     if (this.massRace.active) {
       this.massRace.step(dt, this.terrain, this.startX + this.mode.finish, this.runTime, this.bird.x, this.bird.y);
@@ -1753,7 +1776,12 @@ export class Game {
         this.lastPlace = place;
       }
     }
+  }
 
+  /** What the terrain does to you: biome entry, water and the shield,
+   *  landing score, dust, the ridge skim bonus, the fever ramp, power
+   *  particles and the ocean splash. */
+  private stepTerrainAndFeel (dt: number, diving: boolean) {
     const biomeNow = this.terrain.biomeAt(this.bird.x);
     if (biomeNow.id !== this.lastBiomeId) {
       this.lastBiomeId = biomeNow.id;
@@ -1874,6 +1902,10 @@ export class Game {
       this.splashQuipN += 1;
       if (this.splashQuipN % 3 === 1) this.hud.toast(quip(SPLASH_QUIPS, this.splashQuipN), "cloud");
     }
+  }
+
+  /** Seeded rare delights, then island crossings. */
+  private stepSurprisesAndIslands (dt: number) {
 
     // Rare delight: golden geese, sneezes, encores. Never punishing. Rolled on
     // the run seed so the same hills yield the same surprises (and a race or
@@ -1956,7 +1988,10 @@ export class Game {
         this.hud.toast(`Washed ashore on ${b.name}`, "warn");
       }
     }
+  }
 
+  /** Pickup collection and what each pickup awards. */
+  private stepCollectAndPickups (dt: number) {
     const magnetOn = this.feverOn || this.magnetTimer > 0 || this.gameplaySkin.magnetAlways || this.powers.magnetOn();
     this.collect.update(dt, this.bird, this.terrain, magnetOn, this.elapsed, this.powers.magnetScale(), {
       onCoin: (x, y, gem) => {
@@ -2003,7 +2038,13 @@ export class Game {
       onRing: (x, y) => this.onRing(x, y),
       onBalloon: (x, y) => this.onBalloon(x, y),
     });
+  }
 
+  /** Ring chain, fever, score accumulation, distance milestones, the
+   *  personal-best crossing, the stormfront, and the two ways a race ends:
+   *  the finish line and the clock. Kept as ONE method because the finish
+   *  check reads the runDist the milestone code above it computed. */
+  private stepScoreAndFinish (dt: number) {
     // Ring chain cools off if the player eases off the sky line.
     if (this.ringChainTimer > 0) {
       this.ringChainTimer -= dt;
@@ -2190,6 +2231,11 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** The settle rule for an untouched bird, the live session goals, and the
+   *  coach hint recomputed at the end of the step. */
+  private stepSettleAndGoals (dt: number, diving: boolean) {
 
     // Settle rule: a bird that is down (grounded, in water, or skimming the
     // deck) with crawl speed and no held input has nothing left to do — let
@@ -2244,6 +2290,7 @@ export class Game {
     this.hintTimer += dt;
     this.hint = this.computeHint();
   }
+
 
   /**
    * Take-off: rate it, pay it out, and sell it. This is the moment the whole

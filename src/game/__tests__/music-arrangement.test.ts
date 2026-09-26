@@ -197,6 +197,51 @@ describe("arrangementGlide: how fast the band re-arranges", () => {
   });
 });
 
+describe("intensityFollow: one smoothed value for the whole band", () => {
+  it("arrives at the same point however often it is called", () => {
+    // The reason the follower steps on elapsed time instead of a fixed fraction
+    // per tick: browsers clamp setInterval to >= 1 s in a background tab, and a
+    // fixed 0.12 that is a ~0.2 s glide at 25 ms becomes a ~2.4 s glide at 1 s.
+    // The score must not react to a backgrounded run in slow motion.
+    const run = (seconds: number, hz: number): number => {
+      const step = 1 / hz;
+      let v = 0;
+      for (let t = 0; t < seconds; t += step) {
+        v = intensityFollow(v, 1, Math.min(step, seconds - t));
+      }
+      return v;
+    };
+    const at40 = run(0.5, 40);
+    expect(at40).toBeGreaterThan(0.9);
+    // 1 Hz — a throttled background tab — must land in the same place, and
+    // `at40` is the continuous answer 1 - exp(-0.5 / 0.12).
+    expect(at40).toBeCloseTo(1 - Math.exp(-0.5 / INTENSITY_RISE), 6);
+    expect(run(0.5, 1)).toBeCloseTo(at40, 6);
+    expect(run(0.5, 2)).toBeCloseTo(at40, 6);
+  });
+
+  it("rises quicker than it falls, so a moment registers then lingers", () => {
+    const up = intensityFollow(0, 1, 0.2);
+    expect(intensityFollow(1, 0, 0.2)).toBeLessThan(up);
+  });
+
+  it("does not overshoot, and stands still with no time on the clock", () => {
+    for (const dt of [0, 0.001, 0.025, 1, 30]) {
+      const v = intensityFollow(0, 1, dt);
+      expect(v, `dt=${dt}`).toBeGreaterThanOrEqual(0);
+      expect(v, `dt=${dt}`).toBeLessThanOrEqual(1);
+    }
+    expect(intensityFollow(0.4, 0.4, 5)).toBeCloseTo(0.4, 9);
+    expect(intensityFollow(0.4, 0.4, 0)).toBeCloseTo(0.4, 9);
+  });
+
+  it("survives the numbers a paused or backgrounded tab produces", () => {
+    expect(intensityFollow(Number.NaN, 0.5, 0.1)).toBe(0.5);
+    expect(intensityFollow(0.5, Number.NaN, 0.1)).toBe(0.5);
+    expect(intensityFollow(Number.NaN, Number.NaN, 0.1)).toBe(0);
+  });
+});
+
 /* --------------------------------------------------------------------------
  * Integration: the pure phase machine is only half the feature. These cases
  * drive the real `Music` engine through a fake audio graph to prove the splice
@@ -206,7 +251,7 @@ describe("arrangementGlide: how fast the band re-arranges", () => {
  * ------------------------------------------------------------------------ */
 import { afterEach, vi } from "vitest";
 
-import { Music } from "../Music";
+import { BIOME_MIX, INTENSITY_RISE, Music, intensityFollow, musicCutoff } from "../Music";
 
 class Param {
   value = 0;
@@ -258,6 +303,15 @@ function engine() {
 
 afterEach(() => { vi.useRealTimers(); });
 
+/** Run the engine for `seconds` of audio time, one sequencer tick at a time. */
+function settle(ctx: { currentTime: number }, seconds: number): void {
+  const step = 0.025;
+  for (let elapsed = 0; elapsed < seconds; elapsed += step) {
+    ctx.currentTime += step;
+    vi.advanceTimersByTime(step * 1000);
+  }
+}
+
 describe("the engine follows the arrangement", () => {
   it("re-arranges the band when the phase changes, and only then", () => {
     vi.useFakeTimers();
@@ -298,25 +352,114 @@ describe("the engine follows the arrangement", () => {
     music.dispose();
   });
 
-  it("promotes to apex on the intensity the arc is already writing", () => {
+  it("promotes to apex on sustained intensity, not on a one-frame spike", () => {
     vi.useFakeTimers();
-    const { music } = engine();
+    const { music, ctx } = engine();
     music.setLevel(0.5);
     music.setMode("play");
     music.setRunPhase(true, 20);
     expect(music.getRunPhase()).toBe("cruise");
 
-    music.setIntensity(ARR.apexEnter + 0.1);
+    // A single frame at full tilt is a coin pickup, not a climax. The apex
+    // decision reads the *smoothed* intensity, so the band holds: re-arranging
+    // for a spike the player never heard arrive is the stutter this guards.
+    music.setIntensity(1);
     music.setRunPhase(true, 21);
+    expect(music.getRunPhase()).toBe("cruise");
+
+    // Sustained intensity carries the run into apex — without a second call,
+    // because the tick is what advances the phase now.
+    settle(ctx, 2);
     expect(music.getRunPhase()).toBe("apex");
 
     // Hysteresis through the engine, not only through the pure function.
-    music.setIntensity((ARR.apexEnter + ARR.apexLeave) / 2);
+    music.setIntensity(ARR.apexLeave - 0.12);
     music.setRunPhase(true, 22);
-    expect(music.getRunPhase()).toBe("apex");
-    music.setIntensity(ARR.apexLeave - 0.1);
-    music.setRunPhase(true, 23);
+    settle(ctx, 2);
     expect(music.getRunPhase()).toBe("cruise");
+    music.dispose();
+  });
+
+  it("opens the take-off breath and the landing cadence off the mode flip alone", () => {
+    // No gameplay hook at all: the engine is told the music mode, which is
+    // something it already heard on every state change, and the arrangement
+    // follows the run from there.
+    vi.useFakeTimers();
+    const { music, ctx } = engine();
+    music.setLevel(0.5);
+    expect(music.getRunPhase()).toBe("menu");
+
+    music.setMode("play");
+    expect(music.getRunPhase()).toBe("launch");
+
+    // …and it leaves the take-off on its own, on the run clock.
+    settle(ctx, ARR.launchSeconds + 0.5);
+    expect(music.getRunPhase()).toBe("cruise");
+
+    // A fever surge happens *during* a flight: the run clock must survive it,
+    // or every combo would re-run the take-off breath.
+    music.setMode("fever");
+    expect(music.getRunPhase()).toBe("cruise");
+    music.setMode("play");
+    expect(music.getRunPhase()).toBe("cruise");
+
+    // Landing: the rhythm section leaves and the pad rings out.
+    music.setMode("menu");
+    expect(music.getRunPhase()).toBe("resolve");
+    settle(ctx, ARR.resolveSeconds + 0.5);
+    expect(music.getRunPhase()).toBe("menu");
+    music.dispose();
+  });
+
+  it("keeps the intensity surge through a mode flip", () => {
+    // The regression: `apply()` wrote the tempo from the mode alone while
+    // `setIntensity()` wrote it with the surge folded in, so every mode change
+    // dropped the surge and let it come back a moment later — a tempo step at
+    // exactly the moment the run is changing fastest.
+    vi.useFakeTimers();
+    const { music, ctx } = engine();
+    const internals = music as unknown as { bpm: number };
+    music.setTrack(10); // an island track, so the tempo follows the biome
+    music.setLevel(0.5);
+    music.setMode("play");
+    music.setRunPhase(true, 20);
+
+    music.setIntensity(0.5);
+    settle(ctx, 2);
+    expect(internals.bpm).toBeGreaterThan(BIOME_MIX.bright.bpm);
+
+    // After the flip the surge is still folded in. The old code landed on
+    // exactly `fever` here, which is what the player hears as a stumble.
+    music.setMode("fever");
+    expect(internals.bpm).toBeGreaterThan(BIOME_MIX.bright.fever);
+    music.dispose();
+  });
+
+  it("drives the filter and the hats from one smoothed value", () => {
+    vi.useFakeTimers();
+    const { music, ctx, nodes } = engine();
+    const internals = music as unknown as { intensity: number; intensityTarget: number };
+    music.setLevel(0.5);
+    music.setMode("play");
+    music.setRunPhase(true, 20);
+    music.setIntensity(0.8);
+    settle(ctx, 0.3);
+
+    // Mid-glide: the target is ahead of the ear, which is the whole point.
+    expect(internals.intensity).toBeGreaterThan(0.3);
+    expect(internals.intensity).toBeLessThan(0.79);
+    expect(internals.intensityTarget).toBeGreaterThan(internals.intensity);
+
+    // The filter is written from the *smoothed* value. The old code wrote it
+    // from the target, which only moves in 0.01 quanta, so the cutoff climbed
+    // the 1200 Hz range in 12 Hz steps instead of gliding.
+    const filter = nodes.find((n) => n.frequency.targets.length > 0)!;
+    const fromFollower = musicCutoff(BIOME_MIX.bright.cutoff, 0, internals.intensity);
+    const fromTarget = musicCutoff(BIOME_MIX.bright.cutoff, 0, internals.intensityTarget);
+    // Within the 12 Hz dead-band of the follower…
+    expect(Math.abs(filter.frequency.value - fromFollower)).toBeLessThanOrEqual(12);
+    // …and nowhere near where the raw target would have put it.
+    expect(Math.abs(filter.frequency.value - fromTarget)).toBeGreaterThan(12);
     music.dispose();
   });
 

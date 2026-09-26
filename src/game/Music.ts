@@ -26,11 +26,73 @@
 export type MusicMode = "off" | "menu" | "play" | "fever" | "sleep" | "storm";
 export type BiomeMusicStyle = "bright" | "warm" | "airy" | "wide" | "night" | "crystal" | "reef" | "ember" | "canyon";
 import { TICK_MS, LOOKAHEAD, MAX_STEPS_PER_TICK } from "./audio-constants";
-import { runPhase as computeRunPhase, arrangement, ARR, type RunPhase } from "./MusicArrangement";
+import { runPhase as computeRunPhase, arrangement, arrangementGlide, ARR, type ArrangementContext, type RunPhase } from "./MusicArrangement";
 
 type Voicing = number[];
 
 const BEAT_BPM = 132;
+/** Arcade tracks hold their own tempo floor, independent of the biome. */
+const CHIP_BPM = 176;
+const CHIP_FEVER_BPM = 196;
+/** Tempo surge at intensity 1, as a fraction of the mode's tempo. */
+const TEMPO_SURGE = 0.1;
+/** Level of the offbeat tension hats at intensity 1, before the biome's perc. */
+const TENSION_HATS = 0.24;
+
+/**
+ * The modes that mean "a flight is under way".
+ *
+ * Gameplay flips the music mode at every state change, and the engine already
+ * sees that flip — so the transition *into* this set is the score's run-start
+ * signal and the transition out of it is the landing, with no per-frame hook
+ * needed from the game. `fever` and `storm` are inside the set on purpose: a
+ * fever surge and a stormfront happen *during* a flight, and treating them as
+ * take-offs would restart the run clock on every combo.
+ */
+const FLIGHT_MODES: ReadonlySet<MusicMode> = new Set<MusicMode>(["play", "fever", "storm"]);
+
+/**
+ * Intensity follower time constants, in seconds. The rise is quicker than the
+ * fall so a moment registers immediately and then lingers.
+ */
+export const INTENSITY_RISE = 0.12;
+export const INTENSITY_FALL = 0.34;
+/**
+ * Filter re-target dead-band in Hz. Below this the ear cannot hear a step, and
+ * skipping the write keeps a per-frame call from queueing AudioParam events the
+ * hardware would throw away.
+ */
+const CUTOFF_DEADBAND = 12;
+/** Same idea for the tension hats, in linear gain. */
+const HAT_DEADBAND = 0.002;
+
+/**
+ * One step of the intensity follower, as a pure function of elapsed time.
+ *
+ * A fixed `lerp(current, target, 0.12)` per tick is only correct at exactly the
+ * tick rate it was tuned for. Browsers clamp `setInterval` to >= 1 s in a
+ * backgrounded or occluded tab, so the same 0.12 that is a ~0.2 s glide at
+ * 25 ms becomes a ~2.4 s glide at 1 s — the score then reacts to the run in
+ * slow motion after the player switches back. Exponentiating the *elapsed*
+ * time makes the response rate independent of how often we are called, so the
+ * filter, the hats, the tempo and the arrangement all arrive together however
+ * the browser throttled us.
+ *
+ * Exported for unit testing; it is pure.
+ */
+export function intensityFollow(
+  current: number,
+  target: number,
+  dt: number,
+  rise = INTENSITY_RISE,
+  fall = INTENSITY_FALL,
+): number {
+  if (!Number.isFinite(current)) return Number.isFinite(target) ? target : 0;
+  if (!Number.isFinite(target)) return current;
+  const tau = target > current ? rise : fall;
+  const step = dt > 0 ? 1 - Math.exp(-dt / tau) : 0;
+  return current + (target - current) * Math.min(1, step);
+}
 /**
  * How many times a section's 8-bar progression plays before the next section.
  *
@@ -583,9 +645,30 @@ export const TRACKS: Track[] = [
 /** Track titles for the settings picker — keep in lockstep with TRACKS. */
 export const TRACK_NAMES: string[] = TRACKS.map((t) => t.name);
 
+/**
+ * One world's musical identity.
+ *
+ * The first group is *level*: how loud, how fast, how bright, how far up. The
+ * second group is *instrumentation*: which of the band's supporting voices are
+ * actually in the room. Both are needed for a biome to be recognisable — level
+ * alone makes nine worlds that all sound like the same tune played louder.
+ */
+export type BiomeMix = {
+  bpm: number; fever: number; cutoff: number; transpose: number;
+  uke: number; glock: number; bass: number; perc: number; whistle: number;
+  /**
+   * The supporting voices. These used to be borrowed from `glock` (arp, spark)
+   * or not weighted at all (organ, pad), which meant all nine worlds shared one
+   * set of pads, organs and arpeggios and could only be told apart by tempo and
+   * volume. They are 1 for "as the engine tuned it", so a style that wants the
+   * stock bed says 1 and nothing else has to change.
+   */
+  arp: number; organ: number; pad: number; spark: number;
+};
+
 // Per-biome orchestration keeps each island sonically distinct while all
 // variants share the same original melodic identity.
-export const BIOME_MIX: Record<BiomeMusicStyle, { bpm: number; fever: number; cutoff: number; uke: number; glock: number; bass: number; perc: number; whistle: number; transpose: number }> = {
+export const BIOME_MIX: Record<BiomeMusicStyle, BiomeMix> = {
   // Upbeat floor: nothing in the library sits below 116 BPM, and every island
   // keeps a bright register (transposition stays inside ±4 semitones so the
   // glock lead never sinks into the bass).
@@ -595,18 +678,29 @@ export const BIOME_MIX: Record<BiomeMusicStyle, { bpm: number; fever: number; cu
   // on the darker biomes (night/crystal/reef were 1.6–1.68) made exactly those
   // tracks read as glockenspiel solos — the score that "sometimes" sounded
   // wrong. Keep every row ≤ 1.
+  // The `arp/organ/pad/spark` column is the world's *timbre*, matched to the
+  // identity the gameplay lane gives it in `Biomes.ts`:
+  //   bright  Green Hills      — clean teaching rhythm: open, light, nothing muddy
+  //   warm    Sunset Ridge     — a warm Hammond bed smears the long 2× valleys
+  //   airy    Tropical Atoll   — floating: sparkle and air, almost no weight below
+  //   wide    Dune Sea         — colossal: a huge horizon pad, little inner motion
+  //   night   Midnight Coast   — sparse and dark: everything glows faintly
+  //   crystal Aurora Peaks     — glassy: the brightest bells, a glassy arp
+  //   reef    Coral Reach      — pastel sparkle over a soft, close bed
+  //   ember   Cinder Forge     — low and growling: the organ is the furnace
+  //   canyon  Skyreach Canyon  — vast red walls: big pad, brassy bed
   // Dreamy, open, magical — slower base tempos let the ocarina breathe.
   // Fever still surges hard; the contrast is what makes it feel like a
   // transformation instead of just a tempo bump.
-  bright:  { bpm: 130, fever: 158, cutoff: 5500,  uke: 0.88, glock: 0.60, bass: 0.92, perc: 0.96, whistle: 1.00, transpose: 0  },
-  warm:    { bpm: 124, fever: 150, cutoff: 4500,  uke: 1.04, glock: 0.52, bass: 1.00, perc: 0.92, whistle: 0.90, transpose: -2 },
-  airy:    { bpm: 132, fever: 160, cutoff: 6000,  uke: 0.72, glock: 0.62, bass: 0.80, perc: 1.06, whistle: 1.08, transpose: 2  },
-  wide:    { bpm: 126, fever: 154, cutoff: 5000,  uke: 0.78, glock: 0.54, bass: 1.10, perc: 0.94, whistle: 1.06, transpose: -3 },
-  night:   { bpm: 118, fever: 144, cutoff: 4000,  uke: 0.56, glock: 0.44, bass: 0.74, perc: 0.80, whistle: 0.88, transpose: -3 },
-  crystal: { bpm: 130, fever: 158, cutoff: 6000,  uke: 0.66, glock: 0.58, bass: 0.84, perc: 0.98, whistle: 1.18, transpose: 3  },
-  reef:    { bpm: 132, fever: 160, cutoff: 6500,  uke: 0.70, glock: 0.58, bass: 0.78, perc: 0.88, whistle: 1.10, transpose: 3  },
-  ember:   { bpm: 122, fever: 148, cutoff: 4000,  uke: 0.62, glock: 0.62, bass: 1.20, perc: 1.08, whistle: 0.88, transpose: -4 },
-  canyon:  { bpm: 128, fever: 156, cutoff: 5000,  uke: 0.70, glock: 0.64, bass: 1.10, perc: 0.96, whistle: 1.08, transpose: -2 },
+  bright:  { bpm: 130, fever: 158, cutoff: 5500, transpose: 0,  uke: 0.88, glock: 0.60, bass: 0.92, perc: 0.96, whistle: 1.00, arp: 0.60, organ: 1.00, pad: 1.00, spark: 1.00 },
+  warm:    { bpm: 124, fever: 150, cutoff: 4500, transpose: -2, uke: 1.04, glock: 0.52, bass: 1.00, perc: 0.92, whistle: 0.90, arp: 0.52, organ: 1.00, pad: 1.00, spark: 1.00 },
+  airy:    { bpm: 132, fever: 160, cutoff: 6000, transpose: 2,   uke: 0.72, glock: 0.62, bass: 0.80, perc: 1.06, whistle: 1.08, arp: 0.62, organ: 1.00, pad: 1.00, spark: 1.00 },
+  wide:    { bpm: 126, fever: 154, cutoff: 5000, transpose: -3,  uke: 0.78, glock: 0.54, bass: 1.10, perc: 0.94, whistle: 1.06, arp: 0.54, organ: 1.00, pad: 1.00, spark: 1.00 },
+  night:   { bpm: 118, fever: 144, cutoff: 4000, transpose: -3,  uke: 0.56, glock: 0.44, bass: 0.74, perc: 0.80, whistle: 0.88, arp: 0.44, organ: 1.00, pad: 1.00, spark: 1.00 },
+  crystal: { bpm: 130, fever: 158, cutoff: 6000, transpose: 3,   uke: 0.66, glock: 0.58, bass: 0.84, perc: 0.98, whistle: 1.18, arp: 0.58, organ: 1.00, pad: 1.00, spark: 1.00 },
+  reef:    { bpm: 132, fever: 160, cutoff: 6500, transpose: 3,   uke: 0.70, glock: 0.58, bass: 0.78, perc: 0.88, whistle: 1.10, arp: 0.58, organ: 1.00, pad: 1.00, spark: 1.00 },
+  ember:   { bpm: 122, fever: 148, cutoff: 4000, transpose: -4,  uke: 0.62, glock: 0.62, bass: 1.20, perc: 1.08, whistle: 0.88, arp: 0.62, organ: 1.00, pad: 1.00, spark: 1.00 },
+  canyon:  { bpm: 128, fever: 156, cutoff: 5000, transpose: -2,  uke: 0.70, glock: 0.64, bass: 1.10, perc: 0.96, whistle: 1.08, arp: 0.64, organ: 1.00, pad: 1.00, spark: 1.00 },
 };
 
 /** Keep every biome/night combination inside WebAudio's usable filter range. */
@@ -624,8 +718,27 @@ function mtof(m: number): number {
 export class Music {
   private phase: RunPhase = "menu";
   private runSeconds = 0;
-  private sinceEnd = Infinity;
-  private lastEndTime = 0;
+  private sinceEnd = Number.POSITIVE_INFINITY;
+  /**
+   * Audio-clock time the last flight ended, or `Infinity` if none has. The
+   * "never" has to be a real infinity and not 0: `sinceEnd` is derived as
+   * `now - lastEndTime`, and a 0 here would read as "a run ended at the start of
+   * time", which drops a fresh engine straight into the landing cadence.
+   */
+  private lastEndTime = Number.POSITIVE_INFINITY;
+  /** Audio-clock time at which the current flight took off. */
+  private flightStart = 0;
+  /**
+   * True while a flight is under way. Derived from the music mode (see
+   * `FLIGHT_MODES`) unless gameplay pins the run clock through `setRunPhase`.
+   */
+  private inFlight = false;
+  /**
+   * A run clock handed in by gameplay, or `null` to count the run on the audio
+   * clock. One field decides *who owns the clock*, never a second arrangement
+   * — both paths feed the one phase machine in `syncPhase()`.
+   */
+  private pinnedRunSeconds: number | null = null;
   private mode: MusicMode = "off";
   private targetMode: MusicMode = "off";
   private timer: number | null = null;
@@ -649,6 +762,9 @@ export class Music {
   private biome: BiomeMusicStyle = "bright";
   private transpose = 0;
   private lastCutoff = 5000;
+  private lastHats = 0;
+  /** Audio-clock time of the previous tick, so the follower is time-based. */
+  private lastTick = 0;
   /** 0..1 — continuous intensity (speed / altitude / fever / danger / combos). */
   private intensity = 0;
   private intensityTarget = 0;
@@ -773,35 +889,87 @@ export class Music {
 
   setMode(mode: MusicMode): void {
     if (mode === this.targetMode) return;
+    // The mode flip is the run signal. Stamp the clock *before* applying, so
+    // the mix that lands on take-off is already arranged for the new phase.
+    // Read the previous *mode* rather than the flight flag: a caller may have
+    // pinned the run clock, and the mode is the authority on whether a flight
+    // is under way.
+    const wasFlight = FLIGHT_MODES.has(this.targetMode);
+    const isFlight = FLIGHT_MODES.has(mode);
+    if (isFlight && !wasFlight) this.flightStart = this.ctx.currentTime;
+    if (!isFlight && wasFlight) this.lastEndTime = this.ctx.currentTime;
+    this.inFlight = isFlight;
+    // A mode change hands the clock back to the engine: if gameplay is pinning
+    // a run clock it will say so again on its next call.
+    this.pinnedRunSeconds = null;
     this.targetMode = mode;
     this.apply();
+    this.syncPhase();
   }
 
-  /** Arrangement phase hook used by gameplay and deterministic music tests. */
+  /**
+   * Hand the score the run's own clock instead of letting it count on the audio
+   * clock. Both sources drive the same phase machine, so this is a change of
+   * clock, not a second arrangement. Used by the deterministic tests, and the
+   * seam gameplay should use if it wants the score on the game's run clock
+   * rather than the audio hardware's.
+   */
   setRunPhase(inRun: boolean, runSeconds: number): void {
-    this.runSeconds = inRun ? Math.max(0, runSeconds) : 0;
-    if (!inRun && this.sinceEnd === Infinity) {
-      this.lastEndTime = this.ctx.currentTime;
+    const wasFlight = this.inFlight;
+    this.inFlight = inRun;
+    if (inRun) {
+      this.pinnedRunSeconds = Math.max(0, runSeconds);
+      if (!wasFlight) this.flightStart = this.ctx.currentTime - this.pinnedRunSeconds;
+    } else {
+      this.pinnedRunSeconds = null;
+      if (wasFlight) this.lastEndTime = this.ctx.currentTime;
     }
-    const elapsed = inRun ? Infinity : (this.ctx.currentTime - this.lastEndTime);
-    this.sinceEnd = inRun ? Infinity : Math.max(0, elapsed);
-    const context = this.mode === "sleep" ? "sleep" : inRun ? "flight" : this.sinceEnd < ARR.resolveSeconds ? "flight" : "menu";
-    const prev = this.phase;
-    this.phase = computeRunPhase({
-      context: context as "menu" | "flight" | "sleep",
-      inRun,
-      runSeconds: this.runSeconds,
-      sinceEnd: this.sinceEnd,
-      intensity: this.intensityTarget,
-      previous: this.phase,
-    });
-    if (this.phase !== prev && this.mode !== "off") {
-      this.apply();
-    }
+    this.syncPhase();
   }
 
   getRunPhase(): RunPhase {
     return this.phase;
+  }
+
+  /**
+   * Advance the run clock and re-decide the phase. The single place the phase
+   * changes, whether the clock came from `setMode` or from `setRunPhase`.
+   *
+   * Two things here are deliberate. The apex decision reads the *smoothed*
+   * intensity, not the raw target, so a one-frame spike the player never heard
+   * arrive cannot throw the whole band into an arrangement and back. And a
+   * re-arrangement is applied over `arrangementGlide()`, which is asymmetric on
+   * purpose: voices arriving are quick enough to read as an entrance, voices
+   * leaving slow enough to read as a release.
+   */
+  private syncPhase(): void {
+    const now = this.ctx.currentTime;
+    if (this.inFlight) {
+      this.runSeconds = this.pinnedRunSeconds ?? Math.max(0, now - this.flightStart);
+      this.sinceEnd = Number.POSITIVE_INFINITY;
+    } else {
+      this.runSeconds = 0;
+      this.sinceEnd = Number.isFinite(this.lastEndTime)
+        ? Math.max(0, now - this.lastEndTime)
+        : Number.POSITIVE_INFINITY;
+    }
+    const context: ArrangementContext = this.mode === "sleep"
+      ? "sleep"
+      : this.inFlight || this.sinceEnd < ARR.resolveSeconds
+        ? "flight"
+        : "menu";
+    const prev = this.phase;
+    this.phase = computeRunPhase({
+      context,
+      inRun: this.inFlight,
+      runSeconds: this.runSeconds,
+      sinceEnd: this.sinceEnd,
+      intensity: this.intensity,
+      previous: prev,
+    });
+    if (this.phase !== prev && this.mode !== "off") {
+      this.apply(arrangementGlide(prev, this.phase));
+    }
   }
 
   setNight(t: number): void {
@@ -809,23 +977,20 @@ export class Music {
     this.recomputeCutoff(0.6);
   }
 
-  /** Continuous intensity — opens the filter, speeds up tempo, and adds a tension hat layer. */
+  /**
+   * Continuous intensity — the arc's speed/altitude/fever/danger/combo number.
+   *
+   * Only the *target* moves here. Everything audible is derived from the
+   * smoothed follower in the tick, so the filter, the hats, the tempo and the
+   * arrangement can never disagree about how intense the run is. Writing them
+   * from here instead is what made the filter open in 12 Hz staircases: the
+   * target only moves in the 0.01 quanta of the early-out below, so the cutoff
+   * jumped 12 Hz at a time while the rest of the mix glided.
+   */
   setIntensity(v: number): void {
     const t = Math.max(0, Math.min(1, v));
     if (Math.abs(t - this.intensityTarget) < 0.01) return;
     this.intensityTarget = t;
-    const now = this.ctx.currentTime;
-    // The tension layer rides up quickly for responsiveness, decays a touch
-    // slower so a big moment lingers after the peak.
-    const style = BIOME_MIX[this.biome];
-    // Arcade tracks hold their own tempo floor; intensity adds the same 10%
-    // surge on top for island tracks.
-    const baseBpm = this.isChipTrack
-      ? (this.mode === "fever" ? 196 : 176)
-      : (this.mode === "fever" ? style.fever : style.bpm);
-    this.bpm = Math.round(baseBpm * (1 + t * 0.10));
-    this.tensionGain.gain.setTargetAtTime(t * 0.24 * style.perc, now, t > this.intensity ? 0.1 : 0.4);
-    this.recomputeCutoff(0.3);
   }
 
   /** Sidechain compressor pumping effect for viral EDM rhythm bounce. */
@@ -871,10 +1036,45 @@ export class Music {
   }
 
   private recomputeCutoff(ramp: number): void {
-    const cutoff = musicCutoff(BIOME_MIX[this.biome].cutoff, this.night, this.intensityTarget);
-    if (Math.abs(cutoff - this.lastCutoff) < 12) return;
+    const cutoff = musicCutoff(BIOME_MIX[this.biome].cutoff, this.night, this.intensity);
+    if (Math.abs(cutoff - this.lastCutoff) < CUTOFF_DEADBAND) return;
     this.lastCutoff = cutoff;
     this.filter.frequency.setTargetAtTime(cutoff, this.ctx.currentTime, ramp);
+  }
+
+  /**
+   * The tempo the score is playing at right now.
+   *
+   * One place, on purpose. `apply()` used to write `bpm` from the mode alone
+   * while `setIntensity()` wrote it with the surge folded in, so every mode flip
+   * — fever onset, a stormfront, landing on an island, pause and resume — wiped
+   * the surge for a moment and then let it come back, which is a tempo step
+   * exactly when the run is changing fastest. Deriving it every tick from the
+   * smoothed intensity makes the surge continuous and un-clobbable.
+   */
+  private tempoFor(): number {
+    const style = BIOME_MIX[this.biome];
+    // Arcade tracks hold their own tempo floor; intensity adds the same surge
+    // on top for island tracks.
+    const base = this.isChipTrack
+      ? (this.mode === "fever" ? CHIP_FEVER_BPM : CHIP_BPM)
+      : (this.mode === "fever" ? style.fever : style.bpm);
+    return Math.round(base * (1 + this.intensity * TEMPO_SURGE));
+  }
+
+  /**
+   * Everything in the band that reacts to intensity, written from one smoothed
+   * value: the tempo surge, the filter opening and the tension hats. `rising`
+   * keeps the hats' asymmetric response — quick to arrive, slow to leave, so a
+   * big moment lingers after the peak.
+   */
+  private applyIntensity(rising: boolean): void {
+    this.bpm = this.tempoFor();
+    this.recomputeCutoff(0.25);
+    const hats = this.intensity * TENSION_HATS * BIOME_MIX[this.biome].perc;
+    if (Math.abs(hats - this.lastHats) < HAT_DEADBAND) return;
+    this.lastHats = hats;
+    this.tensionGain.gain.setTargetAtTime(hats, this.ctx.currentTime, rising ? 0.1 : 0.4);
   }
 
   setLevel(level: number): void {
@@ -994,7 +1194,13 @@ export class Music {
     this.sparkGain.disconnect();
   }
 
-  private apply(): void {
+  /**
+   * Re-target the whole mix. `glide` is the arrangement's own time constant and
+   * is supplied only when the *phase* changed; every other caller (a mode flip,
+   * a biome crossing, a track-family change, a level change) keeps the per-voice
+   * ramps the engine was tuned with.
+   */
+  private apply(glide: number | null = null): void {
     const t = this.ctx.currentTime;
     const m = this.targetMode;
     const on = this.baseLevel > 0 && m !== "off";
@@ -1004,47 +1210,48 @@ export class Music {
     this.transpose = style.transpose;
     const song = m === "menu" || m === "play" || m === "fever" || m === "storm";
     // Arcade tracks run their own faster tempo; everything else follows the biome.
-    const chipBpm = this.isChipTrack ? (m === "fever" ? 196 : 176) : (m === "fever" ? style.fever : style.bpm);
     // Fever: glock leads more prominently (it's the hook the ear remembers).
     // Island layers stay silent on arcade tracks — square lead + chip bass own
     // the mix, with the glock shimmer on top.
     // Ukulele / pad / organ are island colours: silent under the arcade chiptune.
     const island = this.isChipTrack ? 0 : 1;
     const arr = arrangement(this.phase);
-    this.ukeGain.gain.setTargetAtTime(song ? (m === "menu" ? 0.30 : m === "fever" ? 0.26 : 0.32) * style.uke * island * arr.uke : 0, t, 0.4);
+    // A re-arrangement glides over the phase's own time constant; everything
+    // else falls back to the ramp this voice was tuned with.
+    const r = (base: number): number => glide ?? base;
+    this.ukeGain.gain.setTargetAtTime(song ? (m === "menu" ? 0.30 : m === "fever" ? 0.26 : 0.32) * style.uke * island * arr.uke : 0, t, r(0.4));
     // Marimba/xylophone accent — a subtle woody pop under the lead, not a
     // voice of its own. Kept very low so the square lead (chip), whistle
     // (island), or Tron synth can actually be heard.
     this.glockGain.gain.setTargetAtTime(
       song ? (m === "menu" ? 0.04 : m === "fever" ? 0.06 : 0.05) * style.glock * arr.glock : 0,
       t,
-      0.4,
+      r(0.4),
     );
-    this.bassGain.gain.setTargetAtTime(song ? (m === "fever" ? 0.48 : 0.42) * style.bass * arr.bass : 0, t, 0.4);
+    this.bassGain.gain.setTargetAtTime(song ? (m === "fever" ? 0.48 : 0.42) * style.bass * arr.bass : 0, t, r(0.4));
     const percBase = m === "play" ? (this.isChipTrack ? 0.22 : 0.18) : m === "fever" ? 0.36 : m === "storm" ? 0.46 : m === "menu" ? (this.isChipTrack ? 0.30 : 0.14) : 0;
-    this.percGain.gain.setTargetAtTime(percBase * style.perc * arr.perc, t, 0.3);
-    this.whistleGain.gain.setTargetAtTime((m === "fever" ? 0.58 : m === "play" ? 0.50 : m === "menu" ? 0.36 : 0) * style.whistle * island * arr.whistle, t, 0.3);
-    this.arpGain.gain.setTargetAtTime((m === "fever" ? 0.06 : m === "play" ? 0.03 : m === "menu" ? 0.015 : 0) * style.glock * island * arr.arp, t, 0.5);
-    this.organGain.gain.setTargetAtTime((m === "play" ? 0.10 : m === "fever" ? 0.18 : m === "menu" ? 0.05 : 0) * island * arr.organ, t, 1.2);
+    this.percGain.gain.setTargetAtTime(percBase * style.perc * arr.perc, t, r(0.3));
+    this.whistleGain.gain.setTargetAtTime((m === "fever" ? 0.58 : m === "play" ? 0.50 : m === "menu" ? 0.36 : 0) * style.whistle * island * arr.whistle, t, r(0.3));
+    this.arpGain.gain.setTargetAtTime((m === "fever" ? 0.06 : m === "play" ? 0.03 : m === "menu" ? 0.015 : 0) * style.arp * island * arr.arp, t, r(0.5));
+    this.organGain.gain.setTargetAtTime((m === "play" ? 0.10 : m === "fever" ? 0.18 : m === "menu" ? 0.05 : 0) * style.organ * island * arr.organ, t, r(1.2));
     this.padGain.gain.setTargetAtTime(
-      m === "sleep" ? 0.18 : (m === "menu" ? 0.16 : m === "play" ? 0.06 : 0) * island * arr.pad,
+      m === "sleep" ? 0.18 : (m === "menu" ? 0.16 : m === "play" ? 0.06 : 0) * style.pad * island * arr.pad,
       t,
-      0.8,
+      r(0.8),
     );
-    this.tronGain.gain.setTargetAtTime(this.isTronTrack && song ? (m === "fever" ? 0.36 : 0.30) * arr.tron : 0, t, 0.4);
-    this.chipGain.gain.setTargetAtTime(this.isChipTrack && song ? (m === "menu" ? 0.38 : m === "fever" ? 0.52 : 0.44) * arr.chip : 0, t, 0.4);
+    this.tronGain.gain.setTargetAtTime(this.isTronTrack && song ? (m === "fever" ? 0.36 : 0.30) * arr.tron : 0, t, r(0.4));
+    this.chipGain.gain.setTargetAtTime(this.isChipTrack && song ? (m === "menu" ? 0.38 : m === "fever" ? 0.52 : 0.44) * arr.chip : 0, t, r(0.4));
     this.sparkGain.gain.setTargetAtTime(
-      song ? (this.isChipTrack ? (m === "fever" ? 0.06 : 0.04) : (m === "fever" ? 0.04 : 0.03) * style.glock) * arr.spark : 0,
+      song ? (this.isChipTrack ? (m === "fever" ? 0.06 : 0.04) * style.spark : (m === "fever" ? 0.04 : 0.03) * style.glock * style.spark) * arr.spark : 0,
       t,
-      0.45,
+      r(0.45),
     );
     this.lullabyGain.gain.setTargetAtTime(m === "sleep" ? 0.3 : 0, t, 0.6);
-    const cutoff = musicCutoff(style.cutoff, this.night, this.intensityTarget);
-    this.filter.frequency.setTargetAtTime(cutoff, t, 0.55);
-    this.lastCutoff = cutoff;
-    this.bpm = chipBpm;
+    this.recomputeCutoff(0.55);
 
     this.mode = m;
+    this.bpm = this.tempoFor();
+
     if (on && this.timer === null) this.start();
     if (!on && this.timer !== null) {
       window.clearInterval(this.timer);
@@ -1064,15 +1271,25 @@ export class Music {
     this.syncFamilyFlags();
     this.lullabyStep = 0;
     this.counterNote = 0;
+    // Seed the follower's clock so the first tick measures ~0 s rather than the
+    // whole age of the AudioContext, which would snap the mix to its target.
+    this.lastTick = this.ctx.currentTime;
     if (this.mode !== "sleep") this.onTrackChange?.(TRACKS[this.section]!.name);
     this.timer = window.setInterval(() => this.tick(), TICK_MS);
   }
 
   private tick(): void {
     if (this.ctx.state !== "running") return;
-    // Smooth the intensity so the hat layer swells instead of stuttering.
-    this.intensity += (this.intensityTarget - this.intensity) * 0.12;
     const now = this.ctx.currentTime;
+    // One smoothed intensity, and everything that reacts to it reads the same
+    // number: the filter, the hats, the tempo and the arrangement. Stepping it
+    // on elapsed audio time rather than a fixed fraction per tick is what keeps
+    // those four in agreement after the browser throttles our interval.
+    const rising = this.intensityTarget > this.intensity;
+    this.intensity = intensityFollow(this.intensity, this.intensityTarget, now - this.lastTick);
+    this.lastTick = now;
+    this.applyIntensity(rising);
+    this.syncPhase();
     // If the timer was throttled (background tab, occluded window, locked
     // phone) the sequencer will be far behind. Re-anchor so we skip the missed
     // music rather than dumping the whole backlog onto the audio clock at once.

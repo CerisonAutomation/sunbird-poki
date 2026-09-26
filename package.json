@@ -48,6 +48,7 @@
     "upload:poki": "pnpm build:poki && pnpm verify:upload",
     "setup:browser": "node scripts/setup-browser.mjs",
     "test:artifact": "pnpm build:poki && playwright test -c playwright.artifact.config.ts",
+    "test:policy": "pnpm build:poki && pnpm build && playwright test -c playwright.policy.config.ts",
     "gate": "pnpm lint && pnpm audit:ui && pnpm typecheck && pnpm typecheck:server && pnpm test && pnpm test:server && pnpm verify:prod && pnpm build:portals && pnpm verify:portals && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm isolation:check && pnpm test:policy && pnpm test:artifact && pnpm test:mobile",
     "serve:upload": "node scripts/serve-upload.mjs",
     "test:visual": "playwright test -c playwright.visual.config.ts",

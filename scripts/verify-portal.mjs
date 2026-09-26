@@ -58,7 +58,7 @@ function zipHtml(portal) {
       maxBuffer: 32 * 1024 * 1024,
     }).toString("utf8");
   } catch {
-    fail(`sunbird-${portal}.zip is missing or has no index.html — run pnpm build:portals first.`);
+    fail(`sunbird-${portal}.zip is missing or has no index.html — run pnpm build:poki first.`);
   }
 }
 
@@ -74,7 +74,7 @@ const failures = [];
 for (const portal of PORTALS) {
   const zipPath = join(root, `sunbird-${portal}.zip`);
   if (!existsSync(zipPath)) {
-    failures.push(`${portal}: zip missing — run pnpm build:portals.`);
+    failures.push(`${portal}: zip missing — run pnpm build:poki.`);
     continue;
   }
   const zipBytes = statSync(zipPath).size;

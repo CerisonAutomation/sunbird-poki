@@ -67,10 +67,8 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 |---|---|
 | `npm run dev` | Start Vite dev server |
 | `npm run build` | Production bundle (chunked; Vercel/PWA) |
-| `npm run build:vercel` | Same as `build` (explicit CDN target) |
-| `npm run build:itch` | Single-file bundle → `dist-itch/` |
-| `npm run build:poki` / `build:crazy` / `build:generic` | Portal zips (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
-| `npm run build:portals` | All three portal zips |
+| `npm run build` | The single-file bundle → `dist/` (this is also what Vercel deploys) |
+| `npm run build:poki` | The Poki submission: `sunbird-poki.zip` + the generated `poki-upload/` folder (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
 | `npm run test:mp` | Multiplayer protocol smoke against a running server |
 | `npm run isolation:check` | Source-level split: the Rust stack stays platform-agnostic, the Poki edition stays Netlib P2P + AUDS, and neither leaks into the other |
 | `npm run typecheck` | TypeScript type-check without emit |
@@ -167,7 +165,7 @@ fails the build on a broken link, an orphan doc, or a snapshot without a status.
 - **Frontend** — Vercel: `vercel deploy --prod` (config in `vercel.json`). See [DEPLOY.md](./DEPLOY.md).
 - **Leaderboard** — Vercel Functions in `api/`, persisted in Upstash Redis (required for production; in-memory fallback for previews).
 - **Multiplayer** — Self-hosted Rust: `docker compose up -d --build` (Rust server + TS social backend, see [DEPLOY.md](./DEPLOY.md)) or `cargo build --release -p sunbird-server`. In-memory rooms cost nothing while empty. See [rust/README.md](./rust/README.md).
-- **Portals** — `npm run build:portals` produces submission-ready zips for Poki, CrazyGames, and 10+ generic HTML5 portals.
+- **Portals** — this checkout is the **Poki-only** fork, so `npm run build:poki` is the one portal build: it produces `sunbird-poki.zip` and the `poki-upload/` folder the Poki Inspector takes. There is no `build:portals`/`build:crazy`/`build:generic` here; see the note at the top of this file.
 
 ## Game systems
 

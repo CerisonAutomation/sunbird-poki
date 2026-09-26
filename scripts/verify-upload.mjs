@@ -114,7 +114,7 @@ if (existsSync(manifestPath)) {
     else
       bad(
         "ROOT-03",
-        `${UPLOAD}/ is STALE: built from a different ${DIST}/index.html — the folder you would upload does not contain the current build. Run \`pnpm build:portals\`.`,
+        `${UPLOAD}/ is STALE: built from a different ${DIST}/index.html — the folder you would upload does not contain the current build. Run \`pnpm build:poki\`.`,
       );
   } else if (!existsSync(DIST)) {
     bad("ROOT-03", `${DIST}/ missing — run \`pnpm build:poki\` to prove ${UPLOAD}/ is current`);
@@ -133,7 +133,7 @@ if (existsSync(manifestPath)) {
     }
   }
 } else {
-  bad("ROOT-03", `${UPLOAD}/upload-manifest.json missing — folder was not produced by \`pnpm build:portals\``);
+  bad("ROOT-03", `${UPLOAD}/upload-manifest.json missing — folder was not produced by \`pnpm build:poki\``);
 }
 
 /* ROOT-04 (folder half) ----------------------------------------------- */

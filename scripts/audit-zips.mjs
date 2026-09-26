@@ -5,7 +5,7 @@
  * verify-portal.mjs is the shippability GATE (fast, per-zip). This script is
  * the forensic inspection: zip anatomy, cross-zip separation, banned-string
  * sweep, full external-URL inventory, lifecycle-signal presence, and the
- * sandbox-storage fix. Run it after `pnpm build:portals`:
+ * sandbox-storage fix. Run it after `pnpm build:poki`:
  *
  *   node scripts/audit-zips.mjs
  *
@@ -45,7 +45,7 @@ const zips = {};
 for (const portal of PORTALS) {
   const zipPath = join(root, `sunbird-${portal}.zip`);
   if (!existsSync(zipPath)) {
-    fail(portal, "zip missing — run `pnpm build:portals` first.");
+    fail(portal, "zip missing — run `pnpm build:poki` first.");
     continue;
   }
   const html = unzip(portal, "html");

@@ -21,7 +21,7 @@
  *   3. every declared host reached `docs/poki/CSP_REQUEST.md` — otherwise someone
  *      edited the host table and did not run `pnpm gen-csp`.
  *
- *     pnpm verify:csp        # after pnpm build:poki / build:portals
+ *     pnpm verify:csp        # after pnpm build:poki / build:poki
  *
  * Wired into `pnpm verify:portals`, so both `pnpm gate` and `pnpm poki:preflight`
  * run it against a fresh build. The scan is exported so

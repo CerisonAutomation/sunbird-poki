@@ -58,7 +58,7 @@ carries an obligation was dropped.
 
 ```bash
 pnpm poki:audit        # run every automated rule check, rewrite COMPLIANCE.md, exit non-zero on failure
-pnpm build:portals     # produce sunbird-poki.zip / -crazy.zip / -generic.zip + the generated poki-upload/
+pnpm build:poki        # produce sunbird-poki.zip + the generated poki-upload/ folder
 pnpm upload:poki       # build Poki only + prove the Inspector can accept the folder (see UPLOAD.md)
 pnpm verify:upload     # the Inspector-shaped gate: root index.html, fresh, uploadable files only
 pnpm verify:portals    # the shippability gate on those zips (Poki size/asset/external-URL rules)

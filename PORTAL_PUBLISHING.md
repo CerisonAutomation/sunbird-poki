@@ -12,11 +12,9 @@ Sunbird ships four explicit build targets through `VITE_PORTAL_TARGET`:
 ## Build commands
 
 ```bash
-pnpm build:poki      # → sunbird-poki.zip
-pnpm build:crazy     # → sunbird-crazy.zip
-pnpm build:generic   # → sunbird-generic.zip
-pnpm build:portals   # all three
-pnpm verify:portals  # compliance gate over the three zips (0 = shippable)
+pnpm build:poki      # → sunbird-poki.zip  +  poki-upload/   (the only portal build in this fork)
+pnpm verify:portals  # compliance gate over the zip (0 = shippable)
+pnpm audit:zips      # the deeper zip audit
 ```
 
 Each zip is fully self-contained (single inlined `index.html` + `icons/` + `fonts/`),

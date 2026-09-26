@@ -91,7 +91,7 @@ try {
   run("npm", ["run", "lint"]);
   run("npm", ["run", "typecheck"]);
   run("npm", ["run", "test"]);
-  run("npm", ["run", "build:vercel"]);
+  run("npm", ["run", "build"]);
 } catch {
   fail("A standard gate (lint/typecheck/test/build) failed. Fix it before the audit.");
 }

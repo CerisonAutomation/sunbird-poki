@@ -116,11 +116,11 @@ function checkCommand(verify) {
   }
   const requires = (verify.requires ?? []).filter((file) => !existsSync(join(root, file)));
   if (!RUN_COMMANDS) {
-    const note = requires.length ? ` (needs ${requires.join(", ")} — run with --run after build:portals)` : "";
+    const note = requires.length ? ` (needs ${requires.join(", ")} — run with --run after build:poki)` : "";
     return { ok: true, detail: `gate wired: ${verify.cmd}${note}`, deferredRun: requires.length > 0 };
   }
   if (requires.length) {
-    return { ok: false, detail: `cannot execute: ${requires.join(", ")} missing — run pnpm build:portals first` };
+    return { ok: false, detail: `cannot execute: ${requires.join(", ")} missing — run pnpm build:poki first` };
   }
   try {
     execFileSync(verify.cmd, { cwd: root, shell: true, stdio: "pipe" });

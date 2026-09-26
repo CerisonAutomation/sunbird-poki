@@ -2119,7 +2119,7 @@ function renderLive(s: HudSnapshot): string {
             </div>
           `).join("")}
         </div>
-        ${live.length === 0 ? `<p class="fineprint">Just you so far — share the code above and the room fills with real pilots.</p>` : ""}
+        ${!live.length ? `<p class="fineprint">Just you so far — share the code above and the room fills with real pilots.</p>` : ""}
         ${s.roomCount > 8 ? `<p class="fineprint">And ${s.roomCount - 8} more ${s.roomAiFallback ? "AI pilots" : "connected pilots"}</p>` : ""}
 
         <button class="ghost-btn" data-ui data-action="room-close">Leave room</button>
@@ -2940,7 +2940,7 @@ function renderProgress(s: HudSnapshot): string {
     }
     ${s.rivalBanner ? renderRivalBanner(s.rivalBanner) : ""}
 
-    ${doNow.length > 0 ? `<div class="section-title progress-do-now"><span>Do this now</span></div>${doNow.join("")}` : ""}
+    ${doNow.length ? `<div class="section-title progress-do-now"><span>Do this now</span></div>${doNow.join("")}` : ""}
 
     ${sectionTitle("Today", "QUESTS &amp; GOALS")}
     ${renderGoalList(s.sessionGoals)}

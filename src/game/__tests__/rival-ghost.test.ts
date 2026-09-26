@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GHOST_MAX_SAMPLES, GHOST_SAMPLE_DT } from "../constants";
+import { paceSkillFor } from "../Engagement";
 import { paceName, paceTargetDistance, synthesizePaceGhost, type PaceTerrain } from "../RivalGhost";
 
 /** Rolling hills, analytically differentiated so slope is exact. */
@@ -79,6 +80,45 @@ describe("pace ghost", () => {
     const slow = make("skill", 1200, 0.05);
     const fast = make("skill", 1200, 0.95);
     expect(fast.seconds).toBeLessThan(slow.seconds);
+  });
+
+  it("is paced for the pilot, not cloned from them — the never-a-humiliation cap", () => {
+    // The strongest pilot must not get the strongest possible ghost.
+    // `paceSkillFor` saturates at 0.88, so every pilot from 0.92 skill up has
+    // to get the *identical* ghost. Before the wire each of these got its own,
+    // faster-and-faster line and a top pilot chased one nobody can catch; a
+    // max-cruise, max-dive ghost is exactly the humiliation a *pace* ghost
+    // exists to avoid.
+    const capped = make("cap", 1200, 0.92);
+    for (const s of [0.95, 1]) {
+      const g = make("cap", 1200, s);
+      expect(g.record.samples).toEqual(capped.record.samples);
+      expect(g.seconds).toBe(capped.seconds);
+    }
+    // The cap is a real one, not a coincidence for those inputs: these three
+    // all pace to 0.88 while a merely-strong pilot paces below it.
+    expect([0.92, 0.95, 1].map(paceSkillFor)).toEqual([0.88, 0.88, 0.88]);
+    expect(paceSkillFor(0.8)).toBeLessThan(0.88);
+  });
+
+  it("paces a middling pilot above a struggling one — the ghost is a target", () => {
+    const struggling = make("spread", 1200, 0.2);
+    const middling = make("spread", 1200, 0.55);
+    expect(middling.seconds).toBeLessThan(struggling.seconds);
+  });
+
+  it("survives a non-numeric skill instead of emitting an empty ghost", () => {
+    // `math.clamp` propagates NaN, so a NaN skill used to poison `cruise`, the
+    // loop guard went false on the first tick, and the pilot got a ghost with
+    // zero samples and zero seconds — a "rival" that never moves. Assert the
+    // shape too, so this cannot pass by having nothing to look at.
+    const g = synthesizePaceGhost({ seed: "nan", startX: 100, distance: 900, terrain: hills, skill: Number.NaN });
+    expect(g.record.samples.length).toBeGreaterThan(4);
+    expect(g.seconds).toBeGreaterThan(0);
+    for (const [, x, y] of g.record.samples) {
+      expect(Number.isFinite(x)).toBe(true);
+      expect(Number.isFinite(y)).toBe(true);
+    }
   });
 
   it("labels itself as a pace target, never as a person", () => {

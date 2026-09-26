@@ -78,3 +78,13 @@ scripts-tmp/
 # state. Never version it: it duplicates src/ wholesale and churns on every
 # agent run.
 .kilo/
+
+# The agent office (hive/) lives INSIDE this repo but is not part of the game.
+# Never version it: it holds every agent's memory.md, inboxes, session state and
+# crash logs, and it churns constantly. Without these, a bare `git add -A` stages
+# 70+ office files into the game. Found by the games-1 baseline audit.
+hive/
+palace/
+roster.json
+roster-backups/
+hallways.json

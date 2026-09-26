@@ -7178,292 +7178,356 @@ export class Game {
     const sTier = this.seasonPass.tier();
     const sProg = this.seasonPass.progressInTier();
     const snap: HudSnapshot = {
-      state: this.state,
-      screen: this.screen,
-      checkoutSku: this.checkoutSku,
-      portalName: this.platform?.name ?? getPortalTarget(),
-      // Poki can render its own leaderboard overlay; the button only appears
-      // when the deployed SDK actually offers it.
-      portalLeaderboard: this.platform?.capabilities().includes("leaderboard") ?? false,
-      version: this.uiVersion,
-      // gameover reads the frozen finishRun() number (see resultDistance):
-      // the bird keeps coasting under the results card, and re-reading its
-      // live position here made the results distance climb past the number
-      // that was actually scored and submitted to the leaderboard.
-      distance: this.state === "gameover" ? this.resultDistance : stats.distance,
-      coins: this.runCoins,
-      multiplierClaimed: this.multiplierClaimed,
-      daylight: this.daylight,
-      daylightMax: this.daylightMax(),
-      fever: this.feverOn ? this.feverTimer / (FEVER_DURATION + this.gameplaySkin.feverBonus + this.masteryPerk.feverBonus) : this.perfectChain / FEVER_NEED,
-      feverOn: this.feverOn,
-      multiplier: this.save.nestMultiplier() * (this.feverOn ? 2 : 1),
-      bestDistance: st.bestDistance,
-      score: this.score(),
-      island: this.island,
-      perfects: this.perfects,
-      clouds: this.runClouds,
-      zeniths: this.zeniths,
-      rings: this.runRings,
-      balloons: this.runBalloons,
-      sunflowers: this.runSunflowers,
-      hint: this.state === "playing" ? this.coachHint() || this.hint : "",
-      magnetTimer: this.magnetTimer,
-      shield: this.shield,
-      boostTimer: this.boostTimer,
-      gold: st.gold,
-      vip: this.save.isVipActive(),
-      vipDaysLeft: this.save.vipDaysLeft(),
-      vipExpiredNotice: this.vipExpiredNotice,
-      adsLeftToday: this.save.adsLeftToday(),
-      ghostDelta: this.state === "playing" || this.state === "gameover" ? this.ghostDelta() : null,
-      newBest: this.newBest,
-      continueTimer: this.continueTimer,
-      continueReason: this.continueOfferView?.reason ?? "",
-      continueHighlight: this.continueOfferView?.highlight ?? false,
-      continueCost: CONTINUE_COST,
-      canAffordContinue: st.wallet >= CONTINUE_COST,
-      // Portal: only advertise a rewarded option the SDK can actually pay out.
-      adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
-      adTimer: this.adTimer,
-      adSkippable: !this.portalEnabled(),
-      adTotal: this.ads.duration,
-      adReason: this.adReason,
-      seedLabel: this.seedLabel(),
-      wings: this.wingsCard(),
-      flightPath: this.state === "gameover" ? this.flightPath : [],
-      rivalBanner: this.rival && this.rivalResult === "" ? `${this.rival.name}|${this.rival.distance}` : "",
-      seedMode: this.seedMode,
-      wallet: st.wallet,
-      piggyCoins: st.piggyBank?.coins ?? 0,
-      prestigeLevel: st.prestige?.level ?? 0,
-      prestigeMult: st.prestige?.multiplier ?? 1.0,
-      canFreeSpin: this.save.canFreeWheelSpin(this.today),
-      streakDays: st.streak.days,
-      nestLevel: st.nestLevel,
-      nestMult: this.save.nestMultiplier(),
-      nestPrice: this.save.nestUpgradePrice(),
-      nestMaxed: st.nestBought >= 10,
-      missions: this.missionViews,
-      quests: this.questViews,
-      highScores: st.highScores,
-      todayBest,
-      runsPlayed: st.runsPlayed,
-      newlyCompleted: this.newlyCompleted,
-      claimedQuests: this.claimedQuests,
-      skins: this.skinViews,
-      boosts: this.boostViews,
-      shopTrails: this.shopTrailViews,
-      settings: st.settings,
-      goldPrice: GOLD.price,
-      starterPrice: STARTER_PACK.price,
-      starterFeatures: STARTER_PACK.features,
-      starterOwned: st.starterPack,
-      goldFeatures: GOLD.features,
-      vipPrice: VIP.price,
-      vipFeatures: VIP.features,
-      checkoutMode: this.checkoutMode(),
-      checkoutUrl: "",
-      checkoutBusy: this.checkoutBusy,
-      checkoutError: this.checkoutError,
-      checkoutOk: this.checkoutOk,
-      checkoutWaiting: this.checkoutWaiting,
-      restoreMessage: this.restoreMessage,
-      resetArmed: this.resetArmed,
-      season: {
-        tier: sTier,
-        maxTier: this.seasonPass.view().length,
-        have: sProg.have,
-        need: sProg.need,
-        label: seasonLabel(seasonId()),
-        tiers: this.seasonPass.view(),
-      },
-      trophies: this.achievements.view(),
-      trophyCounts: this.achievements.counts(),
-      nearestTrophy: this.achievements.nearest(),
-      referralCode: st.referralCode,
-      referralRedeemed: st.referralRedeemed,
-      referralMessage: this.referralMessage,
-      cloudCode: this.screen === "account" ? this.save.exportCode() : "",
-      cloudMessage: this.cloudMessage,
-      canInstall: Boolean(this.deferredInstall) && !this.portalEnabled(),
-      shareBusy: this.shareBusy,
-      expShareFirst:
-        this.state !== "gameover"
-          ? false
-          : (this.expShareFirst ??= variant(st.deviceId, "results_cta_order", 50, (v) => {
-              this.telemetry.track("experiment_exposure", { experiment: "results_cta_order", variant: v });
-            })) === "treatment",
-      combo: Math.max(this.perfectChain, this.versus && this.p1 ? this.p1.launch.combo : this.launch.combo),
-      ringChain: this.ringChain,
-      ringChainFrac: RING_CHAIN_WINDOW > 0 ? this.ringChainTimer / RING_CHAIN_WINDOW : 0,
-      slopeChain: this.slopeChain.chain,
-      slopeScore: this.slopeChain.score,
-      speedNorm: Math.min(1, this.bird.speed() / 100),
-      gust: this.weather.gust,
-      inThermal: this.weather.inThermal,
-      biomeName: this.terrain.biomeAt(this.bird.x).name,
-      biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
-      atlas: this.screen === "atlas" ? this.atlas() : [],
-      farthestIsland: Math.max(st.farthestIsland, this.island),
-      launchBanner: this.launchBannerText,
-      launchBannerT: this.launchBannerT,
-      launchRating: this.lastLaunch?.rating ?? "none",
-      altitude: this.versus && this.p1 ? this.p1.bird.altitude : this.bird.altitude,
-      altZone: this.altZone,
-      maxAltitude: this.maxAltitude,
-      powers: this.versus && this.p1 ? this.p1.powers.view() : this.powers.view(),
-      modes: MODES,
-      modeId: this.modeId,
-      modeName: this.mode.name,
-      modeIcon: this.mode.icon,
-      countdown: this.countdown,
-      versus: this.versus,
-      splitLayout: this.input.splitMode,
-      versusWinner: this.versusWinner,
-      p1Stats: this.p1 && this.versus ? this.p1.stats : null,
-      p2Stats: this.p2 && this.versus ? this.p2.stats : null,
-      raceFinish: RACE_FINISH,
-      sessionGoals: this.goals.goals,
-      goalPop: this.goalPopT > 0 ? this.goalPop : "",
-      goalPopKind: this.goalPopKind,
-      rankUp: this.rankUpT > 0 ? this.rankUp : "",
-      nearMiss: this.nearMiss.text,
-      skillLabel: this.flow.label(),
-      skill: this.flow.skill,
-      bestAltitude: st.bestAltitude,
-      bestCombo: st.bestCombo,
-      runGems: this.runGems,
-      pilotName: this.pilotName,
-      board: this.boardPage,
-      boardLoading: this.boardLoading,
-      boardScope: this.boardScope,
-      boardMetric: this.boardMetric,
-      boardOnline: isLeaderboardOnline(),
-      portalAccountName: this.portalAccountName,
-      // Pulled from the page the menu already warms (scope global / distance):
-      // no extra request, and nothing to render on a cold cache.
-      homeBoard: (this.board.peek("global", "distance")?.entries ?? []).slice(0, 3).map((e) => ({
-        name: e.name,
-        value: `${Math.round(e.value).toLocaleString()} m`,
-        you: e.you,
-      })),
-
-      cups: this.cups.view(),
-      trails: this.cups.ownedTrails().map((id) => ({
-        id,
-        label: TRAILS[id]?.label ?? id,
-        equipped: st.activeTrail === id,
-      })),
-        lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
-      standings:
-        this.massRace.active && this.state === "playing"
-          ? this.massRace.standings(this.bird.x, this.startX, this.pilotName, 6).rows
-          : [],
-      racePlace: this.racePlace,
-      raceFinishM: this.mode.finish,
-      raceField: this.raceField,
-      raceFinishTime: this.raceFinishTime,
-      massRace: isRaceMode(this.modeId),
-      multiplayerLive: isMultiplayerConfigured() && !(this.state === "playing" && this.localRace),
-      multiplayerConfigured: isMultiplayerConfigured(),
-      roster:
-        this.massRace.active && this.state === "playing"
-          ? this.massRace.roster(this.bird.x, this.startX, this.mode.finish, this.pilotName)
-          : [],
-      roomCode: this.roomCode,
-      roomCount: this.net?.info().count ?? 0,
-      roomCapacity: this.net?.info().capacity ?? MASS_RACE_FIELD,
-      roomReady: this.net?.info().ready ?? false,
-      roomReadyCount: (this.net?.roster().filter((p) => p.ready).length ?? 0) + (this.net?.info().ready ? 1 : 0),
-      roomAiFallback: this.net?.info().aiFallback ?? false,
-      roomSize: this.roomSize,
-      roomSkill: this.roomSkill,
-      roomMuted: this.roomMuted,
-      // Only the lobby screen can consume these — no per-frame allocs elsewhere.
-      roomRivals:
-        this.screen === "live"
-          ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
-          : [],
-      netState: this.net?.info().state ?? "offline",
-      linkQuality: this.net?.connectionQuality ?? "unknown",
-      netError: this.net?.info().error ?? "",
-      draft: this.massRace.draft,
-      finishRemaining: this.finishRemaining,
-      nemesis: this.nemesis,
-      photoFinish: this.photoFinish,
-      rival: this.rivalCard(),
-      loadout: this.loadoutView(),
-      // Lobby-only field: computed every frame before, including mid-flight
-      // and on the results card, where no one renders it.
-      lobbyRivals:
-        this.state === "menu" && this.screen === "live"
-          // Truth only: the pilots actually seated in this room. No padded
-          // name-pool rivals, no borrowed leaderboard names — an empty room
-          // renders as an empty room. When the room is the local AI fallback,
-          // every row is tagged as an AI pilot rather than as a live human.
-          ? lobbyRivals(this.net?.roster() ?? [], this.net?.info().aiFallback ?? false)
-          : [],
-      raceRated: this.rankedRace,
-      raceVerified: this.serverPlaceApplied,
-      ratingDelta: this.lastRatingDelta,
-      ratingBonus: this.lastRatingBonus,
-      duel: { ...st.duel },
-      duelWas: this.duelResult,
-      duelDelta: this.duelDelta,
-      duelFoe: duelOpponent(`${this.seed}:${this.today}`, st.rival.rating),
-      daily: this.cardCache.daily,
-      gauntlet: this.cardCache.gauntlet,
-      calendar: this.cardCache.calendar,
-      mastery: this.cardCache.mastery,
-      challengeOutcome: this.challengeOutcome,
-      weeklyEvent: weeklyEvent(),
-      monthlyTheme: monthlyTheme(),
-      eventClearsWeek: st.events.week === weekKey() ? st.events.clearsThisWeek : 0,
-      eventClearsMonth: st.events.month === monthKey() ? st.events.clearsThisMonth : 0,
-      themeTrailClaimed: st.events.claimedTrailMonth === monthKey(),
-      themeTrailNeed: THEME_TRAIL_CLEARS,
-      campaign: campaignViews(this.save, st.campaignClaimed),
-      campaignDone: campaignProgress(st.campaignClaimed).done,
-      campaignTotal: campaignProgress(st.campaignClaimed).total,
-      squad: this.squad?.state ?? emptySquadState(),
-      friendChallenges: this.social.getActiveChallenges(),
-      recentPilots: this.pilots.all(),
-      share: {
-        available: sharingAvailable(),
-        code: this.shareCode,
-        busy: this.runShareBusy,
-        error: this.shareError,
-        loaded: this.sharedRun,
-      },
-      squadNotice: this.squadNotice,
-      dailyFlash: dailyFlashBird(this.today),
-      stipendClaimed: st.lastStipendClaimed === this.today,
-      rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
-      wingmanBundle: st.wingmanBundle === true,
-      showTutorialHand:
-        this.state === "playing" &&
-        !this.input.diving &&
-        // First-flight coach: a brand-new player who has not held yet gets the
-        // demonstrative press hand for the whole "dive" step, not just the old
-        // 2.6 s — a static text line for up to two minutes is exactly the
-        // dead-air the baseline probe measured. The hand hides the instant the
-        // player dives (they've got it) and never outstays a completed coach.
-        (this.coach && !this.coach.done && this.coach.view().step === 0
-          ? true
-          : st.tutorialRuns < 2 && this.hintTimer < 2.6),
-      pvpModes: PVP_MODES,
-      pvpWorlds: PVP_WORLDS,
-      selectedPvpMode: this.selectedPvpMode,
-      selectedPvpWorld: this.selectedPvpWorld,
-      beatLine: null,
-      nextAction: "",
-      // Celebration and proximity are not yet plumbed from game state; provide
-      // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
-      celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
-      proximity: { visible: false, fill: 0, remaining: 0, name: "" },
+      ...this.hudRunState(st, stats),
+      ...this.hudWalletAndBreaks(st),
+      ...this.hudProfile(st, todayBest, sTier, sProg),
+      ...this.hudFlightAndWorld(st),
+      ...this.hudRace(st),
+      ...this.hudEventsAndExtras(st),
     };
     this.hud.update(snap);
+  }
+
+  /* ------------------------------------------------------------------
+   * The HUD snapshot, in six readable parts.
+   *
+   * This used to be one 280-line object literal, so the only way to answer
+   * "where does the HUD get X from" was to scan 280 lines to find it. The
+   * six methods below return contiguous slices of that same literal, in the
+   * same order, so every field is still evaluated left to right exactly as
+   * before -- only the reading changed.
+   *
+   * Bounds: `snap: HudSnapshot` is still annotated on the call
+   * site, so a field added to HudSnapshot that no slice covers is a compile
+   * error, and a slice that misspells a field is a compile error. The
+   * compiler guarantee is exactly as strong as it was when this was one
+   * literal.
+   * ------------------------------------------------------------------ */
+
+  /** Run, score and in-flight status. */
+  private hudRunState(st: SaveData["state"], stats: RunStats) {
+    return {
+    state: this.state,
+    screen: this.screen,
+    checkoutSku: this.checkoutSku,
+    portalName: this.platform?.name ?? getPortalTarget(),
+    // Poki can render its own leaderboard overlay; the button only appears
+    // when the deployed SDK actually offers it.
+    portalLeaderboard: this.platform?.capabilities().includes("leaderboard") ?? false,
+    version: this.uiVersion,
+    // gameover reads the frozen finishRun() number (see resultDistance):
+    // the bird keeps coasting under the results card, and re-reading its
+    // live position here made the results distance climb past the number
+    // that was actually scored and submitted to the leaderboard.
+    distance: this.state === "gameover" ? this.resultDistance : stats.distance,
+    coins: this.runCoins,
+    multiplierClaimed: this.multiplierClaimed,
+    daylight: this.daylight,
+    daylightMax: this.daylightMax(),
+    fever: this.feverOn ? this.feverTimer / (FEVER_DURATION + this.gameplaySkin.feverBonus + this.masteryPerk.feverBonus) : this.perfectChain / FEVER_NEED,
+    feverOn: this.feverOn,
+    multiplier: this.save.nestMultiplier() * (this.feverOn ? 2 : 1),
+    bestDistance: st.bestDistance,
+    score: this.score(),
+    island: this.island,
+    perfects: this.perfects,
+    clouds: this.runClouds,
+    zeniths: this.zeniths,
+    rings: this.runRings,
+    balloons: this.runBalloons,
+    sunflowers: this.runSunflowers,
+    hint: this.state === "playing" ? this.coachHint() || this.hint : "",
+    magnetTimer: this.magnetTimer,
+    shield: this.shield,
+    boostTimer: this.boostTimer,
+    };
+  }
+
+  /** What the player owns and what is being offered right now: gold, VIP,
+   *  the continue offer and the commercial break. */
+  private hudWalletAndBreaks(st: SaveData["state"]) {
+    return {
+    gold: st.gold,
+    vip: this.save.isVipActive(),
+    vipDaysLeft: this.save.vipDaysLeft(),
+    vipExpiredNotice: this.vipExpiredNotice,
+    adsLeftToday: this.save.adsLeftToday(),
+    ghostDelta: this.state === "playing" || this.state === "gameover" ? this.ghostDelta() : null,
+    newBest: this.newBest,
+    continueTimer: this.continueTimer,
+    continueReason: this.continueOfferView?.reason ?? "",
+    continueHighlight: this.continueOfferView?.highlight ?? false,
+    continueCost: CONTINUE_COST,
+    canAffordContinue: st.wallet >= CONTINUE_COST,
+    // Portal: only advertise a rewarded option the SDK can actually pay out.
+    adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
+    adTimer: this.adTimer,
+    adSkippable: !this.portalEnabled(),
+    adTotal: this.ads.duration,
+    adReason: this.adReason,
+    seedLabel: this.seedLabel(),
+    wings: this.wingsCard(),
+    };
+  }
+
+  /** Wallet, progression, missions, quests, shop views, pack pricing,
+   *  checkout, season pass and trophies. */
+  private hudProfile(st: SaveData["state"], todayBest: number, sTier: number, sProg: { have: number; need: number }) {
+    return {
+    flightPath: this.state === "gameover" ? this.flightPath : [],
+    rivalBanner: this.rival && this.rivalResult === "" ? `${this.rival.name}|${this.rival.distance}` : "",
+    seedMode: this.seedMode,
+    wallet: st.wallet,
+    piggyCoins: st.piggyBank?.coins ?? 0,
+    prestigeLevel: st.prestige?.level ?? 0,
+    prestigeMult: st.prestige?.multiplier ?? 1.0,
+    canFreeSpin: this.save.canFreeWheelSpin(this.today),
+    streakDays: st.streak.days,
+    nestLevel: st.nestLevel,
+    nestMult: this.save.nestMultiplier(),
+    nestPrice: this.save.nestUpgradePrice(),
+    nestMaxed: st.nestBought >= 10,
+    missions: this.missionViews,
+    quests: this.questViews,
+    highScores: st.highScores,
+    todayBest,
+    runsPlayed: st.runsPlayed,
+    newlyCompleted: this.newlyCompleted,
+    claimedQuests: this.claimedQuests,
+    skins: this.skinViews,
+    boosts: this.boostViews,
+    shopTrails: this.shopTrailViews,
+    settings: st.settings,
+    goldPrice: GOLD.price,
+    starterPrice: STARTER_PACK.price,
+    starterFeatures: STARTER_PACK.features,
+    starterOwned: st.starterPack,
+    goldFeatures: GOLD.features,
+    vipPrice: VIP.price,
+    vipFeatures: VIP.features,
+    checkoutMode: this.checkoutMode(),
+    checkoutUrl: "",
+    checkoutBusy: this.checkoutBusy,
+    checkoutError: this.checkoutError,
+    checkoutOk: this.checkoutOk,
+    checkoutWaiting: this.checkoutWaiting,
+    restoreMessage: this.restoreMessage,
+    resetArmed: this.resetArmed,
+    season: {
+      tier: sTier,
+      maxTier: this.seasonPass.view().length,
+      have: sProg.have,
+      need: sProg.need,
+      label: seasonLabel(seasonId()),
+      tiers: this.seasonPass.view(),
+    },
+    trophies: this.achievements.view(),
+    trophyCounts: this.achievements.counts(),
+    nearestTrophy: this.achievements.nearest(),
+    referralCode: st.referralCode,
+    referralRedeemed: st.referralRedeemed,
+    referralMessage: this.referralMessage,
+    cloudCode: this.screen === "account" ? this.save.exportCode() : "",
+    cloudMessage: this.cloudMessage,
+    canInstall: Boolean(this.deferredInstall) && !this.portalEnabled(),
+    shareBusy: this.shareBusy,
+    expShareFirst:
+      this.state !== "gameover"
+        ? false
+        : (this.expShareFirst ??= variant(st.deviceId, "results_cta_order", 50, (v) => {
+            this.telemetry.track("experiment_exposure", { experiment: "results_cta_order", variant: v });
+          })) === "treatment",
+    };
+  }
+
+  /** The feel of the flight -- chains, weather, biome, launch, altitude --
+   *  plus the mode picker, the live goal pops, and pilot/leaderboard
+   *  identity. */
+  private hudFlightAndWorld(st: SaveData["state"]) {
+    return {
+    combo: Math.max(this.perfectChain, this.versus && this.p1 ? this.p1.launch.combo : this.launch.combo),
+    ringChain: this.ringChain,
+    ringChainFrac: RING_CHAIN_WINDOW > 0 ? this.ringChainTimer / RING_CHAIN_WINDOW : 0,
+    slopeChain: this.slopeChain.chain,
+    slopeScore: this.slopeChain.score,
+    speedNorm: Math.min(1, this.bird.speed() / 100),
+    gust: this.weather.gust,
+    inThermal: this.weather.inThermal,
+    biomeName: this.terrain.biomeAt(this.bird.x).name,
+    biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
+    atlas: this.screen === "atlas" ? this.atlas() : [],
+    farthestIsland: Math.max(st.farthestIsland, this.island),
+    launchBanner: this.launchBannerText,
+    launchBannerT: this.launchBannerT,
+    launchRating: this.lastLaunch?.rating ?? "none",
+    altitude: this.versus && this.p1 ? this.p1.bird.altitude : this.bird.altitude,
+    altZone: this.altZone,
+    maxAltitude: this.maxAltitude,
+    powers: this.versus && this.p1 ? this.p1.powers.view() : this.powers.view(),
+    modes: MODES,
+    modeId: this.modeId,
+    modeName: this.mode.name,
+    modeIcon: this.mode.icon,
+    countdown: this.countdown,
+    versus: this.versus,
+    splitLayout: this.input.splitMode,
+    versusWinner: this.versusWinner,
+    p1Stats: this.p1 && this.versus ? this.p1.stats : null,
+    p2Stats: this.p2 && this.versus ? this.p2.stats : null,
+    raceFinish: RACE_FINISH,
+    sessionGoals: this.goals.goals,
+    goalPop: this.goalPopT > 0 ? this.goalPop : "",
+    goalPopKind: this.goalPopKind,
+    rankUp: this.rankUpT > 0 ? this.rankUp : "",
+    nearMiss: this.nearMiss.text,
+    skillLabel: this.flow.label(),
+    skill: this.flow.skill,
+    bestAltitude: st.bestAltitude,
+    bestCombo: st.bestCombo,
+    runGems: this.runGems,
+    pilotName: this.pilotName,
+    board: this.boardPage,
+    boardLoading: this.boardLoading,
+    boardScope: this.boardScope,
+    boardMetric: this.boardMetric,
+    boardOnline: isLeaderboardOnline(),
+    portalAccountName: this.portalAccountName,
+    // Pulled from the page the menu already warms (scope global / distance):
+    // no extra request, and nothing to render on a cold cache.
+    homeBoard: (this.board.peek("global", "distance")?.entries ?? []).slice(0, 3).map((e) => ({
+      name: e.name,
+      value: `${Math.round(e.value).toLocaleString()} m`,
+      you: e.you,
+    })),
+
+    cups: this.cups.view(),
+    trails: this.cups.ownedTrails().map((id) => ({
+      id,
+      label: TRAILS[id]?.label ?? id,
+      equipped: st.activeTrail === id,
+    })),
+      lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
+    };
+  }
+
+  /** Everything the race screen needs: standings, the room, the
+   *  connection, the rival card, the loadout and the duel. */
+  private hudRace(st: SaveData["state"]) {
+    return {
+    standings:
+      this.massRace.active && this.state === "playing"
+        ? this.massRace.standings(this.bird.x, this.startX, this.pilotName, 6).rows
+        : [],
+    racePlace: this.racePlace,
+    raceFinishM: this.mode.finish,
+    raceField: this.raceField,
+    raceFinishTime: this.raceFinishTime,
+    massRace: isRaceMode(this.modeId),
+    multiplayerLive: isMultiplayerConfigured() && !(this.state === "playing" && this.localRace),
+    multiplayerConfigured: isMultiplayerConfigured(),
+    roster:
+      this.massRace.active && this.state === "playing"
+        ? this.massRace.roster(this.bird.x, this.startX, this.mode.finish, this.pilotName)
+        : [],
+    roomCode: this.roomCode,
+    roomCount: this.net?.info().count ?? 0,
+    roomCapacity: this.net?.info().capacity ?? MASS_RACE_FIELD,
+    roomReady: this.net?.info().ready ?? false,
+    roomReadyCount: (this.net?.roster().filter((p) => p.ready).length ?? 0) + (this.net?.info().ready ? 1 : 0),
+    roomAiFallback: this.net?.info().aiFallback ?? false,
+    roomSize: this.roomSize,
+    roomSkill: this.roomSkill,
+    roomMuted: this.roomMuted,
+    // Only the lobby screen can consume these — no per-frame allocs elsewhere.
+    roomRivals:
+      this.screen === "live"
+        ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
+        : [],
+    netState: this.net?.info().state ?? "offline",
+    linkQuality: this.net?.connectionQuality ?? "unknown",
+    netError: this.net?.info().error ?? "",
+    draft: this.massRace.draft,
+    finishRemaining: this.finishRemaining,
+    nemesis: this.nemesis,
+    photoFinish: this.photoFinish,
+    rival: this.rivalCard(),
+    loadout: this.loadoutView(),
+    // Lobby-only field: computed every frame before, including mid-flight
+    // and on the results card, where no one renders it.
+    lobbyRivals:
+      this.state === "menu" && this.screen === "live"
+        // Truth only: the pilots actually seated in this room. No padded
+        // name-pool rivals, no borrowed leaderboard names — an empty room
+        // renders as an empty room. When the room is the local AI fallback,
+        // every row is tagged as an AI pilot rather than as a live human.
+        ? lobbyRivals(this.net?.roster() ?? [], this.net?.info().aiFallback ?? false)
+        : [],
+    raceRated: this.rankedRace,
+    raceVerified: this.serverPlaceApplied,
+    ratingDelta: this.lastRatingDelta,
+    ratingBonus: this.lastRatingBonus,
+    duel: { ...st.duel },
+    duelWas: this.duelResult,
+    duelDelta: this.duelDelta,
+    duelFoe: duelOpponent(`${this.seed}:${this.today}`, st.rival.rating),
+    daily: this.cardCache.daily,
+    };
+  }
+
+  /** Event cards, campaign, squad, sharing, and the placeholders the HUD
+   *  still renders with but the game does not yet fill in. */
+  private hudEventsAndExtras(st: SaveData["state"]) {
+    return {
+    gauntlet: this.cardCache.gauntlet,
+    calendar: this.cardCache.calendar,
+    mastery: this.cardCache.mastery,
+    challengeOutcome: this.challengeOutcome,
+    weeklyEvent: weeklyEvent(),
+    monthlyTheme: monthlyTheme(),
+    eventClearsWeek: st.events.week === weekKey() ? st.events.clearsThisWeek : 0,
+    eventClearsMonth: st.events.month === monthKey() ? st.events.clearsThisMonth : 0,
+    themeTrailClaimed: st.events.claimedTrailMonth === monthKey(),
+    themeTrailNeed: THEME_TRAIL_CLEARS,
+    campaign: campaignViews(this.save, st.campaignClaimed),
+    campaignDone: campaignProgress(st.campaignClaimed).done,
+    campaignTotal: campaignProgress(st.campaignClaimed).total,
+    squad: this.squad?.state ?? emptySquadState(),
+    friendChallenges: this.social.getActiveChallenges(),
+    recentPilots: this.pilots.all(),
+    share: {
+      available: sharingAvailable(),
+      code: this.shareCode,
+      busy: this.runShareBusy,
+      error: this.shareError,
+      loaded: this.sharedRun,
+    },
+    squadNotice: this.squadNotice,
+    dailyFlash: dailyFlashBird(this.today),
+    stipendClaimed: st.lastStipendClaimed === this.today,
+    rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
+    wingmanBundle: st.wingmanBundle === true,
+    showTutorialHand:
+      this.state === "playing" &&
+      !this.input.diving &&
+      // First-flight coach: a brand-new player who has not held yet gets the
+      // demonstrative press hand for the whole "dive" step, not just the old
+      // 2.6 s — a static text line for up to two minutes is exactly the
+      // dead-air the baseline probe measured. The hand hides the instant the
+      // player dives (they've got it) and never outstays a completed coach.
+      (this.coach && !this.coach.done && this.coach.view().step === 0
+        ? true
+        : st.tutorialRuns < 2 && this.hintTimer < 2.6),
+    pvpModes: PVP_MODES,
+    pvpWorlds: PVP_WORLDS,
+    selectedPvpMode: this.selectedPvpMode,
+    selectedPvpWorld: this.selectedPvpWorld,
+    beatLine: null,
+    nextAction: "",
+    // Celebration and proximity are not yet plumbed from game state; provide
+    // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
+    celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
+    proximity: { visible: false, fill: 0, remaining: 0, name: "" },
+    };
   }
 
   /* ------------------------------------------------------- versus (2P) */

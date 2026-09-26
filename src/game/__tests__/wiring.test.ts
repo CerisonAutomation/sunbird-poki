@@ -70,7 +70,15 @@ const WIRED: Record<string, string> = {
   "game/resilience/crc.ts:openPayload": "SaveData — save load path",
   "game/resilience/crc.ts:sealPayload": "SaveData — save persist path",
 
-  "game/AntiCheat.ts:verifyRunSubmission": "Leaderboard — the only submission gate",
+    "game/AntiCheat.ts:verifyRunSubmission": "Leaderboard — the only submission gate",
+
+    // 1.3 adaptive difficulty, part 1 of 2. `tuneDifficulty` still computes four
+    // multipliers that never leave Engagement.ts and stays PENDING below; this is
+    // the one that now reaches a player. Moved out of PENDING by the registry's own
+    // bidirectional assertion when RivalGhost gained the call — which is exactly
+    // the "a listed symbol that gains a caller is itself a finding" behaviour the
+    // registry exists for.
+    "game/Engagement.ts:paceSkillFor": "RivalGhost — the pace ghost's skill cap",
 
   // DeepLinks: the live half. The `sb1:` token pair is PENDING, and the two
   // halves live in one file — deleting the dead half must not take these.
@@ -124,8 +132,7 @@ const PENDING: Record<string, string> = {
   "game/Moments.ts:clipShareLine": "clip share text",
   "game/Moments.ts:pickCta": "the CTA that follows the joke",
   // 1.3 adaptive difficulty
-  "game/Engagement.ts:tuneDifficulty": "casual-only ease/spice tune",
-  "game/Engagement.ts:paceSkillFor": "pace-ghost skill cap",
+    "game/Engagement.ts:tuneDifficulty": "casual-only ease/spice tune",
   // 1.5 speed feel
   "game/SpeedFeel.ts:streakOpacity": "HUD speed-line opacity (inlined at HUD with other constants)",
   "game/SpeedFeel.ts:vignetteIntensity": "warp vignette",

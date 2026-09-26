@@ -154,7 +154,7 @@ describe("the rank-up banner renders, and no arbitration can swallow it", () => 
 
     // The banner's own top must be the free-band midpoint — derived from BOTH
     // measured lanes — and not a bare viewport percentage, which cannot know how
-    // tall the footer grew. See HudLayout.bannerCentre().
+    // tall the footer grew.
     const base = cssRules("game/ui.css").filter((r) => r.sel === ".rank-up").pop()!;
     expect(base.body).toMatch(/--hud-header-height/);
     expect(base.body).toMatch(/--hud-footer-height/);

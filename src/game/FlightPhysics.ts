@@ -1,11 +1,11 @@
 import { clamp, lerp } from "./math";
 import { ALT_CEILING, ALT_CEILING_FADE } from "./constants";
 
-/** Anti-bore lift decay: a good launch feels great for ~1.2s, then lift
- * falls off FAST so you can't hang for 10s doing nothing. After 3.5s you're
- * sinking hard and must dive or find a thermal. Shared by all pilots.
- * TUNED 2026-09-24: starts 1.2s, hits 0.15 by 3.7s, 0.08 by 6s — no more
- * endless glides, constant hill-to-hill decisions. */
+/** Anti-bore lift decay: a good launch stays exciting through a 2.5s plateau,
+ * then lift decays to a 0.32 floor over the next 4s (fully decayed by ~6.5s),
+ * so long passive glides go boring and the player must dive and re-launch.
+ * The 0.32 floor (not near-zero) keeps the bird controllable on a lazy glide.
+ * Shared by all pilots. */
 export function glideLiftScale(airSeconds: number): number {
   // Plateau for 2.5s — a good launch stays exciting; then decay to 0.32 over 4s
   // so long passive glides become boring and the player must dive and re-launch.

@@ -115,6 +115,13 @@ export class Collectibles {
   private maxCoins: number;
   private maxRings: number;
   private maxBalloons: number;
+  /**
+   * Floating-origin recenter point (see TerrainSystem.recenter()). Entity
+   * x/y stay true world coordinates (gameplay math — magnet pull, pickup
+   * radii — all reads bird.x/c.x directly); only the rendered sprite/mesh
+   * position below shifts.
+   */
+  private originX = 0;
 
   constructor(seedN: number, seedStr = String(seedN), qualityTier: "lite" | "mid" | "high" = "high") {
     this.seedN = seedN;
@@ -173,6 +180,11 @@ export class Collectibles {
   setLayer(layer: number): void {
     this.layer = layer;
     this.group.traverse((o) => o.layers.set(layer));
+  }
+
+  /** Floating-origin recenter — see TerrainSystem.recenter(). */
+  setRenderOrigin(x: number): void {
+    this.originX = x;
   }
 
   reset(): void {
@@ -255,7 +267,7 @@ export class Collectibles {
       }
       c.phase += dt;
       c.x += c.drift * dt;
-      c.sprite.position.set(c.x, c.y + Math.sin(c.phase) * 0.6, c.z);
+      c.sprite.position.set(c.x - this.originX, c.y + Math.sin(c.phase) * 0.6, c.z);
       if (c.kind !== "plain") {
         const p = 1 + Math.sin(c.phase * 2.4) * 0.05;
         c.sprite.scale.set(9.6 * p, 4.6 * p, 1);
@@ -277,7 +289,7 @@ export class Collectibles {
         continue;
       }
       p.phase += dt;
-      p.mesh.position.set(p.x, p.y + Math.sin(p.phase * 2.2) * 0.35, 0);
+      p.mesh.position.set(p.x - this.originX, p.y + Math.sin(p.phase * 2.2) * 0.35, 0);
       p.mesh.rotation.y += dt * 1.8;
       p.mesh.rotation.x += dt * 0.9;
       p.mesh.scale.setScalar(1 + Math.sin(p.phase * 4) * 0.08);
@@ -316,7 +328,7 @@ export class Collectibles {
       }
       b.phase += dt;
       b.x += b.drift * dt;
-      b.root.position.set(b.x, b.y + Math.sin(b.phase * 1.4) * 1.1, 0);
+      b.root.position.set(b.x - this.originX, b.y + Math.sin(b.phase * 1.4) * 1.1, 0);
       b.root.rotation.z = Math.sin(b.phase * 0.9) * 0.06;
       // Pop on contact — a soft reward that launches you back into the sky.
       if (Math.hypot(bird.x - b.x, bird.y - b.y) < 4.4) {
@@ -536,7 +548,7 @@ export class Collectibles {
     cloud.sprite.material.needsUpdate = true;
     cloud.sprite.scale.set(kind === "plain" ? 9.2 : 9.6, kind === "plain" ? 4.4 : 4.6, 1);
     cloud.sprite.visible = true;
-    cloud.sprite.position.set(x, y, z);
+    cloud.sprite.position.set(x - this.originX, y, z);
     this.activeClouds.push(cloud);
   }
 
@@ -547,7 +559,7 @@ export class Collectibles {
     p.phase = hash01(Math.floor(x), this.seedN) * 6;
     p.taken = false;
     p.mesh.visible = true;
-    p.mesh.position.set(x, y, 0);
+    p.mesh.position.set(x - this.originX, y, 0);
     this.activePickups.push(p);
   }
 
@@ -570,7 +582,7 @@ export class Collectibles {
   private writeCoin(c: Coin, time: number, slot = c.slot): void {
     if (c.slot < 0) return;
     const mesh = c.gem ? this.gemMesh : this.coinMesh;
-    coinDummy.position.set(c.x, c.y + Math.sin(time * 5 + c.x * 0.35) * 0.22, 0);
+    coinDummy.position.set(c.x - this.originX, c.y + Math.sin(time * 5 + c.x * 0.35) * 0.22, 0);
     coinDummy.rotation.set(c.gem ? time * 0.8 : 0, c.gem ? time * 1.6 : time * 3.2, c.gem ? time * 0.45 : Math.PI / 2);
     coinDummy.scale.setScalar(1);
     coinDummy.updateMatrix();

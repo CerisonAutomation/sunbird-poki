@@ -28,6 +28,11 @@ const CREST_BLOCK = 900;
 const CREST_MIN_UP = 0.12;
 const CREST_MIN_DOWN = 0.06;
 const CREST_CONFIRM = 14;
+/** Sample distance either side of `x` used to gate a live curvature launch
+ * check against the same prominence rule (see hasCrestProminence()). Wide
+ * enough to average out the highest-frequency terrain noise (~22-unit
+ * wavelength micro-bumps), narrow enough to still resolve a real crest. */
+const CREST_GATE_DIST = 6;
 
 /** One smooth cosine arch of terrain with an authored intent. */
 type Segment = { start: number; len: number; height: number; base: number; baseNext: number };
@@ -48,7 +53,34 @@ type Chunk = {
    * instanced meshes that render them, so updateOcclusion can sink any prop
    * about to cross the bird's sight line instead of hiding the bird. */
   propGroups?: PropGroup[];
+  /** True while this chunk's geometry build is deferred to an idle callback
+   * (see spawnChunk's spawn budget) — updateOcclusion just skips it until the
+   * mesh exists. */
+  pending?: boolean;
+  /** Set when the chunk scrolls out of range before its deferred build runs,
+   * so the stale idle callback becomes a no-op instead of building geometry
+   * for (and re-adding a mesh to) a chunk that no longer exists. */
+  cancelled?: boolean;
 };
+
+/** Distance beyond which a chunk halves its vertex density (LOD). */
+const LOD_DISTANCE = 400;
+
+/**
+ * requestIdleCallback with a setTimeout fallback for engines that lack it
+ * (Safari, some portal webviews) — spreads chunk-geometry cost across idle
+ * frames instead of building every new chunk synchronously in one frame.
+ */
+function scheduleIdle(cb: () => void, timeout = 200): void {
+  const w = globalThis as typeof globalThis & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  };
+  if (typeof w.requestIdleCallback === "function") {
+    w.requestIdleCallback(cb, { timeout });
+  } else {
+    setTimeout(cb, 1);
+  }
+}
 
 type Placement = { x: number; y: number; z: number; s: number; rot: number };
 type PropGroup = { props: Placement[]; parts: { inst: THREE.InstancedMesh; part: DecoPart }[]; faded: Set<number> };
@@ -94,6 +126,15 @@ export class TerrainSystem {
   private crestScannedTo = -Infinity;
   /** Deterministic sunflower bounce pads, cached per island (like segments). */
   private readonly padCache = new Map<number, BouncePad[]>();
+  /**
+   * Floating-origin recenter point. Procedural generation always samples
+   * true (float64) world x, but every GPU-facing buffer (vertex positions,
+   * instanced-prop matrices) is mandatorily float32 — at tens of thousands
+   * of units that quantises to visible jitter/cracking. Recenter() shifts
+   * this so baked render-space coordinates stay close to zero; see
+   * Game.ts's RENDER_RECENTER_THRESHOLD check.
+   */
+  private originX = 0;
 
   constructor(seedStr: string, qualityTier: "lite" | "mid" | "high" = "high") {
     this.seedStr = seedStr;
@@ -226,6 +267,20 @@ export class TerrainSystem {
     return -d2 / Math.pow(1 + slope * slope, 1.5);
   }
 
+  /**
+   * Whether `x` sits on a launch-worthy crest, not just a noise ripple.
+   *
+   * curvatureAt() alone is a *local* second derivative (e = 1.1), narrow
+   * enough that high-frequency terrain noise (see hills()'s micro-bump
+   * layer) can spike it positive without a real lip ever forming — Bird.step
+   * was launching pilots off texture. This reuses the same prominence gates
+   * ensureCrests() uses to keep the crest cache noise-free: the approach
+   * must have been decisively uphill and the far side decisively downhill.
+   */
+  hasCrestProminence(x: number): boolean {
+    return this.slopeAt(x - CREST_GATE_DIST) >= CREST_MIN_UP && this.slopeAt(x + CREST_GATE_DIST) <= -CREST_MIN_DOWN;
+  }
+
   isOcean(x: number): boolean {
     const lx = this.localX(x);
     return lx >= GAP_START && lx < gapEndFor(this.islandIndex(x));
@@ -273,6 +328,7 @@ export class TerrainSystem {
     this.crestScannedTo = -Infinity;
     // Collision and rendered geometry must always describe the same hills.
     for (const chunk of this.chunks.values()) {
+      chunk.cancelled = true; // a pending idle-callback build must not run
       this.group.remove(chunk.group);
       for (const disposable of chunk.disposables) disposable.dispose();
     }
@@ -360,9 +416,10 @@ export class TerrainSystem {
       this.chunkCenter = center;
       const lo = center - this.visibleBack;
       const hi = center + this.visibleFwd;
-      for (let id = lo; id <= hi; id++) if (!this.chunks.has(id)) this.spawnChunk(id);
+      for (let id = lo; id <= hi; id++) if (!this.chunks.has(id)) this.spawnChunk(id, camX);
       for (const [id, chunk] of this.chunks) {
         if (id < lo || id > hi) {
+          chunk.cancelled = true; // in case its idle-callback build hasn't run yet
           this.group.remove(chunk.group);
           for (const d of chunk.disposables) d.dispose();
           this.chunks.delete(id);
@@ -386,8 +443,33 @@ export class TerrainSystem {
     if (island !== this.farIsland) this.farIsland = island;
   }
 
+  /**
+   * Floating-origin recenter: called once the flight has traveled far
+   * enough (see Game.ts's RENDER_RECENTER_THRESHOLD) that GPU vertex and
+   * instanced-prop buffers — mandatorily float32 — start losing enough
+   * precision at these magnitudes to visibly jitter or crack between
+   * chunks. Procedural generation keeps sampling true (float64) world x —
+   * only the baked render-space coordinates shift, so terrain shape,
+   * physics and determinism are unaffected. Currently-loaded chunks are
+   * cheap to rebuild (a handful around the camera), via the same
+   * idle-scheduled path a fresh spawn uses.
+   */
+  recenter(newOriginX: number, camX: number): void {
+    if (newOriginX === this.originX) return;
+    this.originX = newOriginX;
+    for (const [id, chunk] of [...this.chunks]) {
+      chunk.cancelled = true; // a pending idle-callback build must not use the old origin
+      this.group.remove(chunk.group);
+      for (const d of chunk.disposables) d.dispose();
+      this.chunks.delete(id);
+      this.spawnChunk(id, camX);
+    }
+    this.farCenter = -Infinity; // force rebuildFar() to rebake with the new origin on next update()
+  }
+
   dispose(): void {
     for (const chunk of this.chunks.values()) {
+      chunk.cancelled = true;
       this.group.remove(chunk.group);
       for (const d of chunk.disposables) d.dispose();
     }
@@ -457,19 +539,30 @@ export class TerrainSystem {
   }
 
   /**
+   * Get-or-build a per-island cache entry, keeping at most 6 islands resident
+   * (evicts the oldest once a 7th is added, never the island just requested).
+   * Shared by `segmentAt()` and `padsFor()`, whose values are cheap to derive
+   * from the seed but expensive to call thousands of times per frame.
+   */
+  private cachedByIsland<T>(cache: Map<number, T>, island: number, build: (island: number) => T): T {
+    let value = cache.get(island);
+    if (!value) {
+      value = build(island);
+      cache.set(island, value);
+      if (cache.size > 6) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined && oldest !== island) cache.delete(oldest);
+      }
+    }
+    return value;
+  }
+
+  /**
    * Deterministic segment layout for one island. Cached per island so
    * heightAt() stays cheap (it is called thousands of times per frame).
    */
   private segmentAt(local: number, island: number): Segment {
-    let segs = this.segCache.get(island);
-    if (!segs) {
-      segs = this.buildSegments(island);
-      this.segCache.set(island, segs);
-      if (this.segCache.size > 6) {
-        const oldest = this.segCache.keys().next().value;
-        if (oldest !== undefined && oldest !== island) this.segCache.delete(oldest);
-      }
-    }
+    const segs = this.cachedByIsland(this.segCache, island, (i) => this.buildSegments(i));
     let lo = 0;
     let hi = segs.length - 1;
     while (lo < hi) {
@@ -482,16 +575,7 @@ export class TerrainSystem {
 
   /** Cached sunflower pads for one island (like `segmentAt`). */
   private padsFor(island: number): BouncePad[] {
-    let pads = this.padCache.get(island);
-    if (!pads) {
-      pads = this.buildPads(island);
-      this.padCache.set(island, pads);
-      if (this.padCache.size > 6) {
-        const oldest = this.padCache.keys().next().value;
-        if (oldest !== undefined && oldest !== island) this.padCache.delete(oldest);
-      }
-    }
-    return pads;
+    return this.cachedByIsland(this.padCache, island, (i) => this.buildPads(i));
   }
 
   /**
@@ -590,24 +674,45 @@ export class TerrainSystem {
 
   /* ------------------------------------------------------------ chunks */
 
-  private spawnChunk(id: number): void {
+  /**
+   * Spawning every new chunk's geometry synchronously means a fast flier can
+   * force several `buildChunkGeo` calls (each looping over every vertex,
+   * colour-blending, computing normals) in one frame. Instead, register the
+   * chunk immediately (so `update()` never re-requests it) with an empty
+   * group, then build the actual geometry on the next idle slot — spreading
+   * the cost across frames instead of spiking one of them.
+   */
+  private spawnChunk(id: number, camX: number): void {
     const group = new THREE.Group();
     const disposables: { dispose(): void }[] = [];
-    const geo = this.buildChunkGeo(id);
-    disposables.push(geo);
-    const mesh = new THREE.Mesh(geo, this.mat);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    group.add(mesh);
-    const propGroups = this.placeDecor(id, group, disposables);
-    this.placeSunflowers(id, group, disposables);
+    const chunk: Chunk = { id, group, disposables, pending: true };
     this.group.add(group);
-    this.chunks.set(id, { id, group, disposables, propGroups: propGroups.length ? propGroups : undefined });
+    this.chunks.set(id, chunk);
+    scheduleIdle(() => {
+      if (chunk.cancelled) return;
+      const geo = this.buildChunkGeo(id, camX);
+      disposables.push(geo);
+      const mesh = new THREE.Mesh(geo, this.mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      const propGroups = this.placeDecor(id, group, disposables);
+      this.placeSunflowers(id, group, disposables);
+      chunk.propGroups = propGroups.length ? propGroups : undefined;
+      chunk.pending = false;
+    });
   }
 
-  private buildChunkGeo(id: number): THREE.BufferGeometry {
+  /**
+   * `camX` drives distance-based LOD: chunks more than `LOD_DISTANCE` units
+   * from the camera halve their vertex density (double `chunkRes`) since
+   * their extra detail is never resolvable at that range.
+   */
+  private buildChunkGeo(id: number, camX: number): THREE.BufferGeometry {
     const x0 = id * CHUNK_SIZE;
-    const n = Math.ceil(CHUNK_SIZE / this.chunkRes);
+    const distance = Math.abs(x0 + CHUNK_SIZE / 2 - camX);
+    const chunkRes = distance > LOD_DISTANCE ? this.chunkRes * 2 : this.chunkRes;
+    const n = Math.ceil(CHUNK_SIZE / chunkRes);
     const dx = CHUNK_SIZE / n;
     const hz = TERRAIN_HALF_Z;
     const depth = TERRAIN_FACE_DEPTH;
@@ -664,10 +769,13 @@ export class TerrainSystem {
       cTop.offsetHSL(0, 0, v);
 
       const base = i * stride;
-      set3(positions, base + 0, x, y, -hz);
-      set3(positions, base + 1, x, y, hz);
-      set3(positions, base + 2, x, y - depth * 0.42, hz);
-      set3(positions, base + 3, x, y - depth, hz);
+      // Render-space x: procedural sampling above used the true world x;
+      // only the baked vertex data (GPU, float32) shifts by originX.
+      const rx = x - this.originX;
+      set3(positions, base + 0, rx, y, -hz);
+      set3(positions, base + 1, rx, y, hz);
+      set3(positions, base + 2, rx, y - depth * 0.42, hz);
+      set3(positions, base + 3, rx, y - depth, hz);
 
       set3(normals, base + 0, nrm.nx, nrm.ny, 0.15);
       set3(normals, base + 1, nrm.nx * 0.3, nrm.ny * 0.3, 0.9);
@@ -830,7 +938,7 @@ export class TerrainSystem {
         inst.castShadow = true;
         inst.receiveShadow = true;
         list.forEach((p, i) => {
-          tmpObj.position.set(p.x, p.y + part.y * p.s, p.z);
+          tmpObj.position.set(p.x - this.originX, p.y + part.y * p.s, p.z);
           tmpObj.rotation.set(0, p.rot, 0);
           tmpObj.scale.setScalar(p.s * part.s);
           tmpObj.updateMatrix();
@@ -956,7 +1064,7 @@ export class TerrainSystem {
           if (occ > 0.01) {
             const f = 1 - occ * 0.94;
             for (const { inst, part } of g.parts) {
-              tmpObj.position.set(p.x, p.y + part.y * p.s * f - occ * 2.6, p.z);
+              tmpObj.position.set(p.x - this.originX, p.y + part.y * p.s * f - occ * 2.6, p.z);
               tmpObj.rotation.set(0, p.rot, 0);
               tmpObj.scale.setScalar(p.s * part.s * f);
               tmpObj.updateMatrix();
@@ -985,7 +1093,7 @@ export class TerrainSystem {
   private restoreInstance(g: PropGroup, i: number): void {
     const p = g.props[i]!;
     for (const { inst, part } of g.parts) {
-      tmpObj.position.set(p.x, p.y + part.y * p.s, p.z);
+      tmpObj.position.set(p.x - this.originX, p.y + part.y * p.s, p.z);
       tmpObj.rotation.set(0, p.rot, 0);
       tmpObj.scale.setScalar(p.s * part.s);
       tmpObj.updateMatrix();
@@ -1007,7 +1115,7 @@ export class TerrainSystem {
       inst.castShadow = true;
       inst.receiveShadow = true;
       pads.forEach((p, i) => {
-        tmpObj.position.set(p.x, p.y + part.y * part.s, 0);
+        tmpObj.position.set(p.x - this.originX, p.y + part.y * part.s, 0);
         tmpObj.rotation.set(0, 0, 0);
         tmpObj.scale.setScalar(part.s);
         tmpObj.updateMatrix();
@@ -1057,13 +1165,18 @@ export class TerrainSystem {
           amp * 8 * Math.sin(x * 0.024 + phase * 1.3) +
           5 * fbm(x * 0.016 + layer, this.seedN + layer * 17, 3);
         const offset = i * 6;
-        positions[offset] = x;
+        const rx = x - this.originX;
+        positions[offset] = rx;
         positions[offset + 1] = y;
-        positions[offset + 3] = x;
+        positions[offset + 3] = rx;
         positions[offset + 4] = y - 90;
       }
       // Unlit far silhouettes need no normals. Keep the GPU buffers alive.
       attr.needsUpdate = true;
+      // The ribbon just scrolled to a new [start, end) window, so its bounds
+      // moved too — recompute rather than leave the old (now-stale) sphere
+      // sitting around from the previous window.
+      geo.computeBoundingSphere();
     }
   }
 }

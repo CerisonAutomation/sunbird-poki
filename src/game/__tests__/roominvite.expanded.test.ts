@@ -4,7 +4,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 describe("room invite: normalizeRoomCode", () => {
   async function loadModule() {
     vi.resetModules();
-    const mod = await import("../RoomInvite");
+    const mod = await import("../DeepLinks");
     return mod;
   }
 
@@ -70,7 +70,7 @@ describe("room invite: buildRoomInviteUrl", () => {
       writable: true,
       configurable: true,
     });
-    return await import("../RoomInvite");
+    return await import("../DeepLinks");
   }
 
   it("builds URL with room hash", async () => {
@@ -114,7 +114,7 @@ describe("room invite: readRoomInviteFromUrl", () => {
 
   async function loadFresh() {
     vi.resetModules();
-    const mod = await import("../RoomInvite");
+    const mod = await import("../DeepLinks");
     return mod;
   }
 

@@ -99,4 +99,24 @@ export class Achievements {
     for (const def of ACHIEVEMENTS) if (unlocked.has(def.id) || def.metric(this.save) >= def.target) n++;
     return { unlocked: n, total: ACHIEVEMENTS.length };
   }
+
+  /**
+   * The not-yet-unlocked trophy closest to completion (by progress ratio) —
+   * surfaced during flight as "X/Y toward [trophy]" so players see
+   * achievement progress without leaving the run to open the Trophy Case.
+   * Null once every trophy is unlocked.
+   */
+  nearest(): AchievementView | null {
+    let best: AchievementView | null = null;
+    let bestRatio = -1;
+    for (const v of this.view()) {
+      if (v.unlocked) continue;
+      const ratio = v.def.target > 0 ? v.progress / v.def.target : 0;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = v;
+      }
+    }
+    return best;
+  }
 }

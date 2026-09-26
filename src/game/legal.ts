@@ -18,8 +18,11 @@ const raw = (import.meta.env.VITE_PRIVACY_URL as string | undefined)?.trim();
 /** Live privacy policy page. */
 export const PRIVACY_URL = raw && raw.length > 0 ? raw : "https://sunbird-snowy.vercel.app/privacy.html";
 
-/** Terms of service — same hosting, same rules. */
-export const TERMS_URL = PRIVACY_URL.replace(/privacy\.html?$/, "terms.html");
+/** Terms of service — same hosting, same rules. Derived by path segment so
+ * both URL forms work: `…/privacy.html` → `…/terms.html` and the dashboard
+ * form `…/privacy` → `…/terms` (the old `privacy\.html?$` pattern left the
+ * latter pointing at the privacy page itself). Query/hash preserved. */
+export const TERMS_URL = PRIVACY_URL.replace(/\/privacy(\.html?)?([?#].*)?$/, "/terms$1$2");
 
 export const PRIVACY_POLICY_VERSION = "2026-09-24";
 export const EXTERNAL_HOSTS: readonly ExternalHost[] = [];

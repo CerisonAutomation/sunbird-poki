@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildRoomInviteUrl, normalizeRoomCode } from "../RoomInvite";
+import { buildRoomInviteUrl, normalizeRoomCode } from "../DeepLinks";
 
 describe("room invite deep links", () => {
   it("normalizes input to a 5-char code", () => {
@@ -31,7 +31,7 @@ describe("room invite deep links", () => {
 
   it("parses and consumes a #room= invite exactly once", async () => {
     vi.resetModules();
-    const { readRoomInviteFromUrl } = await import("../RoomInvite");
+    const { readRoomInviteFromUrl } = await import("../DeepLinks");
     window.location.hash = "#room=XYZ12";
     expect(readRoomInviteFromUrl()).toBe("XYZ12");
     expect(readRoomInviteFromUrl()).toBe("XYZ12"); // already consumed this session
@@ -40,7 +40,7 @@ describe("room invite deep links", () => {
 
   it("ignores a hash without a room code", async () => {
     vi.resetModules();
-    const { readRoomInviteFromUrl } = await import("../RoomInvite");
+    const { readRoomInviteFromUrl } = await import("../DeepLinks");
     window.location.hash = "#rival=a.b.c";
     expect(readRoomInviteFromUrl()).toBeNull();
   });

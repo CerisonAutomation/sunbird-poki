@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { verifyRunSubmission } from "../AntiCheat";
-import { defaultProfile } from "../PlayerProfile";
+import { defaultProfile, verifyRunSubmission } from "../AntiCheat";
 
 describe("AntiCheat & Profiles", () => {
   it("generates a valid canonical profile", () => {

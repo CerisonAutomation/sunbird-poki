@@ -28,6 +28,7 @@ import type { MissionView, QuestReward, QuestView } from "./Missions";
 import type { CampaignChapterView } from "./Campaign";
 import type { MonthlyTheme, WeeklyEvent } from "./Events";
 import { SQUAD_QUESTS, type SquadState } from "./Squad";
+import type { FriendChallenge } from "./SocialSystem";
 import { seenAgo, type FlightMate } from "./pilots";
 import type { HighScore, Settings } from "./SaveData";
 import { TRACK_NAMES } from "./Music";
@@ -242,6 +243,8 @@ export type HudSnapshot = {
   season: { tier: number; maxTier: number; have: number; need: number; label: string; tiers: TierView[] };
   trophies: AchievementView[];
   trophyCounts: { unlocked: number; total: number };
+  /** Closest-to-completion locked trophy, surfaced during flight (or null once every trophy is unlocked). */
+  nearestTrophy: AchievementView | null;
   referralCode: string;
   referralRedeemed: boolean;
   referralMessage: string;
@@ -377,6 +380,8 @@ export type HudSnapshot = {
   campaignDone: number;
   campaignTotal: number;
   squad: SquadState;
+  /** Active ghost-race challenges (SocialSystem) — pending or accepted. */
+  friendChallenges: FriendChallenge[];
   /** Real pilots from rooms this device shared — see src/game/pilots.ts. */
   recentPilots: FlightMate[];
   /** AUDS shared-run state (async multiplayer by code, Poki platform only). */
@@ -774,14 +779,14 @@ export class HUD {
       <div class="overlay ad hidden" data-ref="ad"><div class="ad-card" data-ref="adCard"></div></div>
       <div class="overlay gameover hidden" data-ref="over"><div class="paper-card" data-ref="overCard"></div></div>
 
-      <div class="toasts" data-ref="toasts"></div>
+      <div class="toasts" data-ref="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
       <div class="flash" data-ref="flash"></div>
       <div class="impact-popups" data-ref="impactPopups"></div>
       <div class="matchmaking hidden" data-ref="matchmaking" role="status" aria-live="polite">
         ${flockLoadingMark()}
         <div class="matchmaking-title" data-ref="matchmakingTitle">Searching for live pilots…</div>
         <div class="matchmaking-count" data-ref="matchmakingCount">0 live pilots</div>
-        <div class="matchmaking-label" data-ref="matchmakingLabel">Reading the sky…</div>
+        <div class="matchmaking-label" data-ref="matchmakingLabel">Searching for pilots…</div>
         <div class="matchmaking-rooms hidden" data-ref="matchmakingRooms"></div>
         <div class="btn-row mm-actions">
           <button class="primary-btn mm-ready hidden" data-ui data-ref="matchmakingReady" data-action="mm-ready">Ready up ✓</button>
@@ -879,7 +884,7 @@ export class HUD {
         : searching
           ? secsLeft > 0.5
             ? `Looking for pilots on this circuit · ${Math.ceil(secsLeft)}s`
-            : "Reading the sky…"
+            : "Searching for pilots…"
           : "The search stays open — anyone who arrives can still join this room";
     this.matchmakingRooms.textContent = rooms;
     this.matchmakingRooms.classList.toggle("hidden", !rooms);
@@ -1231,7 +1236,9 @@ export class HUD {
       } else {
         this.ghostChip.classList.remove("hidden");
         const ahead = s.ghostDelta >= 0;
-        this.ghostChip.textContent = `👻 ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
+        // The arrow is a shape cue that survives colorblindness — the
+        // ahead/behind background tint alone (green vs. coral) is not enough.
+        this.ghostChip.textContent = `👻 ${ahead ? "▲" : "▼"} ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
         this.ghostChip.classList.toggle("ahead", ahead);
         this.ghostChip.classList.toggle("behind", !ahead);
       }
@@ -1347,7 +1354,10 @@ export class HUD {
       const blKey = bl ? `${bl.kind}:${Math.ceil(bl.gap / 25)}` : "";
       const gk = lead ? `${lead.id}:${Math.floor((lead.progress / lead.target) * 20)}` : "";
       const wk = s.wings ? `${Math.round(s.wings.progress * 100)}:${s.wings.nextNeeded}` : "";
-      const stripKey = `${blKey}|${gk}|${wk}`;
+      const ntRaw = s.nearestTrophy as AchievementView | null;
+      const nt = ntRaw && ntRaw.def && typeof ntRaw.def.target === "number" && ntRaw.def.target > 0 && typeof ntRaw.progress === "number" ? ntRaw : null;
+      const tk = nt ? `${nt.def.id}:${Math.floor((nt.progress / nt.def.target) * 20)}` : "";
+      const stripKey = `${blKey}|${gk}|${wk}|${tk}`;
       if (stripKey !== this.lastGoals) {
         this.lastGoals = stripKey;
         const rows: string[] = [];
@@ -1372,6 +1382,12 @@ export class HUD {
         if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
           const cpct = Math.min(100, s.wings.progress * 100);
           rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${s.wings.nextNeeded} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
+        }
+
+        // Trophy progress: lowest priority — only when a slot is still free.
+        if (nt && rows.length < 2) {
+          const tpct = Math.min(100, (nt.progress / nt.def.target) * 100);
+          rows.push(`<span class="gs gs-trophy"><em>🏆 ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
         }
 
         this.goalStrip.innerHTML = rows.join("");
@@ -2427,9 +2443,28 @@ export function renderSquad(s: HudSnapshot): string {
       .map((f) => {
         const presence = f.local ? "met in a race" : f.online ? "● online" : "○ offline";
         const best = f.bestDistance && f.bestDistance > 0 ? ` · best ${Math.round(f.bestDistance).toLocaleString()} m` : "";
-        return `<div class="friend-row"><span class="fr-name">🐦 ${escapeHtml(f.name)} <small>${escapeHtml(presence)}${best}</small></span><span class="fr-code">${escapeHtml(f.code || "")}</span><button class="mini-btn ghost" data-ui data-action="squad-remove" aria-label="Remove ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">✕</button></div>`;
+        return `<div class="friend-row"><span class="fr-name">🐦 ${escapeHtml(f.name)} <small>${escapeHtml(presence)}${best}</small></span><span class="fr-code">${escapeHtml(f.code || "")}</span><button class="mini-btn" data-ui data-action="friend-challenge" aria-label="Challenge ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">🏁 Challenge</button><button class="mini-btn ghost" data-ui data-action="squad-remove" aria-label="Remove ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">✕</button></div>`;
       })
       .join("")}</div>${pages("friends", page)}`;
+  })();
+
+  // Ghost-race challenges (SocialSystem.FriendChallenge) — an async chase
+  // line posted against a wingman's best, settled the moment you land.
+  const ghostChallenges = (() => {
+    const challenges = s.friendChallenges ?? [];
+    if (!challenges.length) return "";
+    const kindLabel: Record<FriendChallenge["challengeKind"], string> = {
+      distance: "distance", score: "score", altitude: "altitude", perfects: "perfect launches",
+    };
+    const rows = challenges
+      .map((ch) => {
+        const status = ch.status === "accepted" ? "racing — fly to settle it" : "posted — tap to race";
+        return `<div class="friend-row"><span class="fr-name">🏁 vs ${escapeHtml(ch.challengerName)} <small>${escapeHtml(status)}</small></span><span class="fr-code">beat ${Math.round(ch.ghostDistance).toLocaleString()} m ${kindLabel[ch.challengeKind]}</span><button class="mini-btn gold" data-ui data-action="challenge-race" data-id="${escapeHtml(ch.id)}">🏁 Race ghost</button></div>`;
+      })
+      .join("");
+    return `${sectionTitle("🏁 Ghost Challenges", `${challenges.length} active`)}
+      <p class="fineprint">Async races against a wingman's posted line — race the ghost and the result settles the instant you land.</p>
+      <div class="friend-list">${rows}</div>`;
   })();
 
   // Real history: rooms this device actually shared with other pilots.
@@ -2450,7 +2485,7 @@ export function renderSquad(s: HudSnapshot): string {
       <div class="friend-list">${rows || `<div class="empty-note">Everyone you flew with is already in your wingmen.</div>`}</div>`;
   })();
 
-  const friends = `${lookupPanel}${wingmen}${flewWith}`;
+  const friends = `${lookupPanel}${wingmen}${ghostChallenges}${flewWith}`;
   const myClub = sq.clubs.find((c) => c.id === sq.myClubId);
   const clubChat = SQUAD_CHAT && myClub
     ? `
@@ -2627,6 +2662,7 @@ function renderModes(s: HudSnapshot): string {
             <span class="mode-icon">${menuIconSm(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
+            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">✓</span>` : ""}
           </button>`,
         )
         .join("")}
@@ -2639,6 +2675,7 @@ function renderModes(s: HudSnapshot): string {
             <span class="mode-icon">${menuIconSm(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
+            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">✓</span>` : ""}
           </button>`,
         )
         .join("")}
@@ -3360,6 +3397,8 @@ function renderSettings(s: HudSnapshot): string {
     ${toggle(t("hud.settings.reduceMotion", undefined, "Reduce Motion"), "motion", s.settings.reduceMotion)}
     ${toggle(t("hud.settings.colorAssist", undefined, "Colorblind assist"), "colorassist", s.settings.colorAssist)}
     ${toggle(t("hud.settings.largeText", undefined, "Large text"), "bigtext", s.settings.bigText)}
+    ${toggle(t("hud.settings.tapToggleDive", undefined, "Tap to dive (no holding)"), "tap-toggle-dive", s.settings.tapToggleDive)}
+    <p class="fineprint">${t("hud.settings.tapToggleDiveHint", undefined, "One tap starts the dive, the next tap ends it — nothing to hold down.")}</p>
     <div class="setting-row setting-select"><label for="render-quality">${t("hud.settings.renderQuality", undefined, "Render quality")}</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? t("hud.settings.quality.auto", undefined, "Auto · recommended") : q === "high" ? t("hud.settings.quality.high", undefined, "High · more detail") : t("hud.settings.quality.low", undefined, "Low · less GPU work")}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.flightsFlown", undefined, "Flights flown")}</span><b>${s.runsPlayed}</b></div>
     <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">⛶ ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>
@@ -3400,15 +3439,17 @@ function renderPass(s: HudSnapshot): string {
     <div class="pass-progress"><i style="width:${pct}%"></i></div>
     <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks the premium track." : " Fly to unlock rewards."}</p>
     ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>Double the tier rewards with Gold</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
+    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — premium rewards shown for reference; this build has no Gold purchase, so the free track is what you actually earn.</p>` : ""}
     <div class="tier-track">
       ${s.season.tiers
         .map((t) => {
           const canFree = t.unlocked && !t.freeClaimed;
           const canPremium = t.unlocked && !t.premiumLocked && !t.premiumClaimed;
+          const premiumTitle = t.premiumLocked && !SELL_AD_REMOVAL ? "Portal edition — premium rewards shown for reference" : undefined;
           return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
             <div class="tier-num">Lv.${t.tier}</div>
             <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui data-action="${canFree ? "claim-pass-free" : ""}" data-id="${t.tier}" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
-            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui data-action="${canPremium ? "claim-pass-premium" : ""}" data-id="${t.tier}" ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
+            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui data-action="${canPremium ? "claim-pass-premium" : ""}" data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : ""} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
           </div>`;
         })
         .join("")}
@@ -3695,6 +3736,11 @@ function renderGameOver(s: HudSnapshot): string {
     ${shareBlock}
     ${renderCelebration(s.celebration)}
     ${renderFlightRecap(s.flightPath)}
+    <div class="over-stats meta-progress-strip">
+      <div><span>🐦 Migration</span><b>${s.campaignDone}/${s.campaignTotal} legs</b></div>
+      <div><span>🏆 Trophies</span><b>${s.trophyCounts.unlocked}/${s.trophyCounts.total}</b></div>
+      <div><span>${menuIcon("pass")} Nest Pass</span><b>Lv.${s.season.tier}/${s.season.maxTier}</b></div>
+    </div>
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
       <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
@@ -3772,7 +3818,7 @@ function renderContinue(s: HudSnapshot): string {
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
-      ? `<button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad" role="status">🎬 ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button>`
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">🎬 ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button></div>`
       : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>

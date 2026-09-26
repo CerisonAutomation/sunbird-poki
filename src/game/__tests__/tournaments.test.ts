@@ -73,11 +73,39 @@ describe("Tournaments", () => {
     const t = new Tournaments(emptyTournamentState());
     const cup = t.active()[0]!;
     t.submit(cup.mode, { distance: Number.MAX_SAFE_INTEGER, altitude: Number.MAX_SAFE_INTEGER, perfects: Number.MAX_SAFE_INTEGER, coins: Number.MAX_SAFE_INTEGER });
-    const grant = t.claim(cup.id);
-    expect(grant).not.toBeNull();
-    expect(grant!.tier).toBe("diamond");
+    const grants = t.claim(cup.id);
+    expect(grants).not.toBeNull();
+    // Diamond is the top, so it is the last grant in the ascending order.
+    expect(grants!.at(-1)!.tier).toBe("diamond");
     // Second claim is refused.
     expect(t.claim(cup.id)).toBeNull();
+  });
+
+  it("pays every tier below the one reached, instead of forfeiting them", () => {
+    const t = new Tournaments(emptyTournamentState());
+    const cup = t.active()[0]!;
+    // A single great run reaches diamond. The three prizes below it were
+    // earned just as surely, so one claim must bank all four.
+    t.submit(cup.mode, { distance: Number.MAX_SAFE_INTEGER, altitude: Number.MAX_SAFE_INTEGER, perfects: Number.MAX_SAFE_INTEGER, coins: Number.MAX_SAFE_INTEGER });
+    const grants = t.claim(cup.id)!;
+    expect(grants.map((g) => g.tier)).toEqual(["bronze", "silver", "gold", "diamond"]);
+    // Every coin prize is really in the wallet state, not just listed.
+    const coins = grants.filter((g) => g.prize.kind === "coins").reduce((sum, g) => sum + g.prize.amount, 0);
+    expect(coins).toBeGreaterThan(0);
+    // And it is still exactly once: a later claim at the same tier is refused.
+    expect(t.claim(cup.id)).toBeNull();
+  });
+
+  it("claims only the newly reached tiers when a lower tier was already banked", () => {
+    const t = new Tournaments(emptyTournamentState());
+    const cup = t.active()[0]!;
+    // All four stats carry the target so this works whichever metric the
+    // rotated cup happens to use this week.
+    t.submit(cup.mode, { distance: cup.cuts.bronze + 1, altitude: cup.cuts.bronze + 1, perfects: cup.cuts.bronze + 1, coins: cup.cuts.bronze + 1 });
+    expect(t.claim(cup.id)!.map((g) => g.tier)).toEqual(["bronze"]);
+    // Climbing to gold must not re-pay bronze.
+    t.submit(cup.mode, { distance: cup.cuts.gold + 1, altitude: cup.cuts.gold + 1, perfects: cup.cuts.gold + 1, coins: cup.cuts.gold + 1 });
+    expect(t.claim(cup.id)!.map((g) => g.tier)).toEqual(["silver", "gold"]);
   });
 
   it("tracks claimed tiers and owned cosmetics", () => {

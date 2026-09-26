@@ -53,6 +53,8 @@ const LOCAL_ONLY_PREFIXES = [
   "sunbird.ghost.", // recorded ghost flights (large, device-specific)
   "sunbird.journal.", // analytics journal (local-only by definition)
   "sunbird.squad.local_", // offline squad/club caches, incl. per-club chat logs
+  "sunbird.squad.key.", // squad device authentication tokens (per-device only)
+  "sunbird.squad.identity.", // squad device identity (must not roam between devices)
   "auds-singleton:", // AUDS entry secrets: must not roam between devices
   "auds-secret:", // AUDS update secrets: same
   PROBE_KEY, // the write canary is never worth syncing

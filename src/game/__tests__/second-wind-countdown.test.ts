@@ -34,6 +34,13 @@ describe("second wind countdown", () => {
     expect(HUD).toMatch(/class="reward-strip wake-strip" role="status"/);
   });
 
+  it("keeps the ad CTA a real button: the live region wraps it, not the button itself", () => {
+    // role= on a <button> overrides the button role in AT — the countdown
+    // wrapper carries role="status" and the inner control stays a button.
+    expect(HUD).toMatch(/<div role="status"><button class="reward-strip wake-strip wake-ad-btn"/);
+    expect(HUD).not.toMatch(/<button[^>]*role="status"/);
+  });
+
   it("binds the number to the snapshot's timer", () => {
     expect(HUD).toMatch(/data-live="contTimer"/);
     expect(HUD).toMatch(/Math\.ceil\(s\.continueTimer\)/);

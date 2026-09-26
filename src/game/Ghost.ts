@@ -95,9 +95,18 @@ export class GhostPlayer {
   private readonly mat: THREE.MeshBasicMaterial;
   private readonly wingMat: THREE.MeshBasicMaterial;
   private readonly accentMat: THREE.MeshBasicMaterial;
+  /**
+   * Colorblind-assist marker: a small shape hovering over the bird so two
+   * translucent ghosts (your own ice-blue best vs. a rival's amber one) read
+   * apart by silhouette, not only by tint — hidden unless colour-assist is on.
+   */
+  private readonly marker: THREE.Mesh;
+  private readonly markerMat: THREE.MeshBasicMaterial;
   active = false;
 
-  constructor() {
+  /** `markerShape` distinguishes this ghost from another GhostPlayer on
+   *  screen at the same time by silhouette (see `setMarkerVisible`). */
+  constructor(private readonly markerShape: "circle" | "diamond" = "circle") {
     this.mesh = new THREE.Group();
     this.mat = new THREE.MeshBasicMaterial({
       color: 0x9fd8ff,
@@ -182,9 +191,31 @@ export class GhostPlayer {
     this.wingL.position.set(-0.05, 0.1, 0.42);
     this.wingR.position.set(-0.05, 0.1, -0.42);
 
-    this.mesh.add(this.body, this.wingL, this.wingR);
+    // Colorblind-assist marker: a small bright shape floating above the head.
+    // A child of `this.mesh`, so it inherits the group's position/rotation
+    // and needs no extra per-frame bookkeeping in `update()`.
+    this.markerMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.marker = new THREE.Mesh(
+      this.markerShape === "diamond" ? new THREE.OctahedronGeometry(0.22, 0) : new THREE.RingGeometry(0.13, 0.22, 12),
+      this.markerMat,
+    );
+    this.marker.position.set(0, 1.05, 0);
+    this.marker.visible = false;
+
+    this.mesh.add(this.body, this.wingL, this.wingR, this.marker);
     this.mesh.scale.setScalar(1.18);
     this.mesh.visible = false;
+  }
+
+  /** Show/hide the colorblind-assist marker (see the constructor doc). */
+  setMarkerVisible(visible: boolean): void {
+    this.marker.visible = visible;
   }
 
   addTo(scene: THREE.Scene): void {
@@ -257,6 +288,7 @@ export class GhostPlayer {
     this.mat.dispose();
     this.wingMat.dispose();
     this.accentMat.dispose();
+    this.markerMat.dispose();
     this.record = null;
     this.active = false;
   }

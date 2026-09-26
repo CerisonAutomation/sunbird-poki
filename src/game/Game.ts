@@ -124,10 +124,9 @@ import { SocialSystem, type FriendChallenge } from "./SocialSystem";
 import { SeasonPass, seasonId, seasonLabel, XP_RULES } from "./SeasonPass";
 import { FlightCues } from "./FlightCues";
 import { endlessSpeedScale } from "./FlightProgression";
-import { buildChallengeUrl, readChallengeFromUrl, type RivalChallenge } from "./Challenge";
+import { buildChallengeUrl, readChallengeFromUrl, type RivalChallenge, buildRoomInviteUrl, normalizeRoomCode, readRoomInviteFromUrl } from "./DeepLinks";
 import { flag } from "./Flags";
 import { variant } from "./Experiments";
-import { buildRoomInviteUrl, normalizeRoomCode, readRoomInviteFromUrl } from "./RoomInvite";
 import { PORTAL_BANNER_ID, attachPortalErrorReporters, initPlatform, installPageScrollGuards, isCoarsePointer, isPortalBuild, portalTarget as getPortalTarget, type PlatformAdapter } from "../sdk/platform";
 import { CUSTOM_PILOT_NAMES, POKI_MULTIPLAYER, SELL_AD_REMOVAL, SIMULATED_BREAKS, SQUAD_CHAT } from "./edition";
 import { PRIVACY_URL } from "./legal";
@@ -233,9 +232,9 @@ export class Game {
     },
   });
   private readonly ghostRecorder = new GhostRecorder();
-  private readonly ghostPlayer = new GhostPlayer();
+  private readonly ghostPlayer = new GhostPlayer("circle");
   /** Network rival ghost (async PvP on the daily seed) — amber silhouette. */
-  private readonly rivalGhostPlayer = new GhostPlayer();
+  private readonly rivalGhostPlayer = new GhostPlayer("diamond");
   private rivalGhostName = "";
   private rivalGhostPassed = false;
   /** Run counter — guards async ghost loads against arriving mid-next-run. */
@@ -373,6 +372,10 @@ export class Game {
   private manualBoostCooldown = 0;
   private wasDiving = false;
   private continuesUsed = 0;
+  /** In-flight portal rewarded-break guards: a second tap while the SDK
+   * promise is pending must not open a second break (double grant). */
+  private continueRewardBusy = false;
+  private multiplierRewardBusy = false;
   private continueTimer = 0;
   private adTimer = 0;
   /**
@@ -1331,7 +1334,12 @@ export class Game {
           this.telemetry.track("ad_abandoned", { reason: this.adReason, portal: this.platform?.name ?? "none" });
           this.endPortalAd();
           const restore = this.preAdState ?? "gameover";
-          this.setState(restore === "ad" ? "gameover" : restore);
+          // An interstitial fires from inside finishRun (previous state
+          // "playing", bird asleep, run recorded): restoring "playing" would
+          // strand a sleeping bird with no run and no offer. Pause breaks
+          // restore "paused" untouched.
+          const safe = restore === "playing" ? "gameover" : restore;
+          this.setState(safe === "ad" ? "gameover" : safe);
         }
         break;
       case "gameover":
@@ -2631,7 +2639,7 @@ export class Game {
   /** First-flight coach line takes priority over ambient hints. */
   private coachHint(): string {
     if (!this.coach) return "";
-    const v = this.coach.view();
+    const v = this.coach.view(this.save.state.settings.tapToggleDive);
     if (v.step < 0 || !v.text) return "";
     const pips = [..."●".repeat(v.step) + "◉" + "○".repeat(Math.max(0, v.steps - v.step - 1))].join(" ");
     return `${pips}  ${v.text}`;
@@ -2645,7 +2653,8 @@ export class Game {
     const cue = terrainCue({ grounded: this.bird.grounded, localX: local,
       altitude: this.bird.altitude, vy: this.bird.vy,
       landingSlope: !this.bird.grounded && this.bird.altitude < 55 && this.bird.vy < -8
-        ? this.terrain.slopeAt(this.bird.x + landingLookAhead(this.bird.altitude, this.bird.vx, this.bird.vy)) : 0 });
+        ? this.terrain.slopeAt(this.bird.x + landingLookAhead(this.bird.altitude, this.bird.vx, this.bird.vy)) : 0 },
+      this.save.state.settings.tapToggleDive);
     if (cue) return cue;
     if (this.hintTimer > (novice ? 26 : 8)) {
       if (this.terrain.isOcean(this.bird.x + 40) && !this.terrain.isOcean(this.bird.x) && this.island < 2) return "Build speed — then RELEASE";
@@ -2655,6 +2664,7 @@ export class Game {
     if (this.hintTimer < 2.6 && slope < -0.08) {
       // Close the first-flight action loop: acknowledge the hold immediately
       // and teach the release that converts the dive into lift.
+      if (this.save.state.settings.tapToggleDive) return this.input.diving ? "TAP to soar" : "TAP to dive";
       return this.input.diving ? "RELEASE to soar" : "HOLD to dive";
     }
     if (this.hintTimer > 6 && this.ringChain >= 2) return `RING CHAIN ×${this.ringChain} · KEEP IT GOING`;
@@ -3715,6 +3725,12 @@ export class Game {
       return;
     }
     void this.audio.resume();
+    if (this.handleShopEvent(action, id)) return;
+    if (this.handleSocialEvent(action, id)) return;
+    if (this.handleSettingsEvent(action, id)) return;
+    if (this.handleRoomEvent(action, id)) return;
+    if (this.handleJourneyEvent(action, id)) return;
+    if (this.handleContinueEvent(action, id)) return;
     switch (action) {
       case "spin-wheel": {
         if (!this.save.canFreeWheelSpin(this.today)) {
@@ -3902,15 +3918,6 @@ export class Game {
         break;
       case "open-progress":
         this.setScreen("progress");
-        break;
-      case "open-shop":
-        if (!this.save.state.seenShop) {
-          this.save.state.seenShop = true;
-          this.save.persist();
-          this.telemetry.track("onboarding_shop_opened", { runs: this.save.state.runsPlayed });
-          this.hud.toast("Start with a bird — each one changes your flight", "gold");
-        }
-        this.setScreen("shop");
         break;
       case "open-paywall":
         if (!SELL_AD_REMOVAL) break;
@@ -4123,9 +4130,9 @@ export class Game {
         break;
       }
       case "claim-cup": {
-        const grant = this.cups.claim(id);
-        if (!grant) break;
-        this.applyPrize(grant);
+        const grants = this.cups.claim(id);
+        if (!grants) break;
+        this.applyPrizes(grants);
         break;
       }
       case "equip-trail":
@@ -4141,734 +4148,6 @@ export class Game {
         break;
       case "emote":
         this.sendEmote(id || "👋");
-        break;
-      case "host-room": {
-        if (!isMultiplayerConfigured()) {
-          this.hud.toast("Live rooms are not available in this edition", "warn");
-          break;
-        }
-        this.disconnectRace();
-        this.localRace = false;
-        this.roomCode = makeRoomCode();
-        this.joiningRemoteRoom = false;
-        this.modeId = this.selectedPvpMode;
-        this.mode = modeById(this.selectedPvpMode);
-        this.rankedRace = false;
-        this.setScreen("live");
-        this.preseatLobby();
-        this.hud.toast(`Flock room ${this.roomCode} ready!`, "gold");
-        this.bump();
-        break;
-      }
-      case "join-room": {
-        if (!isMultiplayerConfigured()) {
-          this.hud.toast("Live rooms are not available in this edition", "warn");
-          break;
-        }
-        const code = normalizeRoomCode(this.hud.readValue("roomCode"));
-        if (!code) {
-          this.hud.toast("Enter a 5-letter room code", "warn");
-          break;
-        }
-        this.disconnectRace();
-        this.localRace = false;
-        this.roomCode = code;
-        this.joiningRemoteRoom = true;
-        this.modeId = this.selectedPvpMode;
-        this.mode = modeById(this.selectedPvpMode);
-        this.rankedRace = false;
-        this.setScreen("live");
-        this.preseatLobby();
-        this.hud.toast(`Joined room ${code}`, "gold");
-        this.bump();
-        break;
-      }
-      case "select-pvp-mode": {
-        const mId = (id as ModeId) || "pvp_sprint";
-        this.selectedPvpMode = mId;
-        this.modeId = mId;
-        this.mode = modeById(mId);
-        // Selecting a new format while already in a private room MUST move
-        // you to a new room code — the existing room's seed is pinned to the
-        // old format on the server, so staying connected would have you
-        // flying Sprint while your invitees queued for Slalom. Same safety
-        // applies mid-matchmaking: tear down so the next preseating uses the
-        // new seed.
-        if (this.roomCode || this.mmOpts) {
-          this.cancelMatchmaking();
-          this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
-          }
-        }
-        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
-        this.bump();
-        break;
-      }
-      case "select-pvp-world": {
-        const wId = id || "emerald";
-        this.selectedPvpWorld = wId;
-        this.selectedCourse = PVP_WORLDS.find((w) => w.id === wId) ?? PVP_WORLDS[0]!;
-        // Same reseed safety as select-pvp-mode: changing the world while
-        // seated pins a fresh room code so the seed reflects the new course.
-        if (this.roomCode || this.mmOpts) {
-          this.cancelMatchmaking();
-          this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
-          }
-        }
-        this.hud.toast(`${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
-        this.bump();
-        break;
-      }
-      case "quick-match-shuffle": {
-        // "Just make it random": one tap picks a random format AND world so
-        // the big button is always the fastest path into a race.
-        const m = PVP_MODES[Math.floor(Math.random() * PVP_MODES.length)]!;
-        const w = PVP_WORLDS[Math.floor(Math.random() * PVP_WORLDS.length)]!;
-        this.selectedPvpMode = m.id;
-        this.selectedPvpWorld = w.id;
-        this.selectedCourse = w;
-        this.modeId = m.id;
-        this.mode = m;
-        this.hud.toast(`${iconGlyph("dice")} ${iconGlyph(m.icon)} ${m.name} on ${iconGlyph(w.emoji)} ${w.name}`, "gold");
-        this.bump();
-        break;
-      }
-      case "quick-match-instant": {
-        // "Quick Match" is the one-tap ONLINE path: it seats the player in
-        // public matchmaking for the chosen circuit. It used to force a local
-        // AI race (launchMatch(..., true)) while sitting under a "40 pilots,
-        // ready now" hero — the player asked for a PvP race and got bots.
-        // beginMatchmaking falls back to the AI flock only when no transport
-        // exists in this runtime, and now says so when it does.
-        const mode = modeById(this.selectedPvpMode);
-        this.modeId = mode.id;
-        this.mode = mode;
-        this.beginMatchmaking({ ranked: true, storm: mode.id === "pvp_typhoon" });
-        break;
-      }
-      case "start-room-now": {
-        this.modeId = this.selectedPvpMode;
-        this.mode = modeById(this.selectedPvpMode);
-        // With real pilots seated, the room launches together: the transport
-        // issues ONE shared start (a 6s countdown for everyone) instead of the
-        // host racing off alone while guests watch an empty sky.
-        const seatedWithPilots = Boolean(this.net) && this.net!.connected && this.liveCount() > 0;
-        if (this.net) this.net.startNow();
-        if (seatedWithPilots) {
-          this.hud.toast("Launching together — every pilot gets the countdown", "gold");
-        } else {
-          this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, false);
-        }
-        break;
-      }
-      case "copy-invite": {
-        if (this.roomCode) this.copyRoomInvite(this.roomCode);
-        else this.hud.toast("Host a room first to get an invite link", "warn");
-        break;
-      }
-      case "start-room":
-      case "ready-room": {
-        if (!this.roomCode) {
-          this.roomCode = makeRoomCode();
-        }
-        this.modeId = this.selectedPvpMode;
-        this.mode = modeById(this.selectedPvpMode);
-        this.rankedRace = false;
-        this.preseatLobby();
-        if (this.net) {
-          const isReady = !this.net.info().ready;
-          this.net.sendReady(isReady);
-          this.hud.toast(isReady ? "You are ready! ✓" : "Ready cancelled", "gold");
-        } else {
-          this.hud.toast("Starting race flock…", "info");
-          this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, true);
-        }
-        this.bump();
-        break;
-      }
-      case "quick-match":
-      case "pvp-ranked":
-        this.beginMatchmaking({ ranked: true, storm: false });
-        break;
-      case "pvp-storm":
-        this.beginMatchmaking({ ranked: true, storm: true });
-        break;
-      case "mm-cancel":
-        this.cancelMatchmaking();
-        break;
-      case "mm-ready": {
-        // Explicit opt-in to a live start. The race launches only once every
-        // seated pilot is ready, then counts down 6s for everyone.
-        if (this.net?.state === "lobby") {
-          const nowReady = !this.net.info().ready;
-          this.net.sendReady(nowReady);
-          this.hud.toast(nowReady ? "You are ready! ✓" : "Ready cancelled", "gold");
-          this.bump();
-        }
-        break;
-      }
-      case "mm-ai":
-        // Explicit opt-in only: the search never drops a pilot into a bot race.
-        this.takeAiFlock();
-        break;
-      case "mm-keep-search":
-        this.keepSearching();
-        break;
-      case "pvp-duel":
-        this.roomCode = "";
-        this.modeId = "massrace";
-        this.mode = modeById("massrace");
-        this.rankedRace = false;
-        this.startRun({ duel: true });
-        break;
-      case "play-daily": {
-        const c = dailyChallenge(this.today);
-        if (this.save.isDailyDone(this.today)) {
-          this.hud.toast("Today's challenge is already complete — back tomorrow!", "info");
-          break;
-        }
-        this.modeId = c.mode;
-        this.mode = modeById(c.mode);
-        this.exitVersus();
-        this.startRun({ challenge: "daily" });
-        break;
-      }
-      case "play-gauntlet": {
-        const idx = Math.max(0, Math.min(2, parseInt(id || "0", 10) || 0));
-        const g = weeklyGauntlet(weekKey());
-        if (this.save.gauntletDone(g.week).includes(idx)) {
-          this.hud.toast("Stage already cleared this week", "info");
-          break;
-        }
-        const st = g.stages[idx]!;
-        this.modeId = st.mode;
-        this.mode = modeById(st.mode);
-        this.exitVersus();
-        this.startRun({ challenge: `gauntlet${idx}` as `gauntlet${number}` });
-        break;
-      }
-      case "claim-calendar": {
-        const day = this.save.claimCalendar(this.today);
-        if (day === 0) {
-          this.hud.toast("Today's gift is already claimed", "info");
-          break;
-        }
-        const r = calendarReward(day);
-        if (r.kind === "coins") {
-          this.save.addCoins(r.amount);
-          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · +${r.amount} coins`, "gold");
-        } else if (r.kind === "boost") {
-          this.save.armBoost(r.id);
-          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · boost armed for next flight`, "gold");
-        } else {
-          if (this.save.ownTrail(r.id)) this.hud.toast(`${iconGlyph("star")} Day ${day} gift · ${TRAILS[r.id]?.label ?? r.id} trail!`, "gold");
-          else {
-            this.save.addCoins(200);
-            this.hud.toast(`${iconGlyph("star")} Day ${day} · trail already owned, +200 coins instead`, "gold");
-          }
-        }
-        this.audio.purchase();
-        this.bump();
-        break;
-      }
-      case "open-challenges":
-        this.setScreen("challenges");
-        break;
-      case "play-event": {
-        this.modeId = "daytrip";
-        this.mode = modeById("daytrip");
-        this.exitVersus();
-        this.startRun({ event: true });
-        break;
-      }
-      case "open-campaign":
-        this.setScreen("campaign");
-        break;
-      case "claim-campaign": {
-        const ch = CAMPAIGN.find((c) => c.id === id);
-        if (!ch) break;
-        const view = campaignViews(this.save, this.save.state.campaignClaimed).find((v) => v.def.id === id);
-        if (!view || !view.unlocked || !view.complete || !this.save.claimCampaign(id)) {
-          this.hud.toast("Chapter not ready yet", "info");
-          break;
-        }
-        this.save.addCoins(ch.rewardCoins);
-        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins — ${ch.rewardLabel}`, "gold");
-        this.audio.chapterFanfare();
-        this.bump();
-        break;
-      }
-      case "claim-daily-stipend": {
-        // The card disables via the snapshot, but a double-tap can land before
-        // the re-render — the handler must be its own guard.
-        if (this.save.state.lastStipendClaimed === this.today) break;
-        this.save.addCoins(DAILY_STIPEND);
-        this.save.state.lastStipendClaimed = this.today;
-        this.audio.chapterFanfare();
-        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("coin")} Daily Flight Stipend Claimed! +● ${DAILY_STIPEND} coins!`, "gold");
-        this.bump();
-        break;
-      }
-      case "shop-free-coins": {
-        // Rewarded ad from the shop: capped per session to prevent ad farming.
-        // The card is hidden without a live ad surface (HUD: `adAvailable`), so
-        // this is the second half of the same gate.
-        if (!this.adsLive()) break;
-        if (this.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
-          this.hud.toast("Ad rewards capped for this visit", "info");
-          break;
-        };
-        void this.multiplyCoinsFromShopAd();
-        break;
-      }
-      case "buy-bundle": {
-        // One crate per save. It pays 250 coins for 240 — re-claimable it is
-        // an infinite +10/click coin faucet.
-        if (this.save.state.wingmanBundle) break;
-        if (!this.save.spend(240)) {
-          this.hud.toast("Need ● 240 coins to claim Ace Wingman Crate", "warn");
-          break;
-        }
-        this.save.state.wingmanBundle = true;
-        this.save.persist();
-        this.save.armBoost("shield");
-        this.save.armBoost("sunflask");
-        this.save.armBoost("magnet");
-        this.save.ownTrail("trail_tide");
-        this.save.equipTrail("trail_tide");
-        this.save.addCoins(DAILY_STIPEND);
-        this.audio.chapterFanfare();
-        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("badge")} Ace Wingman Crate Unlocked! 3 Boosts + Tideglass Trail + ${DAILY_STIPEND} Coins!`, "gold");
-        this.bump();
-        break;
-      }
-      case "claim-squad-quest": {
-        const questId = id;
-        const rewards: Record<string, number> = {
-          migration: 150,
-          drafting: 120,
-          precision: 100,
-        };
-        const coins = rewards[questId] ?? 100;
-        if (!this.save.state.squadQuestsClaimed) this.save.state.squadQuestsClaimed = {};
-        if (this.save.state.squadQuestsClaimed[questId] === this.today) {
-          this.hud.toast("Already claimed today!", "info");
-          break;
-        }
-        this.save.state.squadQuestsClaimed[questId] = this.today;
-        this.save.addCoins(coins);
-        this.audio.chapterFanfare();
-        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("star")} Squadron Goal Claimed! +● ${coins} coins!`, "gold");
-        this.bump();
-        break;
-      }
-      case "squad-autonomous": {
-        this.squad?.enableAutonomous();
-        this.squadNotice = "⚡ Autonomous Squadron Hub active!";
-        this.audio.chapterFanfare();
-        this.bump();
-        break;
-      }
-      case "open-squad":
-        this.setScreen("squad");
-        this.squadNotice = "";
-        if (this.squad) {
-          if (!this.squad.live || this.squad.isAutonomous) {
-            this.squad.enableAutonomous();
-          } else {
-            void this.squad.refresh().then(() => {
-              // A lost key is not "no service": keep the honest recovery
-              // surface (explicit re-enrollment) instead of silently
-              // dropping into the autonomous offline hub.
-              if (!this.squad?.state.registered && !this.squad?.state.credentialError) {
-                this.squad?.enableAutonomous();
-                this.bump();
-              }
-            }).catch(() => {
-              if (!this.squad?.state.credentialError) {
-                this.squad?.enableAutonomous();
-                this.bump();
-              }
-            });
-          }
-        }
-        break;
-      case "squad-page": {
-        const [kind, page] = id.split(":");
-        this.squad?.setPage(kind, Number(page));
-        break;
-      }
-      case "squad-copy-code": {
-        const code = this.squad?.state.myCode;
-        if (code) void copyText(code).then(ok => {
-          if (this.disposed) return;
-          if (ok) this.hud.toast("Friend code copied", "info"); else this.hud.offerCopy(code);
-        });
-        break;
-      }
-      case "squad-new-profile":
-        void this.squad?.startNewProfile(this.hud.readChecked("squadRecoveryConsent"));
-        break;
-      case "squad-refresh":
-        this.squadNotice = "";
-        void this.squad?.refresh();
-        break;
-      case "share-run": {
-        // Publish this run so a friend can race the same hills against our
-        // mark. AUDS is Poki's store (it needs a Poki game id), so elsewhere
-        // the button is not rendered and this is unreachable.
-        if (this.runShareBusy) break;
-        this.runShareBusy = true;
-        this.shareError = "";
-        this.bump();
-        const run: SharedRun = {
-          v: 1,
-          name: this.racedName(),
-          seed: this.seed,
-          mode: this.modeId,
-          distance: Math.round(this.bird.x - this.startX),
-          timeMs: Math.round((this.raceFinishTime || this.runTime) * 1000),
-          place: this.racePlace,
-          bird: this.skin.id,
-        };
-        void shareRun(run).then((code) => {
-          if (this.disposed) return;
-          this.runShareBusy = false;
-          if (code) {
-            this.shareCode = code;
-            this.hud.toast(`${iconGlyph("check")} Run shared — send the code to a friend`, "gold");
-          } else {
-            // Platform-neutral copy: this string ships in every edition, and
-            // the isolation gates reject the platform's name in other builds.
-            this.shareError = "Sharing isn't available in this build — no platform store is configured.";
-          }
-          this.bump();
-        });
-        break;
-      }
-      case "copy-score": {
-        const dist = Math.round(this.runStats().distance);
-        const text = `I flew ${dist.toLocaleString()} m in Sunbird: Golden Flight! Can you beat it?`;
-        void copyText(text).then((ok) => {
-          if (this.disposed) return;
-          this.hud.toast(ok ? "Score copied to clipboard!" : text, ok ? "gold" : "info");
-        });
-        break;
-      }
-      case "copy-share": {
-        if (!this.shareCode) break;
-        const code = this.shareCode;
-        void copyText(code).then((ok) => {
-          if (this.disposed) return;
-          this.hud.toast(ok ? `Run code ${code} copied` : `Run code: ${code}`, ok ? "gold" : "info");
-        });
-        break;
-      }
-      case "load-run": {
-        const code = this.hud.readValue("shareCode").trim();
-        if (!code) break;
-        this.runShareBusy = true;
-        this.shareError = "";
-        this.bump();
-        void loadSharedRun(code).then((run) => {
-          if (this.disposed) return;
-          this.runShareBusy = false;
-          if (!run) {
-            this.shareError = sharingAvailable()
-              ? "No shared run with that code — check the code and try again."
-              : "Run codes aren't available in this build — no platform store is configured.";
-            this.bump();
-            return;
-          }
-          this.sharedRun = run;
-          // Same hills, same mode, their mark: this is the existing rival
-          // challenge path, just delivered by code instead of a URL.
-          this.rival = { seed: run.seed, distance: run.distance, name: run.name, mode: run.mode };
-          this.rebuildWorld(run.seed);
-          this.seedMode = "random";
-          if (MODES.some((m) => m.id === run.mode)) {
-            this.modeId = run.mode as ModeId;
-            this.mode = modeById(this.modeId);
-          }
-          // Count the play — the AUDS counter endpoint is public by design.
-          void countSharePlay(code);
-          this.hud.toast(`${iconGlyph("swords")} ${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest");
-          this.telemetry.track("shared_run_loaded", { mode: this.modeId, distance: run.distance });
-          this.bump();
-        });
-        break;
-      }
-      case "race-share": {
-        if (!this.sharedRun) break;
-        this.exitVersus();
-        this.startRun();
-        break;
-      }
-      case "pilot-lookup": {
-        // Real lookup: the panel shows the directory's answer, including
-        // "no pilot with that code" and "this build is offline".
-        const code = this.hud.readValue("pilotCode").trim().toUpperCase();
-        void this.squad?.lookupPilot(code).then(() => this.bump());
-        break;
-      }
-      case "pilot-add": {
-        const code = id || this.squad?.state.lookup?.code || this.hud.readValue("pilotCode");
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
-        break;
-      }
-      case "pilot-copy": {
-        const code = id || this.squad?.state.lookup?.code || "";
-        if (!code) break;
-        void copyText(code).then((ok) => {
-          if (this.disposed) return;
-          this.hud.toast(ok ? `Pilot code ${code} copied` : "Copy the code from the field", "info");
-        });
-        break;
-      }
-      case "pilot-invite":
-      case "mate-invite": {
-        // Inviting a wingman is the same real artefact as inviting anyone:
-        // the room's invite link. No room yet → say so instead of pretending.
-        const who = id || "your wingman";
-        if (!this.roomCode) {
-          this.hud.toast("Create a private room first — then invites are one tap", "info");
-          break;
-        }
-        void this.invitePilot(this.roomCode, who);
-        break;
-      }
-      case "mate-wingman": {
-        const name = id;
-        if (name) this.squadNotice = this.squad?.rememberWingman(name) ?? "";
-        this.bump();
-        break;
-      }
-      case "mate-forget": {
-        if (id && this.pilots.forget(id)) {
-          this.hud.toast(`Forgot ${id}`, "info");
-          this.bump();
-        }
-        break;
-      }
-      case "req-accept":
-        void this.squad?.respondRequest(id, true);
-        break;
-      case "req-decline":
-        void this.squad?.respondRequest(id, false);
-        break;
-      case "req-cancel":
-        void this.squad?.cancelRequest(id);
-        break;
-      case "squad-add": {
-        // Kept for older builds/links that still post a bare code.
-        const code = (this.hud.readValue("squadCode") || this.hud.readValue("pilotCode")).trim().toUpperCase();
-        if (!code) break;
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
-        break;
-      }
-      case "squad-remove":
-        void this.squad?.removeFriend(id);
-        break;
-      case "friend-challenge": {
-        // Post a ghost-race challenge (SocialSystem.FriendChallenge) at a
-        // wingman: today's hills, your current best as the line to beat.
-        const friend = this.squad?.state.friends.find((f) => (f.code || f.name) === id);
-        if (!friend) break;
-        const best = this.save.state.bestDistance;
-        if (best <= 0) {
-          this.squadNotice = "Fly at least once before you can post a ghost challenge.";
-          this.bump();
-          break;
-        }
-        const ch = this.social.createChallenge(friend.code || friend.name, friend.name, "distance", best, this.today, best);
-        this.squadNotice = ch
-          ? `${iconGlyph("ghost")} Ghost challenge posted for ${friend.name} — beat ${Math.round(best)} m on today's hills`
-          : `${friend.name} already has a pending challenge from you.`;
-        this.bump();
-        break;
-      }
-      case "challenge-race": {
-        const ch = this.social.getActiveChallenges().find((c) => c.id === id);
-        if (!ch) break;
-        this.beginFriendChallengeRace(ch);
-        break;
-      }
-      case "squad-create-club": {
-        const name = this.hud.readValue("clubName").trim();
-        if (!name) {
-          this.hud.toast("Give your club a name first", "info");
-          break;
-        }
-        void this.squad?.createClub(name, "Fly together, land badly").then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
-        break;
-      }
-      case "squad-join-club":
-        void this.squad?.joinClub(parseInt(id, 10) || 0).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
-        break;
-      case "squad-leave-club":
-        void this.squad?.leaveClub();
-        break;
-      case "squad-chat": {
-        // Portal editions ship without a chat surface (Poki REQ-31: no chat in
-        // multiplayer surfaces; emotes are the sanctioned alternative). The
-        // action stays for the direct build; here it can only be reached by a
-        // stale DOM node.
-        if (!SQUAD_CHAT) break;
-        const text = this.hud.readValue("chatText");
-        void this.squad?.sendChat(text).then(sent => {
-          if (sent && this.hud.readValue("chatText") === text) this.hud.clearValue("chatText");
-          this.bump();
-        });
-        break;
-      }
-      case "room-size": {
-        const n = Math.max(5, Math.min(40, parseInt(id || "40", 10) || 40));
-        this.roomSize = n;
-        this.hud.toast(`Field size · ${n} rivals`, "info");
-        this.bump();
-        break;
-      }
-      case "room-skill":
-        this.roomSkill = (id as "chill" | "sharp" | "ace") || "sharp";
-        this.massRace.setFieldSkill(this.roomSkill === "ace" ? 1.25 : this.roomSkill === "chill" ? 0.7 : 1);
-        this.hud.toast(`Rival skill · ${this.roomSkill}`, "info");
-        this.bump();
-        break;
-      case "room-shuffle":
-        this.massRace.shuffle(`${this.seed}:${this.modeId}`);
-        this.hud.toast("Field shuffled", "info");
-        this.audio.ding();
-        this.bump();
-        break;
-      case "room-kick":
-        if (this.massRace.kick(id)) {
-          this.hud.toast("Pilot removed from room", "warn");
-          this.audio.butter();
-        } else {
-          this.hud.toast("Pilot already gone", "warn");
-        }
-        this.bump();
-        break;
-      case "room-mute":
-        this.roomMuted = !this.roomMuted;
-        this.hud.toast(this.roomMuted ? "Emotes muted" : "Emotes on", "info");
-        this.bump();
-        break;
-      case "room-close":
-        this.cancelMatchmaking();
-        this.disconnectRace();
-        this.massRace.clear();
-        this.roomCode = "";
-        this.joiningRemoteRoom = false;
-        this.hud.toast("You left the room", "info");
-        this.bump();
-        break;
-      case "practice-race":
-        this.roomCode = "";
-        this.launchMatch({ ranked: false, storm: false }, true);
-        break;
-      case "pvp-casual":
-        this.beginMatchmaking({ ranked: false, storm: false });
-        break;
-      case "pvp-practice":
-        this.exitVersus();
-        this.modeId = "daytrip";
-        this.mode = modeById("daytrip");
-        this.startRun();
-        break;
-      case "start-endless":
-        this.exitVersus();
-        this.modeId = "endless";
-        this.mode = modeById("endless");
-        this.startRun();
-        break;
-      case "open-rank":
-        this.setScreen("rank");
-        break;
-      case "back":
-        this.backScreen();
-        break;
-      case "buy-nest": {
-        const price = this.save.nestUpgradePrice();
-        if (this.save.buyNestUpgrade()) {
-          this.audio.fanfare();
-          this.hud.toast(`Nest upgraded → ×${this.save.nestMultiplier().toFixed(2)} score forever`, "gold");
-        } else {
-          this.hud.toast(this.save.state.nestBought >= 10 ? "Nest is fully upgraded" : `Need ● ${price}`, "info");
-        }
-        this.bump();
-        break;
-      }
-      case "buy-skin":
-        this.buySkin(id);
-        break;
-      case "equip-skin":
-        this.save.equipSkin(id);
-        this.applySkin();
-        this.audio.ding();
-        this.platform?.measure("cosmetic", id ?? "skin", "interact");
-        this.bump();
-        break;
-      case "buy-boost":
-        this.buyBoost(id);
-        break;
-      case "buy-trail":
-        this.buyTrail(id);
-        break;
-      case "starter-buy":
-        this.buyCoinStarter();
-        break;
-      case "gold-buy":
-        this.buyCoinGold();
-        break;
-      case "vip-buy":
-        if (SELL_AD_REMOVAL) this.buyPortalVip();
-        break;
-      case "buy-vault":
-        this.buyMysteryVault();
-        break;
-      case "checkout-cancel":
-        if (!this.checkoutBusy) this.backScreen();
-        break;
-      case "restore":
-        this.restore();
-        break;
-      case "redeem":
-        this.redeem();
-        break;
-      case "copy-referral":
-        void this.copyWithFeedback(this.save.state.referralCode, "Code copied");
-        break;
-      case "redeem-referral":
-        this.redeemReferral();
-        break;
-      case "copy-cloud":
-        void this.copyWithFeedback(this.save.exportCode(), "Save code copied");
-        break;
-      case "import-cloud":
-        this.importCloud();
         break;
       case "throw-challenge": {
         // Challenge link: this exact seed + this run's distance (+ mode). Every
@@ -4926,9 +4205,922 @@ export class Game {
         this.telemetry.track("privacy_open", { portal: platform?.name ?? "none" });
         break;
       }
+      case "seed-today":
+        this.setSeedMode("today");
+        break;
+      case "seed-yesterday":
+        this.setSeedMode("yesterday");
+        break;
+      case "seed-random":
+        this.setSeedMode("random");
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Shop + store/account actions (open-shop, buy/equip flows, referral, cloud
+   * save). Returns true when the action was consumed. Extracted from
+   * handleAction so the main switch stays navigable; behavior is unchanged —
+   * every `break` in the moved cases became `return true` (no post-switch
+   * code exists in handleAction, so early return is identical).
+   */
+  private handleShopEvent(action: string, id: string): boolean {
+    switch (action) {
+      case "open-shop":
+        if (!this.save.state.seenShop) {
+          this.save.state.seenShop = true;
+          this.save.persist();
+          this.telemetry.track("onboarding_shop_opened", { runs: this.save.state.runsPlayed });
+          this.hud.toast("Start with a bird — each one changes your flight", "gold");
+        }
+        this.setScreen("shop");
+        return true;
+      case "shop-free-coins": {
+        // Rewarded ad from the shop: capped per session to prevent ad farming.
+        // The card is hidden without a live ad surface (HUD: `adAvailable`), so
+        // this is the second half of the same gate.
+        if (!this.adsLive()) return true;
+        if (this.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
+          this.hud.toast("Ad rewards capped for this visit", "info");
+          return true;
+        };
+        void this.multiplyCoinsFromShopAd();
+        return true;
+      }
+      case "buy-bundle": {
+        // One crate per save. It pays 250 coins for 240 — re-claimable it is
+        // an infinite +10/click coin faucet.
+        if (this.save.state.wingmanBundle) return true;
+        if (!this.save.spend(240)) {
+          this.hud.toast("Need ● 240 coins to claim Ace Wingman Crate", "warn");
+          return true;
+        }
+        this.save.state.wingmanBundle = true;
+        this.save.persist();
+        this.save.armBoost("shield");
+        this.save.armBoost("sunflask");
+        this.save.armBoost("magnet");
+        this.save.ownTrail("trail_tide");
+        this.save.equipTrail("trail_tide");
+        this.save.addCoins(DAILY_STIPEND);
+        this.audio.chapterFanfare();
+        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+        this.hud.toast(`${iconGlyph("badge")} Ace Wingman Crate Unlocked! 3 Boosts + Tideglass Trail + ${DAILY_STIPEND} Coins!`, "gold");
+        this.bump();
+        return true;
+      }
+      case "buy-nest": {
+        const price = this.save.nestUpgradePrice();
+        if (this.save.buyNestUpgrade()) {
+          this.audio.fanfare();
+          this.hud.toast(`Nest upgraded → ×${this.save.nestMultiplier().toFixed(2)} score forever`, "gold");
+        } else {
+          this.hud.toast(this.save.state.nestBought >= 10 ? "Nest is fully upgraded" : `Need ● ${price}`, "info");
+        }
+        this.bump();
+        return true;
+      }
+      case "buy-skin":
+        this.buySkin(id);
+        return true;
+      case "equip-skin":
+        this.save.equipSkin(id);
+        this.applySkin();
+        this.audio.ding();
+        this.platform?.measure("cosmetic", id ?? "skin", "interact");
+        this.bump();
+        return true;
+      case "buy-boost":
+        this.buyBoost(id);
+        return true;
+      case "buy-trail":
+        this.buyTrail(id);
+        return true;
+      case "starter-buy":
+        this.buyCoinStarter();
+        return true;
+      case "gold-buy":
+        this.buyCoinGold();
+        return true;
+      case "vip-buy":
+        if (SELL_AD_REMOVAL) this.buyPortalVip();
+        return true;
+      case "buy-vault":
+        this.buyMysteryVault();
+        return true;
+      case "checkout-cancel":
+        if (!this.checkoutBusy) this.backScreen();
+        return true;
+      case "restore":
+        this.restore();
+        return true;
+      case "redeem":
+        this.redeem();
+        return true;
+      case "copy-referral":
+        void this.copyWithFeedback(this.save.state.referralCode, "Code copied");
+        return true;
+      case "redeem-referral":
+        this.redeemReferral();
+        return true;
+      case "copy-cloud":
+        void this.copyWithFeedback(this.save.exportCode(), "Save code copied");
+        return true;
+      case "import-cloud":
+        this.importCloud();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Social/squad actions (squad hub, run sharing, pilot lookup, friends,
+   * challenges, clubs, chat). Returns true when consumed. Extracted from
+   * handleAction; same break-to-return-true transform as handleShopEvent.
+   */
+  private handleSocialEvent(action: string, id: string): boolean {
+    switch (action) {
+      case "open-squad":
+        this.setScreen("squad");
+        this.squadNotice = "";
+        if (this.squad) {
+          if (!this.squad.live || this.squad.isAutonomous) {
+            this.squad.enableAutonomous();
+          } else {
+            void this.squad.refresh().then(() => {
+              // A lost key is not "no service": keep the honest recovery
+              // surface (explicit re-enrollment) instead of silently
+              // dropping into the autonomous offline hub.
+              if (!this.squad?.state.registered && !this.squad?.state.credentialError) {
+                this.squad?.enableAutonomous();
+                this.bump();
+              }
+            }).catch(() => {
+              if (!this.squad?.state.credentialError) {
+                this.squad?.enableAutonomous();
+                this.bump();
+              }
+            });
+          }
+        }
+        return true;
+      case "squad-page": {
+        const [kind, page] = id.split(":");
+        this.squad?.setPage(kind, Number(page));
+        return true;
+      }
+      case "squad-copy-code": {
+        const code = this.squad?.state.myCode;
+        if (code) void copyText(code).then(ok => {
+          if (this.disposed) return;
+          if (ok) this.hud.toast("Friend code copied", "info"); else this.hud.offerCopy(code);
+        });
+        return true;
+      }
+      case "squad-new-profile":
+        void this.squad?.startNewProfile(this.hud.readChecked("squadRecoveryConsent"));
+        return true;
+      case "squad-refresh":
+        this.squadNotice = "";
+        void this.squad?.refresh();
+        return true;
+      case "share-run": {
+        // Publish this run so a friend can race the same hills against our
+        // mark. AUDS is Poki's store (it needs a Poki game id), so elsewhere
+        // the button is not rendered and this is unreachable.
+        if (this.runShareBusy) return true;
+        this.runShareBusy = true;
+        this.shareError = "";
+        this.bump();
+        const run: SharedRun = {
+          v: 1,
+          name: this.racedName(),
+          seed: this.seed,
+          mode: this.modeId,
+          distance: Math.round(this.bird.x - this.startX),
+          timeMs: Math.round((this.raceFinishTime || this.runTime) * 1000),
+          place: this.racePlace,
+          bird: this.skin.id,
+        };
+        void shareRun(run).then((code) => {
+          if (this.disposed) return;
+          this.runShareBusy = false;
+          if (code) {
+            this.shareCode = code;
+            this.hud.toast(`${iconGlyph("check")} Run shared — send the code to a friend`, "gold");
+          } else {
+            // Platform-neutral copy: this string ships in every edition, and
+            // the isolation gates reject the platform's name in other builds.
+            this.shareError = "Sharing isn't available in this build — no platform store is configured.";
+          }
+          this.bump();
+        });
+        return true;
+      }
+      case "copy-score": {
+        const dist = Math.round(this.runStats().distance);
+        const text = `I flew ${dist.toLocaleString()} m in Sunbird: Golden Flight! Can you beat it?`;
+        void copyText(text).then((ok) => {
+          if (this.disposed) return;
+          this.hud.toast(ok ? "Score copied to clipboard!" : text, ok ? "gold" : "info");
+        });
+        return true;
+      }
+      case "copy-share": {
+        if (!this.shareCode) return true;
+        const code = this.shareCode;
+        void copyText(code).then((ok) => {
+          if (this.disposed) return;
+          this.hud.toast(ok ? `Run code ${code} copied` : `Run code: ${code}`, ok ? "gold" : "info");
+        });
+        return true;
+      }
+      case "load-run": {
+        const code = this.hud.readValue("shareCode").trim();
+        if (!code) return true;
+        this.runShareBusy = true;
+        this.shareError = "";
+        this.bump();
+        void loadSharedRun(code).then((run) => {
+          if (this.disposed) return;
+          this.runShareBusy = false;
+          if (!run) {
+            this.shareError = sharingAvailable()
+              ? "No shared run with that code — check the code and try again."
+              : "Run codes aren't available in this build — no platform store is configured.";
+            this.bump();
+            return;
+          }
+          this.sharedRun = run;
+          // Same hills, same mode, their mark: this is the existing rival
+          // challenge path, just delivered by code instead of a URL.
+          this.rival = { seed: run.seed, distance: run.distance, name: run.name, mode: run.mode };
+          this.rebuildWorld(run.seed);
+          this.seedMode = "random";
+          if (MODES.some((m) => m.id === run.mode)) {
+            this.modeId = run.mode as ModeId;
+            this.mode = modeById(this.modeId);
+          }
+          // Count the play — the AUDS counter endpoint is public by design.
+          void countSharePlay(code);
+          this.hud.toast(`${iconGlyph("swords")} ${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest");
+          this.telemetry.track("shared_run_loaded", { mode: this.modeId, distance: run.distance });
+          this.bump();
+        });
+        return true;
+      }
+      case "race-share": {
+        if (!this.sharedRun) return true;
+        this.exitVersus();
+        this.startRun();
+        return true;
+      }
+      case "pilot-lookup": {
+        // Real lookup: the panel shows the directory's answer, including
+        // "no pilot with that code" and "this build is offline".
+        const code = this.hud.readValue("pilotCode").trim().toUpperCase();
+        void this.squad?.lookupPilot(code).then(() => this.bump());
+        return true;
+      }
+      case "pilot-add": {
+        const code = id || this.squad?.state.lookup?.code || this.hud.readValue("pilotCode");
+        void this.squad?.addFriend(code).then((msg) => {
+          this.squadNotice = msg;
+          this.bump();
+        });
+        return true;
+      }
+      case "pilot-copy": {
+        const code = id || this.squad?.state.lookup?.code || "";
+        if (!code) return true;
+        void copyText(code).then((ok) => {
+          if (this.disposed) return;
+          this.hud.toast(ok ? `Pilot code ${code} copied` : "Copy the code from the field", "info");
+        });
+        return true;
+      }
+      case "pilot-invite":
+      case "mate-invite": {
+        // Inviting a wingman is the same real artefact as inviting anyone:
+        // the room's invite link. No room yet → say so instead of pretending.
+        const who = id || "your wingman";
+        if (!this.roomCode) {
+          this.hud.toast("Create a private room first — then invites are one tap", "info");
+          return true;
+        }
+        void this.invitePilot(this.roomCode, who);
+        return true;
+      }
+      case "mate-wingman": {
+        const name = id;
+        if (name) this.squadNotice = this.squad?.rememberWingman(name) ?? "";
+        this.bump();
+        return true;
+      }
+      case "mate-forget": {
+        if (id && this.pilots.forget(id)) {
+          this.hud.toast(`Forgot ${id}`, "info");
+          this.bump();
+        }
+        return true;
+      }
+      case "req-accept":
+        void this.squad?.respondRequest(id, true);
+        return true;
+      case "req-decline":
+        void this.squad?.respondRequest(id, false);
+        return true;
+      case "req-cancel":
+        void this.squad?.cancelRequest(id);
+        return true;
+      case "squad-add": {
+        // Kept for older builds/links that still post a bare code.
+        const code = (this.hud.readValue("squadCode") || this.hud.readValue("pilotCode")).trim().toUpperCase();
+        if (!code) return true;
+        void this.squad?.addFriend(code).then((msg) => {
+          this.squadNotice = msg;
+          this.bump();
+        });
+        return true;
+      }
+      case "squad-remove":
+        void this.squad?.removeFriend(id);
+        return true;
+      case "friend-challenge": {
+        // Post a ghost-race challenge (SocialSystem.FriendChallenge) at a
+        // wingman: today's hills, your current best as the line to beat.
+        const friend = this.squad?.state.friends.find((f) => (f.code || f.name) === id);
+        if (!friend) return true;
+        const best = this.save.state.bestDistance;
+        if (best <= 0) {
+          this.squadNotice = "Fly at least once before you can post a ghost challenge.";
+          this.bump();
+          return true;
+        }
+        const ch = this.social.createChallenge(friend.code || friend.name, friend.name, "distance", best, this.today, best);
+        this.squadNotice = ch
+          ? `${iconGlyph("ghost")} Ghost challenge posted for ${friend.name} — beat ${Math.round(best)} m on today's hills`
+          : `${friend.name} already has a pending challenge from you.`;
+        this.bump();
+        return true;
+      }
+      case "challenge-race": {
+        const ch = this.social.getActiveChallenges().find((c) => c.id === id);
+        if (!ch) return true;
+        this.beginFriendChallengeRace(ch);
+        return true;
+      }
+      case "squad-create-club": {
+        const name = this.hud.readValue("clubName").trim();
+        if (!name) {
+          this.hud.toast("Give your club a name first", "info");
+          return true;
+        }
+        void this.squad?.createClub(name, "Fly together, land badly").then((msg) => {
+          this.squadNotice = msg;
+          this.bump();
+        });
+        return true;
+      }
+      case "squad-join-club":
+        void this.squad?.joinClub(parseInt(id, 10) || 0).then((msg) => {
+          this.squadNotice = msg;
+          this.bump();
+        });
+        return true;
+      case "squad-leave-club":
+        void this.squad?.leaveClub();
+        return true;
+      case "squad-chat": {
+        // Portal editions ship without a chat surface (Poki REQ-31: no chat in
+        // multiplayer surfaces; emotes are the sanctioned alternative). The
+        // action stays for the direct build; here it can only be reached by a
+        // stale DOM node.
+        if (!SQUAD_CHAT) return true;
+        const text = this.hud.readValue("chatText");
+        void this.squad?.sendChat(text).then(sent => {
+          if (sent && this.hud.readValue("chatText") === text) this.hud.clearValue("chatText");
+          this.bump();
+        });
+        return true;
+      }
+      case "claim-squad-quest": {
+        const questId = id;
+        const rewards: Record<string, number> = {
+          migration: 150,
+          drafting: 120,
+          precision: 100,
+        };
+        const coins = rewards[questId] ?? 100;
+        if (!this.save.state.squadQuestsClaimed) this.save.state.squadQuestsClaimed = {};
+        if (this.save.state.squadQuestsClaimed[questId] === this.today) {
+          this.hud.toast("Already claimed today!", "info");
+          return true;
+        }
+        this.save.state.squadQuestsClaimed[questId] = this.today;
+        this.save.addCoins(coins);
+        this.audio.chapterFanfare();
+        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+        this.hud.toast(`${iconGlyph("star")} Squadron Goal Claimed! +● ${coins} coins!`, "gold");
+        this.bump();
+        return true;
+      }
+      case "squad-autonomous": {
+        this.squad?.enableAutonomous();
+        this.squadNotice = "⚡ Autonomous Squadron Hub active!";
+        this.audio.chapterFanfare();
+        this.bump();
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Settings + danger-zone actions (every `set-*` toggle, volume/track
+   * selectors, and the two-step progress reset). Returns true when consumed.
+   * Extracted from handleAction; same break-to-return-true transform as the
+   * shop/social sub-handlers.
+   */
+  private handleSettingsEvent(action: string, id: string): boolean {
+    switch (action) {
+      case "set-mute":
+        this.save.state.settings.mute = !this.save.state.settings.mute;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-doubletap":
+        if (!this.save.hasUpgrade("doubletap")) return true;
+        this.save.state.settings.doubleTapBoost = !this.save.state.settings.doubleTapBoost;
+        this.save.persist();
+        this.bump();
+        return true;
+      case "set-music":
+        this.save.state.settings.music = !this.save.state.settings.music;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-music-vol": {
+        const cur = this.save.state.settings.musicVolume;
+        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
+        this.save.state.settings.musicVolume = next;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      }
+      case "set-sfx-vol": {
+        const cur = this.save.state.settings.sfxVolume;
+        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
+        this.save.state.settings.sfxVolume = next;
+        this.save.persist();
+        this.applySettings();
+        this.audio.ding();
+        return true;
+      }
+      case "set-track": {
+        const cur = this.save.state.settings.musicTrack;
+        const next = id === "shuffle" ? "shuffle" : id !== "" && Number.isInteger(Number(id)) && Number(id) >= 0 && Number(id) < TRACK_NAMES.length ? Number(id) : cur === "shuffle" ? 0 : cur >= TRACK_NAMES.length - 1 ? "shuffle" : cur + 1;
+        this.save.state.settings.musicTrack = next;
+        this.save.persist();
+        this.applySettings();
+        this.audio.uiTick();
+        return true;
+      }
+      case "set-haptics":
+        this.save.state.settings.haptics = !this.save.state.settings.haptics;
+        this.save.persist();
+        this.bump();
+        return true;
+      case "set-motion":
+        this.save.state.settings.reduceMotion = !this.save.state.settings.reduceMotion;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-colorassist":
+        this.save.state.settings.colorAssist = !this.save.state.settings.colorAssist;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-bigtext":
+        this.save.state.settings.bigText = !this.save.state.settings.bigText;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-tap-toggle-dive":
+        this.save.state.settings.tapToggleDive = !this.save.state.settings.tapToggleDive;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-quality": {
+        const order = ["auto", "high", "low"] as const;
+        const cur = this.save.state.settings.quality;
+        this.save.state.settings.quality = id === "auto" || id === "high" || id === "low" ? id : order[(order.indexOf(cur) + 1) % order.length]!;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      }
+      case "reset-progress":
+        if (!this.resetArmed) {
+          this.resetArmed = true;
+          this.resetTimer = 3;
+        } else {
+          this.resetArmed = false;
+          this.save.resetProgress();
+          this.applySkin();
+          this.applySettings();
+          this.hud.toast("Progress reset", "warn");
+          this.telemetry.track("progress_reset", {});
+        }
+        this.bump();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Room + matchmaking actions (host/join/configure rooms, format/world
+   * pickers, quick match, lobby readiness, AI/practice entries). Returns true
+   * when consumed. Extracted from handleAction; same break-to-return-true
+   * transform as the shop/social/settings sub-handlers.
+   */
+  private handleRoomEvent(action: string, id: string): boolean {
+    switch (action) {
+      case "host-room": {
+        if (!isMultiplayerConfigured()) {
+          this.hud.toast("Live rooms are not available in this edition", "warn");
+          return true;
+        }
+        this.disconnectRace();
+        this.localRace = false;
+        this.roomCode = makeRoomCode();
+        this.joiningRemoteRoom = false;
+        this.modeId = this.selectedPvpMode;
+        this.mode = modeById(this.selectedPvpMode);
+        this.rankedRace = false;
+        this.setScreen("live");
+        this.preseatLobby();
+        this.hud.toast(`Flock room ${this.roomCode} ready!`, "gold");
+        this.bump();
+        return true;
+      }
+      case "join-room": {
+        if (!isMultiplayerConfigured()) {
+          this.hud.toast("Live rooms are not available in this edition", "warn");
+          return true;
+        }
+        const code = normalizeRoomCode(this.hud.readValue("roomCode"));
+        if (!code) {
+          this.hud.toast("Enter a 5-letter room code", "warn");
+          return true;
+        }
+        this.disconnectRace();
+        this.localRace = false;
+        this.roomCode = code;
+        this.joiningRemoteRoom = true;
+        this.modeId = this.selectedPvpMode;
+        this.mode = modeById(this.selectedPvpMode);
+        this.rankedRace = false;
+        this.setScreen("live");
+        this.preseatLobby();
+        this.hud.toast(`Joined room ${code}`, "gold");
+        this.bump();
+        return true;
+      }
+      case "select-pvp-mode": {
+        const mId = (id as ModeId) || "pvp_sprint";
+        this.selectedPvpMode = mId;
+        this.modeId = mId;
+        this.mode = modeById(mId);
+        // Selecting a new format while already in a private room MUST move
+        // you to a new room code — the existing room's seed is pinned to the
+        // old format on the server, so staying connected would have you
+        // flying Sprint while your invitees queued for Slalom. Same safety
+        // applies mid-matchmaking: tear down so the next preseating uses the
+        // new seed.
+        if (this.roomCode || this.mmOpts) {
+          this.cancelMatchmaking();
+          this.disconnectRace();
+          this.roomCode = this.roomCode ? makeRoomCode() : "";
+          if (this.roomCode) {
+            this.preseatLobby();
+            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
+          }
+        }
+        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
+        this.bump();
+        return true;
+      }
+      case "select-pvp-world": {
+        const wId = id || "emerald";
+        this.selectedPvpWorld = wId;
+        this.selectedCourse = PVP_WORLDS.find((w) => w.id === wId) ?? PVP_WORLDS[0]!;
+        // Same reseed safety as select-pvp-mode: changing the world while
+        // seated pins a fresh room code so the seed reflects the new course.
+        if (this.roomCode || this.mmOpts) {
+          this.cancelMatchmaking();
+          this.disconnectRace();
+          this.roomCode = this.roomCode ? makeRoomCode() : "";
+          if (this.roomCode) {
+            this.preseatLobby();
+            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
+          }
+        }
+        this.hud.toast(`${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
+        this.bump();
+        return true;
+      }
+      case "quick-match-shuffle": {
+        // "Just make it random": one tap picks a random format AND world so
+        // the big button is always the fastest path into a race.
+        const m = PVP_MODES[Math.floor(Math.random() * PVP_MODES.length)]!;
+        const w = PVP_WORLDS[Math.floor(Math.random() * PVP_WORLDS.length)]!;
+        this.selectedPvpMode = m.id;
+        this.selectedPvpWorld = w.id;
+        this.selectedCourse = w;
+        this.modeId = m.id;
+        this.mode = m;
+        this.hud.toast(`${iconGlyph("dice")} ${iconGlyph(m.icon)} ${m.name} on ${iconGlyph(w.emoji)} ${w.name}`, "gold");
+        this.bump();
+        return true;
+      }
+      case "quick-match-instant": {
+        // "Quick Match" is the one-tap ONLINE path: it seats the player in
+        // public matchmaking for the chosen circuit. It used to force a local
+        // AI race (launchMatch(..., true)) while sitting under a "40 pilots,
+        // ready now" hero — the player asked for a PvP race and got bots.
+        // beginMatchmaking falls back to the AI flock only when no transport
+        // exists in this runtime, and now says so when it does.
+        const mode = modeById(this.selectedPvpMode);
+        this.modeId = mode.id;
+        this.mode = mode;
+        this.beginMatchmaking({ ranked: true, storm: mode.id === "pvp_typhoon" });
+        return true;
+      }
+      case "start-room-now": {
+        this.modeId = this.selectedPvpMode;
+        this.mode = modeById(this.selectedPvpMode);
+        // With real pilots seated, the room launches together: the transport
+        // issues ONE shared start (a 6s countdown for everyone) instead of the
+        // host racing off alone while guests watch an empty sky.
+        const seatedWithPilots = Boolean(this.net) && this.net!.connected && this.liveCount() > 0;
+        if (this.net) this.net.startNow();
+        if (seatedWithPilots) {
+          this.hud.toast("Launching together — every pilot gets the countdown", "gold");
+        } else {
+          this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, false);
+        }
+        return true;
+      }
+      case "copy-invite": {
+        if (this.roomCode) this.copyRoomInvite(this.roomCode);
+        else this.hud.toast("Host a room first to get an invite link", "warn");
+        return true;
+      }
+      case "start-room":
+      case "ready-room": {
+        if (!this.roomCode) {
+          this.roomCode = makeRoomCode();
+        }
+        this.modeId = this.selectedPvpMode;
+        this.mode = modeById(this.selectedPvpMode);
+        this.rankedRace = false;
+        this.preseatLobby();
+        if (this.net) {
+          const isReady = !this.net.info().ready;
+          this.net.sendReady(isReady);
+          this.hud.toast(isReady ? "You are ready! ✓" : "Ready cancelled", "gold");
+        } else {
+          this.hud.toast("Starting race flock…", "info");
+          this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, true);
+        }
+        this.bump();
+        return true;
+      }
+      case "quick-match":
+      case "pvp-ranked":
+        this.beginMatchmaking({ ranked: true, storm: false });
+        return true;
+      case "pvp-storm":
+        this.beginMatchmaking({ ranked: true, storm: true });
+        return true;
+      case "mm-cancel":
+        this.cancelMatchmaking();
+        return true;
+      case "mm-ready": {
+        // Explicit opt-in to a live start. The race launches only once every
+        // seated pilot is ready, then counts down 6s for everyone.
+        if (this.net?.state === "lobby") {
+          const nowReady = !this.net.info().ready;
+          this.net.sendReady(nowReady);
+          this.hud.toast(nowReady ? "You are ready! ✓" : "Ready cancelled", "gold");
+          this.bump();
+        }
+        return true;
+      }
+      case "mm-ai":
+        // Explicit opt-in only: the search never drops a pilot into a bot race.
+        this.takeAiFlock();
+        return true;
+      case "mm-keep-search":
+        this.keepSearching();
+        return true;
+      case "pvp-duel":
+        this.roomCode = "";
+        this.modeId = "massrace";
+        this.mode = modeById("massrace");
+        this.rankedRace = false;
+        this.startRun({ duel: true });
+        return true;
+      case "room-size": {
+        const n = Math.max(5, Math.min(40, parseInt(id || "40", 10) || 40));
+        this.roomSize = n;
+        this.hud.toast(`Field size · ${n} rivals`, "info");
+        this.bump();
+        return true;
+      }
+      case "room-skill":
+        this.roomSkill = (id as "chill" | "sharp" | "ace") || "sharp";
+        this.massRace.setFieldSkill(this.roomSkill === "ace" ? 1.25 : this.roomSkill === "chill" ? 0.7 : 1);
+        this.hud.toast(`Rival skill · ${this.roomSkill}`, "info");
+        this.bump();
+        return true;
+      case "room-shuffle":
+        this.massRace.shuffle(`${this.seed}:${this.modeId}`);
+        this.hud.toast("Field shuffled", "info");
+        this.audio.ding();
+        this.bump();
+        return true;
+      case "room-kick":
+        if (this.massRace.kick(id)) {
+          this.hud.toast("Pilot removed from room", "warn");
+          this.audio.butter();
+        } else {
+          this.hud.toast("Pilot already gone", "warn");
+        }
+        this.bump();
+        return true;
+      case "room-mute":
+        this.roomMuted = !this.roomMuted;
+        this.hud.toast(this.roomMuted ? "Emotes muted" : "Emotes on", "info");
+        this.bump();
+        return true;
+      case "room-close":
+        this.cancelMatchmaking();
+        this.disconnectRace();
+        this.massRace.clear();
+        this.roomCode = "";
+        this.joiningRemoteRoom = false;
+        this.hud.toast("You left the room", "info");
+        this.bump();
+        return true;
+      case "practice-race":
+        this.roomCode = "";
+        this.launchMatch({ ranked: false, storm: false }, true);
+        return true;
+      case "pvp-casual":
+        this.beginMatchmaking({ ranked: false, storm: false });
+        return true;
+      case "pvp-practice":
+        this.exitVersus();
+        this.modeId = "daytrip";
+        this.mode = modeById("daytrip");
+        this.startRun();
+        return true;
+      case "start-endless":
+        this.exitVersus();
+        this.modeId = "endless";
+        this.mode = modeById("endless");
+        this.startRun();
+        return true;
+      case "open-rank":
+        this.setScreen("rank");
+        return true;
+      case "back":
+        this.backScreen();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Timed journey actions (daily challenge, weekly gauntlet, login calendar,
+   * live events, campaign chapters, daily stipend). Returns true when
+   * consumed. Extracted from handleAction; same break-to-return-true
+   * transform as the other sub-handlers.
+   */
+  private handleJourneyEvent(action: string, id: string): boolean {
+    switch (action) {
+      case "play-daily": {
+        const c = dailyChallenge(this.today);
+        if (this.save.isDailyDone(this.today)) {
+          this.hud.toast("Today's challenge is already complete — back tomorrow!", "info");
+          return true;
+        }
+        this.modeId = c.mode;
+        this.mode = modeById(c.mode);
+        this.exitVersus();
+        this.startRun({ challenge: "daily" });
+        return true;
+      }
+      case "play-gauntlet": {
+        const idx = Math.max(0, Math.min(2, parseInt(id || "0", 10) || 0));
+        const g = weeklyGauntlet(weekKey());
+        if (this.save.gauntletDone(g.week).includes(idx)) {
+          this.hud.toast("Stage already cleared this week", "info");
+          return true;
+        }
+        const st = g.stages[idx]!;
+        this.modeId = st.mode;
+        this.mode = modeById(st.mode);
+        this.exitVersus();
+        this.startRun({ challenge: `gauntlet${idx}` as `gauntlet${number}` });
+        return true;
+      }
+      case "claim-calendar": {
+        const day = this.save.claimCalendar(this.today);
+        if (day === 0) {
+          this.hud.toast("Today's gift is already claimed", "info");
+          return true;
+        }
+        const r = calendarReward(day);
+        if (r.kind === "coins") {
+          this.save.addCoins(r.amount);
+          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · +${r.amount} coins`, "gold");
+        } else if (r.kind === "boost") {
+          this.save.armBoost(r.id);
+          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · boost armed for next flight`, "gold");
+        } else {
+          if (this.save.ownTrail(r.id)) this.hud.toast(`${iconGlyph("star")} Day ${day} gift · ${TRAILS[r.id]?.label ?? r.id} trail!`, "gold");
+          else {
+            this.save.addCoins(200);
+            this.hud.toast(`${iconGlyph("star")} Day ${day} · trail already owned, +200 coins instead`, "gold");
+          }
+        }
+        this.audio.purchase();
+        this.bump();
+        return true;
+      }
+      case "open-challenges":
+        this.setScreen("challenges");
+        return true;
+      case "play-event": {
+        this.modeId = "daytrip";
+        this.mode = modeById("daytrip");
+        this.exitVersus();
+        this.startRun({ event: true });
+        return true;
+      }
+      case "open-campaign":
+        this.setScreen("campaign");
+        return true;
+      case "claim-campaign": {
+        const ch = CAMPAIGN.find((c) => c.id === id);
+        if (!ch) return true;
+        const view = campaignViews(this.save, this.save.state.campaignClaimed).find((v) => v.def.id === id);
+        if (!view || !view.unlocked || !view.complete || !this.save.claimCampaign(id)) {
+          this.hud.toast("Chapter not ready yet", "info");
+          return true;
+        }
+        this.save.addCoins(ch.rewardCoins);
+        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins — ${ch.rewardLabel}`, "gold");
+        this.audio.chapterFanfare();
+        this.bump();
+        return true;
+      }
+      case "claim-daily-stipend": {
+        // The card disables via the snapshot, but a double-tap can land before
+        // the re-render — the handler must be its own guard.
+        if (this.save.state.lastStipendClaimed === this.today) return true;
+        this.save.addCoins(DAILY_STIPEND);
+        this.save.state.lastStipendClaimed = this.today;
+        this.audio.chapterFanfare();
+        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+        this.hud.toast(`${iconGlyph("coin")} Daily Flight Stipend Claimed! +● ${DAILY_STIPEND} coins!`, "gold");
+        this.bump();
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Run-continuation + break + season-pass actions (second-wind offers, ad
+   * break endings, pass claims). Returns true when consumed. Extracted from
+   * handleAction; same break-to-return-true transform as the other
+   * sub-handlers.
+   */
+  private handleContinueEvent(action: string, id: string): boolean {
+    switch (action) {
       case "continue-coins":
         if (this.state === "continue" && this.save.spend(CONTINUE_COST)) this.doContinue("coins");
-        break;
+        return true;
       case "continue-ad":
         if (this.state === "continue") {
           if (this.portalEnabled() && !this.adsLive()) {
@@ -4948,13 +5140,13 @@ export class Game {
             this.setState("ad");
           }
         }
-        break;
+        return true;
       case "continue-gold":
         if (this.state === "continue" && this.save.state.gold) this.doContinue("gold");
-        break;
+        return true;
       case "continue-sleep":
         if (this.state === "continue") this.finishRun();
-        break;
+        return true;
       case "ad-skip":
         // Placeholder ads only. A portal-served break is ended by the SDK's own
         // completion callback, never by a game button: on that path adTimer is
@@ -4962,7 +5154,7 @@ export class Game {
         // the button rendered enabled during a real ad — clicking it skipped
         // the break AND paid out the reward.
         if (this.state === "ad" && adBreakCanEnd(this.portalEnabled(), this.adTimer)) this.endAd();
-        break;
+        return true;
       case "ad-gold":
         // The upsell must not be an ad-skip. This button used to end the break
         // immediately (finishRun/gameover + paywall), so a player could dismiss
@@ -4981,108 +5173,15 @@ export class Game {
           this.setScreen("paywall");
           this.telemetry.track("paywall_open", { from: "ad" });
         }
-        break;
+        return true;
       case "claim-pass-free":
         this.claimPass(Number(id), "free");
-        break;
+        return true;
       case "claim-pass-premium":
         this.claimPass(Number(id), "premium");
-        break;
-      case "set-mute":
-        this.save.state.settings.mute = !this.save.state.settings.mute;
-        this.save.persist();
-        this.applySettings();
-        break;
-      case "set-doubletap":
-        if (!this.save.hasUpgrade("doubletap")) break;
-        this.save.state.settings.doubleTapBoost = !this.save.state.settings.doubleTapBoost;
-        this.save.persist();
-        this.bump();
-        break;
-      case "set-music":
-        this.save.state.settings.music = !this.save.state.settings.music;
-        this.save.persist();
-        this.applySettings();
-        break;
-      case "set-music-vol": {
-        const cur = this.save.state.settings.musicVolume;
-        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
-        this.save.state.settings.musicVolume = next;
-        this.save.persist();
-        this.applySettings();
-        break;
-      }
-      case "set-sfx-vol": {
-        const cur = this.save.state.settings.sfxVolume;
-        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
-        this.save.state.settings.sfxVolume = next;
-        this.save.persist();
-        this.applySettings();
-        this.audio.ding();
-        break;
-      }
-      case "set-track": {
-        const cur = this.save.state.settings.musicTrack;
-        const next = id === "shuffle" ? "shuffle" : id !== "" && Number.isInteger(Number(id)) && Number(id) >= 0 && Number(id) < TRACK_NAMES.length ? Number(id) : cur === "shuffle" ? 0 : cur >= TRACK_NAMES.length - 1 ? "shuffle" : cur + 1;
-        this.save.state.settings.musicTrack = next;
-        this.save.persist();
-        this.applySettings();
-        this.audio.uiTick();
-        break;
-      }
-      case "set-haptics":
-        this.save.state.settings.haptics = !this.save.state.settings.haptics;
-        this.save.persist();
-        this.bump();
-        break;
-      case "set-motion":
-        this.save.state.settings.reduceMotion = !this.save.state.settings.reduceMotion;
-        this.save.persist();
-        this.applySettings();
-        break;
-      case "set-colorassist":
-        this.save.state.settings.colorAssist = !this.save.state.settings.colorAssist;
-        this.save.persist();
-        this.applySettings();
-        break;
-      case "set-bigtext":
-        this.save.state.settings.bigText = !this.save.state.settings.bigText;
-        this.save.persist();
-        this.applySettings();
-        break;
-      case "set-quality": {
-        const order = ["auto", "high", "low"] as const;
-        const cur = this.save.state.settings.quality;
-        this.save.state.settings.quality = id === "auto" || id === "high" || id === "low" ? id : order[(order.indexOf(cur) + 1) % order.length]!;
-        this.save.persist();
-        this.applySettings();
-        break;
-      }
-      case "reset-progress":
-        if (!this.resetArmed) {
-          this.resetArmed = true;
-          this.resetTimer = 3;
-        } else {
-          this.resetArmed = false;
-          this.save.resetProgress();
-          this.applySkin();
-          this.applySettings();
-          this.hud.toast("Progress reset", "warn");
-          this.telemetry.track("progress_reset", {});
-        }
-        this.bump();
-        break;
-      case "seed-today":
-        this.setSeedMode("today");
-        break;
-      case "seed-yesterday":
-        this.setSeedMode("yesterday");
-        break;
-      case "seed-random":
-        this.setSeedMode("random");
-        break;
+        return true;
       default:
-        break;
+        return false;
     }
   }
 
@@ -5123,8 +5222,10 @@ export class Game {
   private goToMenu(): void {
     if (this.state === "playing" || this.state === "paused") {
       this.telemetry.track("run_abandon", { distance: Math.round(this.bird.x - this.startX) });
-      // Quitting a ranked duel mid-flight counts as the loss it is.
-      if (this.duelActive && this.duelResult === "" && !this.runRecorded && this.runTime > 3) {
+      // Quitting a ranked duel mid-flight counts as the loss it is — no timer
+      // floor: finishRun records short duels as losses unconditionally, and a
+      // 3s grace here would let a losing duelist dodge rating by quitting fast.
+      if (this.duelActive && this.duelResult === "" && !this.runRecorded) {
         const res = this.save.recordDuelResult(false, this.today);
         this.hud.toast(`⚔ Duel forfeited · ${res.delta} rating`, "warn");
       }
@@ -5675,6 +5776,12 @@ export class Game {
     // Accessibility classes live on <html> so every overlay inherits them.
     document.documentElement.classList.toggle("a11y-color", s.colorAssist);
     document.documentElement.classList.toggle("a11y-bigtext", s.bigText);
+    // Colorblind-assist shape markers on the two translucent ghosts (yours vs
+    // a rival's), so they read apart by silhouette, not tint alone.
+    this.ghostPlayer.setMarkerVisible(s.colorAssist);
+    this.rivalGhostPlayer.setMarkerVisible(s.colorAssist);
+    // Motor accessibility: tap-to-toggle-dive instead of hold-to-dive.
+    this.input.setToggleDive(s.tapToggleDive);
     this.dpr = this.preferredDpr();
     // Mobile gets a lighter decorative particle stream by default. Gameplay
     // events still render because critical emitters are short-lived and the
@@ -6460,18 +6567,24 @@ export class Game {
     }
   }
 
-  private applyPrize(grant: PrizeGrant): void {
-    const p = grant.prize;
-    if (p.kind === "coins") this.save.addCoins(p.amount);
-    else if (p.kind === "skin") this.save.ownSkin(p.id);
-    else if (p.kind === "boost") this.save.armBoost(p.id);
+  private applyPrizes(grants: PrizeGrant[]): void {
+    const top = grants[grants.length - 1]!;
+    for (const grant of grants) {
+      const p = grant.prize;
+      if (p.kind === "coins") this.save.addCoins(p.amount);
+      else if (p.kind === "skin") this.save.ownSkin(p.id);
+      else if (p.kind === "boost") this.save.armBoost(p.id);
+      this.telemetry.track("cup_prize", { tier: grant.tier, kind: p.kind, id: p.id });
+    }
     // trails/titles were already recorded inside Tournaments.claim()
     this.save.persist();
-    this.lastPrize = grant;
+    this.lastPrize = top;
     this.audio.purchase();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-    this.hud.toast(`${iconGlyph(p.icon)} ${p.label} — ${grant.tier} in ${grant.cup}`, "gold");
-    this.telemetry.track("cup_prize", { tier: grant.tier, kind: p.kind, id: p.id });
+    // One toast, not one per tier: a jump from nothing to diamond pays four
+    // prizes and the player should read one line, not four stacked banners.
+    const extra = grants.length > 1 ? ` + ${grants.length - 1} more tier${grants.length > 2 ? "s" : ""}` : "";
+    this.hud.toast(`${iconGlyph(top.prize.icon)} ${top.prize.label} — ${top.tier} in ${top.cup}${extra}`, "gold");
     this.checkPrizeSkins();
     this.bump();
   }
@@ -6550,9 +6663,12 @@ export class Game {
   private async multiplierWithPortalReward(): Promise<void> {
     const platform = this.platform;
     if (!this.adsLive() || !platform || platform.name === "none") return;
-    const earned = await platform.rewardedBreak();
-    if (this.disposed) return;
-    this.endPortalAd();
+    if (this.multiplierRewardBusy || this.multiplierClaimed) return;
+    this.multiplierRewardBusy = true;
+    try {
+      const earned = await platform.rewardedBreak();
+      if (this.disposed) return;
+      this.endPortalAd();
     if (earned) {
       const bonus = this.runCoins * 2;
       this.multiplierClaimed = true;
@@ -6565,6 +6681,9 @@ export class Game {
     }
     if (this.state === "ad") this.setState("gameover");
     this.bump();
+    } finally {
+      this.multiplierRewardBusy = false;
+    }
   }
 
   /** Shop free-coins rewarded break: capped per hour, modest payout so the
@@ -6601,16 +6720,29 @@ export class Game {
   private async continueWithPortalReward(): Promise<void> {
     const platform = this.platform;
     if (!this.adsLive() || !platform || platform.name === "none") return;
-    this.setState("ad");
-    this.telemetry.track("portal_break_request", { portal: platform.name, placement: "continue" });
-    const earned = await platform.rewardedBreak();
-    if (this.disposed) return;
-    this.endPortalAd();
-    if (earned) {
-      this.doContinue("portal_rewarded");
-    } else {
-      this.setState("continue");
-      this.hud.toast("No reward this time — try coins or rest", "warn");
+    if (this.continueRewardBusy) return;
+    this.continueRewardBusy = true;
+    try {
+      this.setState("ad");
+      this.telemetry.track("portal_break_request", { portal: platform.name, placement: "continue" });
+      const earned = await platform.rewardedBreak();
+      if (this.disposed) return;
+      // The safety valve may have restored pre-break state while the SDK
+      // promise was still pending: a late grant must not resurrect a break
+      // the player already left.
+      if (this.state !== "ad") return;
+      this.endPortalAd();
+      if (earned) {
+        const gold = this.save.state.gold;
+        const max = gold ? 99 : this.save.isVipActive() ? 2 : 1;
+        if (this.continuesUsed < max) this.doContinue("portal_rewarded");
+        else this.setState("continue");
+      } else {
+        this.setState("continue");
+        this.hud.toast("No reward this time — try coins or rest", "warn");
+      }
+    } finally {
+      this.continueRewardBusy = false;
     }
   }
 
@@ -7143,6 +7275,7 @@ export class Game {
       },
       trophies: this.achievements.view(),
       trophyCounts: this.achievements.counts(),
+      nearestTrophy: this.achievements.nearest(),
       referralCode: st.referralCode,
       referralRedeemed: st.referralRedeemed,
       referralMessage: this.referralMessage,

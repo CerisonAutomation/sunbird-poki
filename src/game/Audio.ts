@@ -238,10 +238,15 @@ export class GameAudio {
     return SONGBOOK_ENABLED && this.musicOn && !this.muted ? 0.5 * this.musicVol : 0;
   }
 
+  /** The music bus's level, honoring `MUSIC_DISABLED`, `musicOn` and `muted`. */
+  private musicLevel(): number {
+    return MUSIC_DISABLED ? 0 : this.musicOn && !this.muted ? 0.5 * this.musicVol : 0;
+  }
+
   setVolumes(musicVol: number, sfxVol: number): void {
     this.musicVol = Math.max(0, Math.min(1, musicVol));
     this.sfxVol = Math.max(0, Math.min(1, sfxVol));
-    if (this.music) this.music.setLevel(MUSIC_DISABLED ? 0 : this.musicOn && !this.muted ? 0.5 * this.musicVol : 0);
+    if (this.music) this.music.setLevel(this.musicLevel());
     this.songbook?.setLevel(this.songbookLevel());
     if (this.sfxBus && this.ctx) {
       this.sfxBus.gain.setTargetAtTime(this.muted ? 0 : 0.5 * this.sfxVol, this.ctx.currentTime, 0.05);
@@ -250,7 +255,7 @@ export class GameAudio {
 
   setMuted(m: boolean): void {
     this.muted = m;
-    this.music?.setLevel(MUSIC_DISABLED ? 0 : this.musicOn && !m ? 0.5 * this.musicVol : 0);
+    this.music?.setLevel(this.musicLevel());
     this.songbook?.setLevel(this.songbookLevel());
     if (this.sfxBus && this.ctx) {
       this.sfxBus.gain.setTargetAtTime(m ? 0 : 0.5 * this.sfxVol, this.ctx.currentTime, 0.05);
@@ -259,7 +264,7 @@ export class GameAudio {
 
   setMusicEnabled(on: boolean): void {
     this.musicOn = on;
-    this.music?.setLevel(MUSIC_DISABLED ? 0 : on && !this.muted ? 0.5 * this.musicVol : 0);
+    this.music?.setLevel(this.musicLevel());
     this.songbook?.setLevel(this.songbookLevel());
   }
 

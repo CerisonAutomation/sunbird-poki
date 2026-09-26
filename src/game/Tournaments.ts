@@ -274,19 +274,34 @@ export class Tournaments {
     return improved;
   }
 
-  /** Claims the highest tier the player has actually reached but not banked. */
-  claim(cupId: string): PrizeGrant | null {
+  /**
+   * Claims every tier the player has reached but not banked. Reaching gold
+   * pays bronze with it: the old single-tier claim stamped `claimedTier` at
+   * the highest reached, so a player who jumped straight to diamond silently
+   * forfeited the three prizes below it — and `claimable` then read false
+   * forever, because it compares against the same highest tier.
+   *
+   * `claimedTier` stays the highest tier paid, so the unclaimed slice is
+   * everything strictly above it: exactly-once with no new save field.
+   */
+  claim(cupId: string): PrizeGrant[] | null {
     const def = this.defs.find((d) => d.id === cupId);
     if (!def) return null;
     const entry = this.state.entries[cupId];
     if (!entry) return null;
-    const tier = tierFor(def, entry.best);
-    if (!tier || entry.claimedTier === tier) return null;
-    entry.claimedTier = tier;
-    const prize = def.prizes[tier];
-    if (prize.kind === "trail" && !this.state.trails.includes(prize.id)) this.state.trails.push(prize.id);
-    if (prize.kind === "title" && !this.state.titles.includes(prize.id)) this.state.titles.push(prize.id);
-    return { prize, tier, cup: def.name };
+    const reached = tierFor(def, entry.best);
+    if (!reached || entry.claimedTier === reached) return null;
+    const from = entry.claimedTier ? TIER_ORDER.indexOf(entry.claimedTier) + 1 : 0;
+    const to = TIER_ORDER.indexOf(reached);
+    entry.claimedTier = reached;
+    const grants: PrizeGrant[] = [];
+    for (const tier of TIER_ORDER.slice(from, to + 1)) {
+      const prize = def.prizes[tier];
+      if (prize.kind === "trail" && !this.state.trails.includes(prize.id)) this.state.trails.push(prize.id);
+      if (prize.kind === "title" && !this.state.titles.includes(prize.id)) this.state.titles.push(prize.id);
+      grants.push({ prize, tier, cup: def.name });
+    }
+    return grants;
   }
 
   ownedTrails(): string[] {

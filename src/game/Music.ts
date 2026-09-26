@@ -614,6 +614,9 @@ export function musicCutoff(base: number, night: number, intensity: number): num
   return Math.max(500, Math.min(8000, base - night * 3000 + intensity * 1200));
 }
 
+/** Local copy of the MIDI→frequency formula (Songbook has its own for the
+ * player): importing Songbook here would close a Biomes→Music→Songbook→Biomes
+ * import cycle, so the one-liner stays duplicated by decision. */
 function mtof(m: number): number {
   return 440 * Math.pow(2, (m - 69) / 12);
 }

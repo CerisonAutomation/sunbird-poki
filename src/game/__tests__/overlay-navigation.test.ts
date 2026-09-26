@@ -103,6 +103,39 @@ describe("primary menu action via Space / Return (Poki EN-02)", () => {
     nav.dispose();
   });
 
+  /**
+   * The menu is ONE persistent overlay element (`HUD.ts:723`,
+   * `.overlay.menu > [data-ref="menuCard"]`) whose card is re-rendered with
+   * fresh innerHTML for every screen — Settings, Shop, Leaderboard, all of
+   * them. `sync()` used to move focus only when the overlay element itself
+   * changed identity, so on a screen-to-screen transition it saw the same
+   * `<div>` and did nothing, while the heading it had focused was already
+   * destroyed by the re-render. Focus silently fell back to `<body>`: the
+   * next Tab restarted from the top of the document, so a keyboard player had
+   * to re-tab the entire page on every menu move.
+   */
+  it("re-focuses the heading when the same overlay is re-rendered for the next screen", () => {
+    document.body.innerHTML = '<div id="host"><canvas></canvas><div id="hud"><div class="play-hud"></div><div class="overlay menu"><div class="paper-card" id="card"></div></div></div></div>';
+    const root = document.getElementById("hud")!;
+    const overlay = root.querySelector<HTMLElement>(".overlay.menu")!;
+    const card = root.querySelector<HTMLElement>("#card")!;
+    const nav = new OverlayNavigation(root);
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
+
+    card.innerHTML = "<h2>Settings</h2><button>Back</button>";
+    nav.sync(overlay);
+    expect(document.activeElement).toBe(card.querySelector("h2"));
+
+    // The player activates "Coin store": same overlay element, new card markup,
+    // and the previously focused heading no longer exists.
+    card.innerHTML = "<h2>Coin store</h2><button>Back</button>";
+    nav.sync(overlay);
+
+    expect(document.activeElement).toBe(card.querySelector("h2"));
+    expect(overlay.getAttribute("aria-label")).toBe("Coin store");
+    nav.dispose();
+  });
+
   it("does nothing when no overlay is open", () => {
     document.body.innerHTML = '<div id="hud"><div class="play-hud"></div></div>';
     const root = document.getElementById("hud")!;

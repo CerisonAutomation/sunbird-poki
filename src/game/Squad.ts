@@ -9,6 +9,7 @@
  * offline UI rather than breaking the menu.
  */
 import { directoryAvailable, lookupDirectoryPilot, publishPilot, type DirectoryPilot } from "./PilotDirectory";
+import { storage } from "./Storage";
 
 const ENV: Record<string, string | undefined> = (import.meta as unknown as { env?: Record<string, string> }).env ?? {};
 const API = (ENV.VITE_SOCIAL_URL ?? (ENV.DEV ? "/social" : "")).replace(/\/$/, "");
@@ -113,9 +114,10 @@ export function emptySquadState(): SquadState {
 /** A separate capability from the publicly visible race identity. */
 function squadKey(deviceId: string): string {
   const key = `sunbird.squad.key.${deviceId}`;
-  try { const saved = localStorage.getItem(key); if (saved && /^[a-f0-9]{64}$/.test(saved)) return saved; } catch { /* memory-only */ }
+  const saved = storage.getItem(key);
+  if (saved && /^[a-f0-9]{64}$/.test(saved)) return saved;
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, "0")).join("");
-  try { localStorage.setItem(key, token); } catch { /* session remains usable */ }
+  storage.setItem(key, token);
   return token;
 }
 
@@ -175,10 +177,8 @@ export class SquadClient {
     private readonly nameOf: () => string,
   ) {
     this.identityKey = `sunbird.squad.identity.${deviceId}`;
-    try {
-      const saved = localStorage.getItem(this.identityKey);
-      if (saved && /^[a-f0-9-]{32,64}$/.test(saved)) this.deviceId = saved;
-    } catch { /* retain existing identity */ }
+    const saved = storage.getItem(this.identityKey);
+    if (saved && /^[a-f0-9-]{32,64}$/.test(saved)) this.deviceId = saved;
     this.token = squadKey(this.deviceId);
   }
 
@@ -193,16 +193,13 @@ export class SquadClient {
     this.state.error = "";
 
     // Generate or load persistent friend code
-    let localCode = "";
-    try {
-      localCode = localStorage.getItem("sunbird.squad.local_code") || "";
-    } catch { /* memory only */ }
+    let localCode = storage.getItem("sunbird.squad.local_code") || "";
     if (!localCode || !localCode.startsWith("SUN-")) {
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
       let suffix = "";
       for (let i = 0; i < 6; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
       localCode = `SUN-${suffix}`;
-      try { localStorage.setItem("sunbird.squad.local_code", localCode); } catch { /* ignore */ }
+      storage.setItem("sunbird.squad.local_code", localCode);
     }
     this.state.myCode = localCode;
 
@@ -210,13 +207,13 @@ export class SquadClient {
     // fictional clubs with fictional member counts made an empty screen look
     // busy — which is the same lie in a different row.
     let clubs: Club[] = [];
-    try {
-      const savedClubs = localStorage.getItem("sunbird.squad.local_clubs");
-      if (savedClubs) {
+    const savedClubs = storage.getItem("sunbird.squad.local_clubs");
+    if (savedClubs) {
+      try {
         const parsed = JSON.parse(savedClubs) as unknown;
         if (Array.isArray(parsed)) clubs = parsed.filter((c): c is Club => Boolean(c) && typeof (c as Club).name === "string");
-      }
-    } catch { /* start empty */ }
+      } catch { /* corrupted data, start empty */ }
+    }
     this.state.clubs = clubs;
 
     // Wingmen are only ever real pilots this device verified. Nothing is
@@ -224,21 +221,19 @@ export class SquadClient {
     // offline there is no way to verify a stranger's code, so the panel says
     // exactly that instead of inventing a name to fill the row.
     let friends: Wingman[] = [];
-    try {
-      const savedFriends = localStorage.getItem("sunbird.squad.local_friends");
-      if (savedFriends) {
+    const savedFriends = storage.getItem("sunbird.squad.local_friends");
+    if (savedFriends) {
+      try {
         const parsed = JSON.parse(savedFriends) as unknown;
         if (Array.isArray(parsed)) friends = parsed.filter(isStoredWingman);
-      }
-    } catch { /* start empty */ }
+      } catch { /* corrupted data, start empty */ }
+    }
     this.state.friends = friends;
 
     // No default membership: a pilot is in a club only if they joined one.
     let clubId: number | null = null;
-    try {
-      const savedClubId = localStorage.getItem("sunbird.squad.local_club_id");
-      if (savedClubId !== null && savedClubId !== "") clubId = Number(savedClubId);
-    } catch { /* not a member */ }
+    const savedClubId = storage.getItem("sunbird.squad.local_club_id");
+    if (savedClubId !== null && savedClubId !== "") clubId = Number(savedClubId);
     this.setMembership(clubId);
 
     // Club chat only holds messages this device actually received: the seeded
@@ -246,13 +241,13 @@ export class SquadClient {
     // happened.
     if (clubId) {
       let chat: ChatMessage[] = [];
-      try {
-        const savedChat = localStorage.getItem(`sunbird.squad.local_chat.${clubId}`);
-        if (savedChat) {
+      const savedChat = storage.getItem(`sunbird.squad.local_chat.${clubId}`);
+      if (savedChat) {
+        try {
           const parsed = JSON.parse(savedChat) as unknown;
           if (Array.isArray(parsed)) chat = parsed.filter(isStoredChat);
-        }
-      } catch { /* start empty */ }
+        } catch { /* corrupted data, start empty */ }
+      }
       this.state.chat = chat;
     }
 
@@ -264,11 +259,12 @@ export class SquadClient {
     if (!confirmed || !this.state.credentialError || this.state.busy || this.state.loading) return;
     const id = [...crypto.getRandomValues(new Uint8Array(20))].map(n => n.toString(16).padStart(2, "0")).join("");
     const token = squadKey(id);
-    try {
-      if (localStorage.getItem(`sunbird.squad.key.${id}`) !== token) throw new Error("storage");
-      localStorage.setItem(this.identityKey, id);
-      if (localStorage.getItem(this.identityKey) !== id) throw new Error("storage");
-    } catch {
+    if (storage.getItem(`sunbird.squad.key.${id}`) !== token) {
+      this.state.error = "Allow this site to save browser data before creating a new Squad profile.";
+      this.onChange(); return;
+    }
+    storage.setItem(this.identityKey, id);
+    if (storage.getItem(this.identityKey) !== id) {
       this.state.error = "Allow this site to save browser data before creating a new Squad profile.";
       this.onChange(); return;
     }
@@ -609,13 +605,9 @@ export class SquadClient {
     }, "");
   }
 
-  /** Local wingmen (met in a race, no code to verify) live in localStorage. */
+  /** Local wingmen (met in a race, no code to verify) live in storage. */
   private persistLocalFriends(): void {
-    try {
-      localStorage.setItem("sunbird.squad.local_friends", JSON.stringify(this.state.friends.filter((f) => !f.code)));
-    } catch {
-      /* memory-only session */
-    }
+    storage.setItem("sunbird.squad.local_friends", JSON.stringify(this.state.friends.filter((f) => !f.code)));
   }
 
   /** Accept or decline an incoming request. */
@@ -692,11 +684,9 @@ export class SquadClient {
       this.state.clubs.unshift(newClub);
       this.setMembership(newClub.id);
       this.state.chat = [{ id: 1, name: this.nameOf(), text: `Founded ${name}! Ready for formation flights.`, at: "just now" }];
-      try {
-        localStorage.setItem("sunbird.squad.local_clubs", JSON.stringify(this.state.clubs));
-        localStorage.setItem("sunbird.squad.local_club_id", String(newClub.id));
-        localStorage.setItem(`sunbird.squad.local_chat.${newClub.id}`, JSON.stringify(this.state.chat));
-      } catch {}
+      storage.setItem("sunbird.squad.local_clubs", JSON.stringify(this.state.clubs));
+      storage.setItem("sunbird.squad.local_club_id", String(newClub.id));
+      storage.setItem(`sunbird.squad.local_chat.${newClub.id}`, JSON.stringify(this.state.chat));
       this.onChange();
       return "Club founded!";
     }
@@ -722,11 +712,13 @@ export class SquadClient {
     if (this.isAutonomous) {
       this.setMembership(clubId);
       let chat: ChatMessage[] = [];
-      try {
-        const savedChat = localStorage.getItem(`sunbird.squad.local_chat.${clubId}`);
-        if (savedChat) chat = JSON.parse(savedChat);
-        localStorage.setItem("sunbird.squad.local_club_id", String(clubId));
-      } catch {}
+      const savedChat = storage.getItem(`sunbird.squad.local_chat.${clubId}`);
+      if (savedChat) {
+        try {
+          chat = JSON.parse(savedChat);
+        } catch { /* corrupted data */ }
+      }
+      storage.setItem("sunbird.squad.local_club_id", String(clubId));
       this.state.chat = chat;
       this.onChange();
       return "Joined!";
@@ -751,7 +743,7 @@ export class SquadClient {
     if (this.isAutonomous) {
       this.setMembership(null);
       this.state.chat = [];
-      try { localStorage.setItem("sunbird.squad.local_club_id", ""); } catch {}
+      storage.setItem("sunbird.squad.local_club_id", "");
       this.onChange();
       return;
     }
@@ -777,7 +769,7 @@ export class SquadClient {
       this.state.chat.push(userMsg);
       const clubId = this.state.myClubId;
       if (clubId) {
-        try { localStorage.setItem(`sunbird.squad.local_chat.${clubId}`, JSON.stringify(this.state.chat)); } catch {}
+        storage.setItem(`sunbird.squad.local_chat.${clubId}`, JSON.stringify(this.state.chat));
       }
       this.onChange();
 

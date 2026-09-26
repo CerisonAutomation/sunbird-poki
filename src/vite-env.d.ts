@@ -40,3 +40,14 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/**
+ * `true` when the current vitest run is collecting coverage. Injected as a
+ * literal by `define` in vitest.config.ts.
+ *
+ * It exists for exactly one consumer: `src/game/__tests__/physics-perf.test.ts`
+ * must not assert a wall-clock per-step budget while the v8 provider is
+ * instrumenting the code it is timing. Declared here so that test needs no
+ * cast and no `as any` (which `verify:prod` refuses in shipped code).
+ */
+declare const __COVERAGE_RUN__: boolean;

@@ -118,6 +118,13 @@ export class Bird {
   private viewDistance = CAMERA_BASE_Z;
   private blink = 0;
   private glowPulse = 0;
+  /**
+   * Floating-origin recenter point (see TerrainSystem.recenter()). Physics
+   * state (this.x/this.y) always stays true world x; only the rendered
+   * mesh position below shifts, so terrain sampling and gameplay math are
+   * unaffected.
+   */
+  private originX = 0;
 
   constructor() {
     this.bodyMat = new THREE.MeshLambertMaterial({ color: 0xff7a45, emissiveIntensity: 0 });
@@ -249,6 +256,11 @@ export class Bird {
     this.viewDistance = distance;
   }
 
+  /** Floating-origin recenter — see TerrainSystem.recenter(). */
+  setRenderOrigin(x: number): void {
+    this.originX = x;
+  }
+
   reset(x: number, y: number): void {
     this.x = x;
     this.y = y;
@@ -344,7 +356,11 @@ export class Bird {
       const n2 = terrain.normalAt(this.x, this.terrainNormal);
       const curv = terrain.curvatureAt(this.x); // >0 convex (crest), <0 concave (valley)
       let launched = false;
-      if (curv > 0) {
+      // curvatureAt() is a narrow local probe (e = 1.1) — high-frequency
+      // terrain noise alone can spike it positive with no real lip underfoot.
+      // Gate on the same crest-prominence rule the AI's distanceToCrest()
+      // cache uses, so a launch only fires off a genuine climb-then-drop.
+      if (curv > 0 && terrain.hasCrestProminence(this.x)) {
         const needed = vt * vt * curv; // centripetal pull required to stay glued
         const available = (diving ? GRAVITY_DIVE : GRAVITY_GLIDE) * gMult * n2.ny + (diving ? STICK_ACCEL_DIVE : STICK_ACCEL_GLIDE);
         if (needed > available) launched = true;
@@ -435,7 +451,10 @@ export class Bird {
       this.vy *= 0.55;
       this.vy += 38 * dt;
       this.vx *= 0.9;
-      this.vx = Math.max(this.vx, 7);
+      // Same floor as everywhere else the bird's forward speed is clamped
+      // (see MIN_KEEP_SPEED above) — a lower 7 here let water uniquely stall
+      // the bird below the speed the rest of the game guarantees.
+      this.vx = Math.max(this.vx, MIN_KEEP_SPEED);
       if (this.y > WATER_Y - 0.2 && this.vy > 0) {
         this.vy *= 0.4;
       }
@@ -443,7 +462,14 @@ export class Bird {
 
     // Sunflower bounce: land on a bloom (or roll onto one) and spring back up.
     this.bounceCd = Math.max(0, this.bounceCd - dt);
-    if (this.bounceCd <= 0 && this.grounded && !this.inWater) {
+    // Require wasGrounded so a touchdown that lands exactly on a pad still
+    // gets one full step where `grounded` reads true — otherwise the bounce
+    // below flips grounded back to false within the very step that just set
+    // it, and anything watching for a landing (e.g. pilot.ts's predictLanding,
+    // which keys off `grounded` rather than the one-frame `justLanded` pulse)
+    // never observes this touchdown's landingQuality at all. Deferring the
+    // bounce by a single physics step (~8ms) is imperceptible to a player.
+    if (this.bounceCd <= 0 && this.grounded && this.wasGrounded && !this.inWater) {
       const pad = terrain.bouncePadAt(this.x);
       if (pad) {
         this.bounceCd = 0.6;
@@ -480,7 +506,7 @@ export class Bird {
     // 3D dynamic banking: subtle roll and pitch that gives true depth
     const bankX = Math.sin(time * 3.2) * 0.04 + clamp(this.vy * 0.012, -0.22, 0.22);
     const bankY = clamp(this.vx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
-    this.root.position.set(px, py, 0);
+    this.root.position.set(px - this.originX, py, 0);
     this.root.rotation.z = this.rotation; // visual matches physics — no lag factor
     this.root.rotation.x = bankX;
     this.root.rotation.y = bankY;
@@ -554,7 +580,7 @@ export class Bird {
 
     const h = terrain.heightAt(px);
     const alt = Math.max(0, py - h);
-    this.shadow.position.set(px, h + 0.08, 0);
+    this.shadow.position.set(px - this.originX, h + 0.08, 0);
     const s = clamp(1.3 - alt * 0.045, 0.42, 1.3);
     // The silhouette breathes with the wings: span narrows at the top of each
     // stroke and folds to a dart when tucked (dive/sleep). Local y maps to

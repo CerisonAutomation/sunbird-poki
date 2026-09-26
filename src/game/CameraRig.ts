@@ -106,6 +106,14 @@ export class CameraRig {
   private clipShot: ClipShot | null = null;
   private clipSpeed = 0;
   private clipAlt = 0;
+  /**
+   * Floating-origin recenter point (see TerrainSystem.recenter()). camX/
+   * camY/camZ/lookX/lookY stay true world coordinates throughout this
+   * class — only the final GPU-facing camera transform in apply() shifts,
+   * so worldX/worldY/worldZ below keep returning values other systems
+   * (occlusion, name tags) can compare against absolute world x.
+   */
+  private originX = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1400);
@@ -311,16 +319,28 @@ export class CameraRig {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Floating-origin recenter — see TerrainSystem.recenter(). */
+  recenter(newOriginX: number): void {
+    this.originX = newOriginX;
+  }
+
+  /** True (unshifted) world-space camera position — for game logic that
+   *  compares against absolute world x (occlusion, name tags). Never use
+   *  camera.position for that: it is render-local (see apply()). */
+  get worldX(): number {
+    return this.camX;
+  }
+
   private apply(): void {
     const overlay: ClipPose = this.clipShot && this.clipMix > 0
       ? mixClipPose(CHASE_POSE, clipPose(this.clipShot, this.clipSpeed, this.clipAlt), this.clipMix)
       : CHASE_POSE;
     this.camera.position.set(
-      this.camX + this.shakeX + overlay.offsetX,
+      this.camX - this.originX + this.shakeX + overlay.offsetX,
       this.camY + this.shakeY + overlay.offsetY,
       this.camZ + overlay.offsetZ,
     );
-    this.camera.lookAt(this.lookX, this.lookY, 0);
+    this.camera.lookAt(this.lookX - this.originX, this.lookY, 0);
     this.camera.rotation.z = this.shakeX * 0.01 + this.orbit + overlay.roll;
     this.camera.rotation.x += this.rollTilt;
     if (overlay.fovDelta !== 0 && Math.abs(this.clipMix) > 0) {

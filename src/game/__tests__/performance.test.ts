@@ -9,7 +9,7 @@ import { DROP_START, PHYS_DT } from "../constants";
 import { nextBloomBudget } from "../quality";
 
 describe("render and allocation budgets", () => {
-  it("reuses distant geometry and culls static instanced decoration", () => {
+  it("reuses distant geometry and culls static instanced decoration", async () => {
     const terrain = new TerrainSystem("performance");
     terrain.update(64);
     const far = terrain.group.children.slice(0, 4) as Mesh[];
@@ -18,6 +18,10 @@ describe("render and allocation budgets", () => {
       terrain.update(x);
       far.forEach((mesh, i) => expect(mesh.geometry.getAttribute("position")).toBe(buffers[i]));
     }
+    // Chunk geometry (and the decor/sunflower instancing built alongside it)
+    // is now deferred to an idle callback — the spawn budget from the LOD
+    // work — so give pending builds a tick to land before inspecting them.
+    await new Promise(resolve => setTimeout(resolve, 10));
     let instances = 0;
     terrain.group.traverse(object => {
       if (object instanceof InstancedMesh) {

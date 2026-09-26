@@ -68,14 +68,24 @@ export class FirstFlight {
     }
   }
 
-  view(): CoachState {
+  /**
+   * `tapMode` mirrors the tap-to-toggle-dive accessibility setting: players
+   * using it never hold anything down, so the coach must say "TAP" rather
+   * than "HOLD"/"RELEASE" or the very first thing the game teaches would be
+   * wrong for their control scheme.
+   */
+  view(tapMode = false): CoachState {
     if (this.completed && this.celebration > 0) {
       return { text: "", step: STEPS, steps: STEPS, justCompleted: true };
     }
     if (!this.active) return { text: "", step: -1, steps: STEPS, justCompleted: false };
     const text = [
-      `⬇ ${t("onboarding.holdToDive", undefined, "HOLD to dive down the hill")}`,
-      `⬆ ${t("onboarding.releaseToLaunch", undefined, "RELEASE at the top to launch")}`,
+      tapMode
+        ? `⬇ ${t("onboarding.tapToDive", undefined, "TAP to dive down the hill")}`
+        : `⬇ ${t("onboarding.holdToDive", undefined, "HOLD to dive down the hill")}`,
+      tapMode
+        ? `⬆ ${t("onboarding.tapToLaunch", undefined, "TAP again at the top to launch")}`
+        : `⬆ ${t("onboarding.releaseToLaunch", undefined, "RELEASE at the top to launch")}`,
       `${iconGlyph("bird")} ${t("onboarding.soarInAir", undefined, "RELEASE & SOAR — stay airborne!")}`,
     ][this.step]!;
     return { text, step: this.step, steps: STEPS, justCompleted: false };

@@ -129,7 +129,11 @@ export class SocialSystem {
   createChallenge(targetDeviceId: string, _targetName: string, kind: FriendChallenge["challengeKind"], value: number, ghostSeed: string, ghostDistance: number): FriendChallenge | null {
     const s = this.social;
     if (s.challenges.some(c => c.targetId === targetDeviceId && c.status === "pending")) return null;
-    const challenge: FriendChallenge = { id: `ch_${Date.now().toString(36)}`, challengerId: this.save.state.deviceId,
+    // Date.now() alone collides when two challenges are posted in the same
+    // millisecond (routine in a fast test, rare-but-real on a fast device);
+    // a challenge id is looked up by exact match in accept/complete, so a
+    // collision would silently resolve the wrong challenge.
+    const challenge: FriendChallenge = { id: `ch_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, challengerId: this.save.state.deviceId,
       challengerName: this.save.state.pilotName || "Pilot", targetId: targetDeviceId, challengeKind: kind,
       challengerValue: value, ghostSeed, ghostDistance, targetValue: null, status: "pending",
       createdAt: dateSeed(), expiresAt: this.dateSeedDaysLater(3) };

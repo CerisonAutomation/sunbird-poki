@@ -13,6 +13,43 @@ const WINDOW_MS = 60_000;
 const MAX_WRITES_PER_KEY = 30;
 const writes = new Map<string, { started: number; count: number }>();
 
+/**
+ * `writes` is a plain module-level Map, so — like every in-memory limiter in
+ * this directory — it is scoped to a single warm edge instance. Vercel can
+ * (and does) route concurrent requests to several isolates across regions,
+ * each with its own independent map, so this limiter caps abuse *per
+ * instance*, not globally across the fleet: a client that gets load-balanced
+ * across instances can exceed MAX_WRITES_PER_KEY in aggregate. A true global
+ * limit would need shared storage (e.g. the same Upstash Redis the
+ * leaderboard itself already uses) at the cost of a round trip on every
+ * write; this in-memory version is deliberately cheap and "good enough"
+ * against casual flooding from a single source.
+ *
+ * Left unswept, `writes` would grow by one entry per distinct
+ * IP+deviceId pair ever seen, for as long as the instance stays warm — a slow
+ * memory leak. Sweep it every 5 minutes, dropping any entry whose rate-limit
+ * window has already elapsed.
+ *
+ * `unrefTimer` lets a Node test host (which imports this module fresh per
+ * test via `vi.resetModules()`) exit cleanly instead of accumulating live
+ * intervals; on the actual edge runtime `unref` doesn't exist and the
+ * optional call is simply a no-op.
+ */
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+
+function unrefTimer(timer: unknown): void {
+  (timer as { unref?: () => void }).unref?.();
+}
+
+unrefTimer(
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of writes) {
+      if (now - entry.started >= WINDOW_MS) writes.delete(key);
+    }
+  }, SWEEP_INTERVAL_MS),
+);
+
 function clientAddress(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") || "unknown";

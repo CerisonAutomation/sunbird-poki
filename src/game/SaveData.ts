@@ -46,6 +46,14 @@ export type Settings = {
   colorAssist: boolean;
   /** Large-text mode: bumps every UI font a step for readability. */
   bigText: boolean;
+  /**
+   * Motor accessibility: the core dive mechanic normally requires holding a
+   * key/pointer/button down the whole way down a slope. Some players cannot
+   * comfortably sustain a hold — this flips it to tap-to-toggle: one tap
+   * starts the dive, the next tap ends it. Off by default so existing muscle
+   * memory (hold-to-dive) is unchanged unless a player opts in.
+   */
+  tapToggleDive: boolean;
   quality: Quality;
   /** Distance unit preference: "km" (default) or "mi". */
   distUnit: "km" | "mi";
@@ -211,6 +219,7 @@ const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   colorAssist: false,
   bigText: false,
+  tapToggleDive: false,
   quality: "auto",
   distUnit: "km",
   autoShop: true,
@@ -317,15 +326,19 @@ function parseSocial(v: unknown): SocialState {
   const d = emptySocialState();
   if (!v || typeof v !== "object") return d;
   const p = v as Partial<SocialState>;
+  // Same shape-filter pattern as parseRival: a corrupt/edited blob with
+  // [null] entries must not sail verbatim into Social/HUD.
+  const objArr = <T>(a: unknown): T[] =>
+    (Array.isArray(a) ? a : []).filter((e): e is T => !!e && typeof e === "object") as T[];
   return {
-    friends: Array.isArray(p.friends) ? (p.friends as SocialState["friends"]) : d.friends,
+    friends: objArr(p.friends),
     pendingRequests: strArr(p.pendingRequests),
     incomingRequests: strArr(p.incomingRequests),
     blocked: strArr(p.blocked),
-    club: p.club ?? null,
-    dmThreads: Array.isArray(p.dmThreads) ? (p.dmThreads as SocialState["dmThreads"]) : d.dmThreads,
-    challenges: Array.isArray(p.challenges) ? (p.challenges as SocialState["challenges"]) : d.challenges,
-    savedReplays: Array.isArray(p.savedReplays) ? (p.savedReplays as SocialState["savedReplays"]) : d.savedReplays,
+    club: p.club && typeof p.club === "object" ? (p.club as SocialState["club"]) : null,
+    dmThreads: objArr(p.dmThreads),
+    challenges: objArr(p.challenges),
+    savedReplays: objArr(p.savedReplays),
     socialQuestsClaimed: strArr(p.socialQuestsClaimed),
   };
 }
@@ -502,6 +515,7 @@ export class SaveData {
           reduceMotion: Boolean(p.settings?.reduceMotion),
           colorAssist: Boolean(p.settings?.colorAssist),
           bigText: Boolean(p.settings?.bigText),
+          tapToggleDive: Boolean(p.settings?.tapToggleDive),
           quality: quality === "high" || quality === "low" ? quality : "auto",
           distUnit: p.settings?.distUnit === "mi" ? "mi" : "km",
           // Undefined (a save from before this existed) means on, matching
@@ -1265,13 +1279,16 @@ export class SaveData {
     // but that must never be the ONLY thing standing between a hostile blob
     // and the on-disk save.
     if (typeof parsed.deviceId !== "string" || !parsed.deviceId) return false;
-    const finiteOrAbsent = (v: unknown): boolean => v === undefined || (typeof v === "number" && Number.isFinite(v));
+    // Currency/record fields must never go negative: a pasted code with
+    // wallet: -500 would soft-lock every purchase, and negative bests poison
+    // near-best math. Reject up front; the whitelist below never sees them.
+    const nonNegativeOrAbsent = (v: unknown): boolean => v === undefined || (typeof v === "number" && Number.isFinite(v) && v >= 0);
     const arrayOrAbsent = (v: unknown): boolean => v === undefined || Array.isArray(v);
     if (
-      !finiteOrAbsent(parsed.bestScore) ||
-      !finiteOrAbsent(parsed.bestDistance) ||
-      !finiteOrAbsent(parsed.totalCoins) ||
-      !finiteOrAbsent(parsed.wallet) ||
+      !nonNegativeOrAbsent(parsed.bestScore) ||
+      !nonNegativeOrAbsent(parsed.bestDistance) ||
+      !nonNegativeOrAbsent(parsed.totalCoins) ||
+      !nonNegativeOrAbsent(parsed.wallet) ||
       !arrayOrAbsent(parsed.highScores) ||
       !arrayOrAbsent(parsed.ownedSkins) ||
       !arrayOrAbsent(parsed.completedMissions) ||

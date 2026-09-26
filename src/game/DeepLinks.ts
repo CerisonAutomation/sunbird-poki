@@ -1,11 +1,20 @@
 /**
- * Rival challenge links — the zero-server viral loop.
+ * Deep links — every shareable URL the game speaks.
  *
- * A challenge is just `#rival=<seed>.<distance>.<name>` appended to any
- * URL of the game. The recipient flies the SAME seed (same hills, same
- * thermals, same weather) against the sender's posted distance. No backend,
- * no account, no expiry — the world generator IS the referee, because a
- * seed reproduces the exact same course on every device.
+ * Two schemes live in the same URL hash and must never collide:
+ *
+ * - `#rival=<seed>.<distance>.<name>[&mode=]` — rival challenge links: the
+ *   recipient flies the SAME seed (same hills, same thermals, same weather)
+ *   against the sender's posted distance. No backend, no account, no expiry —
+ *   the world generator IS the referee, because a seed reproduces the exact
+ *   same course on every device.
+ * - `#room=<CODE>` — private race-room invites: opening one seats the player
+ *   straight into that room (the same 5-letter code the host sees), matched
+ *   by code on the room server.
+ *
+ * (Merged from Challenge.ts + RoomInvite.ts, which implemented the same
+ * parse-consume-build pattern twice. Private `KEY`/`consumed` names are
+ * namespaced per scheme — RIVAL_* vs ROOM_* — so the two cannot collide.)
  */
 
 export type RivalChallenge = {
@@ -17,21 +26,23 @@ export type RivalChallenge = {
   mode?: string;
 };
 
-const KEY = "rival";
+/* ------------------------------------------------ rival challenges (#rival=) */
+
+const RIVAL_KEY = "rival";
 const MODE_KEY = "mode";
 
 /** Consuming the hash is destructive, and React StrictMode double-mounts the
  * Game — the first (throwaway) instance would swallow the link and the real
  * one would see nothing. The parsed challenge lives here for the session. */
-let consumed: RivalChallenge | null = null;
+let consumedChallenge: RivalChallenge | null = null;
 
 /** Parses (and consumes) a challenge from the current URL, if present. */
 export function readChallengeFromUrl(): RivalChallenge | null {
-  if (consumed) return consumed;
+  if (consumedChallenge) return consumedChallenge;
   try {
     const hash = window.location.hash.replace(/^#/, "");
     const params = new URLSearchParams(hash);
-    const raw = params.get(KEY);
+    const raw = params.get(RIVAL_KEY);
     if (!raw) return null;
     const [seed, dist, ...nameParts] = raw.split(".");
     const distance = Math.floor(Number(dist));
@@ -42,12 +53,12 @@ export function readChallengeFromUrl(): RivalChallenge | null {
     // (three-dot `seed.distance.name`) keep working unchanged.
     const mode = (params.get(MODE_KEY) ?? "").replace(/[^a-z0-9-]/g, "").slice(0, 20) || undefined;
     // Consume the hash so refresh/share of the page doesn't re-trigger it.
-    params.delete(KEY);
+    params.delete(RIVAL_KEY);
     params.delete(MODE_KEY);
     const rest = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}${rest ? `#${rest}` : ""}`);
-    consumed = { seed, distance, name, mode };
-    return consumed;
+    consumedChallenge = { seed, distance, name, mode };
+    return consumedChallenge;
   } catch {
     return null;
   }
@@ -60,7 +71,7 @@ export function buildChallengeUrl(seed: string, distance: number, name: string, 
   const envBase = (import.meta.env.VITE_SHARE_BASE_URL as string | undefined)?.trim();
   const base = envBase ? envBase.replace(/\/$/, "") : `${window.location.origin}${window.location.pathname}`.replace(/\/$/, "");
   const payload = `${seed}.${Math.floor(distance)}.${encodeURIComponent(name)}`;
-  return `${base}#${KEY}=${payload}${mode ? `&${MODE_KEY}=${encodeURIComponent(mode)}` : ""}`;
+  return `${base}#${RIVAL_KEY}=${payload}${mode ? `&${MODE_KEY}=${encodeURIComponent(mode)}` : ""}`;
 }
 
 const TOKEN_PREFIX = "sb1";
@@ -103,4 +114,53 @@ export function unpackChallengeToken(raw: string): RivalChallenge | null {
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------- room invites (#room=) */
+
+const ROOM_KEY = "room";
+
+/** 5 chars from the room-code alphabet (no 0/O or 1/I). Lenient on input. */
+const CODE_RE = /^[A-Z0-9]{5}$/;
+
+/** Consumed once for the session — React StrictMode double-mounts the Game and
+ * the first throwaway instance must not swallow the link for the real one. */
+let consumedRoomCode: string | null = null;
+
+/** Normalizes user/pasted input to a room code, or "" when invalid. */
+export function normalizeRoomCode(raw: string): string {
+  let input = (raw ?? "").trim();
+  // Pasted invite URLs must not become the bogus code "HTTPS".
+  if (input.includes("#") && (/^https?:/i.test(input) || input.startsWith("#"))) {
+    try { input = new URLSearchParams(input.slice(input.indexOf("#") + 1)).get(ROOM_KEY) ?? ""; }
+    catch { return ""; }
+  } else if (/^https?:/i.test(input)) return "";
+  const code = input.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+  return CODE_RE.test(code) ? code : "";
+}
+
+/** Parses (and consumes) a `#room=` invite from the current URL, if present. */
+export function readRoomInviteFromUrl(): string | null {
+  if (consumedRoomCode) return consumedRoomCode;
+  try {
+    const hash = window.location.hash.replace(/^#/, "");
+    const params = new URLSearchParams(hash);
+    const code = normalizeRoomCode(params.get(ROOM_KEY) ?? "");
+    if (!code) return null;
+    // Consume the key so refresh/share of the page doesn't re-trigger it, and
+    // keep any sibling params (e.g. a #rival= challenge) intact.
+    params.delete(ROOM_KEY);
+    const rest = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}${rest ? `#${rest}` : ""}`);
+    consumedRoomCode = code;
+    return code;
+  } catch {
+    return null;
+  }
+}
+
+/** Builds the shareable invite URL for a room code. */
+export function buildRoomInviteUrl(code: string): string {
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}#${ROOM_KEY}=${encodeURIComponent(normalizeRoomCode(code) || code.toUpperCase())}`;
 }

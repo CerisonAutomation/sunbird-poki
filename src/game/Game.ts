@@ -5570,7 +5570,22 @@ export class Game {
     this.bump();
   }
 
-  private grantVip(source: string): void {
+  /** Charges a coin price, or tells the player the shortfall and reports
+   *  false. The guard, the shortfall arithmetic and the toast were written out
+   *  four times over the coin sinks (gold, starter pack, VIP, mystery vault)
+   *  with the same wording, so a change to any of them had to be made four
+   *  times over and could silently drift between them. */
+  private spendCoins(price: number): boolean {
+    if (this.save.spend(price)) return true;
+    this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
+    return false;
+  }
+
+  /** The state a VIP purchase actually turns on. Both routes to VIP ran this
+   *  same sequence before diverging for their own toast and telemetry line, so
+   *  a fix to one of them (the daily claim, the confetti anchor) had to be
+   *  repeated in the other to stay honest. */
+  private applyVipEntitlement(): void {
     this.save.grantVip();
     this.vipActive = true;
     this.vipExpiredNotice = false;
@@ -5578,6 +5593,10 @@ export class Game {
     this.save.claimVipDaily(this.today);
     this.audio.purchase();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+  }
+
+  private grantVip(source: string): void {
+    this.applyVipEntitlement();
     this.hud.toast("Welcome to VIP ♛", "vip");
     this.telemetry.track("vip_granted", { source });
     this.bump();
@@ -5588,48 +5607,27 @@ export class Game {
    * portals while giving the portal a clear, opt-in monetisation moment. */
   private buyCoinGold(): void {
     if (this.save.state.gold) return;
-    const price = GOLD.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(GOLD.coinPrice)) return;
     this.grantGold("coin_purchase");
   }
 
   private buyCoinStarter(): void {
     if (this.save.state.starterPack) return;
-    const price = STARTER_PACK.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(STARTER_PACK.coinPrice)) return;
     this.grantStarter("coin_purchase");
   }
 
   private buyPortalVip(): void {
     const price = VIP.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
-    this.save.grantVip();
-    this.vipActive = true;
-    this.vipExpiredNotice = false;
-    this.save.ownSkin("aurora");
-    this.save.claimVipDaily(this.today);
-    this.audio.purchase();
-    this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+    if (!this.spendCoins(price)) return;
+    this.applyVipEntitlement();
     this.hud.toast("VIP flight unlocked with coins ♛", "vip");
     this.telemetry.track("vip_granted", { source: "portal_coins", price });
     this.bump();
   }
 
   private buyMysteryVault(): void {
-    const price = 150;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(150)) return;
     const rng = Math.random();
     this.audio.fanfare();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);

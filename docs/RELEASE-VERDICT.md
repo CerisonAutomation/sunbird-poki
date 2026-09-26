@@ -10,7 +10,8 @@ Gates on the tree: `typecheck` 0 · `lint` 0 · `madge --circular` 0 · **2228 t
 
 ## 1. VERDICT
 
-**Conditional — do not upload yet. One blocker, and it is a broken test rather than a broken game.**
+**Conditional — do not upload yet. The two gate blockers from §3 and §4 are FIXED (`a3bca28`); one
+unrelated test failure remains (§8), and the product gaps in §9 are untouched.**
 
 `pnpm gate` exits 1, and it exits at the **last** step (`test:policy`). Every step before it is green.
 The failure is not a policy violation by the game. It is that one assertion in the platform-policy spec
@@ -128,12 +129,31 @@ previous state where the check was a tautology and the claim was true *only by i
 
 ---
 
-## 7. What has to happen before upload
+## 7. What has to happen before upload — STATUS
 
-1. **Fix the ad-removal assertion** — invert it to assert absence (§3). Do not delete the test.
-2. **Install or pin the Playwright browser build** (§4), so `test:policy` is reproducible in CI.
-3. Re-run `pnpm gate` end to end and confirm exit 0.
+1. ~~**Fix the ad-removal assertion**~~ — **DONE, `a3bca28`.** Inverted to require absence. The test
+   was kept and its screen-headings check strengthened; `SELL_AD_REMOVAL` was *not* flipped to true to
+   make the click resolve.
+2. ~~**Install or pin the Playwright browser build**~~ — **DONE, `a3bca28`.** `e2e/chromium-executable.ts`
+   resolves the browser instead of assuming the pinned one. Verified launching with **no env var set**.
+3. **Re-run `pnpm gate` end to end** — still outstanding. `test:policy` is now 7/8 rather than 2/4 with
+   two 240s hangs, but the full chain has not been re-run since `a3bca28`.
 4. **The human makes the upload decision.** Nothing on this floor uploads, and nothing should.
 
-Two of those are small. Neither requires a game change. Once they are done this build is defensible to
-hand to the Poki Inspector.
+## 8. Still failing, and it is not the blocker above
+
+`pnpm test:policy` is **7 of 8**. The remaining failure is the **phone** first-run welcome test:
+`.name-char-count` reads `12` where the seeded value's JS length is `11`. Desktop passes, phone does
+not, and it is unrelated to `a3bca28` — a character-count discrepancy in the call-sign field on the
+phone layout. It was found by running the suite, not by reading it, and it is reported rather than
+adjusted until it passes.
+
+## 9. Product gaps this gate work did not touch
+
+- **The home menu does not offer live PvP.** `open-live` is a *nested* action inside the PvP screens
+  (`HUD.ts:2264`, `:2607`), not a home entry, and the card offers `pvp-practice` rather than
+  `open-practice`. This is the open home-menu decision, still unimplemented.
+- **Ad-removal coverage stops at the menu.** The PvP screen is where `open-live` lives, so the surface
+  most likely to carry a rival offer is the one the walk does not reach. A nested walk is needed.
+- Clusters 1.3–1.10 of the feature-wiring work remain, and the floor still has no passing mobile or
+  orientation evidence.

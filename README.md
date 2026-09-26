@@ -4,6 +4,14 @@
 
 [![CI](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml/badge.svg)](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml)
 
+> **This is the Poki fork; full infrastructure in parent monorepo.** This
+> checkout ships the client and the Vercel leaderboard functions (`api/`)
+> only. The self-hosted `rust/` room server, the Cloudflare `backend/`
+> workers and the `server/social/` PGlite layer described below live in the
+> parent monorepo, not here — `pnpm typecheck:server` / `pnpm test:server`
+> and the Rust-specific sections of this file do not apply to this checkout.
+> Use `pnpm verify` (client-only) rather than `pnpm verify:full` here.
+
 ## What it is
 
 Sunbird is a complete HTML5 arcade game: 8 flight modes, 40-pilot races, daily/weekly PvE, tournaments, 60+ skins with real mechanical perks, a season pass, ghost replays, and portal-ready builds — all running fully offline with zero required backend.

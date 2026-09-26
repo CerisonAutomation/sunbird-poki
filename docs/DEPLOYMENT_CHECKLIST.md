@@ -1,5 +1,12 @@
 # Production Deployment Checklist
 
+> **This is the Poki fork; full infrastructure in parent monorepo.** The
+> "Social server" / "Squad proxy" (`/social`, `/mp`) checks in §4 and §10
+> below refer to the self-hosted social backend and Rust room server, which
+> are not part of this checkout — they live in the parent monorepo. Skip
+> those checks when deploying this fork's client + `api/` leaderboard
+> functions on their own.
+
 Before deploying to production (Vercel or other CDN), verify the following:
 
 ## Pre-Deployment Validation

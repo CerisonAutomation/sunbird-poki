@@ -1,5 +1,14 @@
 # Production Readiness Plan — Multi-App Audit & Monitoring
 
+> **This is the Poki fork; full infrastructure in parent monorepo.** The gap
+> register below was written against the parent monorepo, which includes the
+> `rust/` room server and the `server/` social backend (REST router, DB
+> store, Dockerfile). Neither exists in this checkout — only the client and
+> the `api/` Vercel leaderboard functions do. Rows citing `rust/...` or
+> `server/src/...` describe infrastructure outside this repo; the "Apps
+> Under Management" table likewise spans the parent org's other projects,
+> not just this one.
+
 ## Sunbird Service Gap Register (verified against code, 2026-09-16)
 
 Every production-MVP blocker was re-verified against the actual code on this date. ✅ = implemented **with tests** in-repo; 🟡 = handled at deploy level (docs/proxy); ⬜ = deferred by decision.

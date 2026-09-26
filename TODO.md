@@ -23,7 +23,7 @@ Each item is a focused single-commit change verified by tsc + vitest.
 
 - [x] **`!text.length` → `!text`** — `SocialSystem.ts:104`: `if (!club || !text.length)` — `text` is a string; `!text` is simpler and equally correct. Also audit for any other `.length` checks on string variables.
 
-## Game.ts — decompose handleMenuEvent
+## Game.ts — decompose handleMenuEvent (IN PROGRESS)
 
 - [ ] **Extract `handleShopEvent()` from handleMenuEvent** — The shop action cases in `handleMenuEvent` (~cases: open-shop, buy-skin, buy-boost, buy-trail, etc.) span ~80 lines. Extract into a private `handleShopEvent(action: string, id: string): boolean` sub-handler that returns `true` if it consumed the event.
 - [ ] **Extract `handleSocialEvent()` from handleMenuEvent** — The social/squad action cases (~add-friend, accept-friend, open-squad, etc.) span ~60 lines. Extract into a private `handleSocialEvent(action: string, id: string): boolean`.
@@ -38,4 +38,4 @@ Each item is a focused single-commit change verified by tsc + vitest.
 - [x] **Cache repeated `this.save.state` chains in snapshot** — `buildHudSnapshot()` accesses `this.save.state.X` 30+ times. Cache as `const st = this.save.state` at the top of the function to remove redundant property traversal and improve readability.
 
 ## Completion
-- [x] ALL_TASKS_COMPLETE
+- [ ] Not all tasks complete — the `handleMenuEvent` decomposition above (2 items) is still open. Do not mark ALL_TASKS_COMPLETE until both are checked off.

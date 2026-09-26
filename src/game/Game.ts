@@ -948,16 +948,11 @@ export class Game {
             stuckForMs: drop?.stuckForMs ?? 0,
           });
         }
-        if (this.state === "playing") this.setState("paused");
         // Portal QA requirement (and basic courtesy): a hidden tab is silent.
-        this.audio.setHiddenMuted(true);
-        void this.audio.suspend();
+        this.suspendForBackground();
       } else {
         this.hidden = false;
-        this.last = performance.now();
-        this.acc = 0;
-        this.audio.setHiddenMuted(false);
-        void this.audio.resumeExisting();
+        this.resumeFromBackground();
       }
     };
     document.addEventListener("visibilitychange", this.onVis);
@@ -1017,15 +1012,10 @@ export class Game {
       onPause: () => {
         // Portal-side pause (in addition to visibilitychange): freeze the
         // same way a hidden tab does — paused state + silenced audio.
-        if (this.state === "playing") this.setState("paused");
-        this.audio.setHiddenMuted(true);
-        void this.audio.suspend();
+        this.suspendForBackground();
       },
       onResume: () => {
-        this.last = performance.now();
-        this.acc = 0;
-        this.audio.setHiddenMuted(false);
-        void this.audio.resumeExisting();
+        this.resumeFromBackground();
       },
     }).then((adapter) => {
       if (this.disposed) return;
@@ -1164,6 +1154,24 @@ export class Game {
         // the same state as "multiplayer unavailable": MassRace keeps flying
         // the local squadron and the UI says so.
       });
+  }
+
+  /** Backgrounding, by either route. A hidden tab (visibilitychange) and a
+   *  portal-side pause were two hand-written copies of the same three
+   *  statements, so the two ways of getting muted could drift apart — and a
+   *  drift here is a player who cannot unpause. */
+  private suspendForBackground(): void {
+    if (this.state === "playing") this.setState("paused");
+    this.audio.setHiddenMuted(true);
+    void this.audio.suspend();
+  }
+
+  /** The mirror of suspendForBackground, likewise shared by both routes. */
+  private resumeFromBackground(): void {
+    this.last = performance.now();
+    this.acc = 0;
+    this.audio.setHiddenMuted(false);
+    void this.audio.resumeExisting();
   }
 
   dispose(): void {
@@ -4349,6 +4357,16 @@ export class Game {
    * challenges, clubs, chat). Returns true when consumed. Extracted from
    * handleAction; same break-to-return-true transform as handleShopEvent.
    */
+  /** A club/squad call that answers with a human-readable notice. Every one of
+   *  them settled into the same two lines -- park the message, repaint the
+   *  views -- and a route that forgot the repaint shipped a silent button. */
+  private squadNotices(pending: Promise<string> | undefined): void {
+    void pending?.then((msg) => {
+      this.squadNotice = msg;
+      this.bump();
+    });
+  }
+
   private handleSocialEvent(action: string, id: string): boolean {
     switch (action) {
       case "open-squad":
@@ -4495,10 +4513,7 @@ export class Game {
       }
       case "pilot-add": {
         const code = id || this.squad?.state.lookup?.code || this.hud.readValue("pilotCode");
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.addFriend(code));
         return true;
       }
       case "pilot-copy": {
@@ -4548,10 +4563,7 @@ export class Game {
         // Kept for older builds/links that still post a bare code.
         const code = (this.hud.readValue("squadCode") || this.hud.readValue("pilotCode")).trim().toUpperCase();
         if (!code) return true;
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.addFriend(code));
         return true;
       }
       case "squad-remove":
@@ -4587,17 +4599,11 @@ export class Game {
           this.hud.toast("Give your club a name first", "info");
           return true;
         }
-        void this.squad?.createClub(name, "Fly together, land badly").then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.createClub(name, "Fly together, land badly"));
         return true;
       }
       case "squad-join-club":
-        void this.squad?.joinClub(parseInt(id, 10) || 0).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.joinClub(parseInt(id, 10) || 0));
         return true;
       case "squad-leave-club":
         void this.squad?.leaveClub();
@@ -6092,6 +6098,20 @@ export class Game {
    * starting local AI practice. Browsing or cancelling cannot block a room. */
   private static readonly MM_WINDOW = 15;
 
+  /** Ends the search and hands back what it was searching for. Both exits out
+   *  of matchmaking -- "the run already started" and "the lobby came back
+   *  empty" -- tore the search down by hand, and the two five-line blocks had
+   *  to stay in step: leave the watcher running and the overlay comes back on
+   *  its own. */
+  private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
+    const opts = this.mmOpts;
+    this.mmOpts = null;
+    this.mmDeadline = 0;
+    this.roomWatcher?.stop();
+    this.closeRoomBrowser();
+    return opts;
+  }
+
   private beginMatchmaking(opts: { ranked: boolean; storm: boolean }): void {
     this.disconnectRace();
     this.roomCode = "";
@@ -6122,12 +6142,9 @@ export class Game {
   }
 
   private cancelMatchmaking(): void {
-    this.mmDeadline = 0;
-    this.mmOpts = null;
+    this.takeMatchOpts();
     this.mmPhase = "searching";
     this.mmRooms = "";
-    this.roomWatcher?.stop();
-    this.closeRoomBrowser();
     this.net?.sendReady(false);
     this.disconnectRace();
     this.hud.setMatchmaking(false, 0, this.roomSize, 0);
@@ -6186,11 +6203,7 @@ export class Game {
     // If the run already started (a real start frame, or a local launch), the
     // search is over — the overlay must never sit on top of gameplay.
     if (this.state !== "menu") {
-      const opts = this.mmOpts;
-      this.mmOpts = null;
-      this.mmDeadline = 0;
-      this.roomWatcher?.stop();
-      this.closeRoomBrowser();
+      const opts = this.takeMatchOpts();
       this.hud.setMatchmaking(false, 0, this.roomSize, 0);
       this.hud.toast("No players found — starting AI race", "info");
       if (opts) this.launchMatch(opts, true);
@@ -6232,11 +6245,7 @@ export class Game {
       // Empty lobby — fall back to a clearly labeled AI flock so the pilot is
       // never left staring at a dead search.
       this.mmPhase = "waiting";
-      const opts = this.mmOpts;
-      this.mmOpts = null;
-      this.mmDeadline = 0;
-      this.roomWatcher?.stop();
-      this.closeRoomBrowser();
+      const opts = this.takeMatchOpts();
       this.hud.setMatchmaking(false, live, this.roomSize, 0);
       this.hud.toast("No live pilots found — racing the AI flock (practice)", "info");
       this.telemetry.track("matchmaking_ai_fallback", { window: Game.MM_WINDOW });

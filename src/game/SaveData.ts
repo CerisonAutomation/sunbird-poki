@@ -939,13 +939,13 @@ export class SaveData {
 
   /** Onboarding: mark a contextual screen as seen (shop, pvp, etc). */
   markSeen(area: "shop" | "pvp" | "pve" | "leaderboards" | "challenges"): void {
-    const key = `seen${area.charAt(0).toUpperCase()}${area.slice(1)}` as keyof SaveState;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!(this.state as any)[key]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.state as any)[key] = true;
-      this.persist();
-    }
+    type SeenKey = keyof Pick<SaveState, "seenShop" | "seenPvp" | "seenPve" | "seenLeaderboards" | "seenChallenges">;
+    const seenKeys: Record<typeof area, SeenKey> = {
+      shop: "seenShop", pvp: "seenPvp", pve: "seenPve",
+      leaderboards: "seenLeaderboards", challenges: "seenChallenges",
+    };
+    const key = seenKeys[area];
+    if (!this.state[key]) { this.state[key] = true; this.persist(); }
   }
 
   addGhostBeat(): void {

@@ -44,8 +44,6 @@ import {
   stageVerdict,
   weeklyGauntlet,
   calendarReward,
-  calendarRewardLabel,
-  CALENDAR_DAYS,
   type ChallengeMods,
 } from "./Challenges";
 import { bankMasteryRun, masteryPerks, masteryViews, NO_MASTERY_PERKS, type MasteryPerks } from "./Mastery";

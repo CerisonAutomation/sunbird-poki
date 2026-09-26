@@ -65,7 +65,7 @@ type PokiShareableData = Record<string, string | number | boolean>;
  * `PokiUser`, `PokiShareableData` and `PokiInitOptions` stay local: they
  * describe our call sites, not Poki's published surface.
  */
-import type { PokiSdk } from "./poki-canon";
+import { sanitizeMeasure, type PokiSdk } from "./poki-canon";
 
 /**
  * `init({ submitScore })` is Poki's leaderboard handshake: the SDK hands us a
@@ -613,9 +613,26 @@ export class PokiAdapter implements PlatformAdapter {
 
   /* game events */
   measure(category: string, label: string, action: string): void {
-    if (!category || !label || !action || /[^a-zA-Z0-9_.:-]/.test(category) || /[^a-zA-Z0-9_.:-]/.test(label) || !/^(start|complete|fail|clear|win|lose|finish)$/.test(action)) return;
+    // `sanitizeMeasure` is the guard this method used to hand-roll and get
+    // wrong. The old inline check gated the action on
+    // `^(start|complete|fail|clear|win|lose|finish)$` and the two arguments on
+    // `/[^a-zA-Z0-9_.:-]/`, and it dropped ten of the live `.measure(` call
+    // sites in `Game.ts` on the floor: every `visible` and `interact` placement
+    // event, plus `reached` and `granted`. The events reached this method and
+    // were discarded here, so the Poki dashboard's interaction and reward signal
+    // was simply absent. No test caught it because the tests pinned the pure
+    // function nobody called.
+    //
+    // There is deliberately NO action allowlist. Poki's published signature is
+    // `measure(category, what, action: 'start' | 'complete' | 'fail' |
+    // 'visible' | 'interact' | string)` — the union is advisory and the set is
+    // open, and the loader's real rules are exactly the three `sanitizeMeasure`
+    // encodes. An allowlist here would re-introduce the same class of bug under
+    // a different list.
+    const clean = sanitizeMeasure(category, label, action);
+    if (!clean) return;
     try {
-      this.sdk?.measure?.(category, label, action);
+      this.sdk?.measure?.(clean.category, clean.what, clean.action);
     } catch {
       /* measurement must never break gameplay */
     }

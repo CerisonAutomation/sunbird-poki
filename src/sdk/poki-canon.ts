@@ -179,6 +179,12 @@ export const MEASURE_PROGRESS_ACTIONS = ["start", "complete", "fail"] as const;
 export const MEASURE_INTERACTION_ACTIONS = ["visible", "interact"] as const;
 
 export type MeasureCategory = (typeof MEASURE_CATEGORIES)[number] | (string & {});
+// NB: `| (string & {})` is not a widening convenience, it is verbatim fidelity.
+// Poki's published type is `'start' | 'complete' | 'fail' | 'visible' |
+// 'interact' | string` — the union is advisory and the set is OPEN. An earlier
+// `measure()` treated it as closed via a hand-rolled regex allowlist and so
+// dropped every action outside those five plus three it invented; the SDK would
+// have accepted all of them. Do not close this set.
 export type MeasureAction =
   | (typeof MEASURE_PROGRESS_ACTIONS)[number]
   | (typeof MEASURE_INTERACTION_ACTIONS)[number]

@@ -37,6 +37,29 @@ async function sign(deviceId: string, distance: number, score: number): Promise<
 }
 
 /**
+ * Constant-time string comparison for HMAC signatures.
+ *
+ * `.every()` with `&&`-style short-circuiting (or a plain `===`) returns as
+ * soon as it finds a mismatching character, so the time the comparison takes
+ * leaks how many leading characters of `provided` are correct. Over enough
+ * requests that timing side-channel lets an attacker forge a valid signature
+ * one character at a time without ever knowing LEADERBOARD_SALT. This walks
+ * every position unconditionally (XOR-and-OR into an accumulator, never a
+ * branch on equality) so the running time depends only on the compared
+ * length, not on where — or whether — the strings diverge.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    const ca = i < a.length ? a.charCodeAt(i) : 0;
+    const cb = i < b.length ? b.charCodeAt(i) : 0;
+    diff |= ca ^ cb;
+  }
+  return diff === 0;
+}
+
+/**
  * A score belongs on the *player's* local day, not the server's UTC day — the
  * client sends its `dateSeed()` (local midnight) and the "daily" board must
  * reset on that same midnight, or a player near the UTC boundary sees their
@@ -119,8 +142,7 @@ export default async function handler(request: Request): Promise<Response> {
   if (SALT) {
     const provided = sanitize(p.sig, 128);
     const expected = await sign(row.deviceId, row.distance, row.score);
-    const same = provided.length === expected.length && [...provided].every((char, index) => char === expected[index]);
-    if (!same) return json({ error: "invalid signature" }, 403);
+    if (!timingSafeEqual(provided, expected)) return json({ error: "invalid signature" }, 403);
   }
 
   // Keep the best row per pilot (best by distance), matching the reference.

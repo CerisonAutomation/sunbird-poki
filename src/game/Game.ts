@@ -1141,15 +1141,23 @@ export class Game {
    * before the import resolves, and two clients in one lobby is exactly the
    * bug this funnel prevents.
    */
+  /** The one way a client is put into a room. Every caller used to inline
+   *  `attachTransport` + `setIdentity` + `connect` with the same three
+   *  arguments; they are identical by construction, and the mix-and-match
+   *  hazard is a race that shows up as an empty lobby. */
+  private announceToRoom(client: AnyRealtimeClient, seed: string, remote: boolean): void {
+    this.massRace.attachTransport(client);
+    client.setIdentity(this.racedName(), this.skin.id, 0.06);
+    client.connect(this.roomCode, seed, remote);
+  }
+
   private ensureNet(seed: string, remote: boolean): void {
     this.netPending ??= createNetTransport(this.save.state.deviceId, this.pilotName, this.skin.id);
     void this.netPending
       .then((client) => {
         if (this.disposed) return;
         this.net = client;
-        this.massRace.attachTransport(client);
-        client.setIdentity(this.racedName(), this.skin.id, 0.06);
-        client.connect(this.roomCode, seed, remote);
+        this.announceToRoom(client, seed, remote);
       })
       .catch(() => {
         // A transport that cannot be created leaves `this.net` null, which is
@@ -6298,9 +6306,7 @@ export class Game {
     if (this.net) {
       // Already seated (a reconnect, or a second lobby visit): keep the same
       // client and just re-announce ourselves into the room.
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
+      this.announceToRoom(this.net, seed, remote);
       return;
     }
     this.ensureNet(seed, remote);
@@ -6358,16 +6364,8 @@ export class Game {
     if (!isMultiplayerConfigured() && !POKI_MULTIPLAYER) return;
     const seed = this.currentMatchSeed();
     const remote = this.joiningRemoteRoom;
-    if (this.net?.connected) {
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
-      return;
-    }
     if (this.net) {
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
+      this.announceToRoom(this.net, seed, remote);
       return;
     }
     this.ensureNet(seed, remote);

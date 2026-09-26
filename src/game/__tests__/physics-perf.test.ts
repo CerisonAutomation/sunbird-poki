@@ -11,9 +11,16 @@ import { PHYS_DT } from "../constants";
  *    40-bird field — it must stay CHEAP (frame budget is 8.3 ms) and
  *    BIT-DETERMINISTIC (two runs of the same seed must agree exactly, or
  *    ghost races and server-refereed results drift apart).
- *  • Budgets below are measured (not guessed): ~3.5 µs/step on a CI-class
+ * • Budgets below are measured (not guessed): ~3.5 µs/step on a CI-class
  *    Node. The 20 µs cap fails ~6x before a real regression becomes
  *    player-visible, so it catches drift without flaking.
+ *
+ * The budget is a wall-clock measurement, so it is only meaningful in a clean
+ * room: uninstrumented and unloaded. `pnpm test:coverage` violates the first
+ * condition (the v8 provider instruments the code being timed), so the timing
+ * case opts out there via `__COVERAGE_RUN__` rather than assert a number the
+ * profiler produced. The determinism case below has no such constraint and
+ * still runs in every configuration.
  */
 
 const SEED = "2026-09-11";
@@ -31,7 +38,7 @@ function step(terrain: TerrainSystem, bird: Bird): void {
 }
 
 describe("physics performance guard", () => {
-  it("stays far under the per-frame budget at 120 Hz", () => {
+  it.skipIf(__COVERAGE_RUN__)("stays far under the per-frame budget at 120 Hz", () => {
     const { terrain, bird } = makeFlight();
     // Warm the JIT so cold-start cost doesn't skew the measurement.
     for (let i = 0; i < 1200; i++) step(terrain, bird);

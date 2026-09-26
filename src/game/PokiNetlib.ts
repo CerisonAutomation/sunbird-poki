@@ -132,6 +132,12 @@ export class PokiNetlibClient implements NetTransport {
   private autoReadyTimer: number | null = null;
   /** True when we created the lobby (host) — we send the "start" sync. */
   private amHost = false;
+  /** The signaling server's authoritative leader (host) peer id for this
+   *  room. Used to verify inbound "start"/"place" messages actually came
+   *  from the host — a plain peer id string, never trusted from a message
+   *  payload itself, only from lobby/leader events the signaling service
+   *  publishes. */
+  private leaderId = "";
   /** A finish-order counter used by the host to assign places authoritatively. */
   private finishOrder = 0;
   /** Last phase published to the public lobby entry (host only). */
@@ -250,6 +256,7 @@ export class PokiNetlibClient implements NetTransport {
                 this.roomCode = this.requestedCode.toUpperCase();
                 this.capacity = info.maxPlayers || MAX_CAPACITY;
                 this.amHost = info.leader === network.id;
+                this.leaderId = info.leader ?? "";
                 // Compare against what we ASKED for: onLobby has already
                 // adopted the room's seed by the time join() resolves, so the
                 // old comparison could never differ and the "welcome" event
@@ -314,6 +321,7 @@ export class PokiNetlibClient implements NetTransport {
                   this.roomCode = candidate.code.toUpperCase();
                   this.capacity = info.maxPlayers || candidate.maxPlayers || MAX_CAPACITY;
                   this.amHost = info.leader === network.id;
+                  this.leaderId = info.leader ?? "";
                   // Same as the by-code path: the seed we asked for, not the
                   // one onLobby just adopted, is the thing to compare against.
                   const prevSeed = this.requestedSeed || this.seed;
@@ -343,6 +351,7 @@ export class PokiNetlibClient implements NetTransport {
                 this.roomCode = lobbyCode.toUpperCase();
                 this.requestedCode = this.roomCode;
                 this.amHost = true;
+                this.leaderId = network.id;
               }).catch((err) => {
                 this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
               });
@@ -361,6 +370,7 @@ export class PokiNetlibClient implements NetTransport {
         this.requestedCode = this.roomCode;
         this.capacity = info.maxPlayers || MAX_CAPACITY;
         this.amHost = info.leader === network.id;
+        this.leaderId = info.leader ?? "";
         if (info.customData?.seed && typeof info.customData.seed === "string") {
           this.seed = info.customData.seed;
         }
@@ -372,6 +382,7 @@ export class PokiNetlibClient implements NetTransport {
 
       const onLeader = (leader: string) => {
         this.amHost = leader === network.id;
+        this.leaderId = leader;
       };
 
       const onConnecting = (_peer: Peer) => {
@@ -542,7 +553,11 @@ export class PokiNetlibClient implements NetTransport {
             case "place": {
               // Host-assigned place for a peer (or us if id matches self). The
               // place is kept on the track so the roster reports what really
-              // happened, exactly like the server's roster does.
+              // happened, exactly like the server's roster does. Only the
+              // room's actual leader may hand out places — otherwise any peer
+              // could forge a "place" message and rewrite everyone's finish
+              // order (or hand themselves P1) without ever finishing the race.
+              if (peer.id !== this.leaderId) break;
               if (m.id === this.id) {
                 this.myPlace = m.place;
               } else {
@@ -556,6 +571,11 @@ export class PokiNetlibClient implements NetTransport {
               break;
             }
             case "start": {
+              // Only the room's actual leader may start the race for everyone
+              // else — otherwise any peer could broadcast "start" and force
+              // the rest of the room into a race they never readied up for,
+              // skipping the ready-check the host is supposed to enforce.
+              if (peer.id !== this.leaderId) break;
               if (!Number.isFinite(m.at)) break;
               if (this.state === "racing") break;
               this.startsAt = m.at;

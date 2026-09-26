@@ -36,6 +36,7 @@
 import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { paymentMarkersIn } from "./portal-markers.mjs";
 import path from "node:path";
 
 const portal = process.argv[2];
@@ -57,14 +58,39 @@ const uploadDir = portal === "poki" ? "poki-upload" : null;
  * the zip and the upload folder are byte-identical by construction.
  */
 function stageHtml() {
-  let html = readFileSync(path.join(src, "index.html"), "utf8")
+  const source = readFileSync(path.join(src, "index.html"), "utf8");
+
+  // THE coin-only gate, and it has to run HERE — on the pre-scrub bundle.
+  //
+  // Portal editions are coin/VIP-only and must carry no payment processor
+  // (a standing project boundary, and Poki's own rules). A payment SDK is
+  // present as plain text in the bundle at this point, so this is the one place
+  // a check can see it. The scrub below used to stand in for this and could not:
+  // it rewrote /stripe/gi across the whole document and then asserted that no
+  // `stripe` remained, which is false for every possible input because the
+  // string had just been removed from everywhere. That also made every
+  // downstream `/stripe/` test (verify-portal.mjs, audit-zips.mjs) incapable of
+  // firing, so "coin-only" was true by inspection rather than by gate.
+  //
+  // It is a text scan, so a processor whose name is assembled at runtime would
+  // still slip past. It is a real gate, not a proof.
+  const paymentHits = paymentMarkersIn(source);
+  if (paymentHits.length) {
+    throw new Error(
+      `payment-processor marker in the ${src} bundle — portal editions are coin-only:\n` +
+        paymentHits.map((h) => `  · ${h}`).join("\n") +
+        `\nRemove the processor from the client, or exclude this bundle from packaging.`,
+    );
+  }
+
+  let html = source
     .replace(/^\s*<link rel="manifest"[^>]*>\n?/m, "")
     .replace(/^\s*<meta property="og:url"[^>]*>\s*\n?/m, "")
-    // Portal editions are coin/VIP-only and must not carry a payment-provider
-    // marker for a scanner to find. The swap is length-preserving and applies
-    // to CSS class names and telemetry ids in the same document, so the
-    // artifact stays internally consistent; the assertion below makes sure the
-    // scrub is total (a leftover would mean a runtime-built string escaped it).
+    // Cosmetic last line of defence, kept because it costs nothing: should a
+    // marker ever survive into a portal build, a portal's own scanner must not
+    // see a payment provider's name. The pre-scrub gate above is what makes
+    // that safe to rely on — and because that gate is fatal, this replace is
+    // provably a no-op on a clean tree. It is hygiene, not verification.
     .replace(/stripe/gi, "portal");
   if (/stripe/i.test(html)) throw new Error("payment-marker scrub incomplete");
   // Poki's HTML5 SDK page: "Add the following HTML within the <head> tags of

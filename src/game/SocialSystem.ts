@@ -101,7 +101,7 @@ export class SocialSystem {
   }
   leaveClub(): void { this.social.club = null; this.save.persist(); }
   sendClubChat(text: string): void {
-    const club = this.social.club; if (!club || !text.length) return;
+    const club = this.social.club; if (!club || !text) return;
     club.chatLog.push({ senderId: this.save.state.deviceId, senderName: this.save.state.pilotName || "Pilot",
       text: text.slice(0, 200), timestamp: Date.now() });
     if (club.chatLog.length > 100) club.chatLog.splice(0, club.chatLog.length - 100);

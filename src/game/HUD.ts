@@ -1838,7 +1838,26 @@ const SCREEN_ICONS: Record<string, MenuIconName> = {
 
 function head(key: string, backAction = "back", right = ""): string {
   const icon = destinationByKey(key)?.icon ?? SCREEN_ICONS[key];
-  const title = t(`hud.screen.${key}.title`, undefined, SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key);
+  // Resolve the heading through SCREEN_TITLES, which is keyed by a screen's
+  // VALUE ("scores") and carries the i18n key built from its KEY ("leaderboard").
+  //
+  // Looking SCREEN_HEADINGS up by the value missed on every screen whose key and
+  // value differ, and no `hud.screen.*.title` key exists in the barrel, so the
+  // fallback is what actually renders: 11 of 17 screens were showing their raw
+  // internal id as the visible <h2> — "scores" instead of "Leaderboard", "pass"
+  // instead of "Nest Pass", "paywall" instead of "Coin Store".
+  //
+  // SCREEN_TITLES existed for exactly this and was referenced only by
+  // screen-titles.test.ts, which asserts the MAP is well-formed. Nothing
+  // rendered from it, so the unit suite was green while the UI was wrong — which
+  // is what the orphaned `pnpm test:policy` existed to catch.
+  //
+  // The two call sites that pass an already-localised string ("Your progress",
+  // "Settings") are not screen ids, miss the map, and fall through unchanged.
+  const entry = SCREEN_TITLES[key];
+  const title = entry
+    ? t(entry.key, undefined, entry.en)
+    : t(`hud.screen.${key}.title`, undefined, SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key);
   const back = t("common.back", undefined, "Back");
   return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
 }

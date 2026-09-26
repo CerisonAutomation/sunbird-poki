@@ -38,6 +38,26 @@ const PORTAL_PORT = 4178;
 const DIRECT_PORT = 4179;
 const POKI_CDN = /game-cdn\.poki\.com/;
 
+/**
+ * Poki's AUDS leaderboard API, stubbed for the same reason the SDK is: the
+ * policy assertions below are about the ARTIFACT, and this spec must not depend
+ * on a live third-party service.
+ *
+ * `SDK_STUB.getToken()` returns the literal string "stub-token", so with the
+ * real AUDS endpoint reachable the game sent a fake token to Poki's production
+ * API and got HTTP 400 back — four times over, once per leaderboard read. The
+ * spec's `boot()` records every response >= 400, so `expect(errors).toEqual([])`
+ * was asserting that Poki's production backend accepts a fabricated token. That
+ * is not a property of the build under test, and it made the suite fail (or pass)
+ * on Poki's uptime and this game's AUDS provisioning rather than on the code.
+ *
+ * Stubbing it keeps the strictness that matters: any 404 on a missing asset, any
+ * 5xx, and every console/page error still fails the test. Nothing is filtered.
+ * The empty leaderboard is also the honest case — a first run has no scores.
+ */
+const AUDS_STUB = /auds\.poki\.io/;
+const AUDS_EMPTY_LIST = JSON.stringify({ total: 0, items: [] });
+
 /** Any wording that promises the player fewer or no ads. */
 const AD_REMOVAL_COPY = /sponsored break|no breaks|remove breaks|remove ads|no ads|ad-?free/i;
 
@@ -168,6 +188,9 @@ test.describe("portal artifact (poki-upload/)", () => {
     await page.addInitScript(SDK_STUB);
     await page.route(POKI_CDN, (route) =>
       route.fulfill({ status: 200, contentType: "application/javascript", body: SDK_STUB }),
+    );
+    await page.route(AUDS_STUB, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: AUDS_EMPTY_LIST }),
     );
   });
 

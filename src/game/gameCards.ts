@@ -12,12 +12,13 @@
  * game. If a card needs live state (a run timer, a network count), it stays on
  * `Game`; the snapshot field that carries it is built in `pushHud`.
  */
-import { calendarRewardLabel, CALENDAR_DAYS, dailyChallenge, weeklyGauntlet } from "./Challenges";
+import { buildGauntletCard, buildRivalCard } from "./Cards";
+import { calendarRewardLabel, CALENDAR_DAYS, dailyChallenge } from "./Challenges";
 import { BIOMES, biomeForIsland } from "./Biomes";
 import { nextWings, wingsFor, wingsProgress } from "./Career";
 import type { SaveData } from "./SaveData";
 import { modeById } from "./Modes";
-import { divisionFor, nextDivision, seasonReward } from "./pvp";
+import { seasonReward } from "./pvp";
 import { TRAILS, weekKey } from "./Tournaments";
 import type { AtlasEntry, CalendarCard, DailyCard, GauntletCard, HudSnapshot, LoadoutView, RivalCard } from "./HUD";
 import type { SkinDef } from "./Economy";
@@ -41,28 +42,23 @@ export function dailyCard(save: SaveData, today: string): DailyCard {
   };
 }
 
+/**
+ * The week's gauntlet as the HUD draws it.
+ *
+ * A one-line delegation to `Cards.buildGauntletCard` — the seam that module
+ * documented but was never carried out, which left the tested copy and the live
+ * copy of this rule drifting apart. The live one used `done.length >= 3`; the
+ * tested one uses "every stage of *this* gauntlet is done". They agree through
+ * normal play and diverge on a save whose `gauntletDone` holds stale indices,
+ * where the old rule renders "Gauntlet cleared this week · +N paid" and pays
+ * out for a gauntlet the player did not finish.
+ */
 export function gauntletCard(save: SaveData): GauntletCard {
-  const g = weeklyGauntlet(weekKey());
-  const done = save.gauntletDone(g.week);
-  return {
-    week: g.week,
-    stages: g.stages.map((st) => {
-      const mode = modeById(st.mode);
-      return {
-        index: st.index,
-        label: st.label,
-        modeName: mode.name,
-        modeIcon: mode.icon,
-        metric: st.metric,
-        target: st.target,
-        reward: st.reward,
-        done: done.includes(st.index),
-      };
-    }),
-    clearBonus: g.clearBonus,
-    cleared: done.length >= 3,
-    lifetimeClears: save.state.challenges.gauntletsCleared,
-  };
+  // One clock read: `weekKey()` is a pure function of the date, but calling it
+  // twice would let a midnight rollover hand the builder a week and a done-list
+  // that belong to different weeks.
+  const week = weekKey();
+  return buildGauntletCard(week, save.gauntletDone(week), save.state.challenges.gauntletsCleared);
 }
 
 export function calendarCard(save: SaveData, today: string): CalendarCard {
@@ -97,25 +93,15 @@ export function seasonCard(save: SaveData): RivalCard["season"] {
   };
 }
 
+/**
+ * The ranked-rival card: rating, division, streak and the season footer.
+ *
+ * The one-line delegation the `Cards.ts` header asked for. `seasonCard` is
+ * passed in rather than read here so the builder stays pure — the season footer
+ * is clock-derived, so the caller owns the clock.
+ */
 export function rivalCard(save: SaveData): RivalCard {
-  const r = save.state.rival;
-  const div = divisionFor(r.rating);
-  const next = nextDivision(r.rating);
-  const span = div.max - div.min;
-  return {
-    rating: Math.floor(r.rating),
-    division: div.name,
-    divisionIcon: div.icon,
-    wins: r.wins,
-    losses: r.losses,
-    streak: r.streak,
-    bestStreak: r.bestStreak,
-    nextName: next ? next.div.name : "",
-    nextNeeded: next ? next.needed : 0,
-    progress: span > 0 ? Math.max(0, Math.min(1, (r.rating - div.min) / span)) : 1,
-    matches: r.matches.map((m) => ({ place: m.place, field: m.field, mode: m.mode, date: m.date, won: m.won })),
-    season: seasonCard(save),
-  };
+  return buildRivalCard(save.state.rival, seasonCard(save));
 }
 
 export function wingsCard(save: SaveData): HudSnapshot["wings"] {

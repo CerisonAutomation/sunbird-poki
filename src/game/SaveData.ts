@@ -9,6 +9,7 @@ import {
   VIP_DAILY_GIFT,
   VIP_DAYS,
 } from "./constants";
+import { gauntletCleared } from "./Challenges";
 import { dateSeed } from "./math";
 import { durableSetItem } from "./resilience/durableSet";
 import { openPayload, sealPayload } from "./resilience/crc";
@@ -914,7 +915,11 @@ export class SaveData {
     }
     if (c.gauntletDone.includes(index)) return null;
     c.gauntletDone.push(index);
-    const cleared = c.gauntletDone.length >= 3;
+    // "Every stage of this week's gauntlet is done", not "the array has three
+    // entries" — see `gauntletCleared` in Challenges.ts for the rule and for
+    // the save-parse case that made the difference visible. Same function the
+    // HUD card uses, so the trophy and the payout can never disagree.
+    const cleared = gauntletCleared(week, c.gauntletDone);
     if (cleared) c.gauntletsCleared += 1;
     this.persist();
     return cleared ? "clear" : "stage";

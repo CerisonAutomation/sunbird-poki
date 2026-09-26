@@ -5302,7 +5302,102 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .celebration .beat.more { opacity: 0.7; font-style: italic; }
 .celebration .beat-row { display: flex; flex-wrap: wrap; gap: 5px; }
 .celebration .beat-row .beat { font-size: 11px; padding: 5px 8px; }
-.growth-ledger { min-height: 1px; }
+/* Growth ledger — the two ladders the results card names. Was
+   `min-height: 1px`, a placeholder collapsed to a sliver for a module that had
+   no importer at all; the lines are real content now, so they get real height. */
+.growth-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 9px 12px 10px;
+  border-radius: 12px;
+  background: rgba(20, 16, 40, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.growth-ledger:empty { display: none; }
+.growth-ledger .gl-title {
+  font: 700 10px/1 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-on-sky);
+  opacity: 0.62;
+}
+.growth-ledger dl { margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.growth-ledger .gl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.growth-ledger dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 600 13px/1.2 var(--display);
+  color: var(--text-on-sky);
+}
+.growth-ledger dt i { font-style: normal; font-size: 14px; }
+.growth-ledger dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.growth-ledger dd span {
+  font: 500 11px/1.2 var(--display);
+  color: var(--text-on-sky);
+  opacity: 0.85;
+  text-align: right;
+}
+.growth-ledger .gl-bar {
+  display: block;
+  width: min(150px, 40vw);
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.growth-ledger .gl-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
+.growth-ledger .gl-wings .gl-bar b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
+.growth-ledger .gl-mastery .gl-bar b { background: linear-gradient(90deg, #ffe08a, var(--coin-gold)); }
+
+/* In-flight quest strip. Sits above the goal strip so a quest fill is the
+   thing the eye lands on when it crosses, not the permanent goal row. */
+.mission-strip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(340px, 74vw);
+  pointer-events: none;
+}
+.mission-strip.hidden { display: none; }
+.mission-strip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ms-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 4px 9px 5px;
+  border-radius: 10px;
+  background: rgba(20, 16, 40, 0.42);
+  backdrop-filter: blur(4px);
+  font: 600 11px/1.2 var(--display);
+  color: var(--text-on-sky);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.ms-row .ms-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-row .ms-num { opacity: 0.8; font-weight: 500; }
+.ms-row .ms-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.ms-row .ms-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); transition: width 0.2s ease; }
+.ms-row.done { opacity: 0.72; }
+.ms-row.done .ms-bar b { background: var(--gold); }
+.ms-row.just { animation: ms-bank 0.6s ease-out; }
+@keyframes ms-bank {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
+  40% { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
+}
 
 /* Wings proximity bar */
 .wings-near { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; }
@@ -5312,8 +5407,10 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 
 /* Reduce motion overrides */
 .sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }
+.sb-reduce-motion .ms-row.just { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .celebration .beat { opacity: 1; }
+  .ms-row.just { animation: none; }
 }
 
 @import "./menu-polish.css";

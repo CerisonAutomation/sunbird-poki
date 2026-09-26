@@ -202,8 +202,29 @@ export function weeklyGauntlet(week: string): Gauntlet {
   };
 }
 
-export function stageDone(stats: RunStats, s: GauntletStage): boolean {
-  return (stats[s.metric] ?? 0) >= s.target;
+/**
+ * Whether this week's gauntlet is cleared.
+ *
+ * "Every stage of *this* gauntlet is done" — never "the done array has three
+ * entries". The old rule counted the array, so a duplicated or stale stage index
+ * (reachable through the unvalidated save parse, where `numArr` lets `[7,8,9]`
+ * through) reported a clear that did not happen, and the HUD renders this flag
+ * as "Gauntlet cleared this week · +N paid" while the payout counter increments
+ * on top of it. It was found while writing tests over `Cards.buildGauntletCard`
+ * and fixed only in that copy; the live call sites kept the wrong rule. This is
+ * the one rule both call sites now share, so it cannot drift again.
+ *
+ * @param week       the week key the done list belongs to.
+ * @param doneStages stage indices already cleared, as saved.
+ */
+export function gauntletCleared(week: string, doneStages: readonly number[]): boolean {
+  const stages = weeklyGauntlet(week).stages;
+  if (!stages.length) return false;
+  const done = new Set(doneStages);
+  return stages.every((st) => done.has(st.index));
+}
+
+export function stageDone(stats: RunStats, s: GauntletStage): boolean {  return (stats[s.metric] ?? 0) >= s.target;
 }
 
 /* --------------------------------------------------------- login calendar */

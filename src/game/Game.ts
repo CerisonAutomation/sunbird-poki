@@ -7026,7 +7026,7 @@ export class Game {
       nestLevel: st.nestLevel,
       nestMult: this.save.nestMultiplier(),
       nestPrice: this.save.nestUpgradePrice(),
-      nestMaxed: this.save.state.nestBought >= 10,
+      nestMaxed: st.nestBought >= 10,
       missions: this.missionViews,
       quests: this.questViews,
       highScores: st.highScores,
@@ -7041,7 +7041,7 @@ export class Game {
       goldPrice: GOLD.price,
       starterPrice: STARTER_PACK.price,
       starterFeatures: STARTER_PACK.features,
-      starterOwned: this.save.state.starterPack,
+      starterOwned: st.starterPack,
       goldFeatures: GOLD.features,
       vipPrice: VIP.price,
       vipFeatures: VIP.features,
@@ -7073,7 +7073,7 @@ export class Game {
       expShareFirst:
         this.state !== "gameover"
           ? false
-          : (this.expShareFirst ??= variant(this.save.state.deviceId, "results_cta_order", 50, (v) => {
+          : (this.expShareFirst ??= variant(st.deviceId, "results_cta_order", 50, (v) => {
               this.telemetry.track("experiment_exposure", { experiment: "results_cta_order", variant: v });
             })) === "treatment",
       combo: Math.max(this.perfectChain, this.versus && this.p1 ? this.p1.launch.combo : this.launch.combo),
@@ -7113,8 +7113,8 @@ export class Game {
       nearMiss: this.nearMiss.text,
       skillLabel: this.flow.label(),
       skill: this.flow.skill,
-      bestAltitude: this.save.state.bestAltitude,
-      bestCombo: this.save.state.bestCombo,
+      bestAltitude: st.bestAltitude,
+      bestCombo: st.bestCombo,
       runGems: this.runGems,
       pilotName: this.pilotName,
       board: this.boardPage,
@@ -7219,9 +7219,9 @@ export class Game {
       },
       squadNotice: this.squadNotice,
       dailyFlash: dailyFlashBird(this.today),
-      stipendClaimed: this.save.state.lastStipendClaimed === this.today,
-      rankPrizeClaimed: this.save.state.rankPrizeSeason === rankSeasonId(),
-      wingmanBundle: this.save.state.wingmanBundle === true,
+      stipendClaimed: st.lastStipendClaimed === this.today,
+      rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
+      wingmanBundle: st.wingmanBundle === true,
       showTutorialHand:
         this.state === "playing" &&
         !this.input.diving &&

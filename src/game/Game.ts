@@ -51,7 +51,7 @@ import { FirstFlight } from "./FirstFlight";
 import { bootStage, defer } from "./BootProgress";
 import { continueOffer, continuePlacementLabel, type ContinueOffer } from "./ContinueOffer";
 import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
-import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, type DeviceProfile } from "../sdk/device-report";
+import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews, CAMPAIGN } from "./Campaign";
 import { GameFeel } from "./GameFeel";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
@@ -743,6 +743,18 @@ export class Game {
     this.dpr = softwareMode ? 1 : this.preferredDpr();
     this.renderer.setPixelRatio(this.dpr);
 
+    // A dev-only handle on the live renderer, so the next "what is actually
+    // being drawn?" question is a two-minute console call instead of a build.
+    // It exists because a render pass could not read `renderer.info` at all —
+    // the app exposed no renderer reference — and the live `coinMesh.count` is
+    // still an open question that only a real device can settle.
+    // `import.meta.env.DEV` is replaced with `false` at build time, so the
+    // whole block is dead code in a production bundle and the handle cannot
+    // exist there.
+    if (import.meta.env.DEV) {
+      (window as Window & { __render?: THREE.WebGLRenderer }).__render = this.renderer;
+    }
+
     // EA-04/EA-05: the renderer (the expensive object) exists — the loading
     // screen can now say so truthfully.
     bootStage("engine");
@@ -805,7 +817,7 @@ export class Game {
       if (this.state === "menu" || this.state === "playing") this.hud.toast(`♪ ${name}`, "info");
     });
 
-    this.terrain = new TerrainSystem(this.seed);
+    this.terrain = new TerrainSystem(this.seed, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.terrain.group);
     bootStage("world");
 
@@ -826,7 +838,7 @@ export class Game {
     this.scene.add(this.sky.group);
     this.sky.addLights(this.scene);
 
-    this.collect = new Collectibles(this.terrain.seedN);
+    this.collect = new Collectibles(this.terrain.seedN, undefined, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.collect.group);
     this.weather = new Weather(this.terrain.seedN);
     this.weather.addTo(this.scene);
@@ -5757,9 +5769,9 @@ export class Game {
     this.collect.dispose();
     this.scene.remove(this.weather.group);
     this.weather.dispose();
-    this.terrain = new TerrainSystem(seed);
+    this.terrain = new TerrainSystem(seed, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.terrain.group);
-    this.collect = new Collectibles(this.terrain.seedN);
+    this.collect = new Collectibles(this.terrain.seedN, undefined, worldTierFor(this.deviceProfile.tier));
     this.scene.add(this.collect.group);
     this.weather = new Weather(this.terrain.seedN);
     this.weather.addTo(this.scene);

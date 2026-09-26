@@ -393,6 +393,13 @@ export class SaveData {
    *  a consumable bought for one flight must not survive into the next. */
   private coinBonus = 1;
   private coinBonusUntil = 0;
+  /** When the current run started (0 = no run window open). Session-only, like
+   *  coinBonus: a run's coin weighting is not something a save can carry. */
+  private runStartedAt = 0;
+  /** Every timed bonus armed during the current run, as absolute windows, so a
+   *  run that paid out can be weighted by how long each bonus was actually
+   *  live rather than by whatever happened to be live at the end. */
+  private runBonusWindows: { from: number; to: number; mult: number }[] = [];
   private externalChangeHandler: ((e: StorageEvent) => void) | null = null;
 
   constructor() {
@@ -709,7 +716,12 @@ export class SaveData {
     // the game, so the goldenfeather (permanent) and luckycoin (timed)
     // multipliers actually apply here — this used to add straight to
     // wallet/totalCoins, silently bypassing both.
-    const awarded = this.addCoins(totalRunCoins);
+    //
+    // A run's coins arrive as ONE number, so the timed multiplier cannot be
+    // sampled per coin at the payout: it is averaged over the run instead (see
+    // runCoinMultiplier), or a bonus armed mid-run would be applied to the
+    // whole run or to none of it.
+    const awarded = this.awardCoins(totalRunCoins, this.runCoinMultiplier());
     s.runsPlayed += 1;
     s.tutorialRuns += 1;
     s.lifetime.distance += distance;
@@ -1079,28 +1091,114 @@ export class SaveData {
    */
 
   addCoins(amount: number): number {
-    const awarded = Math.max(0, Math.ceil(amount * this.coinMultiplier()));
+    return this.awardCoins(amount, this.coinMultiplier());
+  }
+
+  /** The one place the wallet moves. `mult` is passed in rather than read here
+   *  so a caller that knows better than "right now" — the run-end payout, which
+   *  weights a timed bonus over the whole run — can say so. */
+  private awardCoins(amount: number, mult: number): number {
+    const awarded = Math.max(0, Math.ceil(amount * mult));
     this.state.wallet += awarded;
     this.state.totalCoins += awarded;
     this.persist();
     return awarded;
   }
 
-  /** Arm a timed coin multiplier (the `luckycoin` boost). Re-arming extends. */
-  setCoinBonus(multiplier: number, seconds: number): void {
-    this.coinBonus = Math.max(1, multiplier);
-    this.coinBonusUntil = Date.now() + Math.max(0, seconds) * 1000;
+  /**
+   * Open the window a run's coins are timed-weighted over. Called by the run
+   * funnel (Game.startRun) before the first coin can be picked up.
+   *
+   * A run's coins are accumulated in Game and paid in ONE addCoins() call at
+   * the end, which used to mean the multiplier applied to the whole run was
+   * whatever was live at that instant: a luckycoin armed for 60s in the middle
+   * of a 90s run paid nothing, and one armed at second 85 paid for all 90s.
+   */
+  beginRun(): void {
+    this.runStartedAt = Date.now();
+    this.runBonusWindows = [];
   }
 
-  /** Combined multiplier in effect right now (>= 1). */
-  coinMultiplier(): number {
+  /** Arm a timed coin multiplier (the `luckycoin` boost). Re-arming extends. */
+  setCoinBonus(multiplier: number, seconds: number): void {
+    const mult = Math.max(1, multiplier);
+    const now = Date.now();
+    this.coinBonus = mult;
+    this.coinBonusUntil = now + Math.max(0, seconds) * 1000;
+    // Remember the window, not just the current state, so a run that was
+    // already in progress can be paid for the part of it this bonus covered.
+    if (this.runStartedAt > 0) {
+      this.runBonusWindows.push({ from: now, to: this.coinBonusUntil, mult });
+    }
+  }
+
+  /** The permanent half of the multiplier: what the player bought. */
+  private permanentCoinMultiplier(): number {
     let mult = 1;
     for (const [id, value] of Object.entries(COIN_MULTIPLIER_UPGRADES)) {
       if (this.state.ownedUpgrades.includes(id)) mult *= value;
     }
-    if (this.coinBonus > 1 && Date.now() < this.coinBonusUntil) mult *= this.coinBonus;
-    else this.coinBonus = 1;
     return mult;
+  }
+
+  /** The timed half, as it stands right now. */
+  private timedCoinMultiplier(now: number): number {
+    if (this.coinBonus > 1 && now < this.coinBonusUntil) return this.coinBonus;
+    this.coinBonus = 1;
+    return 1;
+  }
+
+  /**
+   * The timed multiplier averaged over the run that just ended: a bonus pays
+   * for the time it was actually live, so a 60s luckycoin in a 90s run pays
+   * for 60s of it and one armed at second 85 pays for five.
+   *
+   * Swept over the window edges rather than sampled, because two overlapping
+   * windows must count once (the stronger bonus applies), not twice. Falls
+   * back to the instantaneous value when no run window is open, so a caller
+   * that never opened one keeps exactly the old answer.
+   */
+  private runTimedMultiplier(now: number): number {
+    const startedAt = this.runStartedAt;
+    if (startedAt <= 0 || now <= startedAt) return this.timedCoinMultiplier(now);
+    const windows = this.runBonusWindows.filter((w) => w.to > startedAt && w.from < now);
+    if (windows.length === 0) return this.timedCoinMultiplier(now);
+    const edges = new Set<number>([startedAt, now]);
+    for (const w of windows) {
+      if (w.from > startedAt && w.from < now) edges.add(w.from);
+      if (w.to > startedAt && w.to < now) edges.add(w.to);
+    }
+    const points = [...edges].sort((a, b) => a - b);
+    let credit = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i]!;
+      const to = points[i + 1]!;
+      let live = 1;
+      for (const w of windows) if (w.from <= from && w.to >= to) live = Math.max(live, w.mult);
+      credit += (live - 1) * (to - from);
+    }
+    return 1 + credit / (now - startedAt);
+  }
+
+  /**
+   * The multiplier for a run's payout: the permanent one (it cannot change
+   * mid-run — the shop is unreachable in flight) times the timed one averaged
+   * over the run. Closes the window afterwards, so a second payout in the same
+   * run cannot be weighted by a window that has already been spent.
+   */
+  private runCoinMultiplier(): number {
+    const permanent = this.permanentCoinMultiplier();
+    const now = Date.now();
+    if (this.runStartedAt <= 0) return permanent * this.timedCoinMultiplier(now);
+    const timed = this.runTimedMultiplier(now);
+    this.runStartedAt = 0;
+    this.runBonusWindows = [];
+    return permanent * timed;
+  }
+
+  /** Combined multiplier in effect right now (>= 1). */
+  coinMultiplier(): number {
+    return this.permanentCoinMultiplier() * this.timedCoinMultiplier(Date.now());
   }
 
   ownSkin(id: string): void {

@@ -133,24 +133,30 @@ describe("no award site can bypass the multiplier again", () => {
   /** Read a repo source file (vitest runs from the workspace root). */
   const src = (...parts: string[]): string => readFileSync(join(process.cwd(), "src", ...parts), "utf8");
 
-  it("leaves addCoins() as the only place in src/ that moves the wallet", () => {
+  it("leaves one award path as the only place in src/ that moves the wallet", () => {
     // Pinned by grep because a sixth bypass would compile, pass every
     // behavioural test, and quietly make the shop copy false again.
     const saveData = src("game", "SaveData.ts");
-    const walletHits = saveData.match(/wallet \+=/g) ?? [];
-    const totalHits = saveData.match(/totalCoins \+=/g) ?? [];
-    expect(walletHits).toHaveLength(1);
-    expect(totalHits).toHaveLength(1);
-    // …and both are inside addCoins, not merely somewhere in the file.
+    expect(saveData.match(/wallet \+=/g) ?? []).toHaveLength(1);
+    expect(saveData.match(/totalCoins \+=/g) ?? []).toHaveLength(1);
+    // …and both are inside the single award path, not merely somewhere in the
+    // file. addCoins() is that path for every ordinary award; the run payout
+    // passes its own time-weighted multiplier to the same private method.
+    const award = saveData.slice(saveData.indexOf("private awardCoins("));
+    const awardBody = award.slice(0, award.indexOf("\n  /**", 1) === -1 ? undefined : award.indexOf("\n  /**", 1));
+    expect(awardBody).toContain("this.state.wallet += awarded;");
+    expect(awardBody).toContain("this.state.totalCoins += awarded;");
     const addCoins = saveData.slice(saveData.indexOf("addCoins(amount: number): number {"));
-    const nextMethod = saveData.indexOf("\n  ", addCoins.indexOf("\n", addCoins.indexOf("}") + 1));
-    expect(addCoins.slice(0, nextMethod === -1 ? undefined : nextMethod)).toContain("this.state.wallet += awarded;");
+    expect(addCoins.slice(0, addCoins.indexOf("}"))).toContain("this.awardCoins(amount, this.coinMultiplier())");
   });
 
-  it("keeps the run-end path routed through addCoins() too", () => {
+  it("keeps the run-end path on the same award path, with its own multiplier", () => {
     const saveData = src("game", "SaveData.ts");
     const recordRun = saveData.slice(saveData.indexOf("recordRun("), saveData.indexOf("smashPiggyBank("));
-    expect(recordRun).toContain("this.addCoins(totalRunCoins)");
+    // A run's coins are timed-weighted over the run rather than read at the
+    // payout — but they still go through the one award path.
+    expect(recordRun).toContain("this.awardCoins(totalRunCoins, this.runCoinMultiplier())");
+    expect(recordRun).not.toMatch(/wallet \+=|totalCoins \+=/);
   });
 });
 

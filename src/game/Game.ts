@@ -3002,6 +3002,11 @@ export class Game {
       (this.eventRun ? this.weeklyMods.daylightMult : 1);
     this.settleAcc = 0;
     this.lastInputAt = 0;
+    // Open the window the run's coin payout is timed-weighted over. A run's
+    // coins are collected into one number and paid once at the end, so without
+    // a start time a bonus armed mid-run can only be applied to the whole run
+    // or to none of it (see SaveData.runCoinMultiplier).
+    this.save.beginRun();
     this.weather.windMult = (this.eventRun ? this.weeklyMods.windMult : 1) * (this.stormfront ? 1.7 : 1);
     this.weather.stormfront = this.stormfront;
     if (this.stormfront) this.hud.toast("⛈ STORMFRONT — same storm for every pilot. Survive and outfly.", "warn");

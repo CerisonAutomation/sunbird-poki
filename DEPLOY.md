@@ -141,8 +141,22 @@ entitlements are owned by the server, not by a client-side "I paid" button
 
 > **State of the client today:** no processor is wired into the game. `Payments.ts`
 > returns `null` from `ensureStripeJs`, `stripeLinkFor` and `consumeStripeReturn`,
-> `@stripe/stripe-js` is not a dependency, and the shipped CSP permits no
-> processor origin — the economy is coins. What *is* wired is the restore half:
+> and `@stripe/stripe-js` is not a dependency — the economy is coins. The
+> `vercel.json` CSP nonetheless allowlists `https://js.stripe.com` /
+> `https://api.stripe.com` / `https://hooks.stripe.com` (script-src, connect-src,
+> frame-src) and `https://*.upstash.io` (connect-src): the former is forward
+> compatibility for the day a client-side checkout is wired in (see the note
+> below on declaring it in `legal.edition.ts` first), and the latter is what
+> lets the leaderboard functions in `api/` reach Upstash Redis directly from
+> the edge runtime. Neither is a live processor origin today, and neither ships
+> in a portal build regardless: `vite.config.ts`'s portal alias swaps in a
+> portal-specific `legal.edition.ts` (this repo's copy names the Poki edition,
+> with no Stripe/Upstash host in its `hosts` table), and
+> `scripts/verify-portal.mjs`'s `FORBIDDEN_MARKERS` check fails the gate if
+> `upstash`, `api.stripe.com`, `hooks.stripe.com`, or `js.stripe.com` ever
+> survives into a portal zip. This `vercel.json` CSP only ever reaches the
+> directly-hosted (Vercel/self-hosted) edition in target 1 above. What *is*
+> wired is the restore half:
 > `fetchServerEntitlements()` calls `GET /entitlements?device=…` on the configured
 > leaderboard base, so a purchase completed through any channel you operate
 > grants in-game. If you add a client-side checkout, declare its origin in

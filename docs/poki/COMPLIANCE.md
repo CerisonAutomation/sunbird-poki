@@ -1,6 +1,6 @@
 # Poki compliance report
 
-**Generated:** 2026-09-25 by `pnpm poki:audit` — do not edit by hand.
+**Generated:** 2026-09-26 by `pnpm poki:audit` — do not edit by hand.
 **Result:** ✅ every satisfied rule verified · 167/188 rules verified · 131 of them hard requirements.
 
 **Scope:** the extracted guide corpus in this folder (`requirements.json`, version 2026-09-22). Rules marked *action* are human/submission steps, *deferred* are accepted gaps with a recorded reason — both are listed so nothing is silently skipped.
@@ -104,7 +104,7 @@
 | `LOC-01` | recommendation | Localization is essential for engagement outside English-speaking regions. | ✅ | src/i18n/translations.barrel.json |
 | `LOC-02` | requirement | Centralize all text into a single file format before translating. | ✅ | src/i18n/index.ts matches /export function t\(/ |
 | `LOC-03` | recommendation | Prioritise localization for text-carrying genres/mechanics. | ✅ | docs/poki/05-localization.md |
-| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ | 10 locales × 218 strings complete |
+| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ | 10 locales × 262 strings complete |
 | `LOC-05` | requirement | Detect the browser language and serve it; a manual selector should exist too. | ✅ | src/i18n/__tests__/locales.test.ts |
 
 ## THB — Game thumbnail

@@ -106,6 +106,52 @@ export function dailyDone(stats: RunStats, c: DailyChallenge): boolean {
   return (stats[c.metric] ?? 0) >= c.target;
 }
 
+/* ------------------------------------------------- the mode a challenge needs */
+
+/**
+ * The mode a challenge run has to be flown in.
+ *
+ * The mode is a property of the CHALLENGE, never of the button the player
+ * happened to press: a run is only *flagged* as a challenge
+ * (`{ challenge: "daily" }`), and that flag reaches `startRun()` from a dozen
+ * places — including "Fly again", which rebuilds it from saved run metadata
+ * (`Replay.replayOptions`) and used to rebuild the flag without the mode. Any
+ * caller that set the flag without re-applying the mode here opened a hole
+ * where the reward is claimable in a mode the challenge never asked for.
+ *
+ * Returns "" when this is not a challenge run, or when the flag names a stage
+ * that no longer exists in this week's gauntlet.
+ */
+export function challengeMode(challenge: string, today: string, week: string): ModeId | "" {
+  if (challenge === "daily") return dailyChallenge(today).mode;
+  const stage = /^gauntlet(\d+)$/.exec(challenge);
+  if (!stage) return "";
+  return weeklyGauntlet(week).stages[Number(stage[1])]?.mode ?? "";
+}
+
+/**
+ * Why a finished run may or may not be claimed. `dailyDone`/`stageDone` only
+ * ever compared a metric to a target, which is why the mode used to be
+ * enforced in exactly one place (the journey card's click handler) and nowhere
+ * else.
+ *
+ * The mode gate is checked FIRST and on its own: a run flown in the wrong mode
+ * did not do the challenge, so whether it also cleared the target is beside
+ * the point — and reporting "missed" for it would describe a run the player
+ * never actually attempted.
+ */
+export type ChallengeVerdict = "claim" | "missed" | "wrong-mode";
+
+export function dailyVerdict(stats: RunStats, c: DailyChallenge, runMode: string): ChallengeVerdict {
+  if (runMode !== c.mode) return "wrong-mode";
+  return dailyDone(stats, c) ? "claim" : "missed";
+}
+
+export function stageVerdict(stats: RunStats, s: GauntletStage, runMode: string): ChallengeVerdict {
+  if (runMode !== s.mode) return "wrong-mode";
+  return stageDone(stats, s) ? "claim" : "missed";
+}
+
 /* ------------------------------------------------------- weekly gauntlet */
 
 export type GauntletStage = {

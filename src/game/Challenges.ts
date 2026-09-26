@@ -71,6 +71,21 @@ const DAILY_TEMPLATES: { mode: ModeId; metric: ChallengeMetric; base: number; sp
   { mode: "daytrip", metric: "clouds", base: 3, spread: 3, title: "Head in the Clouds" },
 ];
 
+/**
+ * How much each modifier restricts play, scaled into a reward multiplier.
+ * `gold_rush` is a buff (double coins), not a handicap, so it stays at the
+ * base rate; `pure_sky` (no power-ups at all) is the strictest constraint
+ * and pays the most for clearing the challenge under it.
+ */
+const MODIFIER_REWARD_SCALE: Record<ModifierId, number> = {
+  gold_rush: 1,
+  heavy_wings: 1.15,
+  short_day: 1.3,
+  pure_sky: 1.5,
+};
+
+const DAILY_BASE_REWARD = 150;
+
 export function dailyChallenge(date: string): DailyChallenge {
   const rng = new SeededRandom(`daily:${date}`);
   const t = DAILY_TEMPLATES[Math.floor(rng.next() * DAILY_TEMPLATES.length)]!;
@@ -82,7 +97,7 @@ export function dailyChallenge(date: string): DailyChallenge {
     modifier,
     metric: t.metric,
     target: Math.max(1, target),
-    reward: 150,
+    reward: Math.round((DAILY_BASE_REWARD * MODIFIER_REWARD_SCALE[modifier.id]) / 5) * 5,
     title: t.title,
   };
 }

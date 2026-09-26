@@ -120,7 +120,7 @@ import { fetchServerEntitlements,
   type Sku,
 } from "./Payments";
 import { SaveData } from "./SaveData";
-import { SocialSystem } from "./SocialSystem";
+import { SocialSystem, type FriendChallenge } from "./SocialSystem";
 import { SeasonPass, seasonId, seasonLabel, XP_RULES } from "./SeasonPass";
 import { FlightCues } from "./FlightCues";
 import { endlessSpeedScale } from "./FlightProgression";
@@ -240,6 +240,8 @@ export class Game {
   private rivalGhostPassed = false;
   /** Run counter — guards async ghost loads against arriving mid-next-run. */
   private runEpoch = 0;
+  /** The ghost-race friend challenge (SocialSystem) currently being flown, if any. */
+  private activeFriendChallenge: FriendChallenge | null = null;
   private readonly livingBg = new LivingBackground();
   private terrain: TerrainSystem;
   private collect: Collectibles;
@@ -1935,17 +1937,23 @@ export class Game {
     this.collect.update(dt, this.bird, this.terrain, magnetOn, this.elapsed, this.powers.magnetScale(), {
       onCoin: (x, y, gem) => {
         const base = gem ? 5 : 1;
-        const value = Math.round(
-          base *
-            (this.save.state.gold ? 2 : 1) *
-            this.powers.coinMult() *
-            (this.mode.id === "coinrush" ? 2 : 1) *
-            this.challengeMods.coinMult *
-            this.masteryPerk.coinMult *
-            (this.eventRun ? this.weeklyMods.coinMult : 1) *
-            (this.goldenHour ? 2 : 1) *
-            (this.stormfront && this.stormPhase >= 3 ? 2 : 1),
-        );
+        // Coin-stacking softcap: gold(2x), coinrush(2x), goldenHour(2x) and a
+        // stormfront finale(2x) can all land on the same pickup alongside
+        // powers/challenge/mastery/weekly multipliers — unclamped, a lucky
+        // stack compounds past 16x and trivializes the coin economy. Clamp
+        // the combined multiplier (not `base`, so gems still count 5x within
+        // the cap) to keep stacked buffs generous but bounded.
+        let multiplier =
+          (this.save.state.gold ? 2 : 1) *
+          this.powers.coinMult() *
+          (this.mode.id === "coinrush" ? 2 : 1) *
+          this.challengeMods.coinMult *
+          this.masteryPerk.coinMult *
+          (this.eventRun ? this.weeklyMods.coinMult : 1) *
+          (this.goldenHour ? 2 : 1) *
+          (this.stormfront && this.stormPhase >= 3 ? 2 : 1);
+        multiplier = Math.min(multiplier, 8);
+        const value = Math.round(base * multiplier);
         this.runCoins += value;
         this.markFunnel("first_reward");
         this.bonus += 4 * COIN_VALUE * value;
@@ -3220,6 +3228,18 @@ export class Game {
       this.hud.toast(`${iconGlyph("swords")} Duel lost — never reached the line · ${res.delta} rating`, "warn");
     }
 
+    // A friend's ghost-race challenge (SocialSystem) resolves the moment this
+    // flight ends — win/lose/tie against the challenger's posted distance.
+    if (this.activeFriendChallenge) {
+      const ch = this.activeFriendChallenge;
+      const result = this.social.completeChallenge(ch.id, stats.distance);
+      if (result) {
+        const label = result === "won" ? `Beat ${ch.challengerName}'s ghost!` : result === "lost" ? `Fell short of ${ch.challengerName}'s ghost.` : `Tied ${ch.challengerName}'s ghost.`;
+        this.hud.toast(`${iconGlyph("ghost")} Ghost challenge — ${label}`, result === "won" ? "gold" : "info");
+      }
+      this.activeFriendChallenge = null;
+    }
+
     this.nearMiss = evaluateNearMiss(
       stats.distance,
       this.save.state.bestDistance,
@@ -3618,26 +3638,37 @@ export class Game {
       // Every solo flight gets a visible, beatable chase line. This fallback is
       // explicitly labelled as a pace target, never as a real player.
       if (!this.versus && !this.massRace.active) {
+        // A friend's ghost challenge (SocialSystem) is the point of this
+        // flight when one is active — it overrides the generic pace target,
+        // and its ghost is never replaced by an incoming network rival.
+        const challenge = this.activeFriendChallenge;
         const targetRng = new SeededRandom(`${this.seed}:pace-target`);
         const pace = synthesizePaceGhost({
           seed: this.seed,
           startX: this.startX,
-          distance: paceTargetDistance(this.save.state.bestDistance, () => targetRng.next()),
+          distance: challenge ? challenge.ghostDistance : paceTargetDistance(this.save.state.bestDistance, () => targetRng.next()),
           terrain: this.terrain,
           skill: clamp(this.flow.difficulty() * 0.5, 0.3, 0.82),
         });
-        this.rivalGhostName = pace.name;
+        this.rivalGhostName = challenge ? challenge.challengerName : pace.name;
         this.rivalGhostPlayer.loadRecord(pace.record);
-        this.hud.toast(`${iconGlyph("ghost")} Chase ${pace.name} — pass it before the finish`, "quest");
+        this.hud.toast(
+          challenge
+            ? `${iconGlyph("ghost")} Ghost challenge vs ${challenge.challengerName} — beat ${Math.round(challenge.ghostDistance)} m`
+            : `${iconGlyph("ghost")} Chase ${pace.name} — pass it before the finish`,
+          "quest",
+        );
 
         // Prefer an actual player's compatible ghost when one exists.
         const epoch = this.runEpoch;
-        void fetchRivalGhost(this.seed, this.save.state.deviceId, this.save.state.bestDistance).then((rg) => {
-          if (!rg || this.disposed || epoch !== this.runEpoch || this.state !== "playing") return;
-          this.rivalGhostName = rg.name;
-          this.rivalGhostPlayer.loadRecord({ seed: this.seed, distance: rg.distance, samples: rg.samples });
-          this.hud.toast(`${iconGlyph("ghost")} ${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest");
-        });
+        if (!challenge) {
+          void fetchRivalGhost(this.seed, this.save.state.deviceId, this.save.state.bestDistance).then((rg) => {
+            if (!rg || this.disposed || epoch !== this.runEpoch || this.state !== "playing") return;
+            this.rivalGhostName = rg.name;
+            this.rivalGhostPlayer.loadRecord({ seed: this.seed, distance: rg.distance, samples: rg.samples });
+            this.hud.toast(`${iconGlyph("ghost")} ${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest");
+          });
+        }
       }
     }
     this.launch.reset();
@@ -4654,6 +4685,30 @@ export class Game {
       case "squad-remove":
         void this.squad?.removeFriend(id);
         break;
+      case "friend-challenge": {
+        // Post a ghost-race challenge (SocialSystem.FriendChallenge) at a
+        // wingman: today's hills, your current best as the line to beat.
+        const friend = this.squad?.state.friends.find((f) => (f.code || f.name) === id);
+        if (!friend) break;
+        const best = this.save.state.bestDistance;
+        if (best <= 0) {
+          this.squadNotice = "Fly at least once before you can post a ghost challenge.";
+          this.bump();
+          break;
+        }
+        const ch = this.social.createChallenge(friend.code || friend.name, friend.name, "distance", best, this.today, best);
+        this.squadNotice = ch
+          ? `${iconGlyph("ghost")} Ghost challenge posted for ${friend.name} — beat ${Math.round(best)} m on today's hills`
+          : `${friend.name} already has a pending challenge from you.`;
+        this.bump();
+        break;
+      }
+      case "challenge-race": {
+        const ch = this.social.getActiveChallenges().find((c) => c.id === id);
+        if (!ch) break;
+        this.beginFriendChallengeRace(ch);
+        break;
+      }
       case "squad-create-club": {
         const name = this.hud.readValue("clubName").trim();
         if (!name) {
@@ -5109,6 +5164,17 @@ export class Game {
     this.camera.setIntro(1);
   }
 
+  /**
+   * Attempts to spend `price`; on success returns false. On failure it toasts
+   * how many more coins are needed and returns true, so a call site can just
+   * write `if (this.cantAfford(price)) return;`.
+   */
+  private cantAfford(price: number): boolean {
+    if (this.save.spend(price)) return false;
+    this.hud.toast(`Need ${price - this.save.state.wallet} more coins`, "warn");
+    return true;
+  }
+
   private buySkin(id: string): void {
     const def = skinById(id);
     const st = this.save.state;
@@ -5128,10 +5194,7 @@ export class Game {
     }
     const flash = dailyFlashBird(this.today);
     const price = def.id === flash.id ? flash.price : def.price;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ${price - st.wallet} more coins`, "warn");
-      return;
-    }
+    if (this.cantAfford(price)) return;
     this.save.ownSkin(id);
     this.save.equipSkin(id);
     this.applySkin();
@@ -5155,10 +5218,7 @@ export class Game {
     }
     const deal = dailyDealBoost(this.today);
     const price = def.id === deal.id ? deal.price : def.price;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ${price - st.wallet} more coins`, "warn");
-      return;
-    }
+    if (this.cantAfford(price)) return;
     if (def.permanent) this.save.ownUpgrade(id);
     else this.save.armBoost(id);
     this.audio.purchase();
@@ -5178,10 +5238,7 @@ export class Game {
       this.bump();
       return;
     }
-    if (!this.save.spend(def.price)) {
-      this.hud.toast(`Need ${def.price - st.wallet} more coins`, "warn");
-      return;
-    }
+    if (this.cantAfford(def.price)) return;
     this.save.ownTrail(id);
     this.save.equipTrail(id);
     this.audio.purchase();
@@ -5524,6 +5581,29 @@ export class Game {
 
   get socialSystem(): SocialSystem {
     return this.social;
+  }
+
+  /**
+   * Launch a solo flight whose point is beating a friend's ghost-race
+   * challenge (SocialSystem.FriendChallenge). Rebuilds the world onto the
+   * challenge's exact seed so the hills match what the challenger flew, then
+   * `resetRun` (via `startRun`) synthesizes the chase ghost from
+   * `ghostSeed`/`ghostDistance` — see the `activeFriendChallenge` branch
+   * above.
+   */
+  private beginFriendChallengeRace(ch: FriendChallenge): void {
+    // completeChallenge() only resolves an "accepted" challenge — a pending
+    // one (just created, or re-opened from the Squad screen) is accepted the
+    // moment the player commits to racing it.
+    if (ch.status === "pending") this.social.acceptChallenge(ch.id);
+    this.activeFriendChallenge = ch;
+    this.modeId = "daytrip";
+    this.mode = modeById("daytrip");
+    this.seedMode = "random"; // keep startRun() from reseeding onto today's world
+    this.exitVersus();
+    if (this.seed !== ch.ghostSeed) this.rebuildWorld(ch.ghostSeed);
+    this.startRun();
+    this.bump();
   }
 
   private get skin(): SkinDef {
@@ -7209,6 +7289,7 @@ export class Game {
       campaignDone: campaignProgress(st.campaignClaimed).done,
       campaignTotal: campaignProgress(st.campaignClaimed).total,
       squad: this.squad?.state ?? emptySquadState(),
+      friendChallenges: this.social.getActiveChallenges(),
       recentPilots: this.pilots.all(),
       share: {
         available: sharingAvailable(),

@@ -18,7 +18,7 @@ import { defaultRival, rankSeasonId, ratingDelta, RIVAL_BASE_RATING, seasonRewar
 import { seasonId } from "./season";
 import { emptyTournamentState, type TournamentState } from "./Tournaments";
 import { emptySocialState, type SocialState } from "./SocialSystem";
-import { storage } from "./Storage";
+import { physicalKey, storage } from "./Storage";
 
 export type HighScore = {
   date: string;
@@ -371,14 +371,56 @@ export class SaveData {
   onEviction: ((evicted: readonly string[]) => void) | null = null;
   /** Optional platform SDK adapter for cloud save syncing (e.g. CrazyGames data.setItem). */
   platformAdapter: { saveData?: (key: string, data: string) => Promise<void> } | null = null;
+  /** Invoked whenever another tab's write to the save key is picked up (see
+   *  attachStorageListener). Lets the game surface "your save changed in
+   *  another tab" instead of silently swapping state out from under the UI. */
+  onExternalChange: ((state: SaveState) => void) | null = null;
   private lastPersistErrorAt = 0;
   /** Timed coin multiplier (the `luckycoin` boost) — session-only on purpose:
    *  a consumable bought for one flight must not survive into the next. */
   private coinBonus = 1;
   private coinBonusUntil = 0;
+  private externalChangeHandler: ((e: StorageEvent) => void) | null = null;
 
   constructor() {
     this.state = this.load();
+    this.attachStorageListener();
+  }
+
+  /**
+   * Multi-tab awareness. The browser fires a native `storage` event on every
+   * OTHER same-origin tab/window when localStorage changes — never on the tab
+   * that made the write. Without this, two open tabs each hold their own
+   * in-memory `state`, and tab A can keep playing on a stale snapshot and then
+   * `persist()` it, silently clobbering whatever tab B (or a cloud-save sync
+   * running in another tab) wrote to SAVE_KEY in the meantime — a classic
+   * multi-tab save-stomp. Reloading `state` the moment another tab's write is
+   * observed keeps this tab's next persist() built on the latest data instead
+   * of overwriting it.
+   */
+  private attachStorageListener(): void {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const key = physicalKey(SAVE_KEY);
+    const legacyKey = physicalKey(SAVE_KEY_V1);
+    const handler = (e: StorageEvent): void => {
+      // `key === null` means the other tab called storage.clear() — always
+      // worth reloading. Otherwise only react to our own save key(s); every
+      // other key on this origin (leaderboard cache, ghosts, journal, …) is
+      // not this listener's concern.
+      if (e.key !== null && e.key !== key && e.key !== legacyKey) return;
+      this.state = this.load();
+      this.onExternalChange?.(this.state);
+    };
+    this.externalChangeHandler = handler;
+    window.addEventListener("storage", handler);
+  }
+
+  /** Detaches the multi-tab storage listener (tests / explicit teardown). */
+  detachStorageListener(): void {
+    if (this.externalChangeHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("storage", this.externalChangeHandler);
+    }
+    this.externalChangeHandler = null;
   }
 
   private load(): SaveState {
@@ -649,15 +691,18 @@ export class SaveData {
     const prestigeBonus = Math.round(coins * ((s.prestige?.multiplier ?? 1.0) - 1));
     const totalRunCoins = coins + prestigeBonus;
 
-    s.totalCoins += totalRunCoins;
-    s.wallet += totalRunCoins;
+    // Route run-end coins through addCoins() like every other coin award in
+    // the game, so the goldenfeather (permanent) and luckycoin (timed)
+    // multipliers actually apply here — this used to add straight to
+    // wallet/totalCoins, silently bypassing both.
+    const awarded = this.addCoins(totalRunCoins);
     s.runsPlayed += 1;
     s.tutorialRuns += 1;
     s.lifetime.distance += distance;
-    s.lifetime.coins += totalRunCoins;
+    s.lifetime.coins += awarded;
 
     // Accumulate +20% bonus coins into Piggy Bank
-    const bonusPiggy = Math.max(1, Math.round(totalRunCoins * 0.2));
+    const bonusPiggy = Math.max(1, Math.round(awarded * 0.2));
     if (!s.piggyBank) s.piggyBank = { coins: 0, maxCoins: 1000 };
     s.piggyBank.coins = Math.min(s.piggyBank.maxCoins, s.piggyBank.coins + bonusPiggy);
 
@@ -665,7 +710,7 @@ export class SaveData {
     if (distance > s.bestDistance) s.bestDistance = distance;
     if (island > s.farthestIsland) s.farthestIsland = island;
     if (biomeId && !s.biomesSeen.includes(biomeId)) s.biomesSeen.push(biomeId);
-    s.highScores.push({ date, distance, coins: totalRunCoins, score, vip: s.vip, island });
+    s.highScores.push({ date, distance, coins: awarded, score, vip: s.vip, island });
     s.highScores.sort((a, b) => b.score - a.score);
     s.highScores = s.highScores.slice(0, 8);
     this.persist();
@@ -993,18 +1038,6 @@ export class SaveData {
   }
 
   /**
-   * Award coins. Every coin in the game arrives here, which is what makes it
-   * the right place for multipliers: a bonus applied at one of the ~20 award
-   * sites would be missed by the other nineteen.
-   *
-   * Two independent multipliers stack multiplicatively:
-   *   • permanent — owning `goldenfeather` (see COIN_MULTIPLIER_UPGRADES)
-   *   • timed — `luckycoin`, armed for a run by `setCoinBonus()`
-   * The awarded amount is rounded UP so a 1-coin pickup is never silently
-   * rounded back down to 1 by a 1.1× bonus (a bonus that does nothing on small
-   * awards reads as a broken purchase).
-   */
-  /**
    * Stamps the first-session day the first time it is asked, then leaves it
    * alone forever. @returns true when this call is the one that stamped it, so
    * the caller can tell a brand-new player from a returning one without
@@ -1017,11 +1050,25 @@ export class SaveData {
     return true;
   }
 
-  addCoins(amount: number): void {
+  /**
+   * Award coins. Every coin in the game arrives here, which is what makes it
+   * the right place for multipliers: a bonus applied at one of the ~20 award
+   * sites would be missed by the other nineteen.
+   *
+   * Two independent multipliers stack multiplicatively:
+   *   • permanent — owning `goldenfeather` (see COIN_MULTIPLIER_UPGRADES)
+   *   • timed — `luckycoin`, armed for a run by `setCoinBonus()`
+   * The awarded amount is rounded UP so a 1-coin pickup is never silently
+   * rounded back down to 1 by a 1.1× bonus (a bonus that does nothing on small
+   * awards reads as a broken purchase).
+   */
+
+  addCoins(amount: number): number {
     const awarded = Math.max(0, Math.ceil(amount * this.coinMultiplier()));
     this.state.wallet += awarded;
     this.state.totalCoins += awarded;
     this.persist();
+    return awarded;
   }
 
   /** Arm a timed coin multiplier (the `luckycoin` boost). Re-arming extends. */
@@ -1200,19 +1247,61 @@ export class SaveData {
   }
 
   importCode(code: string): boolean {
+    let parsed: Record<string, unknown>;
     try {
       const json = decodeURIComponent(escape(atob(code.trim())));
-      const parsed = JSON.parse(json) as Partial<SaveState>;
-      if (typeof parsed !== "object" || parsed === null || !("deviceId" in parsed)) return false;
-      // Whitelist only known fields to prevent injection of arbitrary keys.
-      const allowed: Record<string, unknown> = {};
-      for (const k of Object.keys(defaults())) {
-        if (k in parsed) (allowed as Record<string, unknown>)[k] = (parsed as Record<string, unknown>)[k];
-      }
+      const candidate = JSON.parse(json) as unknown;
+      if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return false;
+      parsed = candidate as Record<string, unknown>;
+    } catch {
+      return false;
+    }
+
+    // Validate BEFORE touching storage. A save code is player-suppliable data
+    // (typed in, pasted from a screenshot, or handed over by another player)
+    // and must never be trusted to clobber a good local save just because it
+    // decoded and parsed. Reject anything whose identity/shape is wrong up
+    // front; load()'s per-field coercion still runs after the write below,
+    // but that must never be the ONLY thing standing between a hostile blob
+    // and the on-disk save.
+    if (typeof parsed.deviceId !== "string" || !parsed.deviceId) return false;
+    const finiteOrAbsent = (v: unknown): boolean => v === undefined || (typeof v === "number" && Number.isFinite(v));
+    const arrayOrAbsent = (v: unknown): boolean => v === undefined || Array.isArray(v);
+    if (
+      !finiteOrAbsent(parsed.bestScore) ||
+      !finiteOrAbsent(parsed.bestDistance) ||
+      !finiteOrAbsent(parsed.totalCoins) ||
+      !finiteOrAbsent(parsed.wallet) ||
+      !arrayOrAbsent(parsed.highScores) ||
+      !arrayOrAbsent(parsed.ownedSkins) ||
+      !arrayOrAbsent(parsed.completedMissions) ||
+      !arrayOrAbsent(parsed.redeemedCodes)
+    ) {
+      return false;
+    }
+
+    // Whitelist only known fields to prevent injection of arbitrary keys.
+    const allowed: Record<string, unknown> = {};
+    for (const k of Object.keys(defaults())) {
+      if (k in parsed) allowed[k] = parsed[k];
+    }
+
+    // Back up the current save before overwriting it, so a write (or the
+    // reload right after it) that goes wrong can be rolled back instead of
+    // destroying the player's existing progress.
+    const backup = storage.getItem(SAVE_KEY);
+    try {
       storage.setItem(SAVE_KEY, JSON.stringify(allowed));
       this.state = this.load();
       return true;
     } catch {
+      try {
+        if (backup !== null) storage.setItem(SAVE_KEY, backup);
+        else storage.removeItem(SAVE_KEY);
+      } catch {
+        /* ignore — nothing more we can do */
+      }
+      this.state = this.load();
       return false;
     }
   }

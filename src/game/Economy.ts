@@ -581,6 +581,10 @@ const BASE_BOOSTS: BoostDef[] = [
   { id: "stormward", name: "Storm Ward", desc: "Ash clouds and gusts barely touch you", price: 70, icon: "cloud" },
   { id: "hotwings", name: "Hot Wings", desc: "Take off already in Fever", price: 80, icon: "fire" },
   { id: "doubletap", name: "Sunburst Trigger", desc: "Double-tap in flight for a powerful burst", price: 420, icon: "lightning", permanent: true },
+  // Shop-purchasable wiring for the goldenfeather permanent coin multiplier
+  // (see COIN_MULTIPLIER_UPGRADES below) — buyBoost() checks `permanent` to
+  // route the purchase through save.ownUpgrade(id) instead of save.armBoost(id).
+  { id: "goldenfeather", name: "Golden Feather", desc: "+10% coins forever", price: 2500, icon: "feather", permanent: true },
 ];
 
 /** Permanent coin multipliers, applied centrally by SaveData.addCoins. */

@@ -7,6 +7,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { sunbirdSVG, sunSVG } from "./src/game/Sunbird";
 import { viteSingleFile } from "vite-plugin-singlefile";
+import { visualizer } from "rollup-plugin-visualizer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
     ...(singleFile ? [viteSingleFile()] : [copyrightBanner()]),
+    // Opt-in bundle inspector: `ANALYZE=true pnpm build` (or `pnpm build:analyze`)
+    // writes dist/stats.html — a treemap of what's actually shipping, sized by
+    // gzip/brotli. Off by default so it never adds cost to a normal build.
+    process.env.ANALYZE === "true"
+      ? visualizer({ filename: "dist/stats.html", gzipSize: true, brotliSize: true, template: "treemap" })
+      : null,
   ],
   resolve: {
     alias: {

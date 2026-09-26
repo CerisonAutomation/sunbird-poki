@@ -6,6 +6,65 @@ export type DecoKind = "tree" | "palm" | "pine" | "spire" | "crystal" | "cactus"
 export type LandmarkKind = "ancient" | "stones" | "arch";
 export type HazardKind = "none" | "gust" | "storm";
 
+/**
+ * Per-biome TERRAIN GRAMMAR — the rhythm of the hill sequence itself, as data.
+ *
+ * Why this is separate from `amp`/`wave`/`skew`/`roughness`: those four shape an
+ * arch, but every biome used to draw its arches from one shared, hardcoded
+ * vocabulary in `TerrainSystem.buildSegments` (length buckets 42/60/85/110,
+ * height buckets 10/16/22/32, one authored ramp chain every 2 arches). So the
+ * worlds differed in how a hill was *shaped* and how big, never in how the
+ * hills were *laid out* — which is the part a pilot actually flies.
+ *
+ * All eight fields are multipliers or counts applied by `buildSegments()` /
+ * `buildPads()`. None of them is decorative: each one is read.
+ */
+export type TerrainProfile = {
+  /** Height multiplier on the ordinary arches. 1 = the shared default. */
+  relief: number;
+  /** Length multiplier on ordinary arches, on top of `wave`. <1 chatter, >1 glide. */
+  lenScale: number;
+  /** Ordinary arches between authored ramp chains. Lower = chains arrive sooner. */
+  rampEvery: number;
+  /** Chance an eligible slot becomes a ramp chain instead of an ordinary arch. */
+  rampChance: number;
+  /**
+   * Chicane: how far each arch swings its skew to the *opposite* sign, as a
+   * fraction of |skew|. 0 = every arch on the island faces the same way;
+   * 1 = consecutive arches are fully mirrored, so you alternate dive/release
+   * down a corridor. Safe to vary per arch — `arch'(t)` is 0 at both ends for
+   * every skew, so the junction stays C1-continuous and no lip is invented.
+   */
+  chicane: number;
+  /** Sunflower trampoline spacing as a multiple of TerrainSystem.PAD_SPACING. */
+  padSpacing: number;
+  /** Ordinary arches between solo troughs. 0 = this biome has no troughs. */
+  troughEvery: number;
+  /** Trough depth as a fraction of the height of a neighbouring ordinary arch. */
+  troughDepth: number;
+};
+
+/** The grammar every hand-tuned world overrides; used as the remix base. */
+const GRAMMAR: TerrainProfile = {
+  relief: 1,
+  lenScale: 1,
+  rampEvery: 2,
+  rampChance: 0.65,
+  chicane: 0,
+  padSpacing: 1,
+  troughEvery: 0,
+  troughDepth: 0,
+};
+
+/**
+ * Build a per-biome grammar without repeating eight numbers against every
+ * entry. Keys are the ones that differ from GRAMMAR, so a reader can see at a
+ * glance what makes a world tick differently instead of diffing eight digits.
+ */
+function grammar(over: Partial<TerrainProfile>): TerrainProfile {
+  return { ...GRAMMAR, ...over };
+}
+
 export type BiomeDef = {
   id: string;
   name: string;
@@ -22,6 +81,8 @@ export type BiomeDef = {
   skew: number;
   /** Noise layering on top of the base cosine: 0 = smooth, 1 = very jagged. */
   roughness: number;
+  /** The rhythm the arches are laid out in — see TerrainProfile. */
+  terrain: TerrainProfile;
   /** terrain vertex colours */
   top: number;
   ridge: number;
@@ -65,6 +126,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.50,
     skew: 0.0,       // symmetric — pure teaching rhythm
     roughness: 0.02, // almost no noise — read-ahead is easy
+    // Teaching world: frequent gentle chains, busy trampolines, no surprises.
+    terrain: grammar({ relief: 0.92, rampEvery: 2, rampChance: 0.75, padSpacing: 0.88 }),
     top: 0x86dc7e,
     ridge: 0x4aa85c,
     mid: 0x2f7d5b,
@@ -96,6 +159,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.72,
     skew: 0.15,      // gentle forward lean — downslopes feel a touch steeper
     roughness: 0.1,
+    // Low, springy ground so the six thermals carry you — the sky is the level.
+    terrain: grammar({ relief: 0.9, lenScale: 0.95, rampEvery: 3, rampChance: 0.6, padSpacing: 0.75 }),
     top: 0x7ff0b0,
     ridge: 0x35c48a,
     mid: 0x1f8f80,
@@ -127,6 +192,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.88,
     skew: -0.18,     // slow climb, fast drop — launches feel punchy
     roughness: 0.15,
+    // Lagoon bowls: drop in, surf out, punch back up on the far lip.
+    terrain: grammar({ relief: 1.05, lenScale: 0.88, rampEvery: 3, rampChance: 0.55, chicane: 0.08, padSpacing: 1.05, troughEvery: 5, troughDepth: 0.35 }),
     top: 0xffc9d8,
     ridge: 0xf09ab8,
     mid: 0x2fb4a8,
@@ -158,6 +225,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 1.05,
     skew: -0.30,     // deep valley then sharp launch lip — rewards late release
     roughness: 0.18,
+    // Deep carved valleys under big ramps — the late-release speed run.
+    terrain: grammar({ relief: 1.12, lenScale: 1.15, rampEvery: 2, rampChance: 0.7, chicane: 0.12, padSpacing: 1.14, troughEvery: 4, troughDepth: 0.3 }),
     top: 0xd98ac0,
     ridge: 0x9a5a9e,
     mid: 0x5f3a7a,
@@ -189,6 +258,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 1.28,
     skew: 0.45,      // classic dune: very gradual windward slope, sharp leeward drop
     roughness: 0.08, // smooth — wind polishes the sand
+    // Colossal: very long arches, rare but huge launches, few trampolines.
+    terrain: grammar({ relief: 1.05, lenScale: 1.45, rampEvery: 4, rampChance: 0.5, chicane: 0.06, padSpacing: 1.43 }),
     hazard: "gust",
     top: 0xf2cf7a,
     ridge: 0xdc9a4a,
@@ -220,6 +291,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.95,
     skew: 0.20,      // choppy storm sea feel — waves are steep-fronted
     roughness: 0.35, // storm roughness — unpredictable micro-bumps
+    // Alternating chop, with the odd hole to lose a wing in.
+    terrain: grammar({ relief: 1.0, lenScale: 1.0, rampEvery: 3, rampChance: 0.6, chicane: 0.08, padSpacing: 0.95, troughEvery: 4, troughDepth: 0.3 }),
     top: 0x3f5a8a,
     ridge: 0x2c3f68,
     mid: 0x1d2848,
@@ -251,6 +324,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.88,
     skew: -0.50,     // ice shards: near-vertical front face, gentle backslide
     roughness: 0.28, // crystalline fracture texture
+    // Ice shards: tight, tall, and mirrored arch to arch — a hard chicane.
+    terrain: grammar({ relief: 0.9, lenScale: 1.0, rampEvery: 2, rampChance: 0.65, chicane: 0.15, padSpacing: 1.57 }),
     top: 0xe6f7ff,
     ridge: 0x9fd0ee,
     mid: 0x5a7fc0,
@@ -282,6 +357,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 0.72,
     skew: 0.0,       // symmetric spikes — equally brutal both directions
     roughness: 0.55, // volcanic rubble — chaotic, jagged surface noise
+    // Rubble chatter with pits, and a launch chain almost every other arch.
+    terrain: grammar({ relief: 0.92, lenScale: 0.95, rampEvery: 2, rampChance: 0.65, chicane: 0.08, padSpacing: 0.84, troughEvery: 6, troughDepth: 0.3 }),
     top: 0x5a4448,
     ridge: 0x3c2a30,
     mid: 0x281a20,
@@ -313,6 +390,8 @@ export const BIOMES: BiomeDef[] = [
     wave: 1.08,
     skew: -0.60,     // canyon walls: long plateau then sheer cliff drop
     roughness: 0.22, // wind-carved — some texture but readable
+    // A corridor: the walls swap sides as you go, and the floor drops away.
+    terrain: grammar({ relief: 1.15, lenScale: 1.3, rampEvery: 3, rampChance: 0.7, chicane: 0.45, padSpacing: 1.24, troughEvery: 5, troughDepth: 0.4 }),
     top: 0xe08a5a,
     ridge: 0xb85c3c,
     mid: 0x8a3c2c,
@@ -347,6 +426,8 @@ function shade(hex: number, amt: number): number {
 const WILD_SUFFIX = ["Wilds", "Reaches", "Expanse", "Frontier", "Verge", "Beyond"];
 const _wildCache = new Map<number, BiomeDef>();
 
+const clampF = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+
 export function biomeForIsland(island: number): BiomeDef {
   const i = Math.max(0, Math.floor(island));
   if (i < BIOMES.length) return BIOMES[i]!;
@@ -365,6 +446,12 @@ export function biomeForIsland(island: number): BiomeDef {
   const shift = Math.floor((rnd() - 0.5) * 36) + lap * 12;
   const amp = base.amp * (1 + lap * 0.07 + rnd() * 0.08);
   const wave = base.wave * (1 + (rnd() - 0.5) * 0.14);
+  // Slope scales with relief/lenScale, so cap the RATIO rather than each field:
+  // jittering the two independently can otherwise push a remixed island past a
+  // gradient no hand-tuned world has ever had. rng order is unchanged.
+  const reliefRaw = base.terrain.relief * (1 + lap * 0.03 + (rnd() - 0.5) * 0.12);
+  const lenScale = clampF(base.terrain.lenScale * (1 + (rnd() - 0.5) * 0.16), 0.55, 1.6);
+  const relief = clampF(reliefRaw, 0.3, lenScale * 1.2);
   const suffix = WILD_SUFFIX[i % WILD_SUFFIX.length]!;
   const decoPool: DecoKind[] = ["tree", "palm", "pine", "spire", "crystal", "cactus"];
   const gen: BiomeDef = {
@@ -386,6 +473,19 @@ export function biomeForIsland(island: number): BiomeDef {
     decoDensity: base.decoDensity * (0.9 + rnd() * 0.5),
     hazard: lap >= 2 && rnd() < 0.3 ? (rnd() < 0.5 ? "gust" : "storm") : base.hazard,
     thermals: Math.max(1, Math.min(7, base.thermals + Math.floor((rnd() - 0.4) * 2))),
+    // The remix drifts the GRAMMAR too, or every lap past the hand-tuned nine
+    // would fly the same rhythm in a new colour. Same drift shape as amp/wave:
+    // small per-world jitter plus a lap term, so later laps genuinely bite.
+    terrain: {
+      relief,
+      lenScale,
+      rampEvery: Math.max(1, Math.min(5, base.terrain.rampEvery + Math.floor((rnd() - 0.5) * 2))),
+      rampChance: clampF(base.terrain.rampChance + (rnd() - 0.5) * 0.12 + lap * 0.02, 0.4, 0.85),
+      chicane: clampF(base.terrain.chicane + (rnd() - 0.5) * 0.24, 0, 1),
+      padSpacing: clampF(base.terrain.padSpacing * (1 + (rnd() - 0.5) * 0.3), 0.6, 1.8),
+      troughEvery: base.terrain.troughEvery > 0 ? Math.max(2, base.terrain.troughEvery + Math.floor((rnd() - 0.5) * 2)) : 0,
+      troughDepth: clampF(base.terrain.troughDepth + (rnd() - 0.5) * 0.1, 0.15, 0.6),
+    },
   };
   _wildCache.set(i, gen);
   if (_wildCache.size > 64) {

@@ -134,6 +134,7 @@ export class LivingBackground extends THREE.Group {
       this.add(sp);
     }
 
+    this.writeInstanceColors();
     this.writeInstances(0);
   }
 
@@ -183,13 +184,39 @@ export class LivingBackground extends THREE.Group {
     }
   }
 
+  /**
+   * Aerial-perspective tint, per instance, written once.
+   *
+   * The colour is a pure function of `flock.depth` (aerial perspective: far
+   * birds pale, near birds dark) and `depth` is set when the flock is built and
+   * never changes. Re-running this every frame wrote three identical
+   * `instanceColor` buffers and forced `needsUpdate`, i.e. three of the
+   * measured 12.7 `bufferSubData` calls per frame re-uploading bytes that had
+   * not changed. Split out so the write happens at construction and the frame
+   * path only touches `instanceMatrix`.
+   */
+  private writeInstanceColors(): void {
+    let idx = 0;
+    for (const flock of this.flocks) {
+      // aerial perspective: near = dark slate, far = pale sky-tinted
+      tmpColor.setHSL(0.62, 0.12, 0.32 + (1 - flock.depth) * 0.34);
+      for (let b = 0; b < BIRDS_PER_FLOCK; b++) {
+        this.bodyMesh.setColorAt(idx, tmpColor);
+        this.wingL.setColorAt(idx, tmpColor);
+        this.wingR.setColorAt(idx, tmpColor);
+        idx++;
+      }
+    }
+    for (const mesh of [this.bodyMesh, this.wingL, this.wingR]) {
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
   private writeInstances(time: number): void {
     let idx = 0;
     for (let f = 0; f < this.flocks.length; f++) {
       const flock = this.flocks[f]!;
       const scale = 0.55 + flock.depth * 0.75;
-      // aerial perspective: near = dark slate, far = pale sky-tinted
-      tmpColor.setHSL(0.62, 0.12, 0.32 + (1 - flock.depth) * 0.34);
 
       // flock drifts leftward; wraps around the camera anchor
       const span = 240;
@@ -217,19 +244,16 @@ export class LivingBackground extends THREE.Group {
         dummy.scale.setScalar(scale);
         dummy.updateMatrix();
         this.bodyMesh.setMatrixAt(idx, dummy.matrix);
-        this.bodyMesh.setColorAt(idx, tmpColor);
 
         // left wing (+z), flapping up
         dummy.rotation.set(-flapAngle, 0, 0);
         dummy.updateMatrix();
         this.wingL.setMatrixAt(idx, dummy.matrix);
-        this.wingL.setColorAt(idx, tmpColor);
 
         // right wing (-z): mirror geometry via rotation around x by PI-flap
         dummy.rotation.set(Math.PI + flapAngle, 0, 0);
         dummy.updateMatrix();
         this.wingR.setMatrixAt(idx, dummy.matrix);
-        this.wingR.setColorAt(idx, tmpColor);
 
         idx++;
       }
@@ -237,9 +261,6 @@ export class LivingBackground extends THREE.Group {
     this.bodyMesh.instanceMatrix.needsUpdate = true;
     this.wingL.instanceMatrix.needsUpdate = true;
     this.wingR.instanceMatrix.needsUpdate = true;
-    if (this.bodyMesh.instanceColor) this.bodyMesh.instanceColor.needsUpdate = true;
-    if (this.wingL.instanceColor) this.wingL.instanceColor.needsUpdate = true;
-    if (this.wingR.instanceColor) this.wingR.instanceColor.needsUpdate = true;
   }
 
   dispose(): void {

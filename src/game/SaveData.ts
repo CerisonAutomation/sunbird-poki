@@ -1272,8 +1272,14 @@ export class SaveData {
   claimVipDaily(today: string): number {
     if (!this.isVipActive() || this.state.vipLastClaim === today) return 0;
     this.state.vipLastClaim = today;
-    this.addCoins(VIP_DAILY_GIFT);
-    return VIP_DAILY_GIFT;
+    // The return is the amount the wallet was actually credited, not the
+    // nominal gift: addCoins() applies the coin multiplier, so an owner of
+    // `goldenfeather` ("+10% coins forever") received more than VIP_DAILY_GIFT
+    // and the toast was quoting less than they got. The player is told one
+    // number and handed another, and this project's brand is honesty. Every
+    // sibling award here already returns what addCoins returned, for the same
+    // reason.
+    return this.addCoins(VIP_DAILY_GIFT);
   }
 
   /* ---------- advertising frequency caps (enforced, not decorative) ---------- */

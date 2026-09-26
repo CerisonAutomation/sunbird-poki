@@ -9,7 +9,7 @@ import { replayOptions, shouldRebuildCasualWorld, type RunOptions } from "./Repl
 import * as THREE from "three";
 import { Achievements } from "./Achievements";
 import { GameAudio } from "./Audio";
-import { BIOMES, biomeForIsland } from "./Biomes";
+import { biomeForIsland } from "./Biomes";
 import { TRACK_NAMES } from "./Music";
 import { Bird, type BirdStepOpts } from "./Bird";
 import { AttractPilot } from "./pilot";
@@ -35,18 +35,7 @@ import { Leaderboard, loadPilotName, savePilotName, isLeaderboardOnline, type Bo
 import { generatePilotName, isPilotNameClean, moderatePilotName, pilotNameRejection } from "./pilotNameGenerator";
 import { adoptPortalLocale, setLocale, t, whenLocaleReady, type SupportedLocale } from "../i18n";
 import { Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
-import {
-  dailyChallenge,
-  dailyDone,
-  modsFor,
-  NO_MODS,
-  stageDone,
-  weeklyGauntlet,
-  calendarReward,
-  calendarRewardLabel,
-  CALENDAR_DAYS,
-  type ChallengeMods,
-} from "./Challenges";
+import { dailyChallenge, dailyDone, modsFor, NO_MODS, stageDone, weeklyGauntlet, calendarReward, type ChallengeMods } from "./Challenges";
 import { bankMasteryRun, masteryPerks, masteryViews, NO_MASTERY_PERKS, type MasteryPerks } from "./Mastery";
 import { FirstFlight } from "./FirstFlight";
 import { bootStage, defer } from "./BootProgress";
@@ -99,12 +88,13 @@ SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
 } from "./constants";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
-import { nextWings, wingsFor, wingsProgress, wingsPromotion } from "./Career";
+import { wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
 import { fetchRivalGhost, publishGhost } from "./GhostNet";
 import { paceTargetDistance, synthesizePaceGhost } from "./RivalGhost";
-import { HUD, type CalendarCard, type CheckoutMode, type DailyCard, type GauntletCard, type HudSnapshot, type LoadoutView, type RivalCard, type SeedMode, type UiScreen, type UiState } from "./HUD";
-import { divisionFor, duelOpponent, duelSkillFor, lobbyRivals, nextDivision, rankSeasonId, seasonReward } from "./pvp";
+import { atlas, calendarCard, dailyCard, gauntletCard, loadoutView, rivalCard, wingsCard } from "./gameCards";
+import { HUD, type CalendarCard, type CheckoutMode, type DailyCard, type GauntletCard, type HudSnapshot, type SeedMode, type UiScreen, type UiState } from "./HUD";
+import { divisionFor, duelOpponent, duelSkillFor, lobbyRivals, rankSeasonId, seasonReward } from "./pvp";
 import { PilotBook } from "./pilots";
 import { launchIntentFor, pvpCircuitFor } from "./launchRouting";
 import { countSharePlay, loadSharedRun, shareRun, sharingAvailable, type SharedRun } from "./SharedRun";
@@ -6835,25 +6825,6 @@ export class Game {
     this.bump();
   }
 
-  private atlas(): import("./HUD").AtlasEntry[] {
-    const far = Math.max(this.save.state.farthestIsland, this.island);
-    const count = Math.max(BIOMES.length * 2, far + 3);
-    const out: import("./HUD").AtlasEntry[] = [];
-    for (let i = 0; i < count; i++) {
-      const b = biomeForIsland(i);
-      const seen = this.save.state.biomesSeen.includes(b.id);
-      out.push({
-        island: i,
-        name: b.name,
-        emoji: b.emoji,
-        tagline: b.tagline,
-        color: `#${b.top.toString(16).padStart(6, "0")}`,
-        reached: i <= far && seen,
-        hazard: b.hazard,
-      });
-    }
-    return out;
-  }
 
   // ----- Pause overlay / sub-menu navigation --------------------------------
   // When paused, sub-screens (shop, settings, scores, ...) show over the
@@ -7035,125 +7006,12 @@ export class Game {
     return `Hills of ${formatDatePretty(this.seed)}`;
   }
 
-  private dailyCard(): DailyCard {
-    const c = dailyChallenge(this.today);
-    const mode = modeById(c.mode);
-    return {
-      title: c.title,
-      modeName: mode.name,
-      modeIcon: mode.icon,
-      modifierIcon: c.modifier.icon,
-      modifierLabel: c.modifier.label,
-      modifierDesc: c.modifier.desc,
-      metric: c.metric,
-      target: c.target,
-      reward: c.reward,
-      done: this.save.isDailyDone(this.today),
-      dailiesDone: this.save.state.challenges.dailiesDone,
-    };
-  }
 
-  private gauntletCard(): GauntletCard {
-    const g = weeklyGauntlet(weekKey());
-    const done = this.save.gauntletDone(g.week);
-    return {
-      week: g.week,
-      stages: g.stages.map((st) => {
-        const mode = modeById(st.mode);
-        return {
-          index: st.index,
-          label: st.label,
-          modeName: mode.name,
-          modeIcon: mode.icon,
-          metric: st.metric,
-          target: st.target,
-          reward: st.reward,
-          done: done.includes(st.index),
-        };
-      }),
-      clearBonus: g.clearBonus,
-      cleared: done.length >= 3,
-      lifetimeClears: this.save.state.challenges.gauntletsCleared,
-    };
-  }
 
-  private calendarCard(): CalendarCard {
-    const cal = this.save.state.calendar;
-    const claimedToday = cal.lastClaim === this.today;
-    const days = [];
-    for (let d = 1; d <= CALENDAR_DAYS; d++) {
-      days.push({
-        day: d,
-        label: calendarRewardLabel(d),
-        claimed: d <= cal.cycleDay,
-        today: !claimedToday && d === (cal.cycleDay % CALENDAR_DAYS) + 1,
-        milestone: d % 7 === 0,
-      });
-    }
-    return { cycleDay: cal.cycleDay, claimedToday, days };
-  }
 
-  private wingsCard(): HudSnapshot["wings"] {
-    const life = this.save.state.lifetime.distance;
-    const cur = wingsFor(life);
-    const next = nextWings(life);
-    return {
-      icon: cur.icon,
-      name: cur.name,
-      progress: wingsProgress(life),
-      nextName: next ? next.tier.name : "",
-      nextNeeded: next ? next.needed : 0,
-      lifetime: life,
-    };
-  }
 
-  private rivalCard(): RivalCard {
-    const r = this.save.state.rival;
-    const div = divisionFor(r.rating);
-    const next = nextDivision(r.rating);
-    const span = div.max - div.min;
-    return {
-      rating: Math.floor(r.rating),
-      division: div.name,
-      divisionIcon: div.icon,
-      wins: r.wins,
-      losses: r.losses,
-      streak: r.streak,
-      bestStreak: r.bestStreak,
-      nextName: next ? next.div.name : "",
-      nextNeeded: next ? next.needed : 0,
-      progress: span > 0 ? Math.max(0, Math.min(1, (r.rating - div.min) / span)) : 1,
-      matches: r.matches.map((m) => ({ place: m.place, field: m.field, mode: m.mode, date: m.date, won: m.won })),
-      season: this.seasonCard(),
-    };
-  }
 
-  /** Ranked-season summary: countdown, peak, and the payout it locks in. */
-  private seasonCard(): RivalCard["season"] {
-    const now = new Date();
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const daysLeft = Math.max(1, Math.ceil((end.getTime() - now.getTime()) / 86_400_000));
-    const peak = this.save.state.rankSeason.peak;
-    const reward = seasonReward(peak);
-    return {
-      daysLeft,
-      peak: Math.floor(peak),
-      peakDivision: reward.division.name,
-      peakIcon: reward.division.icon,
-      rewardCoins: reward.coins,
-    };
-  }
 
-  private loadoutView(): LoadoutView {
-    const trail = this.save.state.activeTrail
-      ? (TRAILS[this.save.state.activeTrail]?.label ?? this.save.state.activeTrail)
-      : "Default trail";
-    return {
-      bird: this.skin.name,
-      trail,
-      boosts: this.save.state.armedBoosts.length,
-    };
-  }
 
   private ghostDelta(): number | null {
     if (!this.ghostPlayer.active) return null;
@@ -7175,9 +7033,9 @@ export class Game {
   private refreshViews(): void {
     const st = this.save.state;
     this.cardCache = {
-      daily: this.dailyCard(),
-      gauntlet: this.gauntletCard(),
-      calendar: this.calendarCard(),
+      daily: dailyCard(this.save, this.today),
+      gauntlet: gauntletCard(this.save),
+      calendar: calendarCard(this.save, this.today),
       mastery: masteryViews(this.save),
     };
     const stats = this.state === "menu" ? null : this.runStats();
@@ -7313,7 +7171,7 @@ export class Game {
     adTotal: this.ads.duration,
     adReason: this.adReason,
     seedLabel: this.seedLabel(),
-    wings: this.wingsCard(),
+    wings: wingsCard(this.save),
     };
   }
 
@@ -7402,7 +7260,7 @@ export class Game {
     inThermal: this.weather.inThermal,
     biomeName: this.terrain.biomeAt(this.bird.x).name,
     biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
-    atlas: this.screen === "atlas" ? this.atlas() : [],
+    atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
     farthestIsland: Math.max(st.farthestIsland, this.island),
     launchBanner: this.launchBannerText,
     launchBannerT: this.launchBannerT,
@@ -7497,8 +7355,8 @@ export class Game {
     finishRemaining: this.finishRemaining,
     nemesis: this.nemesis,
     photoFinish: this.photoFinish,
-    rival: this.rivalCard(),
-    loadout: this.loadoutView(),
+    rival: rivalCard(this.save),
+    loadout: loadoutView(this.save, this.skin),
     // Lobby-only field: computed every frame before, including mid-flight
     // and on the results card, where no one renders it.
     lobbyRivals:

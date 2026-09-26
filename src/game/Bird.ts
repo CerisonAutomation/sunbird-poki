@@ -562,6 +562,18 @@ export class Bird {
     // terrain. The previous 2.6–3.5 point-light pulse was visible as eye glare.
     this.glow.intensity = fever ? 0.85 + Math.sin(this.glowPulse) * 0.2 : 0;
     this.glow.color.setHex(0xffe08a);
+    // Outside fever that intensity is 0, and three.js does NOT compile a
+    // zero-intensity light out: a light that is off in practice still makes
+    // every MeshLambertMaterial in the game carry NUM_POINT_LIGHTS = 1 and run
+    // the point-light branch (normalize + length + two pow) on every lit
+    // fragment — terrain, decor, coins, pickups, balloons, race birds — in
+    // exchange for a glow that is off almost always. Hiding it instead of
+    // dimming it drops NUM_POINT_LIGHTS to 0 for those programs.
+    // Driven from `intensity > 0`, not from `fever`, so the light returns the
+    // moment the pulse is non-zero, and it is exactly what intensity 0 already
+    // contributed: nothing. Fever is player-facing feedback, so the pop is
+    // asserted in __tests__/fever-glow.test.ts rather than assumed.
+    this.glow.visible = this.glow.intensity > 0;
     if (fever) {
       this.bodyMat.emissive.set(0x552200);
       this.bodyMat.emissiveIntensity = 0.45;

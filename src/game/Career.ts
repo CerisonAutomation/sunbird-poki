@@ -8,6 +8,11 @@
  * Bronze in a session or two, while Aurora is a months-long badge of honor.
  *
  * Pure module: no storage, no DOM — trivially testable.
+ *
+ * Wiring-registry scanner canary: `__wiringScannerCanary` is named here in prose
+ * only. It deliberately does not exist as an export anywhere in this tree. If the
+ * wiring registry ever starts reading comments as code references, it will report
+ * a caller for it and its own sanity test will catch that.
  */
 
 export type WingsTier = {

@@ -109,19 +109,27 @@ const WIRED: Record<string, string> = {
 
   // Sunbird: the live accessor. `GREY_PALETTE` is a dead alias for index 5.
   "game/Sunbird.ts:rivalPalette": "FlockLoading + HUD + Sky + Social — rival colours",
+
+  // Wired by the results-card lane. Ten PENDING rows moved at once, which is
+  // what the bidirectional half of this registry exists for: each of these gained
+  // a caller in src/game/RunProgress.ts, so each one became a finding. The old
+  // descriptions recorded why they were dead; these record what they now drive.
+  "game/ProgressBeats.ts:planCelebration": "RunProgress - the beat strip for a finished run",
+  "game/ProgressBeats.ts:celebrationView": "RunProgress - celebration rows",
+  "game/ProgressBeats.ts:wingsProximity": "RunProgress - the proximity bar",
+  "game/GrowthLedger.ts:growthLedger": "RunProgress - growth lines (was a 1px empty div)",
+  "game/Missions.ts:missionRows": "RunProgress - the in-flight mission strip",
+  "game/Missions.ts:newlyDone": "RunProgress - newly completed missions",
+  "game/Missions.ts:nextActionLine": "RunProgress - next action (was a hardcoded empty string)",
+  "game/SpeedFeel.ts:streakOpacity": "RunProgress - HUD speed-line opacity",
+  "game/Cards.ts:buildGauntletCard": "RunProgress - gauntlet card (was inlined at Game.ts)",
+  "game/Cards.ts:buildRivalCard": "RunProgress - rival card (was duplicated at Game.ts)",
 };
 
 /** Audited, unwired, awaiting a wire-or-delete decision. See `hive/research/unwired.md`. */
 const PENDING: Record<string, string> = {
   // 1.1 results card — Game.ts:7486 fills these with literals
-  "game/ProgressBeats.ts:planCelebration": "results-card beat strip",
-  "game/ProgressBeats.ts:celebrationView": "results-card beat strip",
-  "game/ProgressBeats.ts:wingsProximity": "results-card proximity bar",
-  "game/GrowthLedger.ts:growthLedger": "results-card growth lines (1px empty div at HUD)",
-  "game/Missions.ts:missionRows": "in-flight mission strip",
-  "game/Missions.ts:newlyDone": "in-flight mission strip",
   "game/Missions.ts:closestGoalLine": "mission strip footer",
-  "game/Missions.ts:nextActionLine": "results-card next action (HUD renders a hardcoded \"\")",
   "game/Career.ts:wingsCrossing": "wing-tier crossing banner",
   "game/HudFeedback.ts:BannerMoment": "banner vocabulary for the above",
   // 1.4 clip camera + recap CTA
@@ -134,7 +142,6 @@ const PENDING: Record<string, string> = {
   // 1.3 adaptive difficulty
     "game/Engagement.ts:tuneDifficulty": "casual-only ease/spice tune",
   // 1.5 speed feel
-  "game/SpeedFeel.ts:streakOpacity": "HUD speed-line opacity (inlined at HUD with other constants)",
   "game/SpeedFeel.ts:vignetteIntensity": "warp vignette",
   "game/SpeedFeel.ts:afterimageAlpha": "afterimages",
   "game/SpeedFeel.ts:whooshRate": "whoosh curve (Audio has its own thresholds)",
@@ -144,8 +151,6 @@ const PENDING: Record<string, string> = {
   "game/SpeedFeel.ts:WEE_IDLE": "one-off celebration gate state",
   "game/SpeedFeel.ts:weeCheck": "one-off celebration gate (Moments names it in a comment and never calls it)",
   // 1.6 half-done refactor seam; Game.ts still holds the pre-fix copies
-  "game/Cards.ts:buildGauntletCard": "seam never delegated (Game.ts:7023 holds the old rule)",
-  "game/Cards.ts:buildRivalCard": "seam never delegated (Game.ts:7058 duplicates it)",
   // 1.7 messenger-safe challenge token (ROADMAP claims shipped)
   "game/DeepLinks.ts:packChallengeToken": "sb1: token pack",
   "game/DeepLinks.ts:unpackChallengeToken": "sb1: token unpack",
@@ -370,14 +375,21 @@ describe("wiring registry", () => {
     expect(shipping.length).toBeGreaterThan(100);
     expect(exportsByModule.size).toBeGreaterThan(100);
     expect(exportsByModule.get("game/Moments.ts")?.has("MOMENTS")).toBe(true);
-    // Prose must not count as code. `wingsProximity` is named in Career.ts:35
-    // and in its own doc comment, and in no code — so a scanner that read
-    // comments as references would misfile it as wired, which is the exact
-    // misfiling that hid eight of the audited defects.
-    expect(callersOf("game/ProgressBeats.ts", "wingsProximity")).toEqual([]);
+    // Prose must not count as code. The canary is PLANTED, not found: Career.ts
+    // carries a comment naming `__wiringScannerCanary`, an identifier that
+    // deliberately does not exist as an export anywhere in this tree. A scanner
+    // that read comments as references would report a caller for it.
+    //
+    // This replaces an organic canary — `wingsProximity`, named in Career.ts:35
+    // and in no code — which had to be swapped the moment the results-card lane
+    // wired that symbol for real. An organic canary is spent by unrelated good
+    // work, and with the PENDING set thinned there is no second one available.
+    // A planted canary cannot be spent.
     const career = join(root, "src/game/Career.ts");
-    expect(readFileSync(career, "utf8")).toContain("wingsProximity");
-    expect(referencePositions(career, "wingsProximity")).toEqual([]);
+    const canary = "__wiringScannerCanary";
+    expect(readFileSync(career, "utf8")).toContain(canary);
+    expect(referencePositions(career, canary)).toEqual([]);
+    expect(exportsByModule.get("game/Career.ts")?.has(canary)).toBeFalsy();
   });
 
   it("reads every shipping file, including the ones holding regex literals", () => {

@@ -6,10 +6,15 @@ import { t } from "../i18n";
  * Canonical home destinations: player-facing names explain what each page is
  * for. Native buttons keep standard Tab/Enter/Space behavior.
  *
- * Wording rule: a destination must name the thing it actually opens. PvP
- * worlds, AI races, and challenge rules now have one home — Challenges — so
- * the root menu stays about choosing a kind of play, not choosing an
- * implementation detail.
+ * Wording rule: a destination must name the thing it actually opens, and a
+ * headline feature that only lives one level down is not reachable. Human and
+ * AI rivals therefore each have their own tile on the home menu, pointing at
+ * the screen built for that opponent. The rest of the root menu stays about
+ * choosing a kind of play, not choosing an implementation detail.
+ *
+ * The rival tiles reuse the canonical screen keys (`raceLobby`, `aiPvp`) rather
+ * than inventing parallel names, so a destination and the screen it opens can
+ * never drift apart in naming.
  *
  * `key` is the stable identity. It does three jobs that the display `title`
  * used to do badly:
@@ -45,7 +50,15 @@ function dest(key: string, action: string, icon: MenuIconName, title: string, de
 }
 
 export const PLAY_DESTINATIONS: MenuDestination[] = [
-  dest("challenges", "open-challenges", "online", "PvP · vs AI", "Race online or against the neural flock"),
+  // The two rival entries lead the row and are named for WHO you race, because
+  // "human or AI" is the question a player asks first and the home menu is the
+  // one screen they always see. Each opens the screen built for that opponent:
+  // the Race Lobby (live matchmaking, invites) or AI PvP (offline flock). They
+  // are separate tiles on purpose — a single "PvP" tile re-hides the choice
+  // one level down, which is how both rivals ended up behind the front door.
+  dest("raceLobby", "open-live", "online", "Race live rivals", "Human matchmaking · invites & rooms"),
+  dest("aiPvp", "open-practice", "bird", "Race AI rivals", "Offline flock · no waiting, no server"),
+  dest("challenges", "open-challenges", "challenge", "Challenges", "Daily & weekly goals, auto-matched"),
   dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush"),
   dest("leaderboard", "open-board", "board", "Leaderboards", "All-time · weekly · today · you"),
   dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge"),

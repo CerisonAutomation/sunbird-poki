@@ -4088,12 +4088,18 @@ export class Game {
         else this.setScreen(target);
         break;
       }
-      case "open-practice":
       case "open-live":
-        // One race hub owns both human matchmaking and AI practice. Keeping
-        // the old screens as routing destinations made the same format/world
-        // picker appear three times with subtly different actions.
-        this.setScreen("challenges");
+        // Human rivals. The Race Lobby is the matchmaking hub: quick match
+        // against live pilots, the format/world picker, and the invite paths.
+        this.setScreen("live");
+        break;
+      case "open-practice":
+        // AI rivals. This is the same split the home menu shows — one tap to
+        // a human lobby, one tap to the offline flock — so the two need
+        // different screens. Pointing both at "challenges" left the AI
+        // practice screen unreachable from anywhere and put the lobby two
+        // levels deep behind the home menu.
+        this.setScreen("practice");
         break;
       case "practice-ranked":
       case "practice-storm":

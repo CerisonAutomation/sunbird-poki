@@ -743,6 +743,18 @@ export class Game {
     this.dpr = softwareMode ? 1 : this.preferredDpr();
     this.renderer.setPixelRatio(this.dpr);
 
+    // A dev-only handle on the live renderer, so the next "what is actually
+    // being drawn?" question is a two-minute console call instead of a build.
+    // It exists because a render pass could not read `renderer.info` at all —
+    // the app exposed no renderer reference — and the live `coinMesh.count` is
+    // still an open question that only a real device can settle.
+    // `import.meta.env.DEV` is replaced with `false` at build time, so the
+    // whole block is dead code in a production bundle and the handle cannot
+    // exist there.
+    if (import.meta.env.DEV) {
+      (window as Window & { __render?: THREE.WebGLRenderer }).__render = this.renderer;
+    }
+
     // EA-04/EA-05: the renderer (the expensive object) exists — the loading
     // screen can now say so truthfully.
     bootStage("engine");

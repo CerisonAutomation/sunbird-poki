@@ -495,11 +495,6 @@ export function biomeForIsland(island: number): BiomeDef {
   return gen;
 }
 
-/** Difficulty tier: every full lap of the world cycle raises the stakes. */
-export function tierForIsland(island: number): number {
-  return Math.floor(Math.max(0, island) / BIOMES.length);
-}
-
 /**
  * Ocean gaps widen gradually, but always leave a landing shelf before the
  * island wraps. Later difficulty comes from the biomes, not impossible gaps.

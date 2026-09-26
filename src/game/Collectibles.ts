@@ -104,6 +104,14 @@ export class Collectibles {
   private readonly activeBalloons: Balloon[] = [];
   private readonly balloonMats: THREE.MeshLambertMaterial[] = [];
   private readonly knotMat: THREE.MeshLambertMaterial;
+  // Balloon part geometries, hoisted like every other collectible geometry
+  // above (coinGeo, gemGeo, pickupGeo, ringGeo). allocBalloon() used to mint a
+  // private copy of all three per pooled instance, so 24 balloons owned 72
+  // identical buffers. Nothing transforms or mutates them per instance — the
+  // meshes carry the transforms — so one shared copy is identical on screen.
+  private readonly balloonBodyGeo: THREE.SphereGeometry;
+  private readonly balloonKnotGeo: THREE.ConeGeometry;
+  private readonly balloonStringGeo: THREE.CylinderGeometry;
   private readonly seedN: number;
   private readonly seedStr: string;
   private spawnedUntil = -1;
@@ -171,6 +179,9 @@ export class Collectibles {
     uploadDensePrefix(this.ringMesh.instanceMatrix, this.ringMesh.count);
 
     this.knotMat = new THREE.MeshLambertMaterial({ color: 0x7a4a20 });
+    this.balloonBodyGeo = new THREE.SphereGeometry(2.1, 14, 12);
+    this.balloonKnotGeo = new THREE.ConeGeometry(0.42, 0.8, 6);
+    this.balloonStringGeo = new THREE.CylinderGeometry(0.05, 0.05, 5, 5);
     for (const c of BALLOON_COLORS) {
       this.balloonMats.push(new THREE.MeshLambertMaterial({ color: c, emissive: 0x1a0a00 }));
     }
@@ -354,11 +365,12 @@ export class Collectibles {
     for (const c of this.cloudPool) (c.sprite.material as THREE.Material).dispose();
     this.ringGeo.dispose();
     this.ringMat.dispose();
-    for (const b of this.balloonPool) {
-      b.root.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.geometry.dispose();
-      });
-    }
+    // Balloon geometries are shared across the pool, so they are disposed once
+    // here rather than by walking the pool (which would release a buffer that
+    // every balloon mesh still points at, 24 times over).
+    this.balloonBodyGeo.dispose();
+    this.balloonKnotGeo.dispose();
+    this.balloonStringGeo.dispose();
     for (const m of this.balloonMats) m.dispose();
     this.knotMat.dispose();
   }
@@ -643,13 +655,13 @@ export class Collectibles {
     if (idle) return idle;
     const root = new THREE.Group();
     const mat = this.balloonMats[this.balloonPool.length % this.balloonMats.length]!;
-    const body = new THREE.Mesh(new THREE.SphereGeometry(2.1, 14, 12), mat);
+    const body = new THREE.Mesh(this.balloonBodyGeo, mat);
     body.position.y = 2.1;
     body.castShadow = true;
-    const knot = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.8, 6), this.knotMat);
+    const knot = new THREE.Mesh(this.balloonKnotGeo, this.knotMat);
     knot.rotation.x = Math.PI;
     knot.position.y = 0.4;
-    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 5, 5), this.knotMat);
+    const string = new THREE.Mesh(this.balloonStringGeo, this.knotMat);
     string.position.y = -2.3;
     root.add(body, knot, string);
     root.traverse((o) => o.layers.set(this.layer));

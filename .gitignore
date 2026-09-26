@@ -88,3 +88,8 @@ palace/
 roster.json
 roster-backups/
 hallways.json
+
+# Agent git worktrees created inside the repo (one per concurrent temp). Each
+# is a full checkout of the source tree, so a bare `git add -A` would commit a
+# nested copy of src/ and api/ under worktrees/. Same hazard as hive/ above.
+worktrees/

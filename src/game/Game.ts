@@ -9,7 +9,7 @@ import { replayOptions, shouldRebuildCasualWorld, type RunOptions } from "./Repl
 import * as THREE from "three";
 import { Achievements } from "./Achievements";
 import { GameAudio } from "./Audio";
-import { BIOMES, biomeForIsland } from "./Biomes";
+import { biomeForIsland } from "./Biomes";
 import { TRACK_NAMES } from "./Music";
 import { Bird, type BirdStepOpts } from "./Bird";
 import { AttractPilot } from "./pilot";
@@ -100,12 +100,13 @@ SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
 } from "./constants";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
-import { nextWings, wingsFor, wingsProgress, wingsPromotion } from "./Career";
+import { wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
 import { fetchRivalGhost, publishGhost } from "./GhostNet";
 import { paceTargetDistance, synthesizePaceGhost } from "./RivalGhost";
-import { HUD, type CalendarCard, type CheckoutMode, type DailyCard, type GauntletCard, type HudSnapshot, type LoadoutView, type RivalCard, type SeedMode, type UiScreen, type UiState } from "./HUD";
-import { divisionFor, duelOpponent, duelSkillFor, lobbyRivals, nextDivision, rankSeasonId, seasonReward } from "./pvp";
+import { atlas, calendarCard, dailyCard, gauntletCard, loadoutView, rivalCard, wingsCard } from "./gameCards";
+import { HUD, type CalendarCard, type CheckoutMode, type DailyCard, type GauntletCard, type HudSnapshot, type SeedMode, type UiScreen, type UiState } from "./HUD";
+import { divisionFor, duelOpponent, duelSkillFor, lobbyRivals, rankSeasonId, seasonReward } from "./pvp";
 import { PilotBook } from "./pilots";
 import { launchIntentFor, pvpCircuitFor } from "./launchRouting";
 import { countSharePlay, loadSharedRun, shareRun, sharingAvailable, type SharedRun } from "./SharedRun";
@@ -949,16 +950,11 @@ export class Game {
             stuckForMs: drop?.stuckForMs ?? 0,
           });
         }
-        if (this.state === "playing") this.setState("paused");
         // Portal QA requirement (and basic courtesy): a hidden tab is silent.
-        this.audio.setHiddenMuted(true);
-        void this.audio.suspend();
+        this.suspendForBackground();
       } else {
         this.hidden = false;
-        this.last = performance.now();
-        this.acc = 0;
-        this.audio.setHiddenMuted(false);
-        void this.audio.resumeExisting();
+        this.resumeFromBackground();
       }
     };
     document.addEventListener("visibilitychange", this.onVis);
@@ -1018,15 +1014,10 @@ export class Game {
       onPause: () => {
         // Portal-side pause (in addition to visibilitychange): freeze the
         // same way a hidden tab does — paused state + silenced audio.
-        if (this.state === "playing") this.setState("paused");
-        this.audio.setHiddenMuted(true);
-        void this.audio.suspend();
+        this.suspendForBackground();
       },
       onResume: () => {
-        this.last = performance.now();
-        this.acc = 0;
-        this.audio.setHiddenMuted(false);
-        void this.audio.resumeExisting();
+        this.resumeFromBackground();
       },
     }).then((adapter) => {
       if (this.disposed) return;
@@ -1142,21 +1133,47 @@ export class Game {
    * before the import resolves, and two clients in one lobby is exactly the
    * bug this funnel prevents.
    */
+  /** The one way a client is put into a room. Every caller used to inline
+   *  `attachTransport` + `setIdentity` + `connect` with the same three
+   *  arguments; they are identical by construction, and the mix-and-match
+   *  hazard is a race that shows up as an empty lobby. */
+  private announceToRoom(client: AnyRealtimeClient, seed: string, remote: boolean): void {
+    this.massRace.attachTransport(client);
+    client.setIdentity(this.racedName(), this.skin.id, 0.06);
+    client.connect(this.roomCode, seed, remote);
+  }
+
   private ensureNet(seed: string, remote: boolean): void {
     this.netPending ??= createNetTransport(this.save.state.deviceId, this.pilotName, this.skin.id);
     void this.netPending
       .then((client) => {
         if (this.disposed) return;
         this.net = client;
-        this.massRace.attachTransport(client);
-        client.setIdentity(this.racedName(), this.skin.id, 0.06);
-        client.connect(this.roomCode, seed, remote);
+        this.announceToRoom(client, seed, remote);
       })
       .catch(() => {
         // A transport that cannot be created leaves `this.net` null, which is
         // the same state as "multiplayer unavailable": MassRace keeps flying
         // the local squadron and the UI says so.
       });
+  }
+
+  /** Backgrounding, by either route. A hidden tab (visibilitychange) and a
+   *  portal-side pause were two hand-written copies of the same three
+   *  statements, so the two ways of getting muted could drift apart — and a
+   *  drift here is a player who cannot unpause. */
+  private suspendForBackground(): void {
+    if (this.state === "playing") this.setState("paused");
+    this.audio.setHiddenMuted(true);
+    void this.audio.suspend();
+  }
+
+  /** The mirror of suspendForBackground, likewise shared by both routes. */
+  private resumeFromBackground(): void {
+    this.last = performance.now();
+    this.acc = 0;
+    this.audio.setHiddenMuted(false);
+    void this.audio.resumeExisting();
   }
 
   dispose(): void {
@@ -1503,6 +1520,20 @@ export class Game {
       this.terrain,
     );
 
+
+    this.stepLaunchAndGhosts(dt, diving);
+    this.stepWeather(dt, diving);
+    this.stepRivalField(dt);
+    this.stepTerrainAndFeel(dt, diving);
+    this.stepSurprisesAndIslands(dt);
+    this.stepCollectAndPickups(dt);
+    this.stepScoreAndFinish(dt);
+    this.stepSettleAndGoals(dt, diving);
+  }
+
+  /** Flight cues, the launch/landing reactions, the first-flight coach and
+   *  the two ghost players. */
+  private stepLaunchAndGhosts (dt: number, diving: boolean) {
     const cue = this.flightCues.update(dt, this.bird, this.terrain.islandIndex(this.bird.x), this.terrain.localX(this.bird.x));
     if (cue === "runup") this.audio.runup();
     else if (cue === "apex") this.audio.apexChime();
@@ -1560,7 +1591,10 @@ export class Game {
         }
       }
     }
+  }
 
+  /** Biome weather for this step: thermals, gusts, ash storms. */
+  private stepWeather (dt: number, diving: boolean) {
     // biome weather: thermals, headwinds, ash storms
     this.weather.update(dt, this.elapsed, this.bird, this.terrain, diving, {
       onThermalEnter: () => {
@@ -1599,7 +1633,13 @@ export class Game {
         this.particles.emitWind(this.bird.x, this.bird.y, this.weather.gust);
       }
     }
+  }
 
+  /** The rival field's fixed step. Same contract as the player's, and the
+   *  single largest block in the tick — it was previously buried in the
+   *  middle of fixedUpdate where nothing about it was visible from the
+   *  call site. */
+  private stepRivalField (dt: number) {
     // The rival field runs the same fixed-step contract as the player.
     if (this.massRace.active) {
       this.massRace.step(dt, this.terrain, this.startX + this.mode.finish, this.runTime, this.bird.x, this.bird.y);
@@ -1738,7 +1778,12 @@ export class Game {
         this.lastPlace = place;
       }
     }
+  }
 
+  /** What the terrain does to you: biome entry, water and the shield,
+   *  landing score, dust, the ridge skim bonus, the fever ramp, power
+   *  particles and the ocean splash. */
+  private stepTerrainAndFeel (dt: number, diving: boolean) {
     const biomeNow = this.terrain.biomeAt(this.bird.x);
     if (biomeNow.id !== this.lastBiomeId) {
       this.lastBiomeId = biomeNow.id;
@@ -1859,6 +1904,10 @@ export class Game {
       this.splashQuipN += 1;
       if (this.splashQuipN % 3 === 1) this.hud.toast(quip(SPLASH_QUIPS, this.splashQuipN), "cloud");
     }
+  }
+
+  /** Seeded rare delights, then island crossings. */
+  private stepSurprisesAndIslands (dt: number) {
 
     // Rare delight: golden geese, sneezes, encores. Never punishing. Rolled on
     // the run seed so the same hills yield the same surprises (and a race or
@@ -1941,7 +1990,10 @@ export class Game {
         this.hud.toast(`Washed ashore on ${b.name}`, "warn");
       }
     }
+  }
 
+  /** Pickup collection and what each pickup awards. */
+  private stepCollectAndPickups (dt: number) {
     const magnetOn = this.feverOn || this.magnetTimer > 0 || this.gameplaySkin.magnetAlways || this.powers.magnetOn();
     this.collect.update(dt, this.bird, this.terrain, magnetOn, this.elapsed, this.powers.magnetScale(), {
       onCoin: (x, y, gem) => {
@@ -1988,7 +2040,13 @@ export class Game {
       onRing: (x, y) => this.onRing(x, y),
       onBalloon: (x, y) => this.onBalloon(x, y),
     });
+  }
 
+  /** Ring chain, fever, score accumulation, distance milestones, the
+   *  personal-best crossing, the stormfront, and the two ways a race ends:
+   *  the finish line and the clock. Kept as ONE method because the finish
+   *  check reads the runDist the milestone code above it computed. */
+  private stepScoreAndFinish (dt: number) {
     // Ring chain cools off if the player eases off the sky line.
     if (this.ringChainTimer > 0) {
       this.ringChainTimer -= dt;
@@ -2175,6 +2233,11 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** The settle rule for an untouched bird, the live session goals, and the
+   *  coach hint recomputed at the end of the step. */
+  private stepSettleAndGoals (dt: number, diving: boolean) {
 
     // Settle rule: a bird that is down (grounded, in water, or skimming the
     // deck) with crawl speed and no held input has nothing left to do — let
@@ -2229,6 +2292,7 @@ export class Game {
     this.hintTimer += dt;
     this.hint = this.computeHint();
   }
+
 
   /**
    * Take-off: rate it, pay it out, and sell it. This is the moment the whole
@@ -4371,6 +4435,16 @@ export class Game {
    * challenges, clubs, chat). Returns true when consumed. Extracted from
    * handleAction; same break-to-return-true transform as handleShopEvent.
    */
+  /** A club/squad call that answers with a human-readable notice. Every one of
+   *  them settled into the same two lines -- park the message, repaint the
+   *  views -- and a route that forgot the repaint shipped a silent button. */
+  private squadNotices(pending: Promise<string> | undefined): void {
+    void pending?.then((msg) => {
+      this.squadNotice = msg;
+      this.bump();
+    });
+  }
+
   private handleSocialEvent(action: string, id: string): boolean {
     switch (action) {
       case "open-squad":
@@ -4517,10 +4591,7 @@ export class Game {
       }
       case "pilot-add": {
         const code = id || this.squad?.state.lookup?.code || this.hud.readValue("pilotCode");
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.addFriend(code));
         return true;
       }
       case "pilot-copy": {
@@ -4570,10 +4641,7 @@ export class Game {
         // Kept for older builds/links that still post a bare code.
         const code = (this.hud.readValue("squadCode") || this.hud.readValue("pilotCode")).trim().toUpperCase();
         if (!code) return true;
-        void this.squad?.addFriend(code).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.addFriend(code));
         return true;
       }
       case "squad-remove":
@@ -4609,17 +4677,11 @@ export class Game {
           this.hud.toast("Give your club a name first", "info");
           return true;
         }
-        void this.squad?.createClub(name, "Fly together, land badly").then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.createClub(name, "Fly together, land badly"));
         return true;
       }
       case "squad-join-club":
-        void this.squad?.joinClub(parseInt(id, 10) || 0).then((msg) => {
-          this.squadNotice = msg;
-          this.bump();
-        });
+        this.squadNotices(this.squad?.joinClub(parseInt(id, 10) || 0));
         return true;
       case "squad-leave-club":
         void this.squad?.leaveClub();
@@ -5592,7 +5654,22 @@ export class Game {
     this.bump();
   }
 
-  private grantVip(source: string): void {
+  /** Charges a coin price, or tells the player the shortfall and reports
+   *  false. The guard, the shortfall arithmetic and the toast were written out
+   *  four times over the coin sinks (gold, starter pack, VIP, mystery vault)
+   *  with the same wording, so a change to any of them had to be made four
+   *  times over and could silently drift between them. */
+  private spendCoins(price: number): boolean {
+    if (this.save.spend(price)) return true;
+    this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
+    return false;
+  }
+
+  /** The state a VIP purchase actually turns on. Both routes to VIP ran this
+   *  same sequence before diverging for their own toast and telemetry line, so
+   *  a fix to one of them (the daily claim, the confetti anchor) had to be
+   *  repeated in the other to stay honest. */
+  private applyVipEntitlement(): void {
     this.save.grantVip();
     this.vipActive = true;
     this.vipExpiredNotice = false;
@@ -5600,6 +5677,10 @@ export class Game {
     this.save.claimVipDaily(this.today);
     this.audio.purchase();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+  }
+
+  private grantVip(source: string): void {
+    this.applyVipEntitlement();
     this.hud.toast("Welcome to VIP ♛", "vip");
     this.telemetry.track("vip_granted", { source });
     this.bump();
@@ -5610,48 +5691,27 @@ export class Game {
    * portals while giving the portal a clear, opt-in monetisation moment. */
   private buyCoinGold(): void {
     if (this.save.state.gold) return;
-    const price = GOLD.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(GOLD.coinPrice)) return;
     this.grantGold("coin_purchase");
   }
 
   private buyCoinStarter(): void {
     if (this.save.state.starterPack) return;
-    const price = STARTER_PACK.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(STARTER_PACK.coinPrice)) return;
     this.grantStarter("coin_purchase");
   }
 
   private buyPortalVip(): void {
     const price = VIP.coinPrice;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
-    this.save.grantVip();
-    this.vipActive = true;
-    this.vipExpiredNotice = false;
-    this.save.ownSkin("aurora");
-    this.save.claimVipDaily(this.today);
-    this.audio.purchase();
-    this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
+    if (!this.spendCoins(price)) return;
+    this.applyVipEntitlement();
     this.hud.toast("VIP flight unlocked with coins ♛", "vip");
     this.telemetry.track("vip_granted", { source: "portal_coins", price });
     this.bump();
   }
 
   private buyMysteryVault(): void {
-    const price = 150;
-    if (!this.save.spend(price)) {
-      this.hud.toast(`Need ● ${(price - this.save.state.wallet).toLocaleString()} more coins`, "info");
-      return;
-    }
+    if (!this.spendCoins(150)) return;
     const rng = Math.random();
     this.audio.fanfare();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
@@ -6116,6 +6176,20 @@ export class Game {
    * starting local AI practice. Browsing or cancelling cannot block a room. */
   private static readonly MM_WINDOW = 15;
 
+  /** Ends the search and hands back what it was searching for. Both exits out
+   *  of matchmaking -- "the run already started" and "the lobby came back
+   *  empty" -- tore the search down by hand, and the two five-line blocks had
+   *  to stay in step: leave the watcher running and the overlay comes back on
+   *  its own. */
+  private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
+    const opts = this.mmOpts;
+    this.mmOpts = null;
+    this.mmDeadline = 0;
+    this.roomWatcher?.stop();
+    this.closeRoomBrowser();
+    return opts;
+  }
+
   private beginMatchmaking(opts: { ranked: boolean; storm: boolean }): void {
     this.disconnectRace();
     this.roomCode = "";
@@ -6146,12 +6220,9 @@ export class Game {
   }
 
   private cancelMatchmaking(): void {
-    this.mmDeadline = 0;
-    this.mmOpts = null;
+    this.takeMatchOpts();
     this.mmPhase = "searching";
     this.mmRooms = "";
-    this.roomWatcher?.stop();
-    this.closeRoomBrowser();
     this.net?.sendReady(false);
     this.disconnectRace();
     this.hud.setMatchmaking(false, 0, this.roomSize, 0);
@@ -6210,11 +6281,7 @@ export class Game {
     // If the run already started (a real start frame, or a local launch), the
     // search is over — the overlay must never sit on top of gameplay.
     if (this.state !== "menu") {
-      const opts = this.mmOpts;
-      this.mmOpts = null;
-      this.mmDeadline = 0;
-      this.roomWatcher?.stop();
-      this.closeRoomBrowser();
+      const opts = this.takeMatchOpts();
       this.hud.setMatchmaking(false, 0, this.roomSize, 0);
       this.hud.toast("No players found — starting AI race", "info");
       if (opts) this.launchMatch(opts, true);
@@ -6256,11 +6323,7 @@ export class Game {
       // Empty lobby — fall back to a clearly labeled AI flock so the pilot is
       // never left staring at a dead search.
       this.mmPhase = "waiting";
-      const opts = this.mmOpts;
-      this.mmOpts = null;
-      this.mmDeadline = 0;
-      this.roomWatcher?.stop();
-      this.closeRoomBrowser();
+      const opts = this.takeMatchOpts();
       this.hud.setMatchmaking(false, live, this.roomSize, 0);
       this.hud.toast("No live pilots found — racing the AI flock (practice)", "info");
       this.telemetry.track("matchmaking_ai_fallback", { window: Game.MM_WINDOW });
@@ -6328,9 +6391,7 @@ export class Game {
     if (this.net) {
       // Already seated (a reconnect, or a second lobby visit): keep the same
       // client and just re-announce ourselves into the room.
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
+      this.announceToRoom(this.net, seed, remote);
       return;
     }
     this.ensureNet(seed, remote);
@@ -6388,16 +6449,8 @@ export class Game {
     if (!isMultiplayerConfigured() && !POKI_MULTIPLAYER) return;
     const seed = this.currentMatchSeed();
     const remote = this.joiningRemoteRoom;
-    if (this.net?.connected) {
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
-      return;
-    }
     if (this.net) {
-      this.massRace.attachTransport(this.net);
-      this.net.setIdentity(this.racedName(), this.skin.id, 0.06);
-      this.net.connect(this.roomCode, seed, remote);
+      this.announceToRoom(this.net, seed, remote);
       return;
     }
     this.ensureNet(seed, remote);
@@ -6813,25 +6866,6 @@ export class Game {
     this.bump();
   }
 
-  private atlas(): import("./HUD").AtlasEntry[] {
-    const far = Math.max(this.save.state.farthestIsland, this.island);
-    const count = Math.max(BIOMES.length * 2, far + 3);
-    const out: import("./HUD").AtlasEntry[] = [];
-    for (let i = 0; i < count; i++) {
-      const b = biomeForIsland(i);
-      const seen = this.save.state.biomesSeen.includes(b.id);
-      out.push({
-        island: i,
-        name: b.name,
-        emoji: b.emoji,
-        tagline: b.tagline,
-        color: `#${b.top.toString(16).padStart(6, "0")}`,
-        reached: i <= far && seen,
-        hazard: b.hazard,
-      });
-    }
-    return out;
-  }
 
   // ----- Pause overlay / sub-menu navigation --------------------------------
   // When paused, sub-screens (shop, settings, scores, ...) show over the
@@ -7013,125 +7047,12 @@ export class Game {
     return `Hills of ${formatDatePretty(this.seed)}`;
   }
 
-  private dailyCard(): DailyCard {
-    const c = dailyChallenge(this.today);
-    const mode = modeById(c.mode);
-    return {
-      title: c.title,
-      modeName: mode.name,
-      modeIcon: mode.icon,
-      modifierIcon: c.modifier.icon,
-      modifierLabel: c.modifier.label,
-      modifierDesc: c.modifier.desc,
-      metric: c.metric,
-      target: c.target,
-      reward: c.reward,
-      done: this.save.isDailyDone(this.today),
-      dailiesDone: this.save.state.challenges.dailiesDone,
-    };
-  }
 
-  private gauntletCard(): GauntletCard {
-    const g = weeklyGauntlet(weekKey());
-    const done = this.save.gauntletDone(g.week);
-    return {
-      week: g.week,
-      stages: g.stages.map((st) => {
-        const mode = modeById(st.mode);
-        return {
-          index: st.index,
-          label: st.label,
-          modeName: mode.name,
-          modeIcon: mode.icon,
-          metric: st.metric,
-          target: st.target,
-          reward: st.reward,
-          done: done.includes(st.index),
-        };
-      }),
-      clearBonus: g.clearBonus,
-      cleared: done.length >= 3,
-      lifetimeClears: this.save.state.challenges.gauntletsCleared,
-    };
-  }
 
-  private calendarCard(): CalendarCard {
-    const cal = this.save.state.calendar;
-    const claimedToday = cal.lastClaim === this.today;
-    const days = [];
-    for (let d = 1; d <= CALENDAR_DAYS; d++) {
-      days.push({
-        day: d,
-        label: calendarRewardLabel(d),
-        claimed: d <= cal.cycleDay,
-        today: !claimedToday && d === (cal.cycleDay % CALENDAR_DAYS) + 1,
-        milestone: d % 7 === 0,
-      });
-    }
-    return { cycleDay: cal.cycleDay, claimedToday, days };
-  }
 
-  private wingsCard(): HudSnapshot["wings"] {
-    const life = this.save.state.lifetime.distance;
-    const cur = wingsFor(life);
-    const next = nextWings(life);
-    return {
-      icon: cur.icon,
-      name: cur.name,
-      progress: wingsProgress(life),
-      nextName: next ? next.tier.name : "",
-      nextNeeded: next ? next.needed : 0,
-      lifetime: life,
-    };
-  }
 
-  private rivalCard(): RivalCard {
-    const r = this.save.state.rival;
-    const div = divisionFor(r.rating);
-    const next = nextDivision(r.rating);
-    const span = div.max - div.min;
-    return {
-      rating: Math.floor(r.rating),
-      division: div.name,
-      divisionIcon: div.icon,
-      wins: r.wins,
-      losses: r.losses,
-      streak: r.streak,
-      bestStreak: r.bestStreak,
-      nextName: next ? next.div.name : "",
-      nextNeeded: next ? next.needed : 0,
-      progress: span > 0 ? Math.max(0, Math.min(1, (r.rating - div.min) / span)) : 1,
-      matches: r.matches.map((m) => ({ place: m.place, field: m.field, mode: m.mode, date: m.date, won: m.won })),
-      season: this.seasonCard(),
-    };
-  }
 
-  /** Ranked-season summary: countdown, peak, and the payout it locks in. */
-  private seasonCard(): RivalCard["season"] {
-    const now = new Date();
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const daysLeft = Math.max(1, Math.ceil((end.getTime() - now.getTime()) / 86_400_000));
-    const peak = this.save.state.rankSeason.peak;
-    const reward = seasonReward(peak);
-    return {
-      daysLeft,
-      peak: Math.floor(peak),
-      peakDivision: reward.division.name,
-      peakIcon: reward.division.icon,
-      rewardCoins: reward.coins,
-    };
-  }
 
-  private loadoutView(): LoadoutView {
-    const trail = this.save.state.activeTrail
-      ? (TRAILS[this.save.state.activeTrail]?.label ?? this.save.state.activeTrail)
-      : "Default trail";
-    return {
-      bird: this.skin.name,
-      trail,
-      boosts: this.save.state.armedBoosts.length,
-    };
-  }
 
   private ghostDelta(): number | null {
     if (!this.ghostPlayer.active) return null;
@@ -7153,9 +7074,9 @@ export class Game {
   private refreshViews(): void {
     const st = this.save.state;
     this.cardCache = {
-      daily: this.dailyCard(),
-      gauntlet: this.gauntletCard(),
-      calendar: this.calendarCard(),
+      daily: dailyCard(this.save, this.today),
+      gauntlet: gauntletCard(this.save),
+      calendar: calendarCard(this.save, this.today),
       mastery: masteryViews(this.save),
     };
     const stats = this.state === "menu" ? null : this.runStats();
@@ -7203,292 +7124,356 @@ export class Game {
     const sTier = this.seasonPass.tier();
     const sProg = this.seasonPass.progressInTier();
     const snap: HudSnapshot = {
-      state: this.state,
-      screen: this.screen,
-      checkoutSku: this.checkoutSku,
-      portalName: this.platform?.name ?? getPortalTarget(),
-      // Poki can render its own leaderboard overlay; the button only appears
-      // when the deployed SDK actually offers it.
-      portalLeaderboard: this.platform?.capabilities().includes("leaderboard") ?? false,
-      version: this.uiVersion,
-      // gameover reads the frozen finishRun() number (see resultDistance):
-      // the bird keeps coasting under the results card, and re-reading its
-      // live position here made the results distance climb past the number
-      // that was actually scored and submitted to the leaderboard.
-      distance: this.state === "gameover" ? this.resultDistance : stats.distance,
-      coins: this.runCoins,
-      multiplierClaimed: this.multiplierClaimed,
-      daylight: this.daylight,
-      daylightMax: this.daylightMax(),
-      fever: this.feverOn ? this.feverTimer / (FEVER_DURATION + this.gameplaySkin.feverBonus + this.masteryPerk.feverBonus) : this.perfectChain / FEVER_NEED,
-      feverOn: this.feverOn,
-      multiplier: this.save.nestMultiplier() * (this.feverOn ? 2 : 1),
-      bestDistance: st.bestDistance,
-      score: this.score(),
-      island: this.island,
-      perfects: this.perfects,
-      clouds: this.runClouds,
-      zeniths: this.zeniths,
-      rings: this.runRings,
-      balloons: this.runBalloons,
-      sunflowers: this.runSunflowers,
-      hint: this.state === "playing" ? this.coachHint() || this.hint : "",
-      magnetTimer: this.magnetTimer,
-      shield: this.shield,
-      boostTimer: this.boostTimer,
-      gold: st.gold,
-      vip: this.save.isVipActive(),
-      vipDaysLeft: this.save.vipDaysLeft(),
-      vipExpiredNotice: this.vipExpiredNotice,
-      adsLeftToday: this.save.adsLeftToday(),
-      ghostDelta: this.state === "playing" || this.state === "gameover" ? this.ghostDelta() : null,
-      newBest: this.newBest,
-      continueTimer: this.continueTimer,
-      continueReason: this.continueOfferView?.reason ?? "",
-      continueHighlight: this.continueOfferView?.highlight ?? false,
-      continueCost: CONTINUE_COST,
-      canAffordContinue: st.wallet >= CONTINUE_COST,
-      // Portal: only advertise a rewarded option the SDK can actually pay out.
-      adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
-      adTimer: this.adTimer,
-      adSkippable: !this.portalEnabled(),
-      adTotal: this.ads.duration,
-      adReason: this.adReason,
-      seedLabel: this.seedLabel(),
-      wings: this.wingsCard(),
-      flightPath: this.state === "gameover" ? this.flightPath : [],
-      rivalBanner: this.rival && this.rivalResult === "" ? `${this.rival.name}|${this.rival.distance}` : "",
-      seedMode: this.seedMode,
-      wallet: st.wallet,
-      piggyCoins: st.piggyBank?.coins ?? 0,
-      prestigeLevel: st.prestige?.level ?? 0,
-      prestigeMult: st.prestige?.multiplier ?? 1.0,
-      canFreeSpin: this.save.canFreeWheelSpin(this.today),
-      streakDays: st.streak.days,
-      nestLevel: st.nestLevel,
-      nestMult: this.save.nestMultiplier(),
-      nestPrice: this.save.nestUpgradePrice(),
-      nestMaxed: st.nestBought >= 10,
-      missions: this.missionViews,
-      quests: this.questViews,
-      highScores: st.highScores,
-      todayBest,
-      runsPlayed: st.runsPlayed,
-      newlyCompleted: this.newlyCompleted,
-      claimedQuests: this.claimedQuests,
-      skins: this.skinViews,
-      boosts: this.boostViews,
-      shopTrails: this.shopTrailViews,
-      settings: st.settings,
-      goldPrice: GOLD.price,
-      starterPrice: STARTER_PACK.price,
-      starterFeatures: STARTER_PACK.features,
-      starterOwned: st.starterPack,
-      goldFeatures: GOLD.features,
-      vipPrice: VIP.price,
-      vipFeatures: VIP.features,
-      checkoutMode: this.checkoutMode(),
-      checkoutUrl: "",
-      checkoutBusy: this.checkoutBusy,
-      checkoutError: this.checkoutError,
-      checkoutOk: this.checkoutOk,
-      checkoutWaiting: this.checkoutWaiting,
-      restoreMessage: this.restoreMessage,
-      resetArmed: this.resetArmed,
-      season: {
-        tier: sTier,
-        maxTier: this.seasonPass.view().length,
-        have: sProg.have,
-        need: sProg.need,
-        label: seasonLabel(seasonId()),
-        tiers: this.seasonPass.view(),
-      },
-      trophies: this.achievements.view(),
-      trophyCounts: this.achievements.counts(),
-      nearestTrophy: this.achievements.nearest(),
-      referralCode: st.referralCode,
-      referralRedeemed: st.referralRedeemed,
-      referralMessage: this.referralMessage,
-      cloudCode: this.screen === "account" ? this.save.exportCode() : "",
-      cloudMessage: this.cloudMessage,
-      canInstall: Boolean(this.deferredInstall) && !this.portalEnabled(),
-      shareBusy: this.shareBusy,
-      expShareFirst:
-        this.state !== "gameover"
-          ? false
-          : (this.expShareFirst ??= variant(st.deviceId, "results_cta_order", 50, (v) => {
-              this.telemetry.track("experiment_exposure", { experiment: "results_cta_order", variant: v });
-            })) === "treatment",
-      combo: Math.max(this.perfectChain, this.versus && this.p1 ? this.p1.launch.combo : this.launch.combo),
-      ringChain: this.ringChain,
-      ringChainFrac: RING_CHAIN_WINDOW > 0 ? this.ringChainTimer / RING_CHAIN_WINDOW : 0,
-      slopeChain: this.slopeChain.chain,
-      slopeScore: this.slopeChain.score,
-      speedNorm: Math.min(1, this.bird.speed() / 100),
-      gust: this.weather.gust,
-      inThermal: this.weather.inThermal,
-      biomeName: this.terrain.biomeAt(this.bird.x).name,
-      biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
-      atlas: this.screen === "atlas" ? this.atlas() : [],
-      farthestIsland: Math.max(st.farthestIsland, this.island),
-      launchBanner: this.launchBannerText,
-      launchBannerT: this.launchBannerT,
-      launchRating: this.lastLaunch?.rating ?? "none",
-      altitude: this.versus && this.p1 ? this.p1.bird.altitude : this.bird.altitude,
-      altZone: this.altZone,
-      maxAltitude: this.maxAltitude,
-      powers: this.versus && this.p1 ? this.p1.powers.view() : this.powers.view(),
-      modes: MODES,
-      modeId: this.modeId,
-      modeName: this.mode.name,
-      modeIcon: this.mode.icon,
-      countdown: this.countdown,
-      versus: this.versus,
-      splitLayout: this.input.splitMode,
-      versusWinner: this.versusWinner,
-      p1Stats: this.p1 && this.versus ? this.p1.stats : null,
-      p2Stats: this.p2 && this.versus ? this.p2.stats : null,
-      raceFinish: RACE_FINISH,
-      sessionGoals: this.goals.goals,
-      goalPop: this.goalPopT > 0 ? this.goalPop : "",
-      goalPopKind: this.goalPopKind,
-      rankUp: this.rankUpT > 0 ? this.rankUp : "",
-      nearMiss: this.nearMiss.text,
-      skillLabel: this.flow.label(),
-      skill: this.flow.skill,
-      bestAltitude: st.bestAltitude,
-      bestCombo: st.bestCombo,
-      runGems: this.runGems,
-      pilotName: this.pilotName,
-      board: this.boardPage,
-      boardLoading: this.boardLoading,
-      boardScope: this.boardScope,
-      boardMetric: this.boardMetric,
-      boardOnline: isLeaderboardOnline(),
-      portalAccountName: this.portalAccountName,
-      // Pulled from the page the menu already warms (scope global / distance):
-      // no extra request, and nothing to render on a cold cache.
-      homeBoard: (this.board.peek("global", "distance")?.entries ?? []).slice(0, 3).map((e) => ({
-        name: e.name,
-        value: `${Math.round(e.value).toLocaleString()} m`,
-        you: e.you,
-      })),
-
-      cups: this.cups.view(),
-      trails: this.cups.ownedTrails().map((id) => ({
-        id,
-        label: TRAILS[id]?.label ?? id,
-        equipped: st.activeTrail === id,
-      })),
-        lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
-      standings:
-        this.massRace.active && this.state === "playing"
-          ? this.massRace.standings(this.bird.x, this.startX, this.pilotName, 6).rows
-          : [],
-      racePlace: this.racePlace,
-      raceFinishM: this.mode.finish,
-      raceField: this.raceField,
-      raceFinishTime: this.raceFinishTime,
-      massRace: isRaceMode(this.modeId),
-      multiplayerLive: isMultiplayerConfigured() && !(this.state === "playing" && this.localRace),
-      multiplayerConfigured: isMultiplayerConfigured(),
-      roster:
-        this.massRace.active && this.state === "playing"
-          ? this.massRace.roster(this.bird.x, this.startX, this.mode.finish, this.pilotName)
-          : [],
-      roomCode: this.roomCode,
-      roomCount: this.net?.info().count ?? 0,
-      roomCapacity: this.net?.info().capacity ?? MASS_RACE_FIELD,
-      roomReady: this.net?.info().ready ?? false,
-      roomReadyCount: (this.net?.roster().filter((p) => p.ready).length ?? 0) + (this.net?.info().ready ? 1 : 0),
-      roomAiFallback: this.net?.info().aiFallback ?? false,
-      roomSize: this.roomSize,
-      roomSkill: this.roomSkill,
-      roomMuted: this.roomMuted,
-      // Only the lobby screen can consume these — no per-frame allocs elsewhere.
-      roomRivals:
-        this.screen === "live"
-          ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
-          : [],
-      netState: this.net?.info().state ?? "offline",
-      linkQuality: this.net?.connectionQuality ?? "unknown",
-      netError: this.net?.info().error ?? "",
-      draft: this.massRace.draft,
-      finishRemaining: this.finishRemaining,
-      nemesis: this.nemesis,
-      photoFinish: this.photoFinish,
-      rival: this.rivalCard(),
-      loadout: this.loadoutView(),
-      // Lobby-only field: computed every frame before, including mid-flight
-      // and on the results card, where no one renders it.
-      lobbyRivals:
-        this.state === "menu" && this.screen === "live"
-          // Truth only: the pilots actually seated in this room. No padded
-          // name-pool rivals, no borrowed leaderboard names — an empty room
-          // renders as an empty room. When the room is the local AI fallback,
-          // every row is tagged as an AI pilot rather than as a live human.
-          ? lobbyRivals(this.net?.roster() ?? [], this.net?.info().aiFallback ?? false)
-          : [],
-      raceRated: this.rankedRace,
-      raceVerified: this.serverPlaceApplied,
-      ratingDelta: this.lastRatingDelta,
-      ratingBonus: this.lastRatingBonus,
-      duel: { ...st.duel },
-      duelWas: this.duelResult,
-      duelDelta: this.duelDelta,
-      duelFoe: duelOpponent(`${this.seed}:${this.today}`, st.rival.rating),
-      daily: this.cardCache.daily,
-      gauntlet: this.cardCache.gauntlet,
-      calendar: this.cardCache.calendar,
-      mastery: this.cardCache.mastery,
-      challengeOutcome: this.challengeOutcome,
-      weeklyEvent: weeklyEvent(),
-      monthlyTheme: monthlyTheme(),
-      eventClearsWeek: st.events.week === weekKey() ? st.events.clearsThisWeek : 0,
-      eventClearsMonth: st.events.month === monthKey() ? st.events.clearsThisMonth : 0,
-      themeTrailClaimed: st.events.claimedTrailMonth === monthKey(),
-      themeTrailNeed: THEME_TRAIL_CLEARS,
-      campaign: campaignViews(this.save, st.campaignClaimed),
-      campaignDone: campaignProgress(st.campaignClaimed).done,
-      campaignTotal: campaignProgress(st.campaignClaimed).total,
-      squad: this.squad?.state ?? emptySquadState(),
-      friendChallenges: this.social.getActiveChallenges(),
-      recentPilots: this.pilots.all(),
-      share: {
-        available: sharingAvailable(),
-        code: this.shareCode,
-        busy: this.runShareBusy,
-        error: this.shareError,
-        loaded: this.sharedRun,
-      },
-      squadNotice: this.squadNotice,
-      dailyFlash: dailyFlashBird(this.today),
-      stipendClaimed: st.lastStipendClaimed === this.today,
-      rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
-      wingmanBundle: st.wingmanBundle === true,
-      showTutorialHand:
-        this.state === "playing" &&
-        !this.input.diving &&
-        // First-flight coach: a brand-new player who has not held yet gets the
-        // demonstrative press hand for the whole "dive" step, not just the old
-        // 2.6 s — a static text line for up to two minutes is exactly the
-        // dead-air the baseline probe measured. The hand hides the instant the
-        // player dives (they've got it) and never outstays a completed coach.
-        (this.coach && !this.coach.done && this.coach.view().step === 0
-          ? true
-          : st.tutorialRuns < 2 && this.hintTimer < 2.6),
-      pvpModes: PVP_MODES,
-      pvpWorlds: PVP_WORLDS,
-      selectedPvpMode: this.selectedPvpMode,
-      selectedPvpWorld: this.selectedPvpWorld,
-      beatLine: null,
-      nextAction: "",
-      // Celebration and proximity are not yet plumbed from game state; provide
-      // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
-      celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
-      proximity: { visible: false, fill: 0, remaining: 0, name: "" },
+      ...this.hudRunState(st, stats),
+      ...this.hudWalletAndBreaks(st),
+      ...this.hudProfile(st, todayBest, sTier, sProg),
+      ...this.hudFlightAndWorld(st),
+      ...this.hudRace(st),
+      ...this.hudEventsAndExtras(st),
     };
     this.hud.update(snap);
+  }
+
+  /* ------------------------------------------------------------------
+   * The HUD snapshot, in six readable parts.
+   *
+   * This used to be one 280-line object literal, so the only way to answer
+   * "where does the HUD get X from" was to scan 280 lines to find it. The
+   * six methods below return contiguous slices of that same literal, in the
+   * same order, so every field is still evaluated left to right exactly as
+   * before -- only the reading changed.
+   *
+   * Bounds: `snap: HudSnapshot` is still annotated on the call
+   * site, so a field added to HudSnapshot that no slice covers is a compile
+   * error, and a slice that misspells a field is a compile error. The
+   * compiler guarantee is exactly as strong as it was when this was one
+   * literal.
+   * ------------------------------------------------------------------ */
+
+  /** Run, score and in-flight status. */
+  private hudRunState(st: SaveData["state"], stats: RunStats) {
+    return {
+    state: this.state,
+    screen: this.screen,
+    checkoutSku: this.checkoutSku,
+    portalName: this.platform?.name ?? getPortalTarget(),
+    // Poki can render its own leaderboard overlay; the button only appears
+    // when the deployed SDK actually offers it.
+    portalLeaderboard: this.platform?.capabilities().includes("leaderboard") ?? false,
+    version: this.uiVersion,
+    // gameover reads the frozen finishRun() number (see resultDistance):
+    // the bird keeps coasting under the results card, and re-reading its
+    // live position here made the results distance climb past the number
+    // that was actually scored and submitted to the leaderboard.
+    distance: this.state === "gameover" ? this.resultDistance : stats.distance,
+    coins: this.runCoins,
+    multiplierClaimed: this.multiplierClaimed,
+    daylight: this.daylight,
+    daylightMax: this.daylightMax(),
+    fever: this.feverOn ? this.feverTimer / (FEVER_DURATION + this.gameplaySkin.feverBonus + this.masteryPerk.feverBonus) : this.perfectChain / FEVER_NEED,
+    feverOn: this.feverOn,
+    multiplier: this.save.nestMultiplier() * (this.feverOn ? 2 : 1),
+    bestDistance: st.bestDistance,
+    score: this.score(),
+    island: this.island,
+    perfects: this.perfects,
+    clouds: this.runClouds,
+    zeniths: this.zeniths,
+    rings: this.runRings,
+    balloons: this.runBalloons,
+    sunflowers: this.runSunflowers,
+    hint: this.state === "playing" ? this.coachHint() || this.hint : "",
+    magnetTimer: this.magnetTimer,
+    shield: this.shield,
+    boostTimer: this.boostTimer,
+    };
+  }
+
+  /** What the player owns and what is being offered right now: gold, VIP,
+   *  the continue offer and the commercial break. */
+  private hudWalletAndBreaks(st: SaveData["state"]) {
+    return {
+    gold: st.gold,
+    vip: this.save.isVipActive(),
+    vipDaysLeft: this.save.vipDaysLeft(),
+    vipExpiredNotice: this.vipExpiredNotice,
+    adsLeftToday: this.save.adsLeftToday(),
+    ghostDelta: this.state === "playing" || this.state === "gameover" ? this.ghostDelta() : null,
+    newBest: this.newBest,
+    continueTimer: this.continueTimer,
+    continueReason: this.continueOfferView?.reason ?? "",
+    continueHighlight: this.continueOfferView?.highlight ?? false,
+    continueCost: CONTINUE_COST,
+    canAffordContinue: st.wallet >= CONTINUE_COST,
+    // Portal: only advertise a rewarded option the SDK can actually pay out.
+    adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
+    adTimer: this.adTimer,
+    adSkippable: !this.portalEnabled(),
+    adTotal: this.ads.duration,
+    adReason: this.adReason,
+    seedLabel: this.seedLabel(),
+    wings: wingsCard(this.save),
+    };
+  }
+
+  /** Wallet, progression, missions, quests, shop views, pack pricing,
+   *  checkout, season pass and trophies. */
+  private hudProfile(st: SaveData["state"], todayBest: number, sTier: number, sProg: { have: number; need: number }) {
+    return {
+    flightPath: this.state === "gameover" ? this.flightPath : [],
+    rivalBanner: this.rival && this.rivalResult === "" ? `${this.rival.name}|${this.rival.distance}` : "",
+    seedMode: this.seedMode,
+    wallet: st.wallet,
+    piggyCoins: st.piggyBank?.coins ?? 0,
+    prestigeLevel: st.prestige?.level ?? 0,
+    prestigeMult: st.prestige?.multiplier ?? 1.0,
+    canFreeSpin: this.save.canFreeWheelSpin(this.today),
+    streakDays: st.streak.days,
+    nestLevel: st.nestLevel,
+    nestMult: this.save.nestMultiplier(),
+    nestPrice: this.save.nestUpgradePrice(),
+    nestMaxed: st.nestBought >= 10,
+    missions: this.missionViews,
+    quests: this.questViews,
+    highScores: st.highScores,
+    todayBest,
+    runsPlayed: st.runsPlayed,
+    newlyCompleted: this.newlyCompleted,
+    claimedQuests: this.claimedQuests,
+    skins: this.skinViews,
+    boosts: this.boostViews,
+    shopTrails: this.shopTrailViews,
+    settings: st.settings,
+    goldPrice: GOLD.price,
+    starterPrice: STARTER_PACK.price,
+    starterFeatures: STARTER_PACK.features,
+    starterOwned: st.starterPack,
+    goldFeatures: GOLD.features,
+    vipPrice: VIP.price,
+    vipFeatures: VIP.features,
+    checkoutMode: this.checkoutMode(),
+    checkoutUrl: "",
+    checkoutBusy: this.checkoutBusy,
+    checkoutError: this.checkoutError,
+    checkoutOk: this.checkoutOk,
+    checkoutWaiting: this.checkoutWaiting,
+    restoreMessage: this.restoreMessage,
+    resetArmed: this.resetArmed,
+    season: {
+      tier: sTier,
+      maxTier: this.seasonPass.view().length,
+      have: sProg.have,
+      need: sProg.need,
+      label: seasonLabel(seasonId()),
+      tiers: this.seasonPass.view(),
+    },
+    trophies: this.achievements.view(),
+    trophyCounts: this.achievements.counts(),
+    nearestTrophy: this.achievements.nearest(),
+    referralCode: st.referralCode,
+    referralRedeemed: st.referralRedeemed,
+    referralMessage: this.referralMessage,
+    cloudCode: this.screen === "account" ? this.save.exportCode() : "",
+    cloudMessage: this.cloudMessage,
+    canInstall: Boolean(this.deferredInstall) && !this.portalEnabled(),
+    shareBusy: this.shareBusy,
+    expShareFirst:
+      this.state !== "gameover"
+        ? false
+        : (this.expShareFirst ??= variant(st.deviceId, "results_cta_order", 50, (v) => {
+            this.telemetry.track("experiment_exposure", { experiment: "results_cta_order", variant: v });
+          })) === "treatment",
+    };
+  }
+
+  /** The feel of the flight -- chains, weather, biome, launch, altitude --
+   *  plus the mode picker, the live goal pops, and pilot/leaderboard
+   *  identity. */
+  private hudFlightAndWorld(st: SaveData["state"]) {
+    return {
+    combo: Math.max(this.perfectChain, this.versus && this.p1 ? this.p1.launch.combo : this.launch.combo),
+    ringChain: this.ringChain,
+    ringChainFrac: RING_CHAIN_WINDOW > 0 ? this.ringChainTimer / RING_CHAIN_WINDOW : 0,
+    slopeChain: this.slopeChain.chain,
+    slopeScore: this.slopeChain.score,
+    speedNorm: Math.min(1, this.bird.speed() / 100),
+    gust: this.weather.gust,
+    inThermal: this.weather.inThermal,
+    biomeName: this.terrain.biomeAt(this.bird.x).name,
+    biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
+    atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
+    farthestIsland: Math.max(st.farthestIsland, this.island),
+    launchBanner: this.launchBannerText,
+    launchBannerT: this.launchBannerT,
+    launchRating: this.lastLaunch?.rating ?? "none",
+    altitude: this.versus && this.p1 ? this.p1.bird.altitude : this.bird.altitude,
+    altZone: this.altZone,
+    maxAltitude: this.maxAltitude,
+    powers: this.versus && this.p1 ? this.p1.powers.view() : this.powers.view(),
+    modes: MODES,
+    modeId: this.modeId,
+    modeName: this.mode.name,
+    modeIcon: this.mode.icon,
+    countdown: this.countdown,
+    versus: this.versus,
+    splitLayout: this.input.splitMode,
+    versusWinner: this.versusWinner,
+    p1Stats: this.p1 && this.versus ? this.p1.stats : null,
+    p2Stats: this.p2 && this.versus ? this.p2.stats : null,
+    raceFinish: RACE_FINISH,
+    sessionGoals: this.goals.goals,
+    goalPop: this.goalPopT > 0 ? this.goalPop : "",
+    goalPopKind: this.goalPopKind,
+    rankUp: this.rankUpT > 0 ? this.rankUp : "",
+    nearMiss: this.nearMiss.text,
+    skillLabel: this.flow.label(),
+    skill: this.flow.skill,
+    bestAltitude: st.bestAltitude,
+    bestCombo: st.bestCombo,
+    runGems: this.runGems,
+    pilotName: this.pilotName,
+    board: this.boardPage,
+    boardLoading: this.boardLoading,
+    boardScope: this.boardScope,
+    boardMetric: this.boardMetric,
+    boardOnline: isLeaderboardOnline(),
+    portalAccountName: this.portalAccountName,
+    // Pulled from the page the menu already warms (scope global / distance):
+    // no extra request, and nothing to render on a cold cache.
+    homeBoard: (this.board.peek("global", "distance")?.entries ?? []).slice(0, 3).map((e) => ({
+      name: e.name,
+      value: `${Math.round(e.value).toLocaleString()} m`,
+      you: e.you,
+    })),
+
+    cups: this.cups.view(),
+    trails: this.cups.ownedTrails().map((id) => ({
+      id,
+      label: TRAILS[id]?.label ?? id,
+      equipped: st.activeTrail === id,
+    })),
+      lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
+    };
+  }
+
+  /** Everything the race screen needs: standings, the room, the
+   *  connection, the rival card, the loadout and the duel. */
+  private hudRace(st: SaveData["state"]) {
+    return {
+    standings:
+      this.massRace.active && this.state === "playing"
+        ? this.massRace.standings(this.bird.x, this.startX, this.pilotName, 6).rows
+        : [],
+    racePlace: this.racePlace,
+    raceFinishM: this.mode.finish,
+    raceField: this.raceField,
+    raceFinishTime: this.raceFinishTime,
+    massRace: isRaceMode(this.modeId),
+    multiplayerLive: isMultiplayerConfigured() && !(this.state === "playing" && this.localRace),
+    multiplayerConfigured: isMultiplayerConfigured(),
+    roster:
+      this.massRace.active && this.state === "playing"
+        ? this.massRace.roster(this.bird.x, this.startX, this.mode.finish, this.pilotName)
+        : [],
+    roomCode: this.roomCode,
+    roomCount: this.net?.info().count ?? 0,
+    roomCapacity: this.net?.info().capacity ?? MASS_RACE_FIELD,
+    roomReady: this.net?.info().ready ?? false,
+    roomReadyCount: (this.net?.roster().filter((p) => p.ready).length ?? 0) + (this.net?.info().ready ? 1 : 0),
+    roomAiFallback: this.net?.info().aiFallback ?? false,
+    roomSize: this.roomSize,
+    roomSkill: this.roomSkill,
+    roomMuted: this.roomMuted,
+    // Only the lobby screen can consume these — no per-frame allocs elsewhere.
+    roomRivals:
+      this.screen === "live"
+        ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
+        : [],
+    netState: this.net?.info().state ?? "offline",
+    linkQuality: this.net?.connectionQuality ?? "unknown",
+    netError: this.net?.info().error ?? "",
+    draft: this.massRace.draft,
+    finishRemaining: this.finishRemaining,
+    nemesis: this.nemesis,
+    photoFinish: this.photoFinish,
+    rival: rivalCard(this.save),
+    loadout: loadoutView(this.save, this.skin),
+    // Lobby-only field: computed every frame before, including mid-flight
+    // and on the results card, where no one renders it.
+    lobbyRivals:
+      this.state === "menu" && this.screen === "live"
+        // Truth only: the pilots actually seated in this room. No padded
+        // name-pool rivals, no borrowed leaderboard names — an empty room
+        // renders as an empty room. When the room is the local AI fallback,
+        // every row is tagged as an AI pilot rather than as a live human.
+        ? lobbyRivals(this.net?.roster() ?? [], this.net?.info().aiFallback ?? false)
+        : [],
+    raceRated: this.rankedRace,
+    raceVerified: this.serverPlaceApplied,
+    ratingDelta: this.lastRatingDelta,
+    ratingBonus: this.lastRatingBonus,
+    duel: { ...st.duel },
+    duelWas: this.duelResult,
+    duelDelta: this.duelDelta,
+    duelFoe: duelOpponent(`${this.seed}:${this.today}`, st.rival.rating),
+    daily: this.cardCache.daily,
+    };
+  }
+
+  /** Event cards, campaign, squad, sharing, and the placeholders the HUD
+   *  still renders with but the game does not yet fill in. */
+  private hudEventsAndExtras(st: SaveData["state"]) {
+    return {
+    gauntlet: this.cardCache.gauntlet,
+    calendar: this.cardCache.calendar,
+    mastery: this.cardCache.mastery,
+    challengeOutcome: this.challengeOutcome,
+    weeklyEvent: weeklyEvent(),
+    monthlyTheme: monthlyTheme(),
+    eventClearsWeek: st.events.week === weekKey() ? st.events.clearsThisWeek : 0,
+    eventClearsMonth: st.events.month === monthKey() ? st.events.clearsThisMonth : 0,
+    themeTrailClaimed: st.events.claimedTrailMonth === monthKey(),
+    themeTrailNeed: THEME_TRAIL_CLEARS,
+    campaign: campaignViews(this.save, st.campaignClaimed),
+    campaignDone: campaignProgress(st.campaignClaimed).done,
+    campaignTotal: campaignProgress(st.campaignClaimed).total,
+    squad: this.squad?.state ?? emptySquadState(),
+    friendChallenges: this.social.getActiveChallenges(),
+    recentPilots: this.pilots.all(),
+    share: {
+      available: sharingAvailable(),
+      code: this.shareCode,
+      busy: this.runShareBusy,
+      error: this.shareError,
+      loaded: this.sharedRun,
+    },
+    squadNotice: this.squadNotice,
+    dailyFlash: dailyFlashBird(this.today),
+    stipendClaimed: st.lastStipendClaimed === this.today,
+    rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
+    wingmanBundle: st.wingmanBundle === true,
+    showTutorialHand:
+      this.state === "playing" &&
+      !this.input.diving &&
+      // First-flight coach: a brand-new player who has not held yet gets the
+      // demonstrative press hand for the whole "dive" step, not just the old
+      // 2.6 s — a static text line for up to two minutes is exactly the
+      // dead-air the baseline probe measured. The hand hides the instant the
+      // player dives (they've got it) and never outstays a completed coach.
+      (this.coach && !this.coach.done && this.coach.view().step === 0
+        ? true
+        : st.tutorialRuns < 2 && this.hintTimer < 2.6),
+    pvpModes: PVP_MODES,
+    pvpWorlds: PVP_WORLDS,
+    selectedPvpMode: this.selectedPvpMode,
+    selectedPvpWorld: this.selectedPvpWorld,
+    beatLine: null,
+    nextAction: "",
+    // Celebration and proximity are not yet plumbed from game state; provide
+    // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
+    celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
+    proximity: { visible: false, fill: 0, remaining: 0, name: "" },
+    };
   }
 
   /* ------------------------------------------------------- versus (2P) */

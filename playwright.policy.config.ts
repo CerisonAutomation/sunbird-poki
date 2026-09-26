@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveChromium } from "./e2e/chromium-executable";
 
 /**
  * Config for the platform-policy contract test: it drives the SHIPPING
@@ -11,7 +12,13 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Run: pnpm test:policy — it builds `dist/` and `poki-upload/` itself first, so
  * it can never report on a stale committed artifact.
+ *
+ * `resolveChromium()` picks the browser instead of assuming the pinned build is
+ * the installed one; see e2e/chromium-executable.ts for why that has to be
+ * resolved rather than hardcoded.
  */
+const browser = resolveChromium();
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /portal-policy\.spec\.ts/,
@@ -28,7 +35,7 @@ export default defineConfig({
   use: {
     trace: "retain-on-failure",
     launchOptions: {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
+      executablePath: browser.executablePath,
       args: ["--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
     },
   },

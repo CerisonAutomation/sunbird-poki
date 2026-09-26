@@ -1,4 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveChromium } from "./e2e/chromium-executable";
+
+/**
+ * `resolveChromium()` picks the browser instead of assuming the build
+ * `@playwright/test` pins is the one installed here; see
+ * e2e/chromium-executable.ts. Without it, a machine holding a different
+ * Chromium build fails every spec in this config identically.
+ */
+const browser = resolveChromium();
 
 export default defineConfig({
   testDir: "./e2e",
@@ -11,7 +20,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
     launchOptions: {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
+      executablePath: browser.executablePath,
       args: ["--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
     },
   },

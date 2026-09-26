@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveChromium } from "./e2e/chromium-executable";
 
 /**
  * Config for the artifact contract test: it loads the SHIPPING folder
@@ -13,6 +14,8 @@ import { defineConfig, devices } from "@playwright/test";
  * Run: pnpm test:artifact — it runs `pnpm build:poki` itself first, so a stale
  * `poki-upload/` snapshot can never make these pass for the wrong reason.
  */
+const browser = resolveChromium();
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /poki-artifact\.spec\.ts/,
@@ -25,7 +28,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4176",
     trace: "retain-on-failure",
     launchOptions: {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
+      executablePath: browser.executablePath,
       // Headless CI has no GPU: WebGL comes from SwiftShader, same flags the
       // main Playwright config uses for the game itself.
       args: ["--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],

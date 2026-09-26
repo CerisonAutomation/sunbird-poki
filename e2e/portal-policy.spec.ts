@@ -23,16 +23,22 @@ import { expect, test, type Page } from "@playwright/test";
  *      spelling is rejected in the artifact, and a clean name is accepted. The
  *      crazy/generic editions set CUSTOM_PILOT_NAMES=false and render the
  *      generated name read-only; the direct build keeps free rename.
- *   2. AD-REMOVAL PURCHASES (REQ-20) — nothing may offer to remove or disable
- *      ads. The portal paywall must not carry Gold's "No sponsored breaks"
- *      bullet, and no screen may say "no breaks" / "Remove breaks". The direct
- *      build keeps them (it owns its own ad schedule).
+ *   2. AD-REMOVAL PURCHASES (REQ-20/REQ-31) — nothing may offer to remove or
+ *      disable ads, and no screen may say "no breaks" / "Remove breaks". In
+ *      this fork there is only one edition: `src/game/edition.ts` IS the Poki
+ *      edition and `vite.config.ts` defines `VITE_SELL_AD_REMOVAL` to false for
+ *      every build, so `dist/` is held to the same rule as `poki-upload/`. That
+ *      is why this asserts **absence** rather than walking into a paywall: the
+ *      controls do not exist, so a screen that offers them is unreachable, and
+ *      the only correct thing to assert is that nothing on the way there offers
+ *      one. `src/game/__tests__/ad-surfaces.test.ts` pins the same rule at the
+ *      render layer for the break overlay, which no menu walk can reach.
  *
  * `scripts/portal-markers.mjs` proves the strings are absent from the portal
  * bundle; this proves the *player* never sees them and that the replacement
  * surface actually works.
  *
- * Run: pnpm test:policy   (after `pnpm build:portals` and `pnpm build`)
+ * Run: pnpm test:policy   (it runs `pnpm build:poki` and `pnpm build` itself)
  */
 const PORTAL_PORT = 4178;
 const DIRECT_PORT = 4179;
@@ -60,6 +66,36 @@ const AUDS_EMPTY_LIST = JSON.stringify({ total: 0, items: [] });
 
 /** Any wording that promises the player fewer or no ads. */
 const AD_REMOVAL_COPY = /sponsored break|no breaks|remove breaks|remove ads|no ads|ad-?free/i;
+
+/**
+ * Every control that would let a player buy their way out of an ad, and why
+ * each one is somewhere a player can actually reach.
+ *
+ *  open-paywall  the Coin Store / Gold upsell, and the way into it. Five render
+ *                sites in HUD.ts — 1901 `upsellStrip()`, 2994 the mission
+ *                lock-chip, 3127 the variant row, 3494 the Nest Pass upsell,
+ *                3566 the account Gold row — and every one of them is behind
+ *                `SELL_AD_REMOVAL`, which `edition.ts` sets to false. A correct
+ *                portal build therefore renders none of them, which is the
+ *                reason this test used to hang: it clicked one and waited 240s
+ *                for a screen that must not exist.
+ *  gold-buy      "Unlock Gold" on the Coin Store. Gold is the entitlement that
+ *                removes breaks, so the button *is* the ad-removal offer.
+ *  vip-buy       the same offer, for VIP.
+ *  restore       "Restore passes" — the recovery path for those same two SKUs,
+ *                so it re-delivers an ad-removing entitlement.
+ *  ad-gold       "✦ Remove breaks", on the break overlay. The sharpest of the
+ *                five: it sits on the ad itself, offering to end it early. No
+ *                menu screen carries it — reaching it needs a flight — so the
+ *                walk below cannot visit it and its absence is pinned at the
+ *                render layer instead, by "never offers to remove breaks on the
+ *                portal edition (REQ-31)" in
+ *                src/game/__tests__/ad-surfaces.test.ts, which renders the
+ *                overlay with `canRemoveBreaks: true` and asserts no `ad-gold`
+ *                comes out. It is listed here so the inventory a reader checks
+ *                the game against is the whole one.
+ */
+const AD_REMOVAL_ACTIONS = ["open-paywall", "gold-buy", "vip-buy", "restore", "ad-gold"] as const;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -183,6 +219,26 @@ async function goHome(page: Page): Promise<void> {
   await expect(cta).toBeVisible({ timeout: 20_000 });
 }
 
+/**
+ * One screen's worth of the ad-removal contract, and the check both the portal
+ * and the direct build run on every screen they visit: none of the controls in
+ * AD_REMOVAL_ACTIONS is on the page, and no copy on it offers one.
+ *
+ * The copy scan reads the whole document, not the menu card, because the Gold
+ * upsell strip (`upsellStrip()` in HUD.ts) renders beside the card rather than
+ * inside it — a card-only scan would pass while the offer sat next to it.
+ */
+async function expectNoAdRemoval(page: Page, where: string): Promise<void> {
+  for (const action of AD_REMOVAL_ACTIONS) {
+    await expect(
+      page.locator(`[data-action="${action}"]`),
+      `${where} must not offer a way to remove ads (${action})`,
+    ).toHaveCount(0);
+  }
+  const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  expect(text, `${where} must not offer ad removal in its copy`).not.toMatch(AD_REMOVAL_COPY);
+}
+
 test.describe("portal artifact (poki-upload/)", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(SDK_STUB);
@@ -271,18 +327,53 @@ test.describe("portal artifact (poki-upload/)", () => {
   test("never offers to remove ads, anywhere a player can reach", async ({ page }) => {
     const errors = await boot(page, `http://127.0.0.1:${PORTAL_PORT}`);
 
-    // Paywall: Nest Pass upsell → Coin Store.
+    // The premise here used to be "walk into the paywall, then check it does not
+    // offer ad removal". That is backwards for this build. `SELL_AD_REMOVAL` is
+    // false, so the paywall is correctly not rendered at all and the Gold
+    // upsell strip returns "" — a player cannot reach the screen, because the
+    // screen does not exist. The property worth testing is therefore the
+    // stronger and simpler one: no ad-removal control is reachable from the menu
+    // at all, on any of the screens below. The entry point is asserted absent
+    // here rather than clicked, and the direct build gets the same treatment.
+    await goHome(page);
     await openMenu(page, "open-pass", "Nest Pass");
-    await page.locator('[data-action="open-paywall"]').first().click();
-    await expect(page.locator('[data-ref="menuCard"] .screen-head h2')).toHaveText("Coin Store", { timeout: 20_000 });
-
-    const goldBullets = page.locator(".gold-hero:not(.vip) + .feature-list li");
-    await expect(goldBullets).toHaveCount(6);
-    for (const li of await goldBullets.allTextContents()) {
-      expect(li, `Gold bullet must not promise ad removal: ${li}`).not.toMatch(AD_REMOVAL_COPY);
-    }
+    await expectNoAdRemoval(page, "the Nest Pass screen");
+    await expect(
+      page.locator(".gold-hero .feature-list li"),
+      "the Gold pitch must not ship in a portal build at all",
+    ).toHaveCount(0);
 
     // Every screen a player can reach from the menu, scanned as rendered text.
+    //
+    // The list is the set of `data-action` values the home menu card actually
+    // renders, measured against the built portal rather than assumed: the card
+    // offers `pvp-practice`, not `open-practice`, and it does not offer
+    // `open-live` at all. A walk that clicks an action the home does not carry
+    // waits out the whole 240s timeout on a locator that can never appear, which
+    // is how this test spent four minutes per attempt before the list was checked
+    // against the build.
+    //
+    // `open-live` is deliberately absent. It is not a home-menu entry: it is a
+    // nested action rendered *inside* the PvP screens ("Want human rivals? Open
+    // PvP", HUD.ts:2264; "Race with friends", HUD.ts:2607), so it belongs to a
+    // nested-action walk, not this one.
+    //
+    // `start-endless`, `versus` and `pvp-practice` are on the card too and are
+    // skipped here, for one measured reason: none of them opens a screen with a
+    // `.screen-head h2`. `pvp-practice` was tried and reported itself — the
+    // assertion names the action — so this is observed, not assumed. They are
+    // launch actions, not menu screens, and walking them would leave the runner
+    // mid-flight for the next iteration.
+    //
+    // The cost of that skip is stated rather than hidden: the PvP surface is
+    // where `open-live` lives (HUD.ts:2264, 2607), so the one screen that could
+    // most plausibly carry a rival offer is the one this walk does not reach.
+    // Covering it needs a nested walk that enters PvP and then checks what is
+    // inside; until that exists, ad-removal coverage stops at the menu.
+    //
+    // That `open-live` is one level below the home menu rather than on it is a
+    // real product gap, not only a test detail. It is tracked as the home-menu
+    // decision and is deliberately not absorbed into this test.
     const screens = [
       "open-shop",
       "open-settings",
@@ -298,24 +389,44 @@ test.describe("portal artifact (poki-upload/)", () => {
       "open-atlas",
       "open-scores",
       "open-squad",
-      "open-live",
-      "open-practice",
       "mode-select",
     ];
     const card = page.locator('[data-ref="menuCard"]');
     for (const action of screens) {
       await goHome(page);
       await card.locator(`[data-action="${action}"]`).first().click();
-      await expect(card.locator(".screen-head h2").first()).toBeVisible({ timeout: 20_000 });
-      const text = (await card.innerText()).replace(/\s+/g, " ");
-      expect(text, `${action} must not offer ad removal`).not.toMatch(AD_REMOVAL_COPY);
+      await expect(
+        card.locator(".screen-head h2").first(),
+        `${action} opened no screen with a heading`,
+      ).toBeVisible({ timeout: 20_000 });
+
+      // The heading has to be a title, not the screen's own key. 11 of these 17
+      // screens once rendered their raw internal id ("pass" for "Nest Pass") and
+      // every other assertion on the page still passed: a screenshot shows a
+      // heading either way, and a reviewer skims past it. This is the reason the
+      // test is worth keeping rather than deleting.
+      //
+      // The id can surface in two shapes — the kebab action name and its camel
+      // form — so both are compared. What is deliberately NOT asserted is that
+      // the heading be several words long: "Settings", "Leaderboards", "Account"
+      // and "Trophies" are all correct single-word titles, and a rule that
+      // rejected them would be a test that fails on correct behaviour, which is
+      // the same defect as the one it was written to catch.
+      const heading = ((await card.locator(".screen-head h2").first().textContent()) ?? "").replace(/\s+/g, " ").trim();
+      const camelId = action.replace(/-([a-z0-9])/g, (_, ch: string) => ch.toUpperCase());
+      expect(heading, `${action} rendered no heading`).not.toBe("");
+      expect(heading, `${action} rendered its own action name as the heading`).not.toBe(action);
+      expect(heading, `${action} rendered its camelCase id as the heading`).not.toBe(camelId);
+      expect(heading, `${action} rendered a bare id fragment as the heading`).not.toBe(action.split("-").pop() ?? "");
+
+      await expectNoAdRemoval(page, action);
     }
     expect(errors).toEqual([]);
   });
 });
 
-test.describe("direct build (dist/) keeps what the portal drops", () => {
-  test("free-text rename and the full Gold pitch survive outside the portals", async ({ page }) => {
+test.describe("direct build (dist/)", () => {
+  test("free-text rename ships there too, and it still offers no way to remove ads", async ({ page }) => {
     const errors = await boot(page, `http://127.0.0.1:${DIRECT_PORT}`);
 
     await openMenu(page, "open-board", "Leaderboard");
@@ -330,13 +441,23 @@ test.describe("direct build (dist/) keeps what the portal drops", () => {
       .poll(async () => (await page.locator('[data-ref="pilotName"]').inputValue()) ?? "", { timeout: 15_000 })
       .toBe("ArenaTester");
 
+    // This test used to end by walking into the Coin Store and asserting the
+    // Gold pitch was still there selling "No sponsored breaks, ever" — the whole
+    // point being that the direct build keeps what the portal drops. In this fork
+    // there is nothing left to keep: `dist/` and `poki-upload/` are the same
+    // edition (`src/game/edition.ts` is the Poki edition, and vite.config.ts
+    // defines `VITE_SELL_AD_REMOVAL` to false for every build), so there is no
+    // Coin Store to open here either. It failed on the same missing locator as
+    // the portal test. What can honestly be asserted about `dist/` is the
+    // property that does hold and does matter: it boots clean, the free-text
+    // rename surface ships, and it offers no way to remove ads either.
     await goHome(page);
     await openMenu(page, "open-pass", "Nest Pass");
-    await page.locator('[data-action="open-paywall"]').first().click();
-    const goldBullets = page.locator(".gold-hero:not(.vip) + .feature-list li");
-    await expect(goldBullets).toHaveCount(7);
-    const bullets = await goldBullets.allTextContents();
-    expect(bullets.some((b) => /No sponsored breaks, ever/.test(b))).toBe(true);
+    await expectNoAdRemoval(page, "the Nest Pass screen (dist/)");
+    await expect(
+      page.locator(".gold-hero .feature-list li"),
+      "the Gold pitch must not ship in dist/ either",
+    ).toHaveCount(0);
 
     expect(errors).toEqual([]);
   });

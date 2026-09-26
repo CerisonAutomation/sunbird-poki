@@ -18,6 +18,15 @@ type SkyStop = {
   hemiGround: number;
 };
 
+/**
+ * Half of one 8-bit colour step. An 8-bit channel quantises in 1/255, so a
+ * sprite blended in below this alpha contributes less than half a step and
+ * cannot move the output pixel. Sprites under it are skipped rather than
+ * rasterised — the guard is the same idea as the deep-space layer skip below,
+ * tightened to the point where it is provably invisible.
+ */
+const HAZE_MIN_ALPHA = 0.5 / 255;
+
 const STOPS: { t: number; s: SkyStop }[] = [
   {
     t: 0,
@@ -523,7 +532,19 @@ export class Sky {
       sprite.position.x = (sprite.userData.baseX as number) - camX * (1 - parallax);
       sprite.position.y = (sprite.userData.baseY as number) + Math.sin(time * (0.09 + parallax * 0.08) + phase) * 1.2;
       mat.color.setHex(this.hazeTint);
-      mat.opacity = hazeAlpha * (0.72 + (phase % 1) * 0.25) * (this.hazeGlow ? 1.12 : 1);
+      const opacity = hazeAlpha * (0.72 + (phase % 1) * 0.25) * (this.hazeGlow ? 1.12 : 1);
+      // Sub-quantisation guard, same reasoning as the space layer above: an
+      // 8-bit channel steps in 1/255, so a sprite whose blended contribution
+      // is under half a step cannot change the output pixel — it is pure
+      // fill-rate and a blended draw for nothing. The density numbers are far
+      // below that (hazeAlpha peaks at 0.0014 for density 1, 0.00082 at the
+      // densest biome's 0.42, i.e. 0.36 and 0.21 of a step), so this always
+      // fires today. It is written against the per-sprite opacity rather than
+      // hazeAlpha so it keeps telling the truth if the density curve is ever
+      // retuned upwards: the haze comes back on its own instead of silently
+      // becoming a lie.
+      sprite.visible = opacity >= HAZE_MIN_ALPHA;
+      mat.opacity = opacity;
     }
 
     this.group.position.set(camX, 0, 0);

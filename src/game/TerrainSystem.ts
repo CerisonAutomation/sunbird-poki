@@ -34,8 +34,10 @@ const CREST_CONFIRM = 14;
  * wavelength micro-bumps), narrow enough to still resolve a real crest. */
 const CREST_GATE_DIST = 6;
 
-/** One smooth cosine arch of terrain with an authored intent. */
-type Segment = { start: number; len: number; height: number; base: number; baseNext: number };
+/** One smooth cosine arch of terrain with an authored intent.
+ *  `skew` is per-arch rather than per-biome so a world can be a chicane of
+ *  alternating wall faces (see BiomeDef.terrain.chicane). */
+type Segment = { start: number; len: number; height: number; base: number; baseNext: number; skew: number };
 
 /** A sunflower bounce pad anchored to the hills. x/y are world coords. */
 type BouncePad = { x: number; y: number };
@@ -509,7 +511,6 @@ export class TerrainSystem {
     const b = biomeForIsland(island);
     const amp = b.amp * flightProgression(island).hillScale;
     const wave = b.wave;
-    const skew = b.skew ?? 0;
     const roughness = b.roughness ?? 0.1;
 
     const local = this.localX(x);
@@ -519,6 +520,11 @@ export class TerrainSystem {
     // Skewed arch: skew > 0 → peak shifts toward the front (dune / steep rise);
     // skew < 0 → peak shifts toward the back (cliff overhang / canyon wall).
     // We remap t through a power curve so the arch remains C1-continuous.
+    // The skew is the ARCH's, not the biome's, so consecutive arches can face
+    // opposite ways. arch'(t) is 0 at t=0 and t=1 for every skew, so mirroring
+    // one arch changes its shape without inventing a slope discontinuity at
+    // the junction — the terrain stays C1 across the whole island.
+    const skew = seg.skew;
     const ts = skew >= 0
       ? Math.pow(t, 1 + skew * 1.8)
       : 1 - Math.pow(1 - t, 1 - skew * 1.8);
@@ -589,19 +595,25 @@ export class TerrainSystem {
     const out: BouncePad[] = [];
     const base = island * ISLAND_PERIOD;
     const landLimit = DROP_BLEND_START - 34; // keep clear of the launch ramp
+    // Trampoline density is a biome property, not a world constant: the teaching
+    // hills hand you a bounce every few seconds, the aurora shards make you earn
+    // one. It is a real mechanic (each pad is a free launch you did not earn by
+    // reading the terrain), so it varies as widely as the terrain does.
+    const spacing = PAD_SPACING * biomeForIsland(island).terrain.padSpacing;
     let lx = 120 + rng.range(0, 60);
     while (lx < landLimit) {
       const wx = base + lx;
       if (wx >= 260 && !this.isOcean(wx) && Math.abs(this.slopeAt(wx)) < 0.42) {
         out.push({ x: wx, y: this.heightAt(wx) });
       }
-      lx += PAD_SPACING * (0.82 + rng.next() * 0.45);
+      lx += spacing * (0.82 + rng.next() * 0.45);
     }
     return out;
   }
 
   private buildSegments(island: number): Segment[] {
     const b = biomeForIsland(island);
+    const g = b.terrain;
     const progression = flightProgression(island);
     const rng = new SeededRandom(`${this.seedStr}:isle:${island}`);
     const out: Segment[] = [];
@@ -610,10 +622,22 @@ export class TerrainSystem {
 
     // Wavelength scales with the speed the player should be carrying here, so
     // ramps arrive at a rhythm the bird can actually match.
-    const speedScale = (progression.rhythmScale * b.wave) / this.difficulty;
+    const speedScale = (progression.rhythmScale * b.wave * g.lenScale) / this.difficulty;
+
+    /**
+     * Per-arch skew. chicane 0 reproduces the old behaviour exactly (every arch
+     * wears the biome's skew); above 0 each arch swings to the other side, so a
+     * world becomes a corridor of alternating wall faces. Clamped to the -0.7..
+     * 0.7 range `hills()` documents, because past that a face is a near-vertical
+     * wall — an instant crash, not a difficulty setting.
+     */
+    const skewFor = (index: number): number => {
+      if (g.chicane === 0) return b.skew;
+      return clamp(b.skew + (index % 2 === 0 ? g.chicane : -g.chicane), -0.7, 0.7);
+    };
 
     const push = (len: number, height: number, nextBase: number): void => {
-      out.push({ start: cursor, len, height, base, baseNext: nextBase });
+      out.push({ start: cursor, len, height, base, baseNext: nextBase, skew: skewFor(out.length) });
       cursor += len;
       base = nextBase;
     };
@@ -628,22 +652,42 @@ export class TerrainSystem {
     const budget = RAMP_START - cursor - 40;
     let used = 0;
     let sincePerfect = 0;
+    let sinceTrough = 0;
     while (used < budget) {
       const remaining = budget - used;
       const roll = rng.next();
       let len: number;
       let height: number;
 
-      // Every 2 segments, lay a "perfect ramp sequence": deep valley -> kicker -> landing -> launch.
-      // V2: more frequent (was 3, now 2) and tighter, so you chain launches instead of gliding.
-      if (sincePerfect >= 2 && remaining > 320 && roll > 0.35) {
+      // Authored ramp chain: deep valley -> kicker -> landing -> launch. The
+      // cadence and the gate are per-biome (terrain.rampEvery / rampChance), so
+      // the green teaching world chains constantly while the dune sea holds
+      // its launches far apart. V2: more frequent than the original 3.
+      if (sincePerfect >= g.rampEvery && remaining > 320 && roll > 1 - g.rampChance) {
+        sincePerfect = 0;
+        sinceTrough = 0;
+        const s = speedScale;
+        push(72 * s, 22 * g.relief, base - 2); // deep carving valley — hold to carve
+        push(52 * s, 24 * g.relief, base + 1); // kicker with crisp lip — release!
+        push(62 * s, 17 * g.relief, base); // landing roller — quick touch
+        push(84 * s, 28 * g.relief, base); // big launch ramp — again!
+        used += (72 + 52 + 62 + 84) * s;
+        continue;
+      }
+
+      // Solo trough, on the roll the ramp chain just declined. A wide, low,
+      // sunken bowl with a short kicker off its far wall: you fall in with
+      // speed already spent and have to punch back out. It is the only
+      // archetype that is pure rhythm break rather than pure launch, and it
+      // is what makes a world feel like it has holes in it.
+      if (g.troughEvery > 0 && sinceTrough >= g.troughEvery && remaining > 340 && roll <= 1 - g.rampChance) {
+        sinceTrough = 0;
         sincePerfect = 0;
         const s = speedScale;
-        push(72 * s, 22, base - 2); // deep carving valley — hold to carve
-        push(52 * s, 24, base + 1); // kicker with crisp lip — release!
-        push(62 * s, 17, base); // landing roller — quick touch
-        push(84 * s, 28, base); // big launch ramp — again!
-        used += (72 + 52 + 62 + 84) * s;
+        const dip = 3 + roll * 5; // 3..8 units of floor drop
+        push(78 * s, 22 * g.troughDepth, clamp(base - dip, 7, 20));
+        push(46 * s, 19, clamp(base - 1, 7, 20)); // far wall pays a little back
+        used += 124 * s;
         continue;
       }
 
@@ -662,9 +706,10 @@ export class TerrainSystem {
       }
       if (len > remaining) len = Math.max(62, remaining);
       const drift = rng.range(-2.5, 2.5);
-      push(len, height, clamp(base + drift, 7, 20));
+      push(len, height * g.relief, clamp(base + drift, 7, 20));
       used += len;
       sincePerfect += 1;
+      sinceTrough += 1;
     }
 
     // Run the final arch out past the ramp zone so lookups never fall off the end.

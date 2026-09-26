@@ -545,8 +545,13 @@ const BASE_SKINS: SkinDef[] = [
  * than a wall of hand-edited numbers. Earn-only and real-money items retain
  * their existing rules.
  */
+/** Round `price * mult` up to the nearest `step`. Returns 0 when price is 0. */
+function roundUp(price: number, mult: number, step: number): number {
+  return price === 0 ? 0 : Math.ceil((price * mult) / step) * step;
+}
+
 function collectionPrice(price: number): number {
-  return price === 0 ? 0 : Math.ceil((price * 1.75) / 25) * 25;
+  return roundUp(price, 1.75, 25);
 }
 
 export const SKINS: SkinDef[] = BASE_SKINS.map((skin) =>
@@ -586,7 +591,7 @@ export const COIN_MULTIPLIER_UPGRADES: Record<string, number> = {
 /** Consumables rise modestly; daily deals remain a valuable return visit. */
 export const BOOSTS: BoostDef[] = BASE_BOOSTS.map((boost) => ({
   ...boost,
-  price: Math.ceil((boost.price * 1.25) / 5) * 5,
+  price: roundUp(boost.price, 1.25, 5),
 }));
 
 /* ---------- shop trails (coins) — prize trails still come from cups ---------- */
@@ -620,7 +625,7 @@ const BASE_SHOP_TRAILS: ShopTrailDef[] = [
 
 export const SHOP_TRAILS: ShopTrailDef[] = BASE_SHOP_TRAILS.map((trail) => ({
   ...trail,
-  price: Math.ceil((trail.price * 1.5) / 25) * 25,
+  price: roundUp(trail.price, 1.5, 25),
 }));
 
 function djb2(str: string, seed: number): number {

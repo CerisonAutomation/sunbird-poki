@@ -36,11 +36,12 @@ import { generatePilotName, isPilotNameClean, moderatePilotName, pilotNameReject
 import { adoptPortalLocale, setLocale, t, whenLocaleReady, type SupportedLocale } from "../i18n";
 import { Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
 import {
+  challengeMode,
   dailyChallenge,
-  dailyDone,
+  dailyVerdict,
   modsFor,
   NO_MODS,
-  stageDone,
+  stageVerdict,
   weeklyGauntlet,
   calendarReward,
   calendarRewardLabel,
@@ -2961,6 +2962,18 @@ export class Game {
     this.duelResult = "";
     this.duelDelta = 0;
     this.challengeRun = opts?.challenge ?? "";
+    // A challenge's mode belongs to the challenge, not to the button that was
+    // pressed, so re-apply it at the single funnel every run passes through:
+    // the journey card already set it, but "Fly again" rebuilds the challenge
+    // flag from saved run metadata (Replay.replayOptions) and used to rebuild
+    // it WITHOUT the mode — a challenge run in the wrong mode, claimable.
+    // The claim re-checks the mode (finishRun), so this is the first of two
+    // gates, not the only one.
+    const challengeModeId = challengeMode(this.challengeRun, this.today, weekKey());
+    if (challengeModeId) {
+      this.modeId = challengeModeId;
+      this.mode = modeById(challengeModeId);
+    }
     this.challengeMods = this.challengeRun === "daily" ? modsFor(dailyChallenge(this.today).modifier.id) : NO_MODS;
     this.eventRun = Boolean(opts?.event);
     if (this.eventRun) this.weeklyMods = weeklyEvent().mods;
@@ -2989,6 +3002,11 @@ export class Game {
       (this.eventRun ? this.weeklyMods.daylightMult : 1);
     this.settleAcc = 0;
     this.lastInputAt = 0;
+    // Open the window the run's coin payout is timed-weighted over. A run's
+    // coins are collected into one number and paid once at the end, so without
+    // a start time a bonus armed mid-run can only be applied to the whole run
+    // or to none of it (see SaveData.runCoinMultiplier).
+    this.save.beginRun();
     this.weather.windMult = (this.eventRun ? this.weeklyMods.windMult : 1) * (this.stormfront ? 1.7 : 1);
     this.weather.stormfront = this.stormfront;
     if (this.stormfront) this.hud.toast("⛈ STORMFRONT — same storm for every pilot. Survive and outfly.", "warn");
@@ -3339,40 +3357,52 @@ export class Game {
     }
     if (this.challengeRun === "daily") {
       const c = dailyChallenge(this.today);
-      if (dailyDone(stats, c) && this.save.completeDaily(this.today)) {
+      // The mode is part of the claim, not just of the launch: a run only
+      // *flagged* as the daily (any "Fly again", any future caller of
+      // startRun) can otherwise clear the target in a mode the challenge never
+      // asked for, and the target test alone would happily pay out.
+      const verdict = dailyVerdict(stats, c, this.modeId);
+      if (verdict === "claim" && this.save.completeDaily(this.today)) {
         this.save.addCoins(c.reward);
         this.challengeOutcome = `${iconGlyph("sun")} Daily challenge complete · +${c.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         this.audio.island();
-      } else if (!dailyDone(stats, c)) {
+      } else if (verdict === "wrong-mode") {
+        this.challengeOutcome = `Daily challenge must be flown in ${modeById(c.mode).name} — this run doesn't count`;
+      } else {
         this.challengeOutcome = `Daily challenge missed — needed ${c.target} ${c.metric}`;
       }
     } else if (this.challengeRun.startsWith("gauntlet")) {
       const idx = Number(this.challengeRun.slice(8)) || 0;
       const g = weeklyGauntlet(weekKey());
       const st = g.stages[idx];
-      if (st && stageDone(stats, st)) {
-        const res = this.save.completeGauntletStage(g.week, idx);
-        if (res) {
-          this.save.addCoins(st.reward);
-          this.challengeOutcome = `${iconGlyph("lightning")} Gauntlet stage ${idx + 1} clear · +${st.reward} coins`;
-          this.hud.toast(this.challengeOutcome, "gold");
-          if (res === "clear") {
-            this.save.addCoins(g.clearBonus);
-            this.hud.toast(`${iconGlyph("trophy")} GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
-            this.platform?.measure("event", "gauntlet-clear", "complete");
-            this.platform?.happyTime();
-            if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
-            // Gauntlet prize skin: 5 lifetime clears earns the Stormcrow.
-            if (this.save.state.challenges.gauntletsCleared >= 5 && !this.save.state.ownedSkins.includes("stormcrow")) {
-              this.save.ownSkin("stormcrow");
-              this.hud.toast(`${iconGlyph("bird")} Stormcrow unlocked — 5 gauntlets cleared!`, "gold");
+      if (st) {
+        const verdict = stageVerdict(stats, st, this.modeId);
+        if (verdict === "claim") {
+          const res = this.save.completeGauntletStage(g.week, idx);
+          if (res) {
+            this.save.addCoins(st.reward);
+            this.challengeOutcome = `${iconGlyph("lightning")} Gauntlet stage ${idx + 1} clear · +${st.reward} coins`;
+            this.hud.toast(this.challengeOutcome, "gold");
+            if (res === "clear") {
+              this.save.addCoins(g.clearBonus);
+              this.hud.toast(`${iconGlyph("trophy")} GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
+              this.platform?.measure("event", "gauntlet-clear", "complete");
+              this.platform?.happyTime();
+              if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
+              // Gauntlet prize skin: 5 lifetime clears earns the Stormcrow.
+              if (this.save.state.challenges.gauntletsCleared >= 5 && !this.save.state.ownedSkins.includes("stormcrow")) {
+                this.save.ownSkin("stormcrow");
+                this.hud.toast(`${iconGlyph("bird")} Stormcrow unlocked — 5 gauntlets cleared!`, "gold");
+              }
+              this.audio.island();
             }
-            this.audio.island();
           }
+        } else if (verdict === "wrong-mode") {
+          this.challengeOutcome = `Gauntlet stage ${idx + 1} must be flown in ${modeById(st.mode).name} — this run doesn't count`;
+        } else {
+          this.challengeOutcome = `Gauntlet stage ${idx + 1} missed — needed ${st.target} ${st.metric}`;
         }
-      } else if (st) {
-        this.challengeOutcome = `Gauntlet stage ${idx + 1} missed — needed ${st.target} ${st.metric}`;
       }
     }
 

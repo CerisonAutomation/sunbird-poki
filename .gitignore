@@ -1,5 +1,8 @@
 # Dependencies
-node_modules/
+node_modules
+# No trailing slash on purpose: a symlink is not a directory, so 'node_modules/'
+# fails to match the SYMLINKED node_modules in every isolated agent worktree.
+# Found by the integrity lane; a bare 'git add -A' there would have committed it.
 
 # Build output
 dist/

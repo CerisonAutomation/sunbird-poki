@@ -735,10 +735,13 @@ export class SaveData {
     if (!s.piggyBank || s.piggyBank.coins <= 0) return 0;
     const amount = s.piggyBank.coins;
     s.piggyBank.coins = 0;
-    s.wallet += amount;
-    s.totalCoins += amount;
+    // Through addCoins() like every other award, so a bought multiplier pays
+    // here too. Returns the amount actually credited, because every caller
+    // shows it to the player as "+N coins" — reporting the pre-multiplier
+    // figure would be a lie the wallet could contradict.
+    const awarded = this.addCoins(amount);
     this.persist();
-    return amount;
+    return awarded;
   }
 
   performPrestige(): boolean {
@@ -830,12 +833,9 @@ export class SaveData {
     r.matches.push({ place: p, field: f, mode, date, won });
     if (r.matches.length > 8) r.matches.splice(0, r.matches.length - 8);
     const bonus = won ? streakBonus(r.streak) : 0;
-    if (bonus > 0) {
-      this.state.wallet += bonus;
-      this.state.totalCoins += bonus;
-    }
+    const awarded = bonus > 0 ? this.addCoins(bonus) : 0;
     this.persist();
-    return { delta, bonus, streak: r.streak };
+    return { delta, bonus: awarded, streak: r.streak };
   }
 
   /**
@@ -850,10 +850,11 @@ export class SaveData {
     this.state.rival.rating = softResetRating(this.state.rival.rating);
     this.state.rival.streak = 0;
     this.state.rankSeason = { id, peak: this.state.rival.rating };
-    this.state.wallet += reward.coins;
-    this.state.totalCoins += reward.coins;
+    // Through addCoins(): the peak-division reward is a coin award like any
+    // other, and the toast quotes whatever this returns.
+    const awarded = this.addCoins(reward.coins);
     this.persist();
-    return { coins: reward.coins, division: reward.division.name };
+    return { coins: awarded, division: reward.division.name };
   }
 
   /** Head-to-head duel result. Rating swing is a flat ±16 vs the duelist. */
@@ -1230,16 +1231,18 @@ export class SaveData {
     s.last = today;
     s.claimedDate = today;
     const reward = 20 * Math.min(7, Math.max(1, s.days));
-    this.state.wallet += reward;
-    this.state.totalCoins += reward;
+    // Both the daily streak and the comeback bonus are coin awards, so both go
+    // through addCoins() — a "+10% coins forever" upgrade that skipped the
+    // login streak was the same bug as the piggy bank, not a lesser one. The
+    // return is the amount actually credited, since callers toast it.
+    const awarded = this.addCoins(reward);
     // Comeback bonus: only when returning after missing days (not day 1)
     if (isComeback) {
       const comebackBonus = 50;
-      this.state.wallet += comebackBonus;
-      this.state.totalCoins += comebackBonus;
+      this.addCoins(comebackBonus);
     }
     this.persist();
-    return reward;
+    return awarded;
   }
 
   questsClaimed(date: string): string[] {

@@ -24,7 +24,7 @@ import { DAILY_STIPEND, PIGGY_BANK_CAP, PIGGY_BANK_MIN_SMASH, SHOP_AD_COINS, SHO
 import { COLLECTIONS, dailyFlashBird, GOLD, skinById, STARTER_PACK, VIP, type BoostView, type ShopTrailView, type SkinView } from "./Economy";
 import { rivalPalette, skinPalette, sunSVG, sunbirdSVG } from "./Sunbird";
 import { formatDistance } from "./math";
-import type { MissionView, QuestReward, QuestView } from "./Missions";
+import type { MissionRow, MissionView, QuestReward, QuestView } from "./Missions";
 import type { CampaignChapterView } from "./Campaign";
 import type { MonthlyTheme, WeeklyEvent } from "./Events";
 import { SQUAD_QUESTS, type SquadState } from "./Squad";
@@ -33,7 +33,9 @@ import { seenAgo, type FlightMate } from "./pilots";
 import type { HighScore, Settings } from "./SaveData";
 import { TRACK_NAMES } from "./Music";
 import type { TierView } from "./SeasonPass";
+import { growthLedger } from "./GrowthLedger";
 import type { CelebrationView } from "./ProgressBeats";
+import { streakOpacity } from "./SpeedFeel";
 
 export type UiScreen =
   | "progress"
@@ -413,6 +415,8 @@ export type HudSnapshot = {
   celebration: CelebrationView;
   /** Wings proximity bar — in-flight rank-up approach meter. */
   proximity: { visible: boolean; fill: number; remaining: number; name: string };
+  /** Today's daily-quest bars, filled live. Empty when the HUD has no run. */
+  missionRows: MissionRow[];
 };
 
 export type DailyCard = {
@@ -559,6 +563,7 @@ export class HUD {
   private countdownEl!: HTMLElement;
   private versusBar!: HTMLElement;
   private goalStrip!: HTMLElement;
+  private missionStrip!: HTMLElement;
   private goalPop!: HTMLElement;
   private rankUp!: HTMLElement;
   private standingsEl!: HTMLElement;
@@ -587,6 +592,7 @@ export class HUD {
   private lastGoals = "";
 
   private lastGoalPop = "";
+  private lastMissionStrip = "";
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
@@ -677,6 +683,7 @@ export class HUD {
         <div class="launch-banner" data-ref="launchBanner"></div>
         <div class="power-strip" data-ref="powerStrip"></div>
         <div class="goal-strip" data-ref="goalStrip"></div>
+        <div class="mission-strip hidden" data-ref="missionStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
         <div class="goal-pop" data-ref="goalPop" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="rank-up" data-ref="rankUp" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="countdown" data-ref="countdown"></div>
@@ -717,7 +724,7 @@ export class HUD {
         <div class="combo" data-ref="combo"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="hand" data-ref="hand">☝<span class="hand-hint">Tap · Space · ↑</span></div>
-        <div class="wings-near hidden" data-ref="wingsNear"><i></i><span></span></div>
+        <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
       </div>
 
       <div class="overlay menu hidden" data-ref="menu"><div class="paper-card" data-ref="menuCard"></div></div>
@@ -1295,7 +1302,12 @@ export class HUD {
         this.lastBiome = biomeTxt;
         this.biomeChip.innerHTML = `<span class="biome-art">${menuIcon("atlas")}</span><span>${escapeHtml(biomeTxt)}</span>`;
       }
-      this.setStyle(this.speedLines, "speedlines", "opacity", String(Math.max(0, (s.speedNorm - 0.55) * 1.6)));
+      // Speed lines, from the tuned curve. This used to inline its own
+      // `Math.max(0, (speedNorm - 0.55) * 1.6)`, which meant the 2026-09-24
+      // retune of `SPEED_BANDS` never reached the player: different threshold,
+      // different slope, and the copy could not be re-tuned in one file. The
+      // band definitions live in `SpeedFeel.ts`; this is the consumer.
+      this.setStyle(this.speedLines, "speedlines", "opacity", String(streakOpacity(s.speedNorm)));
 
       // altitude gauge (log-ish so low hops still read, big launches still climb)
       const aN = Math.min(1, Math.pow(s.altitude / 340, 0.65));
@@ -1391,6 +1403,15 @@ export class HUD {
         }
 
         this.goalStrip.innerHTML = rows.join("");
+      }
+      // The quest strip. Keyed on the numbers rather than rebuilt per frame, so
+      // a 30 Hz HUD push does not churn 3-4 nodes; the `just` class is folded
+      // into the key so the "banked" flourish still fires on the frame it lands.
+      const mkey = s.missionRows.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
+      if (mkey !== this.lastMissionStrip) {
+        this.lastMissionStrip = mkey;
+        this.missionStrip.classList.toggle("hidden", s.missionRows.length === 0);
+        this.missionStrip.innerHTML = renderMissionStrip(s.missionRows);
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;
@@ -1526,8 +1547,20 @@ export class HUD {
       const prox = s.proximity;
       this.wingsNear.classList.toggle("hidden", !prox.visible);
       if (prox.visible) {
-        (this.wingsNear.firstElementChild as HTMLElement).style.width = `${Math.round(prox.fill * 100)}%`;
-        this.wingsNear.lastElementChild!.textContent = `${prox.remaining} m to ${prox.name}`;
+        const pct = Math.round(prox.fill * 100);
+        const label = t("hud.progress.proximity", { n: prox.remaining, name: prox.name }, `${prox.remaining} m to ${prox.name}`);
+        const bar = this.wingsNear.firstElementChild as HTMLElement;
+        bar.style.width = `${pct}%`;
+        // The bar is the accessible element, not the mirrored text beside it:
+        // it updates every frame, so it must NOT be a live region (that would
+        // announce a new distance ~30×/s) — `role="progressbar"` with
+        // `aria-valuetext` reports it on demand instead, and the visible text
+        // is `aria-hidden` so it is not read twice.
+        if (bar.getAttribute("aria-valuenow") !== String(pct)) {
+          bar.setAttribute("aria-valuenow", String(pct));
+          bar.setAttribute("aria-valuetext", label);
+        }
+        (this.wingsNear.lastElementChild as HTMLElement).textContent = label;
       }
     }
 
@@ -1781,6 +1814,7 @@ export class HUD {
     this.matchmakingKeep = grab("matchmakingKeep");
     this.matchmakingReady = grab("matchmakingReady");
     this.goalStrip = grab("goalStrip");
+    this.missionStrip = grab("missionStrip");
     this.goalPop = grab("goalPop");
     this.rankUp = grab("rankUp");
     this.standingsEl = grab("standings");
@@ -3651,8 +3685,37 @@ export function renderCoinMultiplierCard(coins: number, claimed: boolean, reward
     </div>`;
 }
 
-function renderCelebration(cel: CelebrationView): string {
-  if (!cel || (!cel.staged.length && !cel.ledger.length && !cel.folded)) return "";
+/**
+ * The two lines that turn a result into progress: the ranked beats, then the
+ * growth ledger underneath.
+ *
+ * The ledger is derived here, from the two ladders the snapshot *already*
+ * carries (`wings` and this flight's `mastery` row), because that is what
+ * `GrowthLedger.ts` was written against: "This module decides what the card
+ * says; `HUD.ts` only renders it." It is deliberately not a separate snapshot
+ * field — that would be a second copy of state the snapshot already has, which
+ * is the failure mode this whole card was built to avoid.
+ *
+ * The ledger is a `<dl>` because it is a set of terms (a ladder and its
+ * remaining distance) and not a list of beats: assistive tech gets one
+ * announcement per line, and the decorative bar is `aria-hidden` because the
+ * text beside it already says the same thing.
+ */
+function renderCelebration(s: HudSnapshot): string {
+  const cel = s.celebration;
+  const lines = growthLedger(s.wings, s.mastery.find((m) => m.modeId === s.modeId) ?? null);
+  const ledger = lines
+    .map(
+      (l) => `<div class="gl-row gl-${escapeHtml(l.kind)}">
+        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i>${escapeHtml(l.label)}</dt>
+        <dd><span>${escapeHtml(l.detail)}</span><i class="gl-bar" aria-hidden="true"><b style="width:${(l.progress * 100).toFixed(1)}%"></b></i></dd>
+      </div>`,
+    )
+    .join("");
+  const growth = `<div class="growth-ledger" data-ref="growthLedger"><span class="gl-title">${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}</span>${
+    ledger ? `<dl>${ledger}</dl>` : ""
+  }</div>`;
+  if (!cel || (!cel.staged.length && !cel.ledger.length && !cel.folded)) return growth;
   const beatEl = (b: CelebrationView["staged"][0], withDelay = true): string => {
     const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
     const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
@@ -3661,9 +3724,31 @@ function renderCelebration(cel: CelebrationView): string {
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");
-  const moreBit = cel.folded > 0 ? `<div class="beat more" role="listitem">+${cel.folded} more from this flight</div>` : "";
+  const moreBit = cel.folded > 0 ? `<div class="beat more" role="listitem">${escapeHtml(t("hud.progress.more", { n: cel.folded }, `+${cel.folded} more from this flight`))}</div>` : "";
   const beatRow = ledgerBits || moreBit ? `<div class="beat-row">${ledgerBits}${moreBit}</div>` : "";
-  return `<div class="celebration" role="list" aria-label="This flight's progress">${stageBits}${beatRow}</div><div class="growth-ledger"></div>`;
+  return `<div class="celebration" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}">${stageBits}${beatRow}</div>${growth}`;
+}
+
+/**
+ * The in-flight quest strip — `missionRows`, drawn next to the goal strip.
+ *
+ * Emitted unconditionally (and hidden when empty) for the same reason
+ * `.growth-ledger` is: the element is part of the HUD's structure, so a test
+ * and a screen reader can both find it whether or not this particular run has a
+ * quest in it. It is a `<ul>` of rows, each with its progress as text, because a
+ * bar alone tells a screen reader nothing.
+ */
+function renderMissionStrip(rows: MissionRow[]): string {
+  if (!rows.length) return "";
+  return `<ul class="mission-strip-list">${rows
+    .map(
+      (r) => `<li class="ms-row${r.done ? " done" : ""}${r.justDone ? " just" : ""}">
+        <span class="ms-title">${r.done ? "✓ " : ""}${escapeHtml(r.title)}</span>
+        <span class="ms-num">${Math.round(r.progress)}/${Math.round(r.target)}</span>
+        <i class="ms-bar" aria-hidden="true"><b style="width:${(r.pct * 100).toFixed(1)}%"></b></i>
+      </li>`,
+    )
+    .join("")}</ul>`;
 }
 
 function renderGameOver(s: HudSnapshot): string {
@@ -3753,7 +3838,7 @@ function renderGameOver(s: HudSnapshot): string {
     ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">${t("hud.gameover.leaderboardRank", undefined, "Leaderboard rank")} · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
     ${shareBlock}
-    ${renderCelebration(s.celebration)}
+    ${renderCelebration(s)}
     ${renderFlightRecap(s.flightPath)}
     <div class="over-stats meta-progress-strip">
       <div><span>🐦 Migration</span><b>${s.campaignDone}/${s.campaignTotal} legs</b></div>

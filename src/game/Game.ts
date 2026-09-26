@@ -98,7 +98,7 @@ SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
 } from "./constants";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
-import { wingsPromotion } from "./Career";
+import { nextWings, wingsFor, wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
 import { fetchRivalGhost, publishGhost } from "./GhostNet";
 import { paceTargetDistance, synthesizePaceGhost } from "./RivalGhost";
@@ -110,8 +110,10 @@ import { launchIntentFor, pvpCircuitFor } from "./launchRouting";
 import { countSharePlay, loadSharedRun, shareRun, sharingAvailable, type SharedRun } from "./SharedRun";
 import { Input } from "./Input";
 import { clamp, dateSeed, formatDatePretty, lerp, SeededRandom } from "./math";
-import { Missions, type MissionView, type QuestReward, type QuestView, type RunStats } from "./Missions";
+import { Missions, missionRows as buildMissionRows, nextActionLine, newlyDone, type MissionRow, type MissionView, type QuestReward, type QuestView, type RunStats } from "./Missions";
 import { ParticleFX } from "./ParticleFX";
+import { celebrationView, planCelebration, wingsProximity, type ProgressEvent } from "./ProgressBeats";
+import { NO_RUN_PROGRESS, runProgressEvents, type RunChallenge, type RunProgressFacts } from "./RunProgress";
 import { TrailRibbon } from "./Trail";
 import { fetchServerEntitlements,
   PlaceholderAdProvider,
@@ -396,6 +398,26 @@ export class Game {
   private runRecorded = false;
   private newlyCompleted: string[] = [];
   private claimedQuests: QuestReward[] = [];
+  /**
+   * The results card's progress surface, as run state. Empty until a run ends:
+   * a flight in progress has moved nothing yet, and the shape is the one
+   * `planCelebration([])` returns, so the HUD renders nothing rather than a
+   * placeholder. Built once in `finishRun()` by `runProgressEvents` and read
+   * only by the snapshot — it is never recomputed per frame.
+   */
+  private runProgress: ProgressEvent[] = [];
+  /** The in-flight mission strip, and the previous frame's rows for the diff. */
+  private missionRowViews: MissionRow[] = [];
+  private previousMissionRows: MissionRow[] = [];
+  /** The quests banked on the frame each one crossed — juice fires once. */
+  private justBankedQuests: string[] = [];
+  /**
+   * The career rung this run is climbing, frozen at launch. `wingsProximity`
+   * needs the gap as it was *before* the flight; the live `wingsCard` value
+   * shrinks with every metre, so reading it mid-run would always yield zero
+   * remaining and the bar could never appear. Null at max rank.
+   */
+  private wingsRungAtStart: { name: string; needed: number; span: number } | null = null;
   private menuHold = 0;
   private needRelease = false;
   /**
@@ -3409,6 +3431,15 @@ export class Game {
     this.newlyCompleted = this.missions.applyRun(stats);
     this.claimedQuests = this.missions.claimQuests(this.today, stats);
 
+    // RESULTS-CARD PROGRESS — every ladder this run moved, gathered while it is
+    // still in scope. `runProgressEvents` (pure, `RunProgress.ts`) turns these
+    // facts into the ranked beats; the snapshot reads the result. Nothing here
+    // is a second source of truth: each field is the same local the toast above
+    // it was built from, so the card cannot disagree with the flight.
+    const progress: RunProgressFacts = { ...NO_RUN_PROGRESS, distance: stats.distance };
+    const cleared: RunChallenge[] = [];
+    const pushChallenge = (c: RunChallenge): void => { cleared.push(c); };
+
     // Daily challenge / weekly gauntlet resolution for flagged runs.
     this.challengeOutcome = "";
     // Rival verdict first: same seed, straight distance comparison. Runs on
@@ -3441,6 +3472,7 @@ export class Game {
         this.challengeOutcome = `${iconGlyph("sun")} Daily challenge complete · +${c.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         this.audio.island();
+        pushChallenge({ variant: "daily", icon: "sun", label: c.title, coins: c.reward });
       } else if (verdict === "wrong-mode") {
         this.challengeOutcome = `Daily challenge must be flown in ${modeById(c.mode).name} — this run doesn't count`;
       } else {
@@ -3458,9 +3490,14 @@ export class Game {
             this.save.addCoins(st.reward);
             this.challengeOutcome = `${iconGlyph("lightning")} Gauntlet stage ${idx + 1} clear · +${st.reward} coins`;
             this.hud.toast(this.challengeOutcome, "gold");
+            pushChallenge({ variant: "gauntletStage", icon: "lightning", label: st.label, coins: st.reward });
             if (res === "clear") {
               this.save.addCoins(g.clearBonus);
               this.hud.toast(`${iconGlyph("trophy")} GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
+              // The whole-week clear is its own beat, not a second stage beat:
+              // `beatCopy` gives it the dedicated "GAUNTLET CLEARED" key and
+              // it outranks everything except a record and a rank-up.
+              pushChallenge({ variant: "gauntlet", icon: "trophy", label: g.week, coins: g.clearBonus });
               this.platform?.measure("event", "gauntlet-clear", "complete");
               this.platform?.happyTime();
               if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
@@ -3488,6 +3525,7 @@ export class Game {
         this.save.addCoins(ev.reward);
         this.challengeOutcome = `${iconGlyph(ev.icon)} ${ev.name} clear ×${counts.week} · +${ev.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
+        pushChallenge({ variant: "event", icon: ev.icon, label: ev.name, coins: ev.reward });
         this.platform?.measure("event", "weekly-clear", "complete");
         this.platform?.happyTime();
         this.audio.eventStinger();
@@ -3511,6 +3549,16 @@ export class Game {
     if (mastery) {
       this.platform?.measure("mastery", this.modeId, "complete");
       this.platform?.happyTime();
+      progress.mastery = {
+        icon: this.mode.icon,
+        mode: this.mode.name,
+        level: mastery.level,
+        // The signature skill *is* the max: `bankMasteryRun` only returns a
+        // skill at the last level, so this is the one place the flag is known.
+        maxed: Boolean(mastery.skill),
+        skill: mastery.skill?.name ?? "",
+        coins: mastery.coins,
+      };
       if (mastery.skill) {
         this.hud.toast(`★ ${this.mode.name} MASTERED · skill unlocked: ${mastery.skill.name} (${mastery.skill.desc}) · +${mastery.coins} coins`, "gold");
         this.audio.chapterFanfare();
@@ -3546,6 +3594,7 @@ export class Game {
       this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
       this.hud.toast(`${iconGlyph(promo.icon)} ${promo.name.toUpperCase()} — lifetime rank earned`, "gold");
       this.telemetry.track("wings_promo", { tier: promo.id });
+      progress.wings = { tierId: promo.id, icon: promo.icon, name: promo.name };
     }
     this.save.addLifetimeZeniths(stats.zenith);
     this.save.addLifetimeSunflowers(this.runSunflowers);
@@ -3580,6 +3629,7 @@ export class Game {
     if (tierAfter > tierBefore) {
       this.hud.toast(`Nest Pass Lv.${tierAfter} unlocked — claim it!`, "gold");
       this.audio.island();
+      progress.passTier = tierAfter;
     }
     if (this.claimedQuests.length) {
       const total = this.claimedQuests.reduce((a, q) => a + q.reward, 0);
@@ -3588,6 +3638,20 @@ export class Game {
     if (this.newlyCompleted.length) this.hud.toast("Nest upgraded!", "island");
     for (const t of newTrophies) this.hud.toast(`Trophy: ${t.title}`, "gold");
     if (newTrophies.length > 0) this.audio.trophy();
+
+    // THE WIRE. Everything above noticed a ladder move; `runProgressEvents`
+    // turns those same facts into the ranked beats the results card renders,
+    // and the snapshot reads only this field. From here the card is a function
+    // of the run, so it cannot say anything the flight did not do.
+    progress.newBest = this.newBest;
+    progress.trophies = newTrophies;
+    progress.quests = this.claimedQuests;
+    progress.nest = this.newlyCompleted.length
+      ? { level: this.save.state.nestLevel, mult: this.save.nestMultiplier() }
+      : null;
+    progress.challenges = cleared;
+    this.runProgress = runProgressEvents(progress);
+    this.telemetry.track("run_progress", { beats: this.runProgress.length, kinds: [...new Set(this.runProgress.map((e) => e.kind))].join(",") });
 
     const runs = this.save.state.runsPlayed;
     const dueAd = SIMULATED_BREAKS && !this.portalEnabled() && !this.save.state.gold && this.save.shouldShowInterstitial(runs);
@@ -3668,6 +3732,22 @@ export class Game {
   private resetRun(idle: boolean): void {
     this.attractPilot.reset();
     this.flightCues.reset();
+    // A new run inherits nothing from the last one: the card's progress strip,
+    // the mission diff baseline and the once-per-quest "just banked" flags are
+    // all per-run, and carrying them over would replay the previous flight's
+    // celebration on the menu.
+    this.runProgress = [];
+    this.missionRowViews = [];
+    this.previousMissionRows = [];
+    this.justBankedQuests = [];
+    // Freeze the rung this run climbs. `nextWings` is the same call
+    // `wingsCard` makes, read before a single metre is banked.
+    {
+      const life = this.save.state.lifetime.distance;
+      const next = nextWings(life);
+      const cur = wingsFor(life);
+      this.wingsRungAtStart = next ? { name: next.tier.name, needed: next.needed, span: Math.max(0, next.tier.min - cur.min) } : null;
+    }
     this.masteryPerk = this.fairRace ? NO_MASTERY_PERKS : masteryPerks(this.save, this.modeId);
     // Shared/daily/ranked seeds must not depend on an individual save's skill.
     // Apply adaptive calibration only to an unshared casual flight, before sampling spawn.
@@ -7120,6 +7200,24 @@ export class Game {
     this.viewsVersion = this.uiVersion;
   }
 
+  /**
+   * The in-flight mission strip, and the "just banked" flags for this push.
+   *
+   * `missionRows` is pure over (today's defs, the live run counters, what is
+   * already banked), so this is the same call the run-end claim would make —
+   * one producer, two readers, no second source of truth. `newlyDone` diffs
+   * against the previous push so a row that crosses the line flags exactly
+   * once; without the diff a filled bar would keep re-announcing itself for
+   * the rest of the flight.
+   */
+  private stepMissionRows(stats: RunStats): void {
+    const rows = buildMissionRows(this.missions.dailyQuests(this.today), this.state === "playing" ? stats : null, this.save.questsClaimed(this.today));
+    const crossed = newlyDone(this.previousMissionRows, rows);
+    this.previousMissionRows = rows;
+    this.justBankedQuests = crossed.map((r) => r.id);
+    this.missionRowViews = this.justBankedQuests.length ? rows.map((r) => (crossed.some((c) => c.id === r.id) ? { ...r, justDone: true } : r)) : rows;
+  }
+
   private pushHud(): void {
     const now = performance.now();
     // Values refresh at 30 Hz; screen/action changes still commit immediately.
@@ -7129,6 +7227,7 @@ export class Game {
     if (this.viewsVersion !== this.uiVersion) this.refreshViews();
     const st = this.save.state;
     const stats = this.runStats();
+    this.stepMissionRows(stats);
     let todayBest = 0;
     for (const h of st.highScores) if (h.date === this.today && h.distance > todayBest) todayBest = h.distance;
     const sTier = this.seasonPass.tier();
@@ -7478,12 +7577,50 @@ export class Game {
     selectedPvpMode: this.selectedPvpMode,
     selectedPvpWorld: this.selectedPvpWorld,
     beatLine: null,
-    nextAction: "",
-    // Celebration and proximity are not yet plumbed from game state; provide
-    // safe defaults so HUD renders correctly (hidden proximity bar, no beats).
-    celebration: { staged: [], ledger: [], folded: 0, peak: 0 },
-    proximity: { visible: false, fill: 0, remaining: 0, name: "" },
+    nextAction: this.resultsNextAction(),
+    // The results card's progress surface, read from the run — the three fields
+    // that used to be literals here and were the reason `HUD.renderCelebration`
+    // early-returned `""` on every flight.
+    celebration: celebrationView(planCelebration(this.runProgress)),
+    proximity: this.wingsProximityView(),
+    missionRows: this.missionRowViews,
     };
+  }
+
+  /**
+   * The results card's one next action, from today's quest rows.
+   *
+   * `nextActionLine` is a pure function of the rows and the distance just
+   * flown, so this reads state that already exists (`missionRowViews` is the
+   * same rows the in-flight strip shows) rather than recomputing anything. It
+   * returns `""` on the menu and mid-flight — a next action is only meaningful
+   * once there is a run behind it, and the HUD omits the element for `""`.
+   */
+  private resultsNextAction(): string {
+    if (this.state !== "gameover" || this.missionRowViews.length === 0) return "";
+    return nextActionLine(this.missionRowViews, this.resultDistance);
+  }
+
+  /**
+   * The in-flight wings-proximity bar: how close this flight is to promoting
+   * the pilot's career rank.
+   *
+   * `wingsProximity` needs the gap *measured before the flight* — the live
+   * `nextNeeded` shrinks every frame, so feeding it the current value would
+   * make `remaining` always zero and the bar would never show. `resetRun`
+   * snapshots it, which is the only reason this is not a per-frame recompute of
+   * the same subtraction. `tierSpan` is the rung's own width, which is what
+   * sets how wide the reveal window is.
+   */
+  private wingsProximityView(): { visible: boolean; fill: number; remaining: number; name: string } {
+    if (this.state !== "playing" || !this.wingsRungAtStart) return { visible: false, fill: 0, remaining: 0, name: "" };
+    const prox = wingsProximity({
+      flownMetres: this.lastRunDistance(),
+      nextName: this.wingsRungAtStart.name,
+      nextNeeded: this.wingsRungAtStart.needed,
+      tierSpan: this.wingsRungAtStart.span,
+    });
+    return { visible: prox.visible, fill: prox.fill, remaining: prox.remaining, name: this.wingsRungAtStart.name };
   }
 
   /* ------------------------------------------------------- versus (2P) */

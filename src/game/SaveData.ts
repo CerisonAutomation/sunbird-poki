@@ -41,10 +41,22 @@ export type Settings = {
   sfxVolume: number;
   /** Which music track to play: "shuffle" (all ten) or a 0-based track index. */
   musicTrack: number | "shuffle";
+  /**
+   * "songbook" (default) plays the hand-authored tracks in Songbook.ts —
+   * what players actually asked to keep. "procedural" switches to the
+   * generated adaptive score in Music.ts. The two are never audible at
+   * once; see GameAudio.setMusicStyle.
+   */
+  musicStyle: "procedural" | "songbook";
   haptics: boolean;
   reduceMotion: boolean;
   /** Colorblind assist: shifts warning reds/greens to blue/orange + adds glyphs. */
   colorAssist: boolean;
+  /**
+   * Motion-sickness accessibility: disables camera dolly-zoom and banked
+   * tilt outright, and halves the max screen-shake from impacts/launches.
+   */
+  softCamera: boolean;
   /** Large-text mode: bumps every UI font a step for readability. */
   bigText: boolean;
   /**
@@ -70,6 +82,12 @@ export type Settings = {
    * over a results screen or mid-flight), and says why when it happens.
    */
   autoShop: boolean;
+  /**
+   * The home-screen "START HERE" onboarding route (three-step first-flight
+   * plan) can be skipped once the player has seen it — it is only ever shown
+   * again if this is explicitly reset, never re-forced by runsPlayed alone.
+   */
+  dismissedOnboarding: boolean;
 };
 
 export type LifetimeStats = {
@@ -167,6 +185,16 @@ export type SaveState = {
   rankSeason: { id: string; peak: number };
   /** Daily challenge / weekly gauntlet completion state. */
   challenges: ChallengeState;
+  /**
+   * Daily-streak retention counters (Feature: Daily Streak System).
+   * `currentStreak` mirrors `streak.days` under the literal name the
+   * retention spec calls for — `touchStreak()` is the only writer of either,
+   * so the two can never drift apart. `streakDaysAchieved` records which
+   * streak milestones (7/14/30 consecutive days) have already paid their
+   * one-time bonus, so returning to the same milestone never double-pays.
+   */
+  currentStreak: number;
+  streakDaysAchieved: number[];
   /** 28-day login calendar, separate from the streak. */
   calendar: { cycleDay: number; lastClaim: string };
   /** Runs flown per mode, feeding mode mastery levels. */
@@ -207,6 +235,15 @@ export type ChallengeState = {
   gauntletWeek: string;
   gauntletDone: number[];
   gauntletsCleared: number;
+  /**
+   * Consecutive calendar days in a row whose daily challenge was NOT
+   * completed by day's end (Feature: Challenge Difficulty Auto-Tuning).
+   * Reset to 0 the moment a daily is completed; read by `dailyChallenge()`
+   * (see Challenges.ts `scaleTargetForFailures`) to ease tomorrow's target
+   * once this reaches 2, so a target that has outpaced this player twice
+   * gets easier instead of teaching them to quit.
+   */
+  dailyChallengeFailures: number;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -216,14 +253,17 @@ const DEFAULT_SETTINGS: Settings = {
   musicVolume: 0.8,
   sfxVolume: 0.9,
   musicTrack: "shuffle",
+  musicStyle: "songbook",
   haptics: true,
   reduceMotion: false,
   colorAssist: false,
+  softCamera: false,
   bigText: false,
   tapToggleDive: false,
   quality: "auto",
   distUnit: "km",
   autoShop: true,
+  dismissedOnboarding: false,
 };
 
 function makeDeviceId(): string {
@@ -261,6 +301,8 @@ function defaults(): SaveState {
     settings: { ...DEFAULT_SETTINGS },
     quests: { date: "", claimed: [] },
     streak: { last: "", days: 0, claimedDate: "" },
+    currentStreak: 0,
+    streakDaysAchieved: [],
     claimedCollections: [],
     redeemedCodes: [],
     firstPlayed: "",
@@ -294,7 +336,7 @@ function defaults(): SaveState {
     rival: defaultRival(),
     duel: { wins: 0, losses: 0, streak: 0, bestStreak: 0 },
     rankSeason: { id: rankSeasonId(), peak: RIVAL_BASE_RATING },
-    challenges: { dailyDate: "", dailyDone: false, dailiesDone: 0, gauntletWeek: "", gauntletDone: [], gauntletsCleared: 0 },
+    challenges: { dailyDate: "", dailyDone: false, dailiesDone: 0, gauntletWeek: "", gauntletDone: [], gauntletsCleared: 0, dailyChallengeFailures: 0 },
     calendar: { cycleDay: 0, lastClaim: "" },
     mastery: {},
     campaignClaimed: [],
@@ -373,6 +415,18 @@ function parseRival(v: unknown): RivalState {
   };
 }
 
+/**
+ * Daily-streak milestone rewards (Feature: Daily Streak System), paid
+ * exactly once per milestone via `state.streakDaysAchieved`. The 30-day
+ * milestone also grants a cosmetic trail through the same `ownTrail()` path
+ * a tournament prize uses, so it shows up identically in the trail picker.
+ */
+const STREAK_MILESTONE_REWARDS: Readonly<Record<number, { coins: number; trail?: string }>> = {
+  7: { coins: 100 },
+  14: { coins: 200 },
+  30: { coins: 500, trail: "trail_streak" },
+};
+
 export class SaveData {
   state: SaveState;
   /** True when the on-disk save was unreadable this session and we booted
@@ -402,6 +456,9 @@ export class SaveData {
    *  live rather than by whatever happened to be live at the end. */
   private runBonusWindows: { from: number; to: number; mult: number }[] = [];
   private externalChangeHandler: ((e: StorageEvent) => void) | null = null;
+  /** Set by `applyStreakMilestone()`, read (and cleared) by
+   *  `justAchievedStreakMilestone()`. Session-only — never persisted. */
+  private pendingStreakMilestone: { days: number; coins: number; trail?: string } | null = null;
 
   constructor() {
     this.state = this.load();
@@ -519,9 +576,11 @@ export class SaveData {
               : typeof p.settings?.musicTrack === "number"
                 ? Math.max(0, Math.min(TRACK_NAMES.length - 1, Math.floor(p.settings.musicTrack)))
                 : "shuffle",
+          musicStyle: p.settings?.musicStyle === "procedural" ? "procedural" : "songbook",
           haptics: p.settings?.haptics === undefined ? true : Boolean(p.settings.haptics),
           reduceMotion: Boolean(p.settings?.reduceMotion),
           colorAssist: Boolean(p.settings?.colorAssist),
+          softCamera: Boolean(p.settings?.softCamera),
           bigText: Boolean(p.settings?.bigText),
           tapToggleDive: Boolean(p.settings?.tapToggleDive),
           quality: quality === "high" || quality === "low" ? quality : "auto",
@@ -529,6 +588,7 @@ export class SaveData {
           // Undefined (a save from before this existed) means on, matching
           // DEFAULT_SETTINGS — an explicit `false` is respected.
           autoShop: p.settings?.autoShop === undefined ? true : Boolean(p.settings.autoShop),
+          dismissedOnboarding: Boolean(p.settings?.dismissedOnboarding),
         },
         quests:
           p.quests && typeof p.quests.date === "string"
@@ -538,6 +598,8 @@ export class SaveData {
           p.streak && typeof p.streak.last === "string"
             ? { last: p.streak.last, days: num(p.streak.days), claimedDate: String(p.streak.claimedDate ?? "") }
             : d.streak,
+        currentStreak: num(p.currentStreak),
+        streakDaysAchieved: numArr(p.streakDaysAchieved),
         redeemedCodes: strArr(p.redeemedCodes),
         firstPlayed: typeof p.firstPlayed === "string" ? p.firstPlayed : "",
         runsPlayed: num(p.runsPlayed),
@@ -611,6 +673,7 @@ export class SaveData {
                 gauntletWeek: String(p.challenges.gauntletWeek ?? ""),
                 gauntletDone: numArr(p.challenges.gauntletDone),
                 gauntletsCleared: num(p.challenges.gauntletsCleared),
+                dailyChallengeFailures: num(p.challenges.dailyChallengeFailures),
               }
             : d.challenges,
         calendar:
@@ -897,6 +960,10 @@ export class SaveData {
     c.dailyDate = date;
     c.dailyDone = true;
     c.dailiesDone += 1;
+    // A clear breaks the miss streak immediately — the auto-tune (see
+    // scaleTargetForFailures in Challenges.ts) exists to help a player who is
+    // failing, not to keep discounting once they've shown they don't need it.
+    c.dailyChallengeFailures = 0;
     this.persist();
     return true;
   }
@@ -904,6 +971,20 @@ export class SaveData {
   isDailyDone(date: string): boolean {
     const c = this.state.challenges;
     return c.dailyDate === date && c.dailyDone;
+  }
+
+  /**
+   * Called once per calendar-day rollover (boot and midnight-while-open,
+   * never more than once for the same "yesterday") with whether yesterday's
+   * daily challenge was completed. Feeds the difficulty auto-tune: two misses
+   * in a row is what `scaleTargetForFailures` treats as "this target has
+   * outpaced this player," not one unlucky day.
+   */
+  noteDailyChallengeRollover(dailyWasDoneYesterday: boolean): void {
+    const c = this.state.challenges;
+    if (!Number.isFinite(c.dailyChallengeFailures)) c.dailyChallengeFailures = 0;
+    c.dailyChallengeFailures = dailyWasDoneYesterday ? 0 : c.dailyChallengeFailures + 1;
+    this.persist();
   }
 
   /** Marks a gauntlet stage done. @returns "stage" | "clear" | null. */
@@ -1033,9 +1114,30 @@ export class SaveData {
     return true;
   }
 
-  /** Price of the next bought nest level: 300, 450, 675… (×1.5 per level). */
+  /**
+   * Price of the next bought nest level.
+   *
+   * A flat ×1.5 per level (300, 450, 675…) put ~33,900 coins between a
+   * player and their first full prestige (all 10 bought levels) — an
+   * exponential wall that turned the natural day-30 breakout point into a
+   * pay-or-grind cliff. Growth is now tiered: the first three purchases
+   * (the ones a player hits early and needs to feel cheap) grow at ×1.2,
+   * and every purchase after that grows at ×1.3 off the level-3 price —
+   * still far gentler than the original ×1.5 for every level, but keeping
+   * a real coin sink for players who push past the early levels. Result:
+   * 300, 360, 432, 518, 675, 876… for a full-prestige total near 10k
+   * instead of 33.9k, so prestige 1 lands in about two weeks of casual
+   * play and prestige 2-3 are reachable by day 45-60 instead of stalling
+   * at the day-30 wall.
+   */
   nestUpgradePrice(): number {
-    return Math.round(300 * Math.pow(1.5, this.state.nestBought));
+    const n = this.state.nestBought;
+    const EARLY_MULT = 1.2;
+    const LATE_MULT = 1.3;
+    const TIER_BREAK = 3;
+    if (n < TIER_BREAK) return Math.round(300 * Math.pow(EARLY_MULT, n));
+    const tierBreakPrice = 300 * Math.pow(EARLY_MULT, TIER_BREAK);
+    return Math.round(tierBreakPrice * Math.pow(LATE_MULT, n - TIER_BREAK));
   }
 
   /** The coin sink: convert coins into a permanent score multiplier level. */
@@ -1339,19 +1441,63 @@ export class SaveData {
     else if (s.last !== today) s.days = 1;
     s.last = today;
     s.claimedDate = today;
+    // `currentStreak` mirrors `streak.days` under the literal name the
+    // retention spec calls for — this is the ONLY place either is written,
+    // so the two can never drift apart.
+    this.state.currentStreak = s.days;
     const reward = 20 * Math.min(7, Math.max(1, s.days));
     // Both the daily streak and the comeback bonus are coin awards, so both go
     // through addCoins() — a "+10% coins forever" upgrade that skipped the
     // login streak was the same bug as the piggy bank, not a lesser one. The
     // return is the amount actually credited, since callers toast it.
     const awarded = this.addCoins(reward);
-    // Comeback bonus: only when returning after missing days (not day 1)
+    // Comeback bonus: only when returning after missing days (not day 1).
+    // Pinned behavior (coin-multiplier-paths.test.ts): the return value is
+    // the streak-day rate only — what the "Day N streak" toast quotes — not
+    // the comeback top-up, which is credited to the wallet silently.
     if (isComeback) {
       const comebackBonus = 50;
       this.addCoins(comebackBonus);
     }
+    // Milestone bonus (7/14/30 days): same silent-credit treatment as the
+    // comeback bonus above — Game.ts toasts it separately via
+    // `justAchievedStreakMilestone()` rather than folding it into this
+    // return, so the streak toast's number never has to mean two things.
+    this.applyStreakMilestone(s.days);
     this.persist();
     return awarded;
+  }
+
+  /**
+   * Grants the 7/14/30-day streak-milestone bonus exactly once per milestone.
+   * @returns coins actually credited (0 when this day is not a milestone, or
+   * the milestone was already paid on an earlier climb to it).
+   */
+  private applyStreakMilestone(days: number): number {
+    const milestone = STREAK_MILESTONE_REWARDS[days];
+    if (!milestone) return 0;
+    if (!Array.isArray(this.state.streakDaysAchieved)) this.state.streakDaysAchieved = [];
+    if (this.state.streakDaysAchieved.includes(days)) return 0;
+    this.state.streakDaysAchieved.push(days);
+    const credited = this.addCoins(milestone.coins);
+    if (milestone.trail) this.ownTrail(milestone.trail);
+    // Remembered for the caller to toast on its own beat (see
+    // justAchievedStreakMilestone) rather than folded into touchStreak's
+    // return value, which coin-multiplier-paths.test.ts pins to the
+    // streak-day rate alone.
+    this.pendingStreakMilestone = { days, coins: credited, trail: milestone.trail };
+    return credited;
+  }
+
+  /**
+   * The streak milestone (7/14/30 days) `touchStreak()` just paid, if any —
+   * read-once, so a caller that toasts it can't re-announce the same
+   * milestone on the next unrelated save() read.
+   */
+  justAchievedStreakMilestone(): { days: number; coins: number; trail?: string } | null {
+    const m = this.pendingStreakMilestone;
+    this.pendingStreakMilestone = null;
+    return m;
   }
 
   questsClaimed(date: string): string[] {
@@ -1420,7 +1566,12 @@ export class SaveData {
     // destroying the player's existing progress.
     const backup = storage.getItem(SAVE_KEY);
     try {
-      storage.setItem(SAVE_KEY, JSON.stringify(allowed));
+      // Re-seal before writing: without this, an imported save lands as bare
+      // (unsealed) JSON, which openPayload() treats as a legacy pass-through
+      // with NO checksum — silently defeating the CRC integrity check for
+      // every save going forward until the next persist() happens to reseal
+      // it. Sealing here closes that window immediately.
+      storage.setItem(SAVE_KEY, sealPayload(JSON.stringify(allowed)));
       this.state = this.load();
       return true;
     } catch {

@@ -30,6 +30,14 @@ const PORT = 4176;
 const ROOT = path.join(import.meta.dirname, "..", "poki-upload");
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const POKI_CDN = /game-cdn\.poki\.com/;
+/** Poki's own userdata API — the leaderboard's backing store. Not a shipped
+ *  asset: it is a runtime call to the platform, like the SDK itself, and the
+ *  "external resources" assertion is about asset hosts. Left unrouted it both
+ *  tripped that assertion and reached the real API, which answers 400 without
+ *  a live session and so failed the "nothing 4xx'd" claim for a reason that had
+ *  nothing to do with the build. */
+const POKI_API = /auds\.poki\.io/;
+const POKI_SERVED = /game-cdn\.poki\.com|auds\.poki\.io/;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -135,6 +143,15 @@ test.beforeEach(async ({ page }) => {
   await page.route(POKI_CDN, (route) =>
     route.fulfill({ status: 200, contentType: "application/javascript", body: SDK_STUB }),
   );
+  // An empty board, which is what a first-time portal player is shown. Fulfilled
+  // locally so the suite makes no real network call, as the comment above claims.
+  await page.route(POKI_API, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 0, items: [] }),
+    }),
+  );
 });
 
 test("the shipping folder boots, plays, and emits the Poki event contract", async ({ page }) => {
@@ -145,7 +162,7 @@ test("the shipping folder boots, plays, and emits the Poki event contract", asyn
     const url = new URL(request.url());
     if (url.protocol === "data:") return;
     if (url.origin === ORIGIN) local.push(url.pathname);
-    else if (!POKI_CDN.test(request.url())) external.push(request.url());
+    else if (!POKI_SERVED.test(request.url())) external.push(request.url());
   });
   page.on("response", (response) => {
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
@@ -247,9 +264,9 @@ test("boots and plays inside the cross-origin iframe the Inspector uses", async 
     await welcome.click();
     await expect(welcome).toHaveCount(0, { timeout: 20_000 });
   }
-  await expect(game.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible();
+  await expect(game.getByRole("button", { name: "Fly now", exact: true })).toBeVisible();
 
-  await game.getByRole("button", { name: "Play free flight now", exact: true }).click();
+  await game.getByRole("button", { name: "Fly now", exact: true }).click();
   await expect(game.locator('[data-action="pause"]')).toBeVisible();
 
   // The stub is injected into the game frame too, and it saw the lifecycle.

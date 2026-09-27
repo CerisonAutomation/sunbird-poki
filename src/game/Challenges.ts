@@ -86,7 +86,28 @@ const MODIFIER_REWARD_SCALE: Record<ModifierId, number> = {
 
 const DAILY_BASE_REWARD = 150;
 
-export function dailyChallenge(date: string): DailyChallenge {
+/**
+ * Difficulty auto-tuning (Feature: Challenge Difficulty Auto-Tuning): two
+ * missed dailies in a row scale the target down to 70% of what it would
+ * otherwise be, so a target that has outpaced this player's skill twice gets
+ * easier instead of teaching them to quit. Below two failures the target is
+ * untouched — this only kicks in once a miss looks like a pattern, not bad
+ * luck. Pure, so the same scaled target is what the player is shown AND what
+ * their run is checked against (see `dailyChallenge`'s `failures` param).
+ */
+export function scaleTargetForFailures(target: number, failures: number): number {
+  return failures >= 2 ? Math.max(1, Math.ceil(target * 0.7)) : target;
+}
+
+/**
+ * @param failures consecutive missed-daily days going into today (0 when the
+ * caller doesn't track it, or hasn't failed) — `SaveData.state.challenges
+ * .dailyChallengeFailures`, updated once per day by
+ * `SaveData.noteDailyChallengeRollover`. Scales `target` only; the mode and
+ * modifier stay whatever the date's seed picked, so difficulty tuning never
+ * changes what a player is asked to do — only how far.
+ */
+export function dailyChallenge(date: string, failures = 0): DailyChallenge {
   const rng = new SeededRandom(`daily:${date}`);
   const t = DAILY_TEMPLATES[Math.floor(rng.next() * DAILY_TEMPLATES.length)]!;
   const modifier = MODIFIERS[Math.floor(rng.next() * MODIFIERS.length)]!;
@@ -96,7 +117,7 @@ export function dailyChallenge(date: string): DailyChallenge {
     mode: t.mode,
     modifier,
     metric: t.metric,
-    target: Math.max(1, target),
+    target: scaleTargetForFailures(Math.max(1, target), failures),
     reward: Math.round((DAILY_BASE_REWARD * MODIFIER_REWARD_SCALE[modifier.id]) / 5) * 5,
     title: t.title,
   };

@@ -362,6 +362,15 @@ export const TRAILS: Record<string, { label: string; colors: [number, number, nu
       [0.9, 0.95, 1],
     ],
   },
+  /* granted free at the 30-day login-streak milestone (SaveData.ts) */
+  trail_streak: {
+    label: "Streakfire",
+    colors: [
+      [1, 0.55, 0.1],
+      [1, 0.82, 0.2],
+      [1, 0.95, 0.7],
+    ],
+  },
   /* shop trails — bought with coins in the Shop (SHOP_TRAILS in Economy.ts) */
   trail_ember: {
     label: "Emberline",
@@ -510,4 +519,16 @@ export const TRAILS: Record<string, { label: string; colors: [number, number, nu
       [0.3, 0.79, 0.94],
     ],
   },
+};
+
+/**
+ * Cup title prizes, keyed by prize id.
+ *
+ * The diamond cup grants an "Ace" title into `state.titles`, and for the whole
+ * life of that feature nothing read the array — the hardest prize in the game
+ * was written to a field and dropped. The label lives here so the HUD can
+ * render what was won instead of the raw prize id.
+ */
+export const CUP_TITLES: Record<string, string> = {
+  title_ace: "Ace",
 };

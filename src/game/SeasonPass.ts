@@ -74,10 +74,27 @@ export class SeasonPass {
 
   private ensureFresh(): void {
     const id = seasonId();
-    if (this.save.state.season.id !== id) {
-      this.save.state.season = { id, xp: 0, claimedFree: [], claimedPremium: [] };
-      this.save.persist();
+    if (this.save.state.season.id === id) return;
+    // A month turning over used to wipe xp and every unclaimed tier, silently —
+    // a player who reached tier 40 on the 31st woke to Lv.0 with a full tier
+    // track re-locked and no notice. The only cosmetic advertised as a pass
+    // prize (Bird of Paradise, free tier 30) was forfeit if CLAIM was not
+    // pressed before midnight. Unclaimed-but-reached FREE tiers are banked now,
+    // exactly as the cup rollover preserves won cosmetics.
+    // GRANT, do not mark. A tier present in `claimedFree` makes claim() return
+    // null before it ever calls grant(), so pushing numbers in there would
+    // FORFEIT the reward — the opposite of banking it. And seeding from last
+    // month's claimed list would blacklist the new season's whole track, since
+    // tier 3 means tier 3 of THIS month.
+    const prev = this.save.state.season;
+    const reached = Math.min(SEASON_TIERS, Math.floor(prev.xp / SEASON_XP_PER_TIER));
+    for (let tier = 1; tier <= reached; tier++) {
+      if (prev.claimedFree.includes(tier)) continue; // already paid out last month
+      const def = SEASON_TIER_DEFS.find((d) => d.tier === tier);
+      if (def) this.grant(def.free);
     }
+    this.save.state.season = { id, xp: 0, claimedFree: [], claimedPremium: [] };
+    this.save.persist();
   }
 
   xp(): number {

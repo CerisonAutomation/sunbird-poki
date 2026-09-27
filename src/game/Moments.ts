@@ -44,6 +44,10 @@ export const MOMENT_KINDS = [
   // order both follow this list, so inserting a kind would silently rewrite the
   // story of every run already recorded.
   "wee",
+  // Also appended, for the same reason: `frenzy` is the fourth clean take-off in
+  // a row (see ChainFlair) and has to land in the ledger AFTER every moment that
+  // can precede it, or a saved run's story would be renumbered.
+  "frenzy",
 ] as const;
 
 export type MomentKind = (typeof MOMENT_KINDS)[number];
@@ -152,6 +156,27 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     next: {
       title: "Hug the ridge for skim points — you love danger!",
       tip: "Flying low and fast over a ridge pays +15 each time. Danger is literally a scoring mechanic. And you eat danger for breakfast!",
+    },
+  },
+  // The one big celebration. Tiny Wings spent its entire flourish budget on this
+  // moment — four clean take-offs, announced once — and Sunbird had the chain and
+  // the Fever payout but no moment that said so. Appended beside `perfect` in the
+  // table; its KIND is last in MOMENT_KINDS so no saved run's story renumbers.
+  frenzy: {
+    kind: "frenzy",
+    icon: "\u{1F525}",
+    label: "FRENZY",
+    key: "moments.frenzy",
+    cardKey: "moments.frenzy.card",
+    popup: "zenith",
+    tone: "zenith",
+    haptic: [14, 10, 14, 10, 30],
+    shout: "FRENZY!",
+    cardLine: (n) => `${n} FRENZY \u{2014} four perfect launches, back to back, on pure nerve!`,
+    next: {
+      title: "Ride the chain while it's hot",
+      tip: "A clean take-off at the top of a ramp starts a chain. A sloppy landing ends it. Chain four for FRENZY, three for Fever — keep the streak alive.",
+      action: "open-shop",
     },
   },
   perfect: {
@@ -274,6 +299,7 @@ export class MomentLedger {
     sleep: 0,
     record: 0,
     wee: 0,
+    frenzy: 0,
   };
   /** Insertion order, so ties on the card read as "the run's story". */
   private order: MomentKind[] = [];

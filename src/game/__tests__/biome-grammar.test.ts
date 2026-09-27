@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TerrainSystem } from "../TerrainSystem";
-import { BIOMES, biomeForIsland, type BiomeDef } from "../Biomes";
+import { BIOMES, biomeForIsland, islandTemplate, type BiomeDef } from "../Biomes";
 import { Bird } from "../Bird";
 import { ISLAND_PERIOD, PHYS_DT, RAMP_START } from "../constants";
 
@@ -316,9 +316,13 @@ describe("biome grammar: the terrain builder actually consumes it", () => {
     // chicane is authored large again — that build measured 1.76 here.
     const t = new TerrainSystem(SEED);
     for (let i = 0; i < BIOMES.length; i++) {
-      const base = i * ISLAND_PERIOD;
+      // The biome's own island, and the loop's upper bound its own ramp: with a
+      // uniform `i * ISLAND_PERIOD` this walked across island BOUNDARIES, and a
+      // boundary is a step — so the test was measuring the seam, not a chicane.
+      const tpl = islandTemplate(i);
+      const base = tpl.start;
       let prev = t.slopeAt(base + 300);
-      for (let x = base + 301; x < base + RAMP_START - 40; x++) {
+      for (let x = base + 301; x < base + tpl.rampStart - 40; x++) {
         const s = t.slopeAt(x);
         expect(Math.abs(s - prev), `${BIOMES[i]!.id} @${x}`).toBeLessThan(1.3);
         prev = s;
@@ -338,7 +342,10 @@ describe("biome grammar: every world stays flyable", () => {
     const results: { id: string; min: number; peakSlope: number }[] = [];
     for (let i = 0; i < BIOMES.length; i++) {
       const b = BIOMES[i]!;
-      const startX = i * ISLAND_PERIOD + 200;
+      // Each biome's own island start. `i * ISLAND_PERIOD` was the old uniform
+      // pitch; with per-biome island lengths it flies the wrong island entirely,
+      // which is why the nine worlds started reading as one rhythm.
+      const startX = islandTemplate(i).start + 200;
       let min = Infinity;
       let peakSlope = 0;
       for (const seed of SEEDS) {

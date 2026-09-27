@@ -17,12 +17,19 @@ const MIME: Record<string, string> = {
   ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml",
 };
 
-/** Every screen reachable from the menu (the same list the policy sweep walks). */
+/**
+ * Every screen reachable from the home menu.
+ *
+ * `open-practice` is deliberately absent: the AI flock is now a section *of*
+ * `open-live` (the PvP screen), not a second home tile, so there is nothing on
+ * the home menu to click. The AI-only view still exists for the in-lobby
+ * shortcut, and this list is explicitly "reachable from the menu".
+ */
 export const SCREENS = [
   "open-shop", "open-settings", "open-board", "open-progress", "open-cups",
   "open-account", "open-challenges", "open-campaign", "open-rank", "open-pass",
   "open-trophies", "open-atlas", "open-scores", "open-squad", "open-live",
-  "open-practice", "mode-select",
+  "mode-select",
 ];
 
 /** The screens whose copy is translated and whose boxes are tightest. */

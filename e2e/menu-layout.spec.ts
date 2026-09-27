@@ -20,7 +20,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     expect(brand.weight).toBe("500");
     expect(brand.color).toBe("rgb(255, 122, 69)"); // Current coral brand in menu-polish.css.
     await app.expectNoOverlaps([".hero-sun-wrap", ".menu-mute"], '[data-ref="menuCard"]');
-    await expect(page.getByRole("button", { name: "Play free flight now", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeInViewport({ ratio: 1 });
     await expect(page.locator('details[data-ref="homeMore"]')).toHaveCount(0);
     await expect(page.locator('[data-action="versus"]')).toBeVisible();
     await page.screenshot({ path: info.outputPath(`home-${viewport.width}.png`) });

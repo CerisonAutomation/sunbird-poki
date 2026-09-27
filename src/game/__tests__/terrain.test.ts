@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TerrainSystem } from "../TerrainSystem";
 import { GAP_START, ISLAND_PERIOD, RAMP_START, OCEAN_FLOOR } from "../constants";
+import { islandTemplate } from "../Biomes";
 
 // ── heightAt (10 tests) ────────────────────────────────────────────────────────
 describe("terrain: heightAt", () => {
@@ -252,7 +253,11 @@ describe("terrain: isOcean", () => {
 
   it("wraps correctly for x beyond one island", () => {
     const t = new TerrainSystem("2026-09-12");
-    expect(t.isOcean(GAP_START + ISLAND_PERIOD)).toBe(true);
+    // The gap of island 1, measured from island 1's own start — islands are
+    // not a fixed pitch any more, so "one island later" is the layout's
+    // question rather than the base constant's.
+    const next = islandTemplate(1);
+    expect(t.isOcean(next.start + next.gapStart + 20)).toBe(true);
     t.dispose();
   });
 });
@@ -282,7 +287,9 @@ describe("terrain: islandIndex", () => {
 
   it("scales correctly for large x", () => {
     const t = new TerrainSystem("2026-09-12");
-    expect(t.islandIndex(ISLAND_PERIOD * 50)).toBe(50);
+    // Island 50's own start resolves back to 50, whatever its neighbours did
+    // to the pitch on the way there.
+    expect(t.islandIndex(islandTemplate(50).start + 30)).toBe(50);
     t.dispose();
   });
 });

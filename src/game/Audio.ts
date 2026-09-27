@@ -5,22 +5,26 @@ import { SongbookPlayer } from "./SongbookPlayer";
 import type { BiomeId } from "./Songbook";
 
 /**
- * Background music is silenced at the source, independent of the `musicOn`
- * setting and Music.ts's own content — direct player feedback on a live
- * build was strongly negative and asked for it gone outright. SFX are
- * unaffected. The `Music` engine below still runs (mode/track/biome keep
- * being tracked) so re-enabling later is a one-line flip, not a rebuild.
+ * Re-enabled behind the `musicStyle` setting (see Settings.musicStyle /
+ * GameAudio.setMusicStyle). Direct player feedback on an earlier build was
+ * strongly negative about the generated score specifically, so it no longer
+ * plays by default — `musicStyle` defaults to "songbook" — but a player who
+ * wants the adaptive procedural engine back can opt into it from Settings.
+ * Kept as a module-level kill switch: flipping this back to `true` silences
+ * the engine outright regardless of the setting, without touching the rest
+ * of the file.
  */
-const MUSIC_DISABLED = true;
+const MUSIC_DISABLED = false;
 
 /**
- * The authored songs in `Songbook.ts` ARE the game's music, and they are what
- * `musicOn` switches. They are gated separately from `MUSIC_DISABLED` on
+ * The authored songs in `Songbook.ts` ARE the game's music on the default
+ * "songbook" style. They are gated separately from `MUSIC_DISABLED` on
  * purpose: what players asked to be rid of was the *generated* score — one
  * tempo, one meter, one drum feel for thirty tracks — not the idea of music.
  * The songbook is hand-written, so it answers the complaint rather than
- * repeating it, and the two players are never audible at once (the generated
- * engine stays at zero).
+ * repeating it. Both engines are constructed together, but `musicStyle`
+ * (see `musicLevel()` / `songbookLevel()`) guarantees only one is ever
+ * audible at once.
  */
 const SONGBOOK_ENABLED = true;
 
@@ -43,6 +47,8 @@ export class GameAudio {
   private songbook: SongbookPlayer | null = null;
   private muted = false;
   private musicOn = true;
+  /** Which engine `musicOn` actually plays — see Settings.musicStyle. */
+  private musicStyle: "procedural" | "songbook" = "songbook";
   private musicVol = 0.8;
   private sfxVol = 0.9;
   private adMuted = false;
@@ -160,12 +166,22 @@ export class GameAudio {
     }
 
     if (!MUSIC_DISABLED) {
-      this.music = new Music(this.ctx, this.master, this.reverbSend);
-      this.music.setLevel(this.musicOn && !this.muted ? 0.5 * this.musicVol : 0);
-      this.music.setBiome(this.pendingBiome);
-      this.music.setMode(this.pendingMode);
-      this.music.setTrack(this.pendingTrack);
-      if (this.onTrackChange) this.music.onTrackChange = this.onTrackChange;
+      // If the procedural engine fails to construct (a bad node graph on some
+      // exotic WebView, an OOM on a very low-end device, etc.), fall back to
+      // the songbook silently — no error toast, no broken audio graph, the
+      // player just gets the other style instead of the one they picked.
+      try {
+        this.music = new Music(this.ctx, this.master, this.reverbSend);
+        this.music.setBiome(this.pendingBiome);
+        this.music.setMode(this.pendingMode);
+        this.music.setTrack(this.pendingTrack);
+        if (this.onTrackChange) this.music.onTrackChange = this.onTrackChange;
+      } catch {
+        this.music = null;
+        this.musicStyle = "songbook";
+      }
+      this.music?.setLevel(this.musicLevel());
+      this.songbook?.setLevel(this.songbookLevel());
     } else {
       this.music = null;
     }
@@ -181,7 +197,17 @@ export class GameAudio {
     if (!ctx) return;
     if (ctx.state === "suspended") {
       try {
-        await ctx.resume();
+        // Some embedded WebViews (low-end Android) return a promise from
+        // resume() that never settles — no resolve, no reject. Without a
+        // bound on the wait, `this.started` below would never be reached and
+        // every gated audio method (play/playLoop/oneShot) would stay dead
+        // for the rest of the session. Race against a grace period so a
+        // stuck resume can't block audio forever; the context may still
+        // finish resuming on its own afterwards.
+        await Promise.race([
+          ctx.resume(),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
       } catch {
         /* ignore */
       }
@@ -232,15 +258,31 @@ export class GameAudio {
   /**
    * The songbook's level, in one place. Portal/ad/hidden mutes are not here:
    * those act on the master bus, which the songbook is routed through, so they
-   * silence it exactly as they silence SFX.
+   * silence it exactly as they silence SFX. Gated on `musicStyle` so the two
+   * engines are never audible together.
    */
   private songbookLevel(): number {
-    return SONGBOOK_ENABLED && this.musicOn && !this.muted ? 0.5 * this.musicVol : 0;
+    return SONGBOOK_ENABLED && this.musicStyle === "songbook" && this.musicOn && !this.muted
+      ? 0.5 * this.musicVol
+      : 0;
   }
 
-  /** The music bus's level, honoring `MUSIC_DISABLED`, `musicOn` and `muted`. */
+  /** The music bus's level, honoring `MUSIC_DISABLED`, `musicStyle`, `musicOn` and `muted`. */
   private musicLevel(): number {
-    return MUSIC_DISABLED ? 0 : this.musicOn && !this.muted ? 0.5 * this.musicVol : 0;
+    return !MUSIC_DISABLED && this.musicStyle === "procedural" && this.musicOn && !this.muted
+      ? 0.5 * this.musicVol
+      : 0;
+  }
+
+  /**
+   * Switch between the generated adaptive score and the hand-authored
+   * songbook. Both engines already exist on the graph (see `ensure()`) — this
+   * just moves which one is audible, so the swap is click-free and instant.
+   */
+  setMusicStyle(style: "procedural" | "songbook"): void {
+    this.musicStyle = style;
+    this.music?.setLevel(this.musicLevel());
+    this.songbook?.setLevel(this.songbookLevel());
   }
 
   setVolumes(musicVol: number, sfxVol: number): void {

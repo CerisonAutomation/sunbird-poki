@@ -1,3 +1,4 @@
+import { SELL_AD_REMOVAL } from "./edition";
 
 export type SkinRarity = "starter" | "common" | "rare" | "epic" | "legendary" | "mythic";
 export type CollectionId = "starter" | "nature" | "elements" | "cosmic" | "seasonal" | "premium" | "tournament" | "achievement";
@@ -522,7 +523,7 @@ const BASE_SKINS: SkinDef[] = [
   { id: "fire_dragon", name: "Fire Dragon", perk: "+5% speed · +3 s fever", price: 850, body: 0xff4400, wing: 0xff8800, belly: 0xffeecc, beak: 0xffcc00, speedMult: 1.05, feverBonus: 3, daylightBonus: 0, magnetAlways: false, rarity: "epic", collection: "cosmic" },
   { id: "thunder", name: "Thunder", perk: "+4% speed · weather immunity", price: 750, body: 0x334466, wing: 0x6688aa, belly: 0xccddee, beak: 0xffaa44, speedMult: 1.04, feverBonus: 1, daylightBonus: 0, magnetAlways: false, weatherProof: true, rarity: "epic", collection: "cosmic" },
   { id: "wind", name: "Zephyr", perk: "+6% speed · +2 s daylight", price: 650, body: 0x88bbdd, wing: 0xaaddff, belly: 0xeeffff, beak: 0xffcc00, speedMult: 1.06, feverBonus: 0, daylightBonus: 2, magnetAlways: false, rarity: "rare", collection: "cosmic" },
-  { id: "earth", name: "Terra", perk: "+5 s daylight · magnet", price: 700, body: 0x668844, wing: 0x88aa66, belly: 0xccddaa, beak: 0xffaa44, speedMult: 1, feverBonus: 0, daylightBonus: 5, magnetAlways: false, rarity: "rare", collection: "cosmic" },
+  { id: "earth", name: "Terra", perk: "+5 s daylight", price: 700, body: 0x668844, wing: 0x88aa66, belly: 0xccddaa, beak: 0xffaa44, speedMult: 1, feverBonus: 0, daylightBonus: 5, magnetAlways: false, rarity: "rare", collection: "cosmic" },
   { id: "moon", name: "Moonbird", perk: "+4 s daylight · stealth", price: 600, body: 0xccccee, wing: 0xeeeeff, belly: 0xffffff, beak: 0xffdd00, speedMult: 1, feverBonus: 0, daylightBonus: 4, magnetAlways: false, stealth: true, rarity: "rare", collection: "cosmic" },
   { id: "sun", name: "Solar", perk: "+3% speed · +3 s fever", price: 550, body: 0xffcc00, wing: 0xffee66, belly: 0xffffcc, beak: 0xff8800, speedMult: 1.03, feverBonus: 3, daylightBonus: 0, magnetAlways: false, rarity: "rare", collection: "cosmic" },
   { id: "star", name: "Starlight", perk: "+5 s daylight · +2 s fever", price: 650, body: 0xffeeff, wing: 0xffffff, belly: 0xffffff, beak: 0xffdd00, speedMult: 1, feverBonus: 2, daylightBonus: 5, magnetAlways: false, rarity: "rare", collection: "cosmic" },
@@ -532,7 +533,7 @@ const BASE_SKINS: SkinDef[] = [
   { id: "pulsar", name: "Pulsar", perk: "+4% speed · +3 s fever", price: 700, body: 0x6644aa, wing: 0x8866cc, belly: 0xccbbff, beak: 0xffaa44, speedMult: 1.04, feverBonus: 3, daylightBonus: 0, magnetAlways: false, rarity: "rare", collection: "cosmic" },
   { id: "aurora_borealis", name: "Aurora Borealis", perk: "+3 s daylight · +3 s fever", price: 800, body: 0x44aa88, wing: 0x66ccaa, belly: 0xaaffcc, beak: 0xffaa44, speedMult: 1, feverBonus: 3, daylightBonus: 3, magnetAlways: false, rarity: "legendary", collection: "cosmic" },
   { id: "solar_flare", name: "Solar Flare", perk: "+6% speed · +2 s fever", price: 850, body: 0xff4400, wing: 0xff8800, belly: 0xffccaa, beak: 0xffaa00, speedMult: 1.06, feverBonus: 2, daylightBonus: 0, magnetAlways: false, rarity: "legendary", collection: "cosmic" },
-  { id: "black_hole", name: "Black Hole", perk: "+5 s daylight · magnet", price: 900, body: 0x111122, wing: 0x222244, belly: 0x333355, beak: 0x6666aa, speedMult: 1, feverBonus: 0, daylightBonus: 5, magnetAlways: false, rarity: "mythic", collection: "cosmic" },
+  { id: "black_hole", name: "Black Hole", perk: "+5 s daylight", price: 900, body: 0x111122, wing: 0x222244, belly: 0x333355, beak: 0x6666aa, speedMult: 1, feverBonus: 0, daylightBonus: 5, magnetAlways: false, rarity: "mythic", collection: "cosmic" },
   { id: "dark_matter", name: "Dark Matter", perk: "+4% speed · +4 s fever", price: 850, body: 0x1a1a2e, wing: 0x333355, belly: 0x4a4a6a, beak: 0x8888aa, speedMult: 1.04, feverBonus: 4, daylightBonus: 0, magnetAlways: false, rarity: "mythic", collection: "cosmic" },
   { id: "apex_roc", name: "Apex Roc", perk: "+8% speed · +5 s fever · +6 s daylight", price: 2500, body: 0x0f2a3d, wing: 0x1f6f8b, belly: 0xd9f6ff, beak: 0xffc94d, speedMult: 1.08, feverBonus: 5, daylightBonus: 6, magnetAlways: false, rarity: "mythic", collection: "cosmic" },
   { id: "solar_sovereign", name: "Solar Sovereign", perk: "+8% speed · +5 s fever · +8 s daylight", price: 5000, body: 0x3d1e00, wing: 0xff8c1a, belly: 0xfff3d6, beak: 0xffe45e, speedMult: 1.08, feverBonus: 5, daylightBonus: 8, magnetAlways: false, rarity: "mythic", collection: "cosmic" },
@@ -551,7 +552,7 @@ function roundUp(price: number, mult: number, step: number): number {
 }
 
 function collectionPrice(price: number): number {
-  return roundUp(price, 1.75, 25);
+  return roundUp(price, 1.35, 25);
 }
 
 export const SKINS: SkinDef[] = BASE_SKINS.map((skin) =>
@@ -562,6 +563,45 @@ export const SKINS: SkinDef[] = BASE_SKINS.map((skin) =>
 
 export function skinById(id: string): SkinDef {
   return SKINS.find((s) => s.id === id) ?? SKINS[0]!;
+}
+
+/** Ranked fair-play cap: cosmetic perks stop being a competitive edge. */
+const RANKED_SPEED_MULT_CAP = 1.03;
+const RANKED_FEVER_BONUS_CAP = 3;
+const RANKED_DAYLIGHT_BONUS_CAP = 3;
+
+/**
+ * Caps a bird's cosmetic perks for ranked play. Solo/casual modes keep the
+ * full catalogue values; ranked play (currently: seeded 1v1 duels, whose
+ * rating swing is the whole point of the mode) caps every bird — earned-only
+ * birds included — at a modest +3% speed / +3s buff ceiling, so a bought or
+ * earned skin can still look and sound different without deciding the
+ * result. Artwork, magnet/weather/stealth traits and identity are untouched.
+ */
+export function normalizePerks(bird: SkinDef, isRanked: boolean): SkinDef {
+  if (!isRanked) return bird;
+  return {
+    ...bird,
+    speedMult: Math.min(bird.speedMult, RANKED_SPEED_MULT_CAP),
+    feverBonus: Math.min(bird.feverBonus, RANKED_FEVER_BONUS_CAP),
+    daylightBonus: Math.min(bird.daylightBonus, RANKED_DAYLIGHT_BONUS_CAP),
+  };
+}
+
+/**
+ * Short, player-facing summary of what ranked normalization does to a given
+ * bird: which stats get capped and to what, or a plain "no change" line when
+ * the bird was already inside the cap. Used by the ranked hub to preview the
+ * effective stats before a duel, instead of leaving the cap invisible.
+ */
+export function rankedPerkPreview(bird: SkinDef): string {
+  const capped = normalizePerks(bird, true);
+  const pct = (m: number) => `${m > 1 ? "+" : ""}${Math.round((m - 1) * 100)}%`;
+  const bits: string[] = [];
+  if (capped.speedMult !== bird.speedMult) bits.push(`speed ${pct(bird.speedMult)} → ${pct(capped.speedMult)}`);
+  if (capped.feverBonus !== bird.feverBonus) bits.push(`fever +${bird.feverBonus}s → +${capped.feverBonus}s`);
+  if (capped.daylightBonus !== bird.daylightBonus) bits.push(`daylight +${bird.daylightBonus}s → +${capped.daylightBonus}s`);
+  return bits.length ? `Ranked cap: ${bits.join(" · ")}` : "Already within the ranked fair-play cap — no change.";
 }
 
 export type BoostDef = {
@@ -585,6 +625,42 @@ const BASE_BOOSTS: BoostDef[] = [
   // (see COIN_MULTIPLIER_UPGRADES below) — buyBoost() checks `permanent` to
   // route the purchase through save.ownUpgrade(id) instead of save.armBoost(id).
   { id: "goldenfeather", name: "Golden Feather", desc: "+10% coins forever", price: 2500, icon: "feather", permanent: true },
+
+  /* --- the in-flight powerups, sold so a run can start with them ----------- */
+  //
+  // Every pickup in the world already had a real, tuned flight effect (see
+  // PowerUps.ts) and none of them could be bought. The best things the game does
+  // to a run — barely sinking, lifting harder, doubling coins — were reachable
+  // only by flying well enough to find them, which is backwards: the store is
+  // where a player spends for a better run, and a powerup you can only collect
+  // is a powerup the shop cannot offer.
+  //
+  // These arm the SAME `PowerUps` instance the pickups write to, at the same
+  // durations, so buying one produces exactly the flight state catching one
+  // does. The ids deliberately differ from the existing `shield`/`magnet` rows:
+  // those are takeoff effects (a sea bounce, a magnet timer) and these are the
+  // in-flight modifiers that happen to share their names. Two different
+  // mechanics must never share one id.
+  { id: "longglide", name: "Long Glide", desc: "Barely sink for 9 s — ride one hill much further", price: 55, icon: "glide" },
+  { id: "wingboost", name: "Wing Boost", desc: "Lift 50% harder for 8 s off every slope", price: 75, icon: "wing" },
+  { id: "feather", name: "Feather", desc: "Go weightless for 12 s — stop losing height", price: 60, icon: "feather" },
+  { id: "rocket", name: "Speed Boost", desc: "A hard speed kick for 2.2 s — a free launch", price: 95, icon: "rocket" },
+  { id: "cloudboost", name: "Cloud Boost", desc: "Cloud perches become launch pads for 14 s", price: 65, icon: "cloud" },
+  { id: "goldenwings", name: "Golden Wings", desc: "2× coins, magnet and glide together for 10 s", price: 320, icon: "star" },
+  // The timed coin multiplier was fully implemented in SaveData and had no
+  // producer anywhere in the game — a whole mechanic with no way to reach it.
+  // This is the producer it was written for.
+  { id: "luckycoin", name: "Lucky Coin", desc: "2× coins for 45 s — the best money in the game", price: 110, icon: "coin" },
+
+  /* --- the climb boosters: pay for a wall before you reach it ------------ */
+  //
+  // The Climb Breaker (see Game.grantClimbBreaker) is free and automatic, but
+  // it only fires AT a wall, and only the first time. These are the same two
+  // compensations sold up front, for a player who saw the wall coming and would
+  // rather not spend a run discovering it: sun for the clock, and a ward for the
+  // weather that arrives with the harder biomes.
+  { id: "sunrunner", name: "Sun Runner", desc: "Start with +20 s of daylight and 20 s more cap", price: 130, icon: "sun" },
+  { id: "tailwind", name: "Tailwind", desc: "Gusts and ash clouds barely touch you all flight", price: 85, icon: "glide" },
 ];
 
 /** Permanent coin multipliers, applied centrally by SaveData.addCoins. */
@@ -674,8 +750,12 @@ const GOLD_FEATURES = [
   // wind" perk is architecturally correct but invisible on Poki — don't try to
   // surface it there. If Gold is ever cross-marketed to Poki players, add a
   // compensating perk (e.g. +20% coin bonus) that works within portal rules.
-  "Unlimited free second winds — the sun never wins",
-  "Fly yesterday's hills or wild random seeds",
+  // Portal builds cannot deliver this: the free-wake button is portal-only,
+  // so a Gold owner still pays or watches. Advertising it makes a 500-coin
+  // purchase a lie on the platform most players are actually on.
+  ...(SELL_AD_REMOVAL ? ["Unlimited free second winds — the sun never wins"] : []),
+  // Same: the seed picker is portal-gated, so this is not deliverable there.
+  ...(SELL_AD_REMOVAL ? ["Fly yesterday's hills or wild random seeds"] : []),
   "Unlocks the Nest Pass premium reward track",
 ];
 

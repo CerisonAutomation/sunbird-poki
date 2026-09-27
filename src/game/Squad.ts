@@ -27,9 +27,9 @@ export type SquadQuest = {
 };
 
 export const SQUAD_QUESTS: SquadQuest[] = [
-  { id: "migration", title: "Flock Migration", desc: "Glide 4,000 m across championship circuits", target: 4000, rewardCoins: 150 },
-  { id: "drafting", title: "Slipstream Drafting", desc: "Hold slipstream behind wingmates for 25s", target: 25, rewardCoins: 120 },
-  { id: "precision", title: "Perfect Formations", desc: "Chain 8 perfect kinetic carve launches", target: 8, rewardCoins: 100 },
+  { id: "migration", title: "Flock Migration", desc: "Glide 4,000 m — a squad bonus counts 1.5x toward it", target: 4000, rewardCoins: 150 },
+  { id: "drafting", title: "Slipstream Drafting", desc: "Fly 5 squad races — 5 points each, 25 to claim", target: 25, rewardCoins: 120 },
+  { id: "precision", title: "Perfect Formations", desc: "Fly 800 m in a day — 1 point per 100 m, 8 to claim", target: 8, rewardCoins: 100 },
 ];
 
 /** One row of the wingman list — real data from the social service. */

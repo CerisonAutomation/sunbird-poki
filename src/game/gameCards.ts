@@ -21,11 +21,11 @@ import { modeById } from "./Modes";
 import { seasonReward } from "./pvp";
 import { TRAILS, weekKey } from "./Tournaments";
 import type { AtlasEntry, CalendarCard, DailyCard, GauntletCard, HudSnapshot, LoadoutView, RivalCard } from "./HUD";
-import type { SkinDef } from "./Economy";
+import { rankedPerkPreview, type SkinDef } from "./Economy";
 
 /** Today's daily challenge, and whether it is already banked. */
 export function dailyCard(save: SaveData, today: string): DailyCard {
-  const c = dailyChallenge(today);
+  const c = dailyChallenge(today, save.state.challenges.dailyChallengeFailures ?? 0);
   const mode = modeById(c.mode);
   return {
     title: c.title,
@@ -126,6 +126,9 @@ export function loadoutView(save: SaveData, skin: SkinDef): LoadoutView {
     bird: skin.name,
     trail,
     boosts: save.state.armedBoosts.length,
+    // Preview of what ranked duels do to this bird's perks, so the cap is
+    // visible before the pilot launches instead of only felt mid-race.
+    rankedNote: rankedPerkPreview(skin),
   };
 }
 

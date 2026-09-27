@@ -166,6 +166,229 @@ const CX = 30;
 const CY = 36;
 const UNITS = 64;
 
+/* ---------------------------------------------------------------- species */
+
+/**
+ * The species shapes a bird can be built in.
+ *
+ * Sixty-nine birds all drawn as the same oval with the same two wing paths is
+ * why the shop read as a colour swatch list: a "Harpy Eagle" and a "Dusk Owl"
+ * were the same animal in different paint, so the only way to tell them apart
+ * was to read the name. A shape is what makes a species a species at a glance.
+ *
+ * The SVG/canvas table here and the Three.js `Bird` both read this enum (see
+ * `Bird.setShape`), so a bird in the hangar is the bird that flies — the two
+ * used to be the same outline too, which is a different way of saying nothing.
+ *
+ * `songbird` is the title-screen mark and the default for anything without a
+ * species, and it is deliberately the ORIGINAL table, unchanged: at
+ * `FLAP_NEUTRAL` the hero bird must stay path-for-path what the designer drew.
+ */
+export type BirdShape = "songbird" | "raptor" | "owl" | "wader" | "ember" | "comet";
+
+const SHAPE_EYE = (
+  head: readonly [number, number, number],
+): readonly Part[] => [
+  { kind: "circle", cx: head[0], cy: head[1], r: head[2], color: "eyeWhite" },
+  { kind: "circle", cx: head[0] + 1.4, cy: head[1] - 0.6, r: head[2] * 0.5, color: "eye" },
+  { kind: "circle", cx: head[0] + 1.6, cy: head[1] - 1.2, r: head[2] * 0.2, color: "eyeWhite" },
+];
+
+/** A hooked beak, for the birds that kill things. */
+const BEAK_HOOKED: Part = {
+  kind: "path",
+  color: "beak",
+  d: [["M", 45, 32], ["L", 58, 35], ["L", 50, 41], ["Q", 46, 38, 45, 32], ["Z"]],
+};
+
+/** A dagger beak, for the birds that stab. */
+const BEAK_DAGGER: Part = {
+  kind: "path",
+  color: "beak",
+  d: [["M", 46, 30], ["L", 64, 26], ["L", 46, 33], ["Z"]],
+};
+
+/** A short hooked stub, for the birds that sit still and listen. */
+const BEAK_STUB: Part = {
+  kind: "path",
+  color: "beak",
+  d: [["M", 44, 35], ["L", 53, 37], ["L", 45, 41], ["Z"]],
+};
+
+/** The head, eyes and brow for a species, in one call. */
+function head2(
+  x: number,
+  y: number,
+  r: number,
+  beak: Part,
+  brow = true,
+): readonly Part[] {
+  return [
+    ...SHAPE_EYE([x, y, r]),
+    beak,
+    ...(brow
+      ? [
+          {
+            kind: "path",
+            color: "brow",
+            d: [["M", x - 5, y - r - 3], ["Q", x + 1, y - r - 2.5, x + 3, y], ["Q", x - 1, y - r - 0.6, x - 4, y - r - 0.8], ["Z"]],
+          } satisfies Path,
+        ]
+      : []),
+  ];
+}
+
+const RAPTOR_SHAPE: readonly Part[] = [
+  // Long, raked tail — the silhouette that reads "raptor" before colour does.
+  { kind: "path", color: "tail", d: [["M", 14, 40], ["L", -6, 34], ["L", -2, 44], ["L", -4, 52], ["L", 16, 47], ["Z"]] },
+  { kind: "path", color: "tailTip", d: [["M", -4, 48], ["L", -4, 56], ["L", 2, 52], ["L", 4, 47], ["Z"]] },
+  { kind: "ellipse", cx: 30, cy: 36, rx: 16, ry: 9.5, color: "body" },
+  { kind: "ellipse", cx: 33, cy: 39, rx: 10, ry: 5, color: "belly" },
+  {
+    kind: "path", color: "wingFar", pivot: FAR_WING_PIVOT, flapK: -0.7,
+    d: [["M", 24, 26], ["Q", 12, 8, 2, 8], ["Q", 12, 20, 24, 30], ["Z"]],
+  },
+  {
+    kind: "path", color: "wingNear", pivot: NEAR_WING_PIVOT, flapK: -0.9,
+    d: [["M", 26, 30], ["Q", 10, 6, -2, 8], ["Q", 13, 22, 27, 34], ["Z"]],
+  },
+  // Swept crest, the tell on a falcon.
+  { kind: "path", color: "brow", d: [["M", 36, 25], ["L", 41, 19], ["L", 40, 26], ["Z"]] },
+  ...head2(40, 30, 3.2, BEAK_HOOKED),
+];
+
+const OWL_SHAPE: readonly Part[] = [
+  { kind: "path", color: "tail", d: [["M", 16, 42], ["L", 4, 40], ["L", 5, 48], ["L", 4, 54], ["L", 17, 48], ["Z"]] },
+  { kind: "path", color: "tailTip", d: [["M", 5, 50], ["L", 4, 56], ["L", 10, 52], ["L", 11, 49], ["Z"]] },
+  { kind: "ellipse", cx: 30, cy: 38, rx: 15, ry: 13, color: "body" },
+  { kind: "ellipse", cx: 31, cy: 42, rx: 10, ry: 7, color: "belly" },
+  // Broad, short, rounded wings — a glider's planform, not a hunter's.
+  {
+    kind: "path", color: "wingFar", pivot: FAR_WING_PIVOT, flapK: -0.55,
+    d: [["M", 24, 28], ["Q", 14, 18, 8, 22], ["Q", 14, 28, 24, 33], ["Z"]],
+  },
+  {
+    kind: "path", color: "wingNear", pivot: NEAR_WING_PIVOT, flapK: -0.65,
+    d: [["M", 26, 32], ["Q", 13, 20, 4, 24], ["Q", 14, 30, 27, 37], ["Z"]],
+  },
+  // Tufted ear discs: an owl needs ears, or it is a round bird.
+  { kind: "path", color: "wingFar", d: [["M", 34, 24], ["L", 33, 15], ["L", 39, 22], ["Z"]] },
+  { kind: "path", color: "wingNear", d: [["M", 30, 23], ["L", 27, 15], ["L", 35, 21], ["Z"]] },
+  ...head2(38, 31, 4.2, BEAK_STUB),
+];
+
+const WADER_SHAPE: readonly Part[] = [
+  { kind: "path", color: "tail", d: [["M", 18, 42], ["L", 8, 46], ["L", 12, 50], ["L", 20, 47], ["Z"]] },
+  { kind: "ellipse", cx: 27, cy: 41, rx: 11, ry: 7, color: "body" },
+  { kind: "ellipse", cx: 28, cy: 43, rx: 7, ry: 4, color: "belly" },
+  // Legs first, so the body sits on them.
+  { kind: "path", color: "beak", d: [["M", 24, 46], ["L", 23, 62], ["L", 25.5, 62], ["L", 27, 47], ["Z"]] },
+  { kind: "path", color: "beak", d: [["M", 30, 46], ["L", 32, 62], ["L", 34.5, 62], ["L", 32, 47], ["Z"]] },
+  // The S-neck: a herpy is a leg and a neck.
+  { kind: "path", color: "body", d: [["M", 33, 40], ["Q", 42, 34, 41, 26], ["L", 45, 26], ["Q", 46, 36, 35, 43], ["Z"]] },
+  {
+    kind: "path", color: "wingFar", pivot: FAR_WING_PIVOT, flapK: -0.6,
+    d: [["M", 22, 34], ["Q", 12, 26, 8, 30], ["Q", 14, 36, 23, 40], ["Z"]],
+  },
+  {
+    kind: "path", color: "wingNear", pivot: NEAR_WING_PIVOT, flapK: -0.75,
+    d: [["M", 24, 38], ["Q", 11, 28, 3, 32], ["Q", 13, 39, 25, 44], ["Z"]],
+  },
+  ...head2(44, 24, 2.6, BEAK_DAGGER, false),
+];
+
+const EMBER_SHAPE: readonly Part[] = [
+  // A forked, flame-shaped tail.
+  { kind: "path", color: "tail", d: [["M", 14, 40], ["L", 2, 28], ["L", 10, 40], ["L", 2, 50], ["L", 16, 46], ["Z"]] },
+  { kind: "path", color: "tailTip", d: [["M", 3, 30], ["L", -1, 22], ["L", 5, 33], ["L", 4, 42], ["L", 1, 50], ["L", 0, 40], ["Z"]] },
+  { kind: "ellipse", cx: 30, cy: 36, rx: 15, ry: 10, color: "body" },
+  { kind: "ellipse", cx: 32, cy: 40, rx: 10, ry: 5, color: "belly" },
+  {
+    kind: "path", color: "wingFar", pivot: FAR_WING_PIVOT, flapK: -0.8,
+    d: [["M", 24, 26], ["Q", 13, 10, 4, 12], ["Q", 13, 22, 24, 30], ["Z"]],
+  },
+  {
+    kind: "path", color: "wingNear", pivot: NEAR_WING_PIVOT, flapK: -1.0,
+    d: [["M", 26, 30], ["Q", 12, 8, 0, 10], ["Q", 14, 23, 27, 34], ["Z"]],
+  },
+  // Three flame tongues for a crest.
+  { kind: "path", color: "brow", d: [["M", 34, 24], ["L", 33, 13], ["L", 38, 21], ["Z"]] },
+  { kind: "path", color: "brow", d: [["M", 38, 24], ["L", 40, 14], ["L", 42, 22], ["Z"]] },
+  { kind: "path", color: "brow", d: [["M", 41, 26], ["L", 46, 19], ["L", 45, 27], ["Z"]] },
+  ...head2(40, 31, 3, BEAK_STUB),
+];
+
+const COMET_SHAPE: readonly Part[] = [
+  // The streak is the whole point: a tapering trail rather than a tail fan.
+  { kind: "path", color: "tail", d: [["M", 16, 38], ["L", -14, 26], ["L", -16, 36], ["L", -13, 46], ["L", 16, 44], ["Z"]] },
+  { kind: "path", color: "tailTip", d: [["M", -16, 32], ["L", -28, 30], ["L", -16, 40], ["Z"]] },
+  { kind: "ellipse", cx: 30, cy: 36, rx: 14, ry: 9, color: "body" },
+  { kind: "ellipse", cx: 32, cy: 39, rx: 9, ry: 4.5, color: "belly" },
+  {
+    kind: "path", color: "wingFar", pivot: FAR_WING_PIVOT, flapK: -0.75,
+    d: [["M", 24, 27], ["Q", 15, 14, 8, 16], ["Q", 15, 24, 24, 31], ["Z"]],
+  },
+  {
+    kind: "path", color: "wingNear", pivot: NEAR_WING_PIVOT, flapK: -0.95,
+    d: [["M", 26, 31], ["Q", 14, 13, 4, 15], ["Q", 15, 25, 27, 35], ["Z"]],
+  },
+  ...head2(41, 32, 2.8, BEAK_HOOKED, false),
+];
+
+/**
+ * Every shape, by name. The songbird is the original hand-authored table.
+ *
+ * Exported so the species rule can be checked over the whole bird catalogue
+ * rather than eyeballed on one card — a rule that quietly collapsed to a single
+ * shape would look fine in any single screenshot.
+ */
+export const SHAPES: readonly BirdShape[] = (["songbird", "raptor", "owl", "wader", "ember", "comet"] as const);
+const SHAPE_TABLES: Readonly<Record<BirdShape, readonly Part[]>> = {
+  songbird: SUNBIRD_SHAPE,
+  raptor: RAPTOR_SHAPE,
+  owl: OWL_SHAPE,
+  wader: WADER_SHAPE,
+  ember: EMBER_SHAPE,
+  comet: COMET_SHAPE,
+};
+
+export function shapeTable(shape: BirdShape): readonly Part[] {
+  return SHAPE_TABLES[shape] ?? SUNBIRD_SHAPE;
+}
+
+/**
+ * The species a skin is drawn in.
+ *
+ * Derived, not authored per bird: 69 hand-assigned species would be 69 chances
+ * to get one wrong and no way to see the error, whereas a rule reads the skin's
+ * own identity and lands in the same place every time. The family comes from the
+ * collection (which is already the game's own grouping) and the exact member of
+ * that family from a stable hash of the id, so a bird keeps its species forever
+ * and a new bird added tomorrow gets a sensible one without anyone deciding.
+ */
+export function skinShape(skin: { id: string; collection?: string }): BirdShape {
+  const FAMILIES: Readonly<Record<string, readonly BirdShape[]>> = {
+    nature: ["songbird", "raptor", "wader"],
+    elements: ["ember", "raptor", "comet"],
+    seasonal: ["songbird", "wader", "raptor"],
+    cosmic: ["comet", "ember", "raptor"],
+    tournament: ["raptor", "owl"],
+    achievement: ["owl", "raptor", "comet"],
+    premium: ["ember", "comet"],
+    starter: ["songbird"],
+  };
+  const family = FAMILIES[skin.collection ?? ""] ?? (["songbird", "raptor"] as const);
+  // FNV-1a: a short, stable, well-spread hash. `charCodeAt` is deliberate —
+  // stable across engines, unlike anything locale- or float-sensitive.
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < skin.id.length; i += 1) {
+    hash ^= skin.id.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return family[hash % family.length]!;
+}
+
+
 /** Tight viewBox with a little room for the wing sweep. */
 export const SUNBIRD_VIEWBOX = "-6 -2 76 68";
 
@@ -190,13 +413,18 @@ export function skinPalette(skin: { body: number; wing: number; belly: number; b
     return ((r << 16) | (g << 8) | b) >>> 0;
   };
   const body = skin.body;
+  // The tail, crest and wings all read from `skin.wing` in flight, because
+  // Bird.applySkin paints them from one material. Deriving the tail from the
+  // body here made the hangar preview a visibly different animal from the one
+  // the player then flies — the one place a preview must not lie.
+  const wing = skin.wing;
   return {
     body: toHex(body),
     belly: toHex(skin.belly),
-    wingNear: toHex(skin.wing),
-    wingFar: toHex(darken(body, 0.72)),
-    tail: toHex(darken(body, 0.88)),
-    tailTip: toHex(darken(body, 0.7)),
+    wingNear: toHex(wing),
+    wingFar: toHex(darken(wing, 0.72)),
+    tail: toHex(wing),
+    tailTip: toHex(darken(wing, 0.7)),
     brow: toHex(darken(body, 0.8)),
     beak: toHex(skin.beak),
     eye: "#2a1c28",
@@ -228,13 +456,14 @@ export function drawSunbird(
   flap: number,
   dim = 1,
   palette: SunbirdPalette = SUNBIRD_PALETTE,
+  shape: BirdShape = "songbird",
 ): void {
   const s = size / UNITS;
   ctx.save();
   ctx.scale(s, s);
   ctx.translate(-CX, -CY);
 
-  for (const part of SUNBIRD_SHAPE) {
+  for (const part of shapeTable(shape)) {
     // The three-part eye is only worth its pixels once the bird is big enough
     // to read; on a 9px flocker it is sub-pixel noise and three extra fills.
     if (part.kind === "circle" && size < EYE_MIN_SIZE) continue;
@@ -278,8 +507,10 @@ export type SunbirdSvgOptions = {
   width?: number;
   title?: string;
   className?: string;
-  /** CSS wingbeat for the lightweight boot loader only. */
+  /** CSS wingbeat — see `wingFlapKeyframes` in ui.css for the animation. */
   animateWings?: boolean;
+  /** Which species to draw. Defaults to the title-screen songbird. */
+  shape?: BirdShape;
 };
 
 function cmdToSvg(cmd: Cmd): string {
@@ -300,8 +531,9 @@ export function sunbirdSVG(opts: SunbirdSvgOptions = {}): string {
   const flap = opts.flap ?? FLAP_NEUTRAL;
   const width = opts.width ?? 72;
   const dim = 1;
+  const shape = opts.shape ?? "songbird";
 
-  const parts = SUNBIRD_SHAPE.map((part) => {
+  const parts = shapeTable(shape).map((part) => {
     const fill = dimColor(palette[part.color], dim);
     let body: string;
     if (part.kind === "ellipse") {
@@ -315,8 +547,10 @@ export function sunbirdSVG(opts: SunbirdSvgOptions = {}): string {
         a !== 0 && part.pivot
           ? ` transform="rotate(${round(a * DEG)} ${part.pivot[0]} ${part.pivot[1]})"`
           : "";
+      // The far wing gets its own class so the keyframes can lead it slightly —
+      // both wings beating in perfect unison reads as a single flapping card.
       const wing = opts.animateWings && part.pivot
-        ? ` class="boot-wing" style="transform-origin:${part.pivot[0]}px ${part.pivot[1]}px"`
+        ? ` class="bird-wing bird-wing--${shape}${part.pivot === FAR_WING_PIVOT ? " wing-far" : ""}" style="transform-origin:${part.pivot[0]}px ${part.pivot[1]}px"`
         : "";
       body = `<path d="${d}" fill="${fill}"${transform}${wing}/>`;
     }

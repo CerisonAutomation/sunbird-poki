@@ -38,6 +38,19 @@
 .overlay select { max-width: 100%; min-height: 44px; }
 .overlay :is(button, summary) { touch-action: manipulation; }
 .overlay :is(.mini-btn,.soft-btn,.nav-btn,.seg button,.tier-reward) { min-height: 44px; }
+/* Controls that were shipping at 19-40px — thumb-misses on the primary
+   choices: the race mode/world pills, the shop's category disclosures, the
+   customize summary, the mission head, the name dice, the home Nest Pass link.
+   A miss on a pill means the wrong race, not a retry. */
+.overlay :is(.pvp-pill, .world-pill, .coll-head, .mission-head, .name-random-btn, .record-pass, .customize-race summary) { min-height: 44px; }
+.overlay :is(input, select, textarea):not([type=range]) { min-height: 44px; }
+/* The character counter sits in the same row as the dice. With no width of its
+   own it resized every time the digit count changed — "9/14" -> "12/14" — which
+   reflowed the row and nudged the dice sideways while the player typed. A
+   counter that shifts the control next to it while you are aiming at that
+   control is a mis-tap generator. Fixed width + tabular figures means the row
+   is laid out once and the digits change inside it. */
+.overlay .name-char-count { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .overlay .mini-btn { min-width: 44px; }
 .overlay .section-title { color: #735340; line-height: 1.5; gap: 8px; flex-wrap: wrap; }
 .overlay :is(.fineprint,.tagline,.empty-note,.md) { color: var(--clay); line-height: 1.55; }
@@ -268,6 +281,10 @@
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
 .onboarding-route-head span { font:800 10px/1 var(--body); letter-spacing:.14em; }
 .onboarding-route-head small { color:#8c7658; font-size:11px; }
+/* Skip button (P0 fix): pinned to the far right regardless of the header's
+   own `justify-content: space-between` — without `margin-left: auto` a third
+   flex child would land in the middle, between the kicker and the subtitle. */
+.onboarding-route-head .onboarding-dismiss { margin-left:auto; flex-shrink:0; padding:4px 9px; font-size:12px; line-height:1; }
 .onboarding-route-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
 .onboarding-route-step { display:grid; grid-template-columns:auto 1fr; gap:7px; min-width:0; min-height:70px; padding:9px; border:1px solid #ead9ae; border-radius:12px; background:#fffdf5; color:#4a3825; text-align:left; cursor:pointer; }
 .onboarding-route-step.active { border-color:#d99c35; background:#fff0bd; box-shadow:inset 0 2px 0 #fff8d7; }
@@ -440,7 +457,15 @@
 .menu-hero .hero-kicker { display:block; color:#916219; font-size:9px; letter-spacing:.2em; font-weight:700; }
 .paper-card.menu-hero h1 { color:#ff7a45; font-size:46px; font-weight:500; letter-spacing:.035em; margin:7px 0 8px; text-shadow:0 2px 1px #a65e1220; background:none; -webkit-text-fill-color:#ff7a45; }
 .menu-hero .hero-sub { display:block; text-align:left; color:#795329; font-size:12px; line-height:1.5; margin:0; }
-.overlay .icon-btn.menu-mute { z-index:4; top:12px; right:12px; background:#fff9eb; border:1px solid #ddd4b9; box-shadow:0 2px 0 #c5b89b50; }
+.overlay .icon-btn.menu-mute {
+  z-index: 4;
+  /* Safe-area aware. These overrode the inset-aware values in index.css with
+     flat 12px, which on a notched iPhone in landscape (~44px inset) put half
+     the target under the sensor housing. */
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  background:#fff9eb; border:1px solid #ddd4b9; box-shadow:0 2px 0 #c5b89b50;
+}
 .menu-illustration { width:100%; height:100%; display:block; overflow:visible; pointer-events:none; }
 .menu-hero .home-launch {
   display:flex; align-items:center; gap:14px; text-align:left; padding:14px 18px;
@@ -1780,12 +1805,20 @@ button,
     will-change: transform, box-shadow;
   }
 }
-/* Snap back when reduce-motion is on */
+/* Press feedback without movement, when reduce-motion is on.
+   This used to be `transform: none !important`, which cancelled the press
+   state outright rather than de-animating it: the button stopped moving AND
+   stopped looking pressed, so a reduced-motion player got no confirmation that
+   their tap registered. The block above already strips transitions, and the
+   press's real signal is the inset shadow on :active, which is not motion —
+   so there is nothing here left to cancel. The 1px press offset stays: it is
+   far below the displacement that provokes motion sensitivity, and removing it
+   would cost the only feedback a reduced-motion player has. */
 @media (prefers-reduced-motion: reduce) {
   .overlay .back-btn:active,
   .overlay .soft-btn:active,
   .overlay .primary-btn:active,
-  .overlay .mini-btn:active { transform: none !important; }
+  .overlay .mini-btn:active { filter: brightness(0.92); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -3244,12 +3277,21 @@ button.upsell:active,
 .overlay .screen-head h2 {
   min-width: 0 !important;
   flex: 1 1 0 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  /* Wraps, on purpose. Forcing one nowrap line left ~13 characters at 320px,
+     so a localised title truncated on sight and the bare "‹" gave no label to
+     fall back on. */
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 /* screen-head itself: pad right so content never clips card corner */
 .overlay .paper-card .screen-head {
+  /* PINNED. This is the only way out of a menu screen and it was the first
+     child of the scroll box, so a player who scrolled the Shop to the bottom
+     had no visible exit at all: no hardware Back on a phone, no Escape. */
+  position: sticky;
+  top: -10px;
+  z-index: 6;
+  background: #fff7e9;
   padding-right: 4px !important;
   overflow: visible !important;
 }

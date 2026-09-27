@@ -99,8 +99,8 @@ describe("progressive, bounded difficulty", () => {
     }
     expect(endlessSpeedScale(0, 0)).toBe(1);
     expect(terrainDifficulty(NaN)).toBe(1);
-    expect(terrainDifficulty(100)).toBe(1.16);
-    expect(terrainDifficulty(-5)).toBe(0.86);
+    expect(terrainDifficulty(100)).toBe(1.35);
+    expect(terrainDifficulty(-5)).toBe(0.7);
   });
 });
 

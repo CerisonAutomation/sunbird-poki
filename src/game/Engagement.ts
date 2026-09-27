@@ -44,7 +44,7 @@ export class FlowTuner {
    * experts get tighter, steeper ones that demand real timing.
    */
   difficulty(): number {
-    return lerp(0.86, 1.16, this.skill);
+    return lerp(0.7, 1.35, this.skill);
   }
 
   label(): string {
@@ -118,6 +118,15 @@ export class SessionGoals {
   private seq = 0;
   /** While true, targets come from `STARTER_TARGETS` instead of the skill curve. */
   private starter = false;
+  /**
+   * Session Complete gate. False while the list can still refill; flips
+   * true the moment every goal is done, and only flips back to false when
+   * a new run starts after a genuine 60 s+ pause (see `update()`). While
+   * true, a finished goal stays finished instead of being replaced.
+   */
+  private sessionGoalsRefilled = false;
+  /** Wall-clock time of the last `update()` tick, used to detect that pause. */
+  private lastActiveAt = 0;
 
   constructor(private readonly tuner: FlowTuner) {}
 
@@ -129,6 +138,8 @@ export class SessionGoals {
     this.seq = 0;
     this.starter = Boolean(opts.starter);
     this.goals = [];
+    this.sessionGoalsRefilled = false;
+    this.lastActiveAt = 0;
     const rng = new SeededRandom(`${seed}:goals`);
     const used = new Set<GoalKind>();
     while (this.goals.length < 3) this.goals.push(this.make(rng, used));
@@ -164,24 +175,49 @@ export class SessionGoals {
     };
   }
 
-  /** @returns goals completed by this update (already replaced in the list). */
+  /**
+   * @returns goals completed by this update.
+   *
+   * Finishing a goal used to spawn its replacement instantly, so the list
+   * could never actually close out — the Zeigarnik "always something open"
+   * hook turned into a treadmill players resented instead of a reason to
+   * come back. Now a finished goal just stays finished ("Session Complete")
+   * for the rest of the session; the whole list only refills once the
+   * player returns for a new run after a genuine 60 s+ pause.
+   */
   update(p: GoalProgress): SessionGoal[] {
     const finished: SessionGoal[] = [];
-    const rng = new SeededRandom(`${Date.now()}:${this.seq}`);
-    for (let i = 0; i < this.goals.length; i++) {
-      const g = this.goals[i]!;
+    const now = Date.now();
+    const newRunAfterPause = this.lastActiveAt > 0 && now - this.lastActiveAt >= 60_000;
+    this.lastActiveAt = now;
+    if (newRunAfterPause) {
+      const rng = new SeededRandom(`${now}:${this.seq}`);
+      const used = new Set<GoalKind>();
+      this.goals = [];
+      while (this.goals.length < 3) this.goals.push(this.make(rng, used));
+      this.sessionGoalsRefilled = false;
+    }
+
+    for (const g of this.goals) {
       if (g.done) continue;
       g.progress = p[g.kind] ?? 0;
       if (g.progress >= g.target) {
         g.done = true;
         finished.push(g);
-        // Refill immediately — the list must never be empty.
-        const used = new Set(this.goals.map((x) => x.kind));
-        used.delete(g.kind);
-        this.goals[i] = this.make(rng, used);
       }
     }
+    if (this.goals.every((x) => x.done)) this.sessionGoalsRefilled = true;
     return finished;
+  }
+
+  /**
+   * Whether every goal in the current session is finished ("Session
+   * Complete") — exposed so a caller can show a completion cue instead of
+   * silence once the last goal is done, rather than the old instant-refill
+   * where the state never existed to show.
+   */
+  isSessionComplete(): boolean {
+    return this.sessionGoalsRefilled;
   }
 
   /** The goal closest to completion, for the "almost there" nudge. */
@@ -285,7 +321,11 @@ export const IDENTITY_TUNE: DifficultyTune = {
 };
 
 const EASE: DifficultyTune = {
-  daylightMult: 0.9,
+  // Was 0.9 — LESS daylight for the players having the worst time, which is
+  // backwards in a game whose only fail state is the clock. The polarity of the
+  // whole table is "ease = more room"; a struggling player who cannot read the
+  // terrain is the one who can least afford to also be short on sun.
+  daylightMult: 1.12,
   packCatchupMult: 1.28,
   ridgeForgiveness: 2.4,
   magnetBonus: 0.18,
@@ -347,4 +387,17 @@ export function tuneDifficulty(signals: DifficultySignals, rated: boolean): Diff
 export function paceSkillFor(playerSkill: number): number {
   const s = clamp(Number(playerSkill) || 0, 0, 1);
   return clamp(s * 0.72 + 0.22, 0.22, 0.88);
+}
+
+/* ======================================================= daily login ritual */
+
+/**
+ * Whether the boot-time "Daily Challenge ready" banner should show (Feature:
+ * Daily Login Ritual Banner). Pure AND so HUD doesn't reimplement it: the
+ * banner shows only while today's daily is still open AND the player hasn't
+ * already dismissed it this session — dismissal is session-only state
+ * (`Game.dismissedDailyPrompt`) that resets every day, never persisted.
+ */
+export function shouldShowDailyBanner(dailyDone: boolean, dismissedToday: boolean): boolean {
+  return !dailyDone && !dismissedToday;
 }

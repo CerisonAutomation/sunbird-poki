@@ -18,7 +18,7 @@ test("a run is startable and flyable from the keyboard alone", async ({ page }) 
   await app.ready();
 
   // Primary menu action via Return, without touching the mouse.
-  const launch = page.getByRole("button", { name: "Play free flight now", exact: true });
+  const launch = page.getByRole("button", { name: "Fly now", exact: true });
   await launch.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-action="pause"]')).toBeVisible();

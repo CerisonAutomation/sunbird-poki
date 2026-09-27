@@ -84,6 +84,16 @@ button {
   outline-offset: 2px;
 }
 
+/* P0 touch-target fix: a little extra breathing room on phones/small
+   tablets — .paper-card's own `width: min(440px, 100%)` (index.css) already
+   keeps it inside the viewport, so 95vw only ever tightens that cap, never
+   loosens it. */
+@media (max-width: 768px) {
+  .back-btn { width: 48px; height: 48px; }
+  .paper-card { max-width: 95vw; }
+  .screen-head { gap: 12px; }
+}
+
 .section-title {
   text-align: left;
   font-size: 11px;
@@ -1657,8 +1667,17 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .alt-zone.z1 { bottom: 0; height: 22%; background: linear-gradient(#8fd8ff, transparent); opacity: 0.65; }
 .alt-zone.z2 { bottom: 22%; height: 24%; background: linear-gradient(var(--pure-white), transparent); opacity: 0.6; }
-.alt-zone.z3 { bottom: 46%; height: 26%; background: linear-gradient(#7fa8ff, transparent); opacity: 0.6; }
-.alt-zone.z4 { bottom: 72%; height: 28%; background: linear-gradient(#2b2b6e, transparent); opacity: 0.7; }
+/* Colorblind-friendly: z3/z4 (the two zones a red/green mix-up would blur
+   together) also carry a diagonal stripe pattern layered over the color
+   falloff, so the zone reads by pattern even if the tint does not. */
+.alt-zone.z3 {
+  bottom: 46%; height: 26%; opacity: 0.6;
+  background: repeating-linear-gradient(45deg, rgba(255, 180, 0, 0.3) 0 2px, transparent 2px 6px), linear-gradient(#7fa8ff, transparent);
+}
+.alt-zone.z4 {
+  bottom: 72%; height: 28%; opacity: 0.7;
+  background: repeating-linear-gradient(45deg, rgba(255, 100, 100, 0.3) 0 2px, transparent 2px 6px), linear-gradient(#2b2b6e, transparent);
+}
 
 .alt-fill {
   position: absolute;
@@ -1790,6 +1809,21 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
     filter: brightness(1.06) saturate(1.06);
     transform: translateY(-1px);
   }
+}
+
+/* P0 touch-target fix: `hover: none` targets a real touch-primary device
+   (unlike a max-width query, this also catches a touch-capable tablet or
+   laptop at a wide viewport). `.icon-btn` is deliberately left out here — it
+   is already floored at 44px (`.icon-btn.pause-btn`, `.icon-btn.menu-mute`,
+   `.hud-controls .icon-btn`, and the <=640px rule below all set it
+   explicitly), and `min-height`/`min-width` would win as a layout floor over
+   those fixed 44px values regardless of selector specificity, growing the
+   HUD's mute/pause row exactly where layout.spec.ts/orientation.spec.ts pin
+   its height. `.primary-btn`/`.mini-btn` carry no such pinned height
+   anywhere, so raising their floor here is safe. */
+@supports (hover: none) {
+  .primary-btn { min-height: 48px; padding: 12px 16px; }
+  .mini-btn { min-height: 44px; font-size: 13px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2009,7 +2043,11 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
      the header. The header can grow with race/boost rows and the footer can
      grow with fever, goals and emotes; a fixed header offset therefore puts
      this announcement directly on top of active HUD content. */
-  top: calc(var(--hud-header-height, 110px) + (100vh - var(--hud-header-height, 110px) - var(--hud-footer-height, 65px)) / 2);
+  /* 100dvh, not 100vh: the containing block is the visual viewport, and 100vh
+     is the large one, so on any browser with a collapsing URL bar — the normal
+     way this ships, inside a portal iframe — the banner sat below the centre of
+     what the player can actually see. Every sibling already uses 100%. */
+  top: calc(var(--hud-header-height, 110px) + (100dvh - var(--hud-header-height, 110px) - var(--hud-footer-height, 90px)) / 2);
   transform: translateX(-50%) translateY(8px) scale(.94);
   z-index: 18;
   pointer-events: none;
@@ -3335,6 +3373,16 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   row-gap: 2px;
   min-width: 0;
 }
+/* The boost's name, as an element rather than a bare text node. A text node
+   inherits the ROW's colour, so on a deal row — where the "TODAY −50%" tag
+   paints the line white — the name went white on cream and vanished. The
+   cheapest boost in the shop had no readable name. */
+.boost-row .boost-name {
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 13px;
+}
+.boost-row.armed .boost-name { color: var(--green, #1f5f34); }
 
 .boost-row > div {
   min-width: 0;
@@ -5366,7 +5414,10 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .mission-strip {
   position: absolute;
   left: 50%;
-  bottom: calc(150px + env(safe-area-inset-bottom));
+  /* Off the measured footer. Three quest rows span ~90px, so the old fixed
+     150px put the top row at y~80 on a 568x320 landscape phone — on the
+     header — and the bottom rows inside the footer during a mass race. */
+  bottom: calc(var(--hud-footer-height, 90px) + 16px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   width: min(340px, 74vw);
   pointer-events: none;
@@ -5400,10 +5451,31 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 }
 
 /* Wings proximity bar */
-.wings-near { display: flex; flex-direction: column; gap: 4px; padding: 6px 0; }
+/* Absolutely positioned like every other flight element. It was the last
+   child never added to a `lane()`, which made it the first in-flow block of
+   `.play-hud` — so the "N m to <rank>" meter printed across the very top of
+   the screen, out of context, and pushed the header down 31px. */
+.wings-near {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--hud-footer-height, 90px) + 96px);
+  display: flex; flex-direction: column; gap: 4px; padding: 6px 0;
+  width: min(340px, 74vw);
+  pointer-events: none;
+}
 .wings-near.hidden { display: none; }
 .wings-near > i { display: block; height: 4px; border-radius: 2px; background: var(--gold-muted); transition: width 0.3s; max-width: 100%; }
 .wings-near > span { font: 600 11px/1 var(--display); color: rgba(255,255,255,0.8); }
+
+/* The Reduce Motion switch lives in Settings, and the game is spent flying —
+   but the only broad rule was scoped to `.sb-reduce-motion .overlay *`, and
+   `.play-hud` is not inside an overlay. So the three infinite flight animations
+   (speedlines, the urgent sun meter, the expiring-powerup blink) and every
+   decorative pop kept running for a player who had explicitly turned them off. */
+html.sb-reduce-motion .play-hud *,
+html.sb-reduce-motion .play-hud *::before,
+html.sb-reduce-motion .play-hud *::after { animation: none; transition: none; }
 
 /* Reduce motion overrides */
 .sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }
@@ -5414,3 +5486,221 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 }
 
 @import "./menu-polish.css";
+
+/* ---------- the wingbeat ---------- */
+/* `sunbirdSVG({ animateWings: true })` has been emitting a wing class since the
+   bird was first drawn, and nothing ever defined it — so every "animated" bird
+   in the game (the title screen, the name entry, the boot loader) has been a
+   still image with a transform-origin and no motion. This is that animation. */
+/* Both wings swing in opposition about their own shoulder, which is what makes
+   a flap read as a flap rather than as the whole bird tilting. The two are
+   separate keyframes because the far wing has to lead the near one slightly. */
+.bird-wing { transform-box: view-box; }
+.bird-wing--songbird,
+.bird-wing--wader,
+.bird-wing--comet,
+.bird-wing--ember,
+.bird-wing--raptor,
+.bird-wing--owl { animation: birdFlapNear 1.15s ease-in-out infinite; }
+.bird-wing--songbird.wing-far,
+.bird-wing--wader.wing-far,
+.bird-wing--comet.wing-far,
+.bird-wing--ember.wing-far,
+.bird-wing--raptor.wing-far,
+.bird-wing--owl.wing-far { animation-name: birdFlapFar; }
+@keyframes birdFlapNear {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-17deg); }
+}
+@keyframes birdFlapFar {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-13deg); }
+}
+/* A raptor holds its wings out; a wader beats them slowly and shallowly. One
+   shared keyframe for six species is what made them all flap like the songbird
+   no matter what they were. */
+.bird-wing--raptor { animation-duration: 1.9s; }
+.bird-wing--owl { animation-duration: 1.45s; }
+.bird-wing--wader { animation-duration: 1.6s; }
+.bird-wing--ember, .bird-wing--comet { animation-duration: 0.85s; }
+/* The shop is where a player decides what to fly, so the bird on the card is
+   the product. Bigger, and lit off the tile so it reads as the thing being
+   offered rather than as a thumbnail in a list. */
+.skin-bird .bird-wing { transform-box: view-box; }
+.skin-card .skin-preview svg { filter: drop-shadow(0 3px 5px rgba(58, 34, 24, 0.26)); }
+.shop-hero-bird { filter: drop-shadow(0 6px 12px rgba(58, 34, 24, 0.3)); }
+
+/* Respect the in-game Reduce Motion toggle and the OS setting alike — a
+   decorative flap is exactly the kind of motion that setting exists for.
+   These come LAST and without `!important`, so they win on source order
+   against the per-species durations above at equal specificity. The in-game
+   class wins on specificity against the media query below. */
+@media (prefers-reduced-motion: reduce) {
+  .bird-wing,
+  .bird-wing--songbird, .bird-wing--raptor, .bird-wing--owl,
+  .bird-wing--wader, .bird-wing--ember, .bird-wing--comet,
+  .bird-wing.wing-far { animation: none; }
+}
+.sb-reduce-motion .bird-wing,
+.sb-reduce-motion .bird-wing--songbird, .sb-reduce-motion .bird-wing--raptor,
+.sb-reduce-motion .bird-wing--owl, .sb-reduce-motion .bird-wing--wader,
+.sb-reduce-motion .bird-wing--ember, .sb-reduce-motion .bird-wing--comet,
+.sb-reduce-motion .bird-wing.wing-far { animation: none; }
+
+/* ---------- the combined PvP screen ---------- */
+/* The AI flock now lives on the race screen next to the lobby, so it needs its
+   own visual register: a recessed panel that reads as "the other half of this
+   page" rather than as a second screen that happened to get appended. */
+.race-rival-divider {
+  margin-top: 22px;
+  padding-top: 4px;
+}
+.race-section-ai {
+  border-style: dashed;
+  border-color: rgba(126, 168, 150, 0.5);
+  background: linear-gradient(180deg, rgba(30, 52, 46, 0.5), rgba(20, 38, 34, 0.4));
+}
+.race-section-ai .practice-formats summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 6px 0;
+  list-style: revert;
+}
+.race-section-ai .practice-formats summary h3 { display: inline; margin: 0; }
+
+/* The ranked note under a duel: a caveat the player must be able to read but
+   not one that should compete with the duel button above it. */
+.ranked-perk-note {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+
+/* The daily-ritual strip and its dismiss affordance. The ✕ is a real control
+   and needs a tap target, not a glyph floating in a corner. */
+.daily-ritual-banner { align-items: center; }
+.daily-ritual-close {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+/* ---------- the chain readout, and FRENZY ---------- */
+/* Tiny Wings had exactly one flourish in the whole game: four clean take-offs in
+   a row, announced. The chain that produces it is the game's core skill loop, so
+   it has to be readable mid-flight without looking away from the bird. The
+   readout sits in the same lane as the launch banner, scales with the chain, and
+   gains a tier of colour and pulse per step — a reward that looks the same at
+   ×1 and ×9 is a reward nobody feels. */
+.chain-readout {
+  --chain-scale: 0;
+  --chain-pulse: 1s;
+  /* In the flight-messages lane, not floating at 22% of the screen. At 568x320
+     that 22% is 70px — inside a ~90px header, so CHAIN x2 printed over the
+     distance/daylight/coins bar. Lane placement is what the sibling
+     announcements already do and is size-proof. */
+  position: static;
+  transform: scale(var(--chain-scale));
+  transform-origin: 50% 50%;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease-out, transform 0.14s cubic-bezier(0.2, 1.6, 0.4, 1);
+  text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 18px currentColor;
+  z-index: 4;
+}
+.chain-readout.tier-warm {
+  font-size: 22px;
+  color: #ffe08a;
+  opacity: 1;
+}
+.chain-readout.tier-hot {
+  font-size: 28px;
+  color: #ffb03a;
+  opacity: 1;
+}
+.chain-readout.tier-blazing {
+  font-size: 34px;
+  color: #ff7a3c;
+  opacity: 1;
+  animation: chainBeat var(--chain-pulse) ease-in-out infinite;
+}
+/* The one that matters. Full weight, its own colour, and a beat that a player
+   feels in the corner of their eye before they read the word. */
+.chain-readout.tier-frenzy {
+  font-size: 42px;
+  color: #ff4d6d;
+  opacity: 1;
+  animation: chainBeat var(--chain-pulse) ease-in-out infinite, frenzyGlow 1.1s ease-in-out infinite alternate;
+}
+@keyframes chainBeat {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.45); }
+}
+@keyframes frenzyGlow {
+  0% { text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 18px #ff4d6d; }
+  100% { text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 34px #ffd166, 0 0 60px #ff4d6d; }
+}
+/* Reduced motion keeps the escalation — size and colour, which carry the
+   information — and drops only the pulsing, which is the decorative half. */
+@media (prefers-reduced-motion: reduce) {
+  .chain-readout.tier-blazing,
+  .chain-readout.tier-frenzy { animation: none; }
+}
+.sb-reduce-motion .chain-readout.tier-blazing,
+.sb-reduce-motion .chain-readout.tier-frenzy { animation: none; }
+
+/* The results card gained a chip, so it needs a place to be. */
+.moment-chip.frenzy {
+  border-color: #ff4d6d;
+  background: rgba(255, 77, 109, 0.18);
+  color: #ffd166;
+}
+
+/* A daily-reward card the player is told has coins waiting must be a door, not
+   a notice. It was a <div> whose only control was the dismiss — the one control
+   that made the problem go away. */
+.pc-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.pc-open .pc-body { text-align: left; }
+.daily-ritual-close { flex: 0 0 auto; }
+
+/* A cup title prize, finally rendered. */
+.prize-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  background: rgba(176, 106, 232, 0.14);
+  border-color: rgba(176, 106, 232, 0.5);
+  color: #7a3fb0;
+  font-weight: 800;
+  cursor: default;
+}
+
+/* Why the run ended, above "Flight completed". */
+.end-reason {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted-rose);
+}

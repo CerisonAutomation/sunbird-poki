@@ -172,13 +172,19 @@ export async function loadPack(locale: string): Promise<boolean> {
   if (!load) return false;
   try {
     const mod = await load();
-    const packArray = (mod.default as unknown) as string[];
+    // A slot is `string | null`: the generator collapses every cell that is
+    // byte-identical to English down to `null` rather than storing the same
+    // characters twice. Skipping those slots leaves the key absent from the
+    // pack, so `t()`'s `pack[key] ?? EN[key]` resolves it to English — the
+    // same result, without the duplicated bytes in the shipped payload.
+    const packArray = (mod.default as unknown) as (string | null)[];
     // Convert array pack to object pack using pack-keys mapping
     const packObj: Pack = {};
     for (let i = 0; i < packArray.length; i++) {
       const key = packKeys[i];
-      if (key) {
-        packObj[key] = packArray[i];
+      const text = packArray[i];
+      if (key && text != null) {
+        packObj[key] = text;
       }
     }
     packs.set(locale, packObj);
@@ -229,15 +235,65 @@ export function t(key: string, params?: Record<string, string | number>, default
     const rawText = pack[key] ?? EN[key] ?? defaultText;
     if (!rawText) return defaultText ?? key;
     if (!params) return rawText;
+    // Pluralisation happens BEFORE interpolation so a translator can put the
+    // form in the middle of the sentence, where most languages put it.
+    const forms = params["forms"];
+    const resolved: Record<string, string | number> = { ...params };
+    if (typeof forms === "string" && forms.includes("|")) {
+      resolved["n"] = plural(Number(params["count"] ?? params["n"] ?? 0), forms);
+      delete resolved["forms"];
+    }
     let result = rawText;
     for (const [k, v] of Object.entries(params)) {
-      const strVal = String(v);
+      const strVal = String(resolved[k] ?? v);
       result = result.split(`{{${k}}}`).join(strVal).split(`{${k}}`).join(strVal);
     }
     return result;
   } catch {
     return defaultText ?? key;
   }
+}
+
+/**
+ * Plural forms, CLDR-style.
+ *
+ * Assembling plurals in English (`n === 1 ? "day" : "days"`) and interpolating
+ * the noun afterwards is wrong in every language that is not English, and
+ * actively broken in the ones with three or more forms: Russian needs
+ * one/few/many, Arabic needs six. The tournament card shipped exactly that, so
+ * it read "ends in 2 day" wherever the translator had no other option.
+ *
+ * The translator supplies the FORMS and the rule picks one:
+ *
+ *   t("hud.cup.endsIn", { n: 2, forms: "day|days" })   // 2 days
+ *   t("hud.cup.endsIn", { n: 5, forms: "день|дня|дней" }) // 5 дней
+ *
+ * `forms` is pipe-separated and may be a single form. A locale that has not
+ * been translated falls back to the English source, which is two forms, so
+ * English keeps working and a partial translation is never worse than today.
+ */
+const ONE_FORM_LANGS = new Set(["ja", "zh", "ko", "th", "vi", "id", "ms"]);
+
+function pluralFormIndex(count: number, locale: string): number {
+  if (ONE_FORM_LANGS.has(locale)) return 0;
+  const lang = locale.split("-")[0]!;
+  // Slavic three-form rule (ru, uk, pl and friends).
+  if (["ru", "uk", "be", "pl"].includes(lang)) {
+    const n = Math.abs(count);
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 0;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1;
+    return 2;
+  }
+  return count === 1 ? 0 : 1;
+}
+
+/** The pluralised noun for `count` in the active locale. */
+export function plural(count: number, forms: string, locale = currentLocale): string {
+  const list = forms.split("|");
+  if (list.length === 1) return list[0]!;
+  return list[Math.min(pluralFormIndex(count, locale), list.length - 1)]!;
 }
 
 /**

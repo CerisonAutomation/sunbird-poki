@@ -128,12 +128,21 @@ describe("runtime packs (generated from the barrel)", () => {
     expect(readFileSync(resolve(root, "src/i18n/pack-keys.json"), "utf8"), "pack-keys.json").toBe(expectedKeys);
 
     const codes = [...new Set(Object.values(barrel.barrel).flatMap((e) => Object.keys(e.translations ?? {})))].sort();
+    const englishOf = (key: string) => {
+      const entry = barrel.barrel[key]!;
+      const text = entry.translations.en ?? entry.sourceText;
+      return typeof text === "string" ? text : "";
+    };
     const drift: string[] = [];
     for (const code of codes) {
       const values = keys.map((key) => {
         const entry = barrel.barrel[key]!;
         const text = entry.translations[code] ?? entry.translations.en ?? entry.sourceText;
-        return typeof text === "string" ? text : "";
+        const value = typeof text === "string" ? text : "";
+        // Mirrors gen-i18n-packs.mjs: a cell identical to English is stored as
+        // null and inherits English at runtime. The drift check has to encode
+        // that or it would demand the pre-compaction shape forever.
+        return code !== "en" && value !== "" && value === englishOf(key) ? null : value;
       });
       const expected = JSON.stringify(values) + "\n";
       const actual = readFileSync(resolve(root, `src/i18n/packs/${code}.json`), "utf8");
@@ -142,7 +151,7 @@ describe("runtime packs (generated from the barrel)", () => {
     expect(drift).toEqual([]);
   });
 
-  it("every pack covers every key (fallback chain stays total)", () => {
+  it("every pack covers every key, and every nulled slot is provably lossless", () => {
     const root = resolve(__dirname, "../../..");
     const barrel = JSON.parse(readFileSync(resolve(root, "src/i18n/translations.barrel.json"), "utf8")) as {
       barrel: Record<string, unknown>;
@@ -150,13 +159,34 @@ describe("runtime packs (generated from the barrel)", () => {
     const keys = JSON.parse(readFileSync(resolve(root, "src/i18n/pack-keys.json"), "utf8")) as string[];
     expect(keys.length, "pack-keys covers every barrel key").toBe(Object.keys(barrel.barrel).length);
 
+    const english = JSON.parse(readFileSync(resolve(root, "src/i18n/packs/en.json"), "utf8")) as (string | null)[];
+
     for (const file of readdirSync(resolve(root, "src/i18n/packs"))) {
-      const pack = JSON.parse(readFileSync(resolve(root, "src/i18n/packs", file), "utf8")) as string[];
+      const pack = JSON.parse(readFileSync(resolve(root, "src/i18n/packs", file), "utf8")) as (string | null)[];
+      const isEnglish = file === "en.json";
       // Position is meaning: a pack that is a different length from the key
       // list would shift every string after the gap onto the wrong key.
       expect(pack.length, `${file} length !== key count`).toBe(keys.length);
-      const empty = keys.filter((_, i) => typeof pack[i] !== "string" || pack[i].length === 0);
-      expect(empty, `${file} has empty slots`).toEqual([]);
+
+      // The user-facing guarantee: whatever a player resolves for any key in
+      // any locale is a non-empty string. A blank label is a visible defect;
+      // a null slot is only legal because it resolves to a real English cell.
+      const blank = keys.filter((_, i) => {
+        const resolved = pack[i] ?? english[i];
+        return typeof resolved !== "string" || resolved.length === 0;
+      });
+      expect(blank, `${file} resolves to an empty label`).toEqual([]);
+
+      if (isEnglish) continue;
+      // English is the fallback every nulled slot points at, so it must be
+      // total on its own. A null here would make a null elsewhere meaningless.
+      expect(english.filter((v) => typeof v === "string" && v.length > 0).length).toBe(keys.length);
+
+      // Nulling is a *storage* optimisation, never a loss of content. If a slot
+      // is dropped it must be byte-identical to English, or the compaction has
+      // silently discarded a real translation.
+      const lossy = keys.filter((_, i) => pack[i] === null && english[i] === null);
+      expect(lossy, `${file} nulls a slot English cannot fill`).toEqual([]);
     }
   });
 });
@@ -210,7 +240,12 @@ describe("source → barrel coverage (the direction that was missing)", () => {
     const known = new Set(Object.keys(barrelDoc.barrel));
     // A translation key is dotted, lowercase and space-free. That shape is what
     // separates a real t("hud.stat.coins") from an unrelated local named `t`.
-    const call = /\bt\(\s*["'`]([a-z0-9]+(?:\.[a-z0-9-]+)+)["'`]/g;
+    // Case-tolerant: the previous class was lowercase-only, so every camelCase
+    // key (`hud.heroSub`, `onboarding.tapToDive`, `hud.gameover.newBest`, ...)
+    // was invisible to this guard. 21 shipping strings were rendering English
+    // on all 36 locales while the test that exists to prevent exactly that
+    // passed. Uppercase is a normal part of a key, not an escape hatch.
+    const call = /\bt\(\s*["'`]([A-Za-z0-9]+(?:\.[A-Za-z0-9-]+)+)["'`]/g;
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const full = resolve(dir, entry.name);

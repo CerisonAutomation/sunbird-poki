@@ -1,6 +1,19 @@
 export const PHYS_HZ = 120;
 export const PHYS_DT = 1 / PHYS_HZ;
 
+/**
+ * The most physics steps one frame may be asked to catch up on.
+ *
+ * The accumulator was drained with no ceiling, so a single slow frame queued
+ * every step it had fallen behind by — and each of those steps cost the time
+ * that made the next frame slower still. On the CPU-bound mid-range phones the
+ * portal actually ships to, that is the difference between a stutter and a
+ * locked page. Slightly over a sixth of a second of simulation: long enough
+ * that an ordinary dropped frame is fully absorbed and invisible, short enough
+ * that a genuine spiral is broken in one frame.
+ */
+export const MAX_CATCHUP_STEPS = 20;
+
 /* ---------------- momentum flight model ----------------
  * Height comes from momentum, never from "flapping upward".
  *   hold  -> heavier gravity + strong ground suction (carve the valley)
@@ -11,6 +24,27 @@ export const GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
 export const GROUND_G_GLIDE = 14;  // reduced: less deceleration on uphill slopes
 export const GROUND_G_DIVE = 88;
+
+/**
+ * A floor on how much a HELD stick accelerates a grounded bird.
+ *
+ * The bird's only grounded acceleration used to be gravity along the slope, so
+ * `88 * slope` — and on anything flatter than about 1:10 that is less than the
+ * friction it fights. Measured across the nine biomes, 11-20% of every island's
+ * run-in sat below 0.12 slope, i.e. flat ground where holding did nothing and
+ * letting go actively COST you speed. The `MIN_KEEP_SPEED` floor then supplied
+ * the missing velocity, so a dead stretch was a 12 m/s conveyor rather than a
+ * mistake.
+ *
+ * Tiny Wings, this game's own ancestor, pushes a constant downward force
+ * whenever the player dives (`ApplyForce(b2Vec2(0,-40))` in Hero.mm), so
+ * holding always does something. This is the same idea in the tangent frame:
+ * a floor, not an addend, so steep terrain — where the slope term already
+ * exceeds it and the feel is already right — is untouched, and uphill
+ * deceleration is untouched, because the game is still built on climbs costing
+ * you. Only the dead flat ground gains anything.
+ */
+export const GROUND_STICK_DIVE = 11;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
@@ -92,13 +126,38 @@ export const ALT_CEILING_FADE = 20;
 export const ZENITH_THERMAL_VY = 110;
 export const ALT_STRATO = 230;
 
-export const ISLAND_PERIOD = 1450;
-export const DROP_START = 935;
-export const DROP_BLEND_START = 830;
-export const RAMP_START = 1115;
-export const GAP_START = 1225;
+/**
+ * The island template. These five are ONE template and must scale together.
+ *
+ * `buildSegments` spends a budget of `RAMP_START - cursor` and always fills it,
+ * so the number of hills on an island is set by `RAMP_START` alone. Move
+ * `ISLAND_PERIOD` on its own and the extra length becomes an un-arched shoulder
+ * — a longer, emptier island, which is worse than a short one. This is why the
+ * 2026-09-26 "longer islands" pass scaled all five by the same factor.
+ *
+ * Scale: x1.32 on the previous 1450 pitch. An island is now ~1,900 m — about
+ * twenty seconds of real flying against a 52 s day, so a day is a handful of
+ * islands rather than a sprint through two.
+ */
+export const ISLAND_PERIOD = 1912;
+export const DROP_START = 1233;
+export const DROP_BLEND_START = 1094;
+export const RAMP_START = 1470;
+export const GAP_START = 1615;
 export const OCEAN_FLOOR = -18;
 export const WATER_Y = 0.4;
+
+/**
+ * How far the flight may travel before the render origin is rebased.
+ *
+ * GPU vertex and instanced-prop buffers are float32, so baked render-space
+ * coordinates start to jitter and crack between chunks once world-x gets large
+ * — most visibly on a long Endless run, which is the one mode with no natural
+ * end. 4,096 m is roughly two of the game's long islands: rare enough that the
+ * chunk rebuild it costs is a non-event, early enough that no player will ever
+ * see the artefact. See `Game.maybeRecenter`.
+ */
+export const RENDER_RECENTER_THRESHOLD = 4096;
 
 export const CHUNK_SIZE = 72;
 export const CHUNK_RES = 1.8;
@@ -109,7 +168,53 @@ export const VISIBLE_CHUNKS_FWD = 14;
 
 export const DAYLIGHT_MAX = 52;
 export const DAYLIGHT_ISLAND_REFILL = 15;
-export const DAYLIGHT_OCEAN_PENALTY = 4.5;
+/**
+ * How high you may be and still collect an island's refill.
+ *
+ * The refill pays for FLIGHT — speed you convert into height on the hills and
+ * spend on the launch. Paying it for altitude you never earned made the
+ * stratosphere the optimal line: a player cruising above this ceiling banked
+ * +15 s per island without touching a hill, so the game's only fail state
+ * stopped being one. Set well above the ridge line (which tops out around
+ * 60) so an honest high glide still counts.
+ */
+export const ISLAND_REFILL_CEILING = 120;
+/**
+ * Sun lost per splash, and how often it is taken.
+ *
+ * The two were tuned as a pair and read as one number, which is how they became
+ * wrong: 4.5 s every 0.55 s is 8.2 daylight-seconds per real second, so a
+ * two-second dip in the sea cost a third of a full island's refill and ended
+ * most runs outright. Water should be the most expensive thing in the game —
+ * it is, at 4.3x the rate the day accrues — but a mistake you can swim out of
+ * should cost you a mistake's worth, not the run.
+ */
+export const DAYLIGHT_OCEAN_PENALTY = 3;
+export const DAYLIGHT_SPLASH_INTERVAL = 0.7;
+
+/**
+ * Climb Breaker — the compensation for a biome that is a wall rather than a
+ * slope (see `biomeClimb`). Granted on crossing into one, and sized by how big
+ * the wall is.
+ *
+ * Three things at once, because a wall is three things at once: the arches
+ * suddenly get shorter and rougher, a new hazard class arrives, and the help
+ * (thermals, sunflower pads) thins out. Sun buys time, the ward buys the
+ * hazards, and the raised cap keeps the sun from being spent on the crossing
+ * that earned it.
+ */
+export const CLIMB_DAYLIGHT_BONUS = 22;
+export const CLIMB_REFILL_MULT = 0.6;
+
+/**
+ * The GO countdown before a solo run's clock starts.
+ *
+ * The day is 52 seconds of real time, and it used to begin on the very first
+ * physics step — so a new player watched it tick down while still reading the
+ * HUD and the coach line. Versus and networked starts bring their own
+ * (a shared countdown, or the room's server clock), so this is solo only.
+ */
+export const SOLO_START_COUNTDOWN = 3;
 
 export const FEVER_NEED = 3;
 export const FEVER_DURATION = 9;

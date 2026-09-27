@@ -1,4 +1,5 @@
 import { dampClimbAtCeiling, glideLiftScale } from "./FlightPhysics";
+import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
   AIR_DRAG_DIVE,
@@ -16,6 +17,7 @@ import {
   GROUND_FRICTION_DIVE,
   GROUND_G_DIVE,
   GROUND_G_GLIDE,
+  GROUND_STICK_DIVE,
   LAND_BAD_MIN_KEEP,
   LAND_FEATHER_FLOOR,
   LAND_GOOD,
@@ -55,6 +57,34 @@ export type BirdSkinColors = {
   wing: number;
   belly: number;
   beak: number;
+};
+
+/**
+ * How each species wears the shared mesh hierarchy.
+ *
+ * The numbers are the species' silhouette in three dimensions: wingspan, how
+ * far the tail streams, beak length and girth, body bulk, and whether the
+ * crest is worn. They mirror the SVG shape tables in `Sunbird.ts` — a raptor is
+ * long-winged and short-tailed in both, a wader is the reverse — so the hangar
+ * and the sky are the same animal. `songbird` is 1 everywhere, which is the
+ * original build and what an un-shaped bird must stay.
+ */
+type ShapeProportions = {
+  span: number;
+  tail: number;
+  beak: number;
+  beakWidth: number;
+  bulk: number;
+  crest: boolean;
+};
+
+const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
+  songbird: { span: 1, tail: 1, beak: 1, beakWidth: 1, bulk: 1, crest: true },
+  raptor: { span: 1.34, tail: 1.5, beak: 0.72, beakWidth: 0.8, bulk: 0.92, crest: true },
+  owl: { span: 0.84, tail: 0.72, beak: 0.6, beakWidth: 0.72, bulk: 1.16, crest: false },
+  wader: { span: 0.8, tail: 0.7, beak: 1.7, beakWidth: 0.5, bulk: 0.82, crest: false },
+  ember: { span: 1.12, tail: 1.28, beak: 0.78, beakWidth: 0.86, bulk: 0.98, crest: true },
+  comet: { span: 1.05, tail: 1.85, beak: 0.66, beakWidth: 0.78, bulk: 0.88, crest: true },
 };
 
 export class Bird {
@@ -102,6 +132,9 @@ export class Bird {
   private readonly shadow: THREE.Mesh;
   private readonly bodyMat: THREE.MeshLambertMaterial;
   private readonly wingMat: THREE.MeshLambertMaterial;
+  private readonly crests: THREE.Mesh[] = [];
+  /** The species currently worn — see `setShape`. */
+  private shape: BirdShape = "songbird";
   private readonly bellyMat: THREE.MeshLambertMaterial;
   private readonly lidMat: THREE.MeshLambertMaterial;
   private readonly beakMat: THREE.MeshLambertMaterial;
@@ -169,11 +202,14 @@ export class Bird {
     this.squash.add(this.wingL, this.wingR);
 
     // Crest: three little head feathers give the silhouette real character.
+    // Held on `this.crests` so `setShape` can take them off a species that does
+    // not wear one — an owl with a sunbird crest is not an owl.
     for (let i = 0; i < 3; i++) {
       const crest = new THREE.Mesh(new THREE.ConeGeometry(0.09 - i * 0.015, 0.42 - i * 0.06, 5), this.wingMat);
       crest.position.set(0.18 - i * 0.17, 0.62 + i * 0.03, 0);
       crest.rotation.z = 0.55 + i * 0.35;
       this.squash.add(crest);
+      this.crests.push(crest);
     }
 
     // Fanned three-feather tail reads far better in 3/4 view than one cone.
@@ -288,6 +324,16 @@ export class Bird {
     this.root.rotation.set(0, 0, 0);
     this.lidL.scale.y = 0.08;
     this.lidR.scale.y = 0.08;
+    // The species is the loadout's business, applied by Game.applySkin — but a
+    // reset must not leave the previous bird's proportions on this one, so the
+    // proportions themselves are cleared and the shape re-applied.
+    this.wingL.scale.set(1, 1, 1);
+    this.wingR.scale.set(1, 1, 1);
+    this.tail.scale.set(1, 1, 1);
+    this.beak.scale.set(1, 1, 1);
+    this.squash.scale.set(1, 1, 1);
+    for (const crest of this.crests) crest.visible = true;
+    this.shape = "songbird";
   }
 
   speed(): number {
@@ -302,6 +348,33 @@ export class Bird {
     this.lidMat.color.setHex(skin.body);
     this.lidMat.emissive.set(0, 0, 0);
     this.beakMat.color.setHex(skin.beak);
+  }
+
+  /**
+   * Dress the bird as its species.
+   *
+   * The shop draws a raptor with a hooked beak and a long tail; if the bird you
+   * then fly is the same oval in the same colours, the preview is selling
+   * something the game does not deliver. So the species adjusts the actual
+   * proportions of the existing mesh hierarchy — wingspan, tail length, beak,
+   * body bulk, and whether the crest is worn at all.
+   *
+   * Scaling rather than rebuilding: the geometry is shared across every bird
+   * (one Bird is allocated per run, see Game), so a species change has to be
+   * free of allocation on the render path. Restores the songbird's numbers
+   * exactly, which is what `reset` expects when a new run starts.
+   */
+  setShape(shape: BirdShape): void {
+    if (shape === this.shape) return;
+    this.shape = shape;
+    const p = BIRD_SHAPE_PROPORTIONS[shape];
+    this.wingL.scale.set(p.span, 1, p.span);
+    this.wingR.scale.set(p.span, 1, p.span);
+    this.tail.scale.set(p.tail, p.tail, 1);
+    this.beak.scale.set(p.beakWidth, p.beak, p.beakWidth);
+    this.squash.scale.set(p.bulk, p.bulk, 1);
+    // An owl is a round bird with no crest to speak of; a phoenix is not.
+    for (const child of this.crests) child.visible = p.crest;
   }
 
   /**
@@ -333,9 +406,15 @@ export class Bird {
       const n = terrain.normalAt(this.x, this.terrainNormal);
       let vt = this.vx * n.tx + this.vy * n.ty;
 
-      // gravity along the slope: downhill (ty<0) accelerates, uphill decelerates
+      // Gravity along the slope: downhill (ty<0) accelerates, uphill decelerates.
       const gGround = diving ? GROUND_G_DIVE : GROUND_G_GLIDE;
-      vt += -gGround * n.ty * dt;
+      // ...but downhill-only, with a floor when the stick is held, so that flat
+      // ground is not a place where the input does nothing. See
+      // GROUND_STICK_DIVE. Uphill keeps the full slope penalty in both states —
+      // the climb is still the thing the run is about.
+      const downhill = -n.ty;
+      const accel = diving ? Math.max(gGround * downhill, GROUND_STICK_DIVE) : gGround * downhill;
+      vt += accel * dt;
 
       const fr = diving ? GROUND_FRICTION_DIVE : GROUND_FRICTION;
       vt *= 1 - fr * dt;

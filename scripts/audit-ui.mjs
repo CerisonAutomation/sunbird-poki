@@ -93,7 +93,20 @@ for (const ref of refsGrabbed) {
   }
 }
 // Dynamic data-ref lookups by name (shop preview etc.) are allowed.
-const dynamicRefTargets = new Set(["shopHeroName"]);
+// The three shop-section refs are the same case: the "Birds / Boosts / Trails"
+// jump row resolves its target at click time from the button's data-id, so the
+// target cannot be a literal in the query. They were dead markup until the
+// sections carried the matching anchors — this records that they now do.
+const dynamicRefTargets = new Set([
+  "shopHeroName",
+  "shopBirds",
+  "shopBoosts",
+  "shopTrails",
+  // The chain readout is a live element the flight HUD writes into every frame
+  // (see HUD.read); it is never grabbed by name because it is addressed once
+  // and then mutated, not re-queried.
+  "chainReadout",
+]);
 // Refs this audit cannot see a consumer for, because the consumer is the TEST
 // SUITE — it queries these by data-ref, and this script only scans app code.
 // They are real hooks, not dead markup: deleting one breaks

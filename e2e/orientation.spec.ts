@@ -39,7 +39,7 @@ test("portrait and landscape remain playable when rotating during a flight", asy
   await app.expectMenuFits();
   await expectViewportFits(page);
   // Exercise real touch input in the mobile project, not just DOM visibility.
-  const play = page.getByRole("button", { name: "Play free flight now", exact: true });
+  const play = page.getByRole("button", { name: "Fly now", exact: true });
   if (info.project.name === "phone") await play.tap();
   else await play.click();
   await expect(page.locator(".hud-root")).toHaveAttribute("data-ui-state", "playing");
@@ -158,7 +158,7 @@ test("an embedded game follows its iframe rather than the outer page orientation
   const game = page.frameLocator("#game");
   await game.getByRole("button", { name: "Random name", exact: true }).click();
   await game.locator('[data-action="confirm-pilot-name"]').click();
-  await game.getByRole("button", { name: "Play free flight now", exact: true }).click();
+  await game.getByRole("button", { name: "Fly now", exact: true }).click();
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
     await page.locator("#game").evaluate((el, size) => {
       el.style.width = `${size.width}px`;

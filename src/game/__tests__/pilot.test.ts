@@ -3,6 +3,7 @@ import { Bird } from "../Bird";
 import { TerrainSystem } from "../TerrainSystem";
 import { PHYS_DT } from "../constants";
 import { decideHold } from "../pilot";
+import { islandTemplate } from "../Biomes";
 
 /**
  * Attract-mode pilot invariants: the menu backdrop flies the real sim, so
@@ -54,10 +55,16 @@ describe("attract pilot over water", () => {
     const terrain = new TerrainSystem("2026-09-14");
     // Mid-ocean, low and slow: diving splashes inside the horizon while
     // soaring stays dry past it — ranked clean > dry miss > splash.
+    //
+    // The three positions are derived from the island layout rather than typed
+    // in. They used to be fixed world-x values, which quietly stopped being
+    // over water the moment the island template changed length — the test kept
+    // passing its "mid-ocean" premise while flying over the drop.
+    const gap = islandTemplate(0).gapStart;
     for (const p of [
-      { x: 1320, y: 6, vx: 25, vy: -4 },
-      { x: 1315, y: 8, vx: 30, vy: -5 },
-      { x: 1330, y: 5, vx: 22, vy: -3 },
+      { x: gap + 30, y: 6, vx: 25, vy: -4 },
+      { x: gap + 25, y: 8, vx: 30, vy: -5 },
+      { x: gap + 40, y: 5, vx: 22, vy: -3 },
     ]) {
       const bird = new Bird();
       bird.reset(p.x, p.y);

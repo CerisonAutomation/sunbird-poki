@@ -3,8 +3,8 @@ import { Vector3 } from "three";
 import { Bird } from "../Bird";
 import { CameraRig } from "../CameraRig";
 import { TerrainSystem } from "../TerrainSystem";
-import { gapEndFor } from "../Biomes";
-import { DROP_BLEND_START, DROP_START, RAMP_START, GAP_START, ISLAND_PERIOD, PHYS_DT } from "../constants";
+import { islandTemplate } from "../Biomes";
+import { PHYS_DT } from "../constants";
 
 const seeds = ["2026-09-15", "wild-drop", "tiny-wings"];
 
@@ -12,13 +12,18 @@ describe("island transfer", () => {
   it.each(seeds)("has a long, monotonic drop and a clean ramp (%s)", (seed) => {
     const terrain = new TerrainSystem(seed);
     for (const island of [0, 1, 8, 20, 100]) {
-      const base = island * ISLAND_PERIOD;
+      // Islands are no longer a fixed pitch, so the landmarks are the island's
+      // own. The claim is unchanged — long monotonic drop, clean ramp — and now
+      // has to hold for a 1,644 m canyon and a 2,294 m dune sea alike.
+      const tpl = islandTemplate(island);
+      const base = tpl.start;
+      const { dropStart, rampStart, gapStart, dropBlendStart, gapEnd, period } = tpl;
       // Shoulder is smaller than before but still above hills; monotonic drop; clean ramp.
-      expect(terrain.heightAt(base + DROP_START) - terrain.heightAt(base + RAMP_START)).toBeGreaterThan(40);
-      for (let x = DROP_START + 1; x < RAMP_START - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeLessThan(0);
-      for (let x = RAMP_START + 1; x < GAP_START - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeGreaterThan(0);
-      expect(gapEndFor(island)).toBeLessThan(ISLAND_PERIOD);
-      for (const edge of [DROP_BLEND_START, DROP_START, RAMP_START, GAP_START, gapEndFor(island), ISLAND_PERIOD]) {
+      expect(terrain.heightAt(base + dropStart) - terrain.heightAt(base + rampStart)).toBeGreaterThan(40);
+      for (let x = dropStart + 1; x < rampStart - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeLessThan(0);
+      for (let x = rampStart + 1; x < gapStart - 1; x += 2) expect(terrain.slopeAt(base + x)).toBeGreaterThan(0);
+      expect(gapEnd).toBeLessThan(period);
+      for (const edge of [dropBlendStart, dropStart, rampStart, gapStart, gapEnd, period]) {
         // Subtract the expected rise across the sample: a steep continuous
         // slope is fine; a position jump or broken tangent is not.
         const rise = terrain.heightAt(base + edge + 0.125) - terrain.heightAt(base + edge - 0.125);
@@ -34,17 +39,18 @@ describe("island transfer", () => {
   it.each(seeds)("rewards a downhill hold with enough momentum to cross (%s)", (seed) => {
     const terrain = new TerrainSystem(seed);
     for (const island of [0, 1, 8, 20]) {
-      const base = island * ISLAND_PERIOD;
+      const tpl = islandTemplate(island);
+      const base = tpl.start;
       const bird = new Bird();
-      bird.reset(base + DROP_START + 2, terrain.heightAt(base + DROP_START + 2) + 0.9);
+      bird.reset(base + tpl.dropStart + 2, terrain.heightAt(base + tpl.dropStart + 2) + 0.9);
       bird.grounded = true;
       bird.vx = 24;
       let fastest = 0;
       let launched = false;
       let splashed = false;
-      for (let tick = 0; tick < 15 / PHYS_DT && bird.x < base + ISLAND_PERIOD; tick++) {
+      for (let tick = 0; tick < 15 / PHYS_DT && bird.x < base + tpl.period; tick++) {
         const previousX = bird.x;
-        bird.step(PHYS_DT, { diving: terrain.localX(bird.x) < RAMP_START, fever: false, speedMult: 1, boost: false }, terrain);
+        bird.step(PHYS_DT, { diving: terrain.localX(bird.x) < tpl.rampStart, fever: false, speedMult: 1, boost: false }, terrain);
         expect(bird.x).toBeGreaterThanOrEqual(previousX);
         fastest = Math.max(fastest, bird.speed());
         launched ||= bird.justLaunched;
@@ -53,7 +59,7 @@ describe("island transfer", () => {
       expect(fastest).toBeGreaterThan(70);
       expect(launched).toBe(true);
       expect(splashed).toBe(false);
-      expect(bird.x).toBeGreaterThanOrEqual(base + ISLAND_PERIOD);
+      expect(bird.x).toBeGreaterThanOrEqual(base + tpl.period);
       bird.dispose();
     }
     terrain.dispose();

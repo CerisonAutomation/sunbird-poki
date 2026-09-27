@@ -1,15 +1,14 @@
 import * as THREE from "three";
 import { flightProgression, terrainDifficulty } from "./FlightProgression";
-import { biomeForIsland, gapEndFor, rampPeakFor, type BiomeDef, type DecoKind, type LandmarkKind } from "./Biomes";
+import { biomeForIsland, islandIndexFor, islandTemplate, localXFor, rampPeakFor, type BiomeDef, type DecoKind, type LandmarkKind } from "./Biomes";
+// The island landmarks (DROP_START, RAMP_START, GAP_START, ISLAND_PERIOD) are
+// deliberately absent: they are the DEFAULT the island layout scales from, and
+// every landmark this file needs is read per-island through `islandTemplate`,
+// so a long biome gets a proportionally longer drop, ramp and runway.
 import {
   CHUNK_RES,
   CHUNK_SIZE,
-  DROP_BLEND_START,
-  DROP_START,
-  GAP_START,
-  ISLAND_PERIOD,
   OCEAN_FLOOR,
-  RAMP_START,
   TERRAIN_FACE_DEPTH,
   TERRAIN_HALF_Z,
   VISIBLE_CHUNKS_BACK,
@@ -197,7 +196,11 @@ export class TerrainSystem {
   private computeHeight(x: number): number {
     const island = this.islandIndex(x);
     const lx = this.localX(x);
-    const gapEnd = gapEndFor(island);
+    // This island's own landmarks, not the shared base pitch: a long biome
+    // gets a proportionally longer drop and ramp, so "long island" means more
+    // island rather than more empty shoulder.
+    const tpl = islandTemplate(island);
+    const gapEnd = tpl.gapEnd;
     const hills = this.hills(x, island);
 
     const lip = rampPeakFor(island) + 14;
@@ -206,21 +209,21 @@ export class TerrainSystem {
     // enough height to guarantee momentum through the ramp.
     const shoulder = lip + 16 + hash01(island, this.seedN) * 6;
     const valley = 1.2; // skim just above water — the bird nearly touches the ocean
-    if (lx >= GAP_START && lx < gapEnd) {
+    if (lx >= tpl.gapStart && lx < gapEnd) {
       // Start at the actual ramp height, NOT the unrelated procedural hills.
       // The old branch had a vertical discontinuity precisely at take-off.
-      const departure = lerp(lip, OCEAN_FLOOR, smoothstep(GAP_START, GAP_START + 26, lx));
+      const departure = lerp(lip, OCEAN_FLOOR, smoothstep(tpl.gapStart, tpl.gapStart + 26, lx));
       return lerp(departure, 16, smoothstep(gapEnd - 26, gapEnd, lx));
     }
     if (lx >= gapEnd) return 16;
 
     let h = hills;
-    if (lx >= DROP_START && lx < RAMP_START) {
-      h = lerp(shoulder, valley, smoothstep(DROP_START, RAMP_START, lx));
-    } else if (lx >= RAMP_START && lx < GAP_START) {
-      h = lerp(valley, lip, smoothstep(RAMP_START, GAP_START, lx));
-    } else if (lx >= DROP_BLEND_START) {
-      h = lerp(hills, shoulder, smoothstep(DROP_BLEND_START, DROP_START, lx));
+    if (lx >= tpl.dropStart && lx < tpl.rampStart) {
+      h = lerp(shoulder, valley, smoothstep(tpl.dropStart, tpl.rampStart, lx));
+    } else if (lx >= tpl.rampStart && lx < tpl.gapStart) {
+      h = lerp(valley, lip, smoothstep(tpl.rampStart, tpl.gapStart, lx));
+    } else if (lx >= tpl.dropBlendStart) {
+      h = lerp(hills, shoulder, smoothstep(tpl.dropBlendStart, tpl.dropStart, lx));
     }
 
     // Flat, continuous shore across the wrap, then ease into the next hills.
@@ -284,8 +287,8 @@ export class TerrainSystem {
   }
 
   isOcean(x: number): boolean {
-    const lx = this.localX(x);
-    return lx >= GAP_START && lx < gapEndFor(this.islandIndex(x));
+    const tpl = islandTemplate(this.islandIndex(x));
+    return this.localX(x) >= tpl.gapStart && this.localX(x) < tpl.gapEnd;
   }
 
   /**
@@ -303,12 +306,11 @@ export class TerrainSystem {
   }
 
   islandIndex(x: number): number {
-    return Math.max(0, Math.floor(x / ISLAND_PERIOD));
+    return islandIndexFor(x);
   }
 
   localX(x: number): number {
-    const p = ISLAND_PERIOD;
-    return ((x % p) + p) % p;
+    return localXFor(x);
   }
 
   /* ------------------------------------------------------------ update */
@@ -593,8 +595,9 @@ export class TerrainSystem {
   private buildPads(island: number): BouncePad[] {
     const rng = new SeededRandom(`${this.seedStr}:sunflower:${island}`);
     const out: BouncePad[] = [];
-    const base = island * ISLAND_PERIOD;
-    const landLimit = DROP_BLEND_START - 34; // keep clear of the launch ramp
+    const tpl = islandTemplate(island);
+    const base = tpl.start;
+    const landLimit = tpl.dropBlendStart - 34; // keep clear of the launch ramp
     // Trampoline density is a biome property, not a world constant: the teaching
     // hills hand you a bounce every few seconds, the aurora shards make you earn
     // one. It is a real mechanic (each pad is a free launch you did not earn by
@@ -649,7 +652,11 @@ export class TerrainSystem {
       push(84, 23, 12);
     }
 
-    const budget = RAMP_START - cursor - 40;
+    // The budget is this island's own ramp start, not the base pitch's. This is
+    // the line that turns `islandScale` into a longer island rather than a
+    // longer one with a longer empty shoulder at the end.
+    const budget = islandTemplate(island).rampStart - cursor - 40;
+
     let used = 0;
     let sincePerfect = 0;
     let sinceTrough = 0;
@@ -705,6 +712,11 @@ export class TerrainSystem {
         height = rng.range(32, 40);
       }
       if (len > remaining) len = Math.max(62, remaining);
+      height *= g.relief;
+
+      // CONSTRAIN THE GRADIENT. Length and height used to be drawn from two
+      // independent buckets, so an island's hills spanned a 50:1 range of
+      // steepness: a sixth of the teaching world was too flat to convert speed
       const drift = rng.range(-2.5, 2.5);
       push(len, height * g.relief, clamp(base + drift, 7, 20));
       used += len;
@@ -713,7 +725,7 @@ export class TerrainSystem {
     }
 
     // Run the final arch out past the ramp zone so lookups never fall off the end.
-    push(ISLAND_PERIOD - cursor + 200, 16, base);
+    push(islandTemplate(island).period - cursor + 200, 16, base);
     return out;
   }
 
@@ -785,7 +797,8 @@ export class TerrainSystem {
       // blend biome colours across island boundaries so the seam is soft
       const lx = this.localX(x);
       const nextB = biomeForIsland(this.islandIndex(x) + 1);
-      const blend = smoothstep(ISLAND_PERIOD - 90, ISLAND_PERIOD, lx);
+      const tpl = islandTemplate(this.islandIndex(x));
+      const blend = smoothstep(tpl.period - 90, tpl.period, lx);
       cTop.setHex(b.top).lerp(tmpColor.setHex(nextB.top), blend);
       cRidge.setHex(b.ridge).lerp(tmpColor.setHex(nextB.ridge), blend);
       cMid.setHex(b.mid).lerp(tmpColor.setHex(nextB.mid), blend);
@@ -966,7 +979,8 @@ export class TerrainSystem {
       const slope = Math.abs(this.slopeAt(x));
       if (slope > 0.55) continue;
       const lx = this.localX(x);
-      if (lx > RAMP_START - 10 && lx < GAP_START) continue;
+      const tpl = islandTemplate(this.islandIndex(x));
+      if (lx > tpl.rampStart - 10 && lx < tpl.gapStart) continue;
       const behind = r2 < 0.72;
       const z = behind ? -3.5 - r3 * 6 : 4.5 + r3 * 5;
       const s = (behind ? 0.9 : 0.6) + r3 * 0.5;
@@ -1013,12 +1027,13 @@ export class TerrainSystem {
       const lmParts = this.decoParts.get(kind);
       const lx0 = x0 + (0.3 + hash01(id, this.seedN + 603) * 0.4) * CHUNK_SIZE;
       const llx = this.localX(lx0);
+      const tpl = islandTemplate(this.islandIndex(lx0));
       if (
         lmParts &&
         !this.isOcean(lx0) &&
         lx0 >= 30 &&
         Math.abs(this.slopeAt(lx0)) <= 0.5 &&
-        !(llx > RAMP_START - 10 && llx < GAP_START)
+        !(llx > tpl.rampStart - 10 && llx < tpl.gapStart)
       ) {
         const behind = hash01(id, this.seedN + 604) < 0.7;
         const spot = {
@@ -1055,7 +1070,8 @@ export class TerrainSystem {
       if (this.isOcean(x) || x < 30) continue;
       if (Math.abs(this.slopeAt(x)) > 0.6) continue;
       const lx = this.localX(x);
-      if (lx > RAMP_START - 10 && lx < GAP_START) continue;
+      const tpl = islandTemplate(this.islandIndex(x));
+      if (lx > tpl.rampStart - 10 && lx < tpl.gapStart) continue;
       const behind = r2 < 0.6;
       const z = behind ? -2.5 - r3 * 5 : 3.5 + r3 * 4.5;
       scatter.push({ x, y: this.heightAt(x) - 0.08, z, s: 0.5 + r3 * 0.7, rot: r2 * Math.PI * 2 });

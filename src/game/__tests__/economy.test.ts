@@ -4,6 +4,7 @@ import { SEASON_TIER_DEFS } from "../SeasonPass";
 import { TRAILS } from "../Tournaments";
 import { MODES } from "../Modes";
 import { BIOMES, biomeForIsland } from "../Biomes";
+import { SaveData } from "../SaveData";
 
 describe("skin catalogue", () => {
   it("has a meaningful roster (60+) with unique ids", () => {
@@ -180,16 +181,25 @@ describe("modes", () => {
 });
 
 describe("nest coin sink", () => {
-  it("price curve escalates ×1.5 and the multiplier cap holds", () => {
-    // Mirror of SaveData.nestUpgradePrice: 300 * 1.5^bought.
-    const price = (bought: number): number => Math.round(300 * Math.pow(1.5, bought));
-    expect(price(0)).toBe(300);
-    expect(price(1)).toBe(450);
-    expect(price(2)).toBe(675);
-    // Total cost to max (10 levels) must be a meaningful sink: > 30k coins.
+  it("price curve is tiered (×1.2 for 3, then ×1.3) and the multiplier cap holds", () => {
+    // A flat ×1.5 for all 10 levels put ~33.9k coins between a player and
+    // their first full prestige — the exponential wall this tiering fixes.
+    localStorage.clear();
+    const save = new SaveData();
+    expect(save.nestUpgradePrice()).toBe(300);
+
+    // Buy through all 10 levels and total the real cost via the actual
+    // production function, not a hand-duplicated formula that can drift.
     let total = 0;
-    for (let i = 0; i < 10; i++) total += price(i);
-    expect(total).toBeGreaterThan(30_000);
+    for (let i = 0; i < 10; i++) {
+      const price = save.nestUpgradePrice();
+      total += price;
+      save.state.wallet += price;
+      expect(save.buyNestUpgrade()).toBe(true);
+    }
+    // Meaningful sink, but nowhere near the old ~33.9k wall.
+    expect(total).toBeGreaterThan(5_000);
+    expect(total).toBeLessThan(15_000);
     // Cap: bought levels alone add at most +1.2x (10 × 0.12).
     expect(10 * 0.12).toBeCloseTo(1.2);
   });

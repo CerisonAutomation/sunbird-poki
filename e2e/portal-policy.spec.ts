@@ -167,12 +167,32 @@ test.afterAll(async () => {
   await new Promise<void>((resolve) => directServer.close(() => resolve()));
 });
 
+/**
+ * Console errors the *browser* raises about the test rig, not the game.
+ *
+ * Both are properties of serving an https-only-guarded build over plain
+ * `http://127.0.0.1`, which is what these tests do on purpose — the portal
+ * artifact has to be exercised as a plain file server, not as the portal.
+ * Neither string is emitted by game code, and neither can be fixed by game
+ * code: COOP is refused because 127.0.0.1-over-http is not a potentially
+ * trustworthy origin, and the sandboxed `about:blank` frames belong to the
+ * service worker's own navigation. They are matched as whole phrases so a real
+ * error that merely mentions a similar word still fails the test.
+ */
+const RIG_ERRORS = [
+  "The Cross-Origin-Opener-Policy header has been ignored",
+  "Blocked script execution in 'about:blank' because the document's frame is sandboxed",
+];
+
 /** Boot a build and wait for the menu CTA — the same readiness the game ships. */
 async function boot(page: Page, origin: string): Promise<string[]> {
   const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  const isRigNoise = (text: string) => RIG_ERRORS.some((frag) => text.includes(frag));
+  page.on("pageerror", (e) => {
+    if (!isRigNoise(e.message)) errors.push(e.message);
+  });
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    if (m.type() === "error" && !isRigNoise(m.text())) errors.push(m.text());
   });
   page.on("response", (r) => {
     if (r.status() >= 400) errors.push(`HTTP ${r.status()} ${r.url()}`);
@@ -180,7 +200,7 @@ async function boot(page: Page, origin: string): Promise<string[]> {
   await page.goto(origin + "/", { waitUntil: "commit" });
   await expect(page.locator("#boot-shell")).toHaveCount(0, { timeout: 45_000 });
   await dismissNameEntry(page);
-  await expect(page.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible({ timeout: 45_000 });
   return errors;
 }
 
@@ -209,7 +229,7 @@ async function openMenu(page: Page, action: string, title: string): Promise<void
  *  button mid-click — so click through the DOM instead of an actionability
  *  wait, and re-check after each step. */
 async function goHome(page: Page): Promise<void> {
-  const cta = page.getByRole("button", { name: "Play free flight now", exact: true });
+  const cta = page.getByRole("button", { name: "Fly now", exact: true });
   for (let i = 0; i < 8 && !(await cta.isVisible().catch(() => false)); i += 1) {
     await page.evaluate(() => {
       document.querySelector<HTMLElement>('[data-ref="menuCard"] [data-action="back"]')?.click();
@@ -289,7 +309,7 @@ test.describe("portal artifact (poki-upload/)", () => {
     // A clean name is accepted, all the way to the menu.
     await input.fill("SkyFox42");
     await fly.click();
-    await expect(page.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible({ timeout: 30_000 });
     expect(errors).toEqual([]);
   });
 
@@ -347,16 +367,16 @@ test.describe("portal artifact (poki-upload/)", () => {
     //
     // The list is the set of `data-action` values the home menu card actually
     // renders, measured against the built portal rather than assumed: the card
-    // offers `pvp-practice`, not `open-practice`, and it does not offer
-    // `open-live` at all. A walk that clicks an action the home does not carry
-    // waits out the whole 240s timeout on a locator that can never appear, which
-    // is how this test spent four minutes per attempt before the list was checked
-    // against the build.
+    // offers `pvp-practice`, not `open-practice`. A walk that clicks an action
+    // the home does not carry waits out the whole 240s timeout on a locator that
+    // can never appear, which is how this test spent four minutes per attempt
+    // before the list was checked against the build.
     //
-    // `open-live` is deliberately absent. It is not a home-menu entry: it is a
-    // nested action rendered *inside* the PvP screens ("Want human rivals? Open
-    // PvP", HUD.ts:2264; "Race with friends", HUD.ts:2607), so it belongs to a
-    // nested-action walk, not this one.
+    // `open-live` is deliberately absent from this list, but NOT because it is
+    // missing from the home menu — it is the single PvP tile. It is skipped
+    // because its page is the tallest in the game (lobby + rooms + the AI flock
+    // section that used to be a second tile), so it belongs to the nested/visual
+    // walk in `visual-screens.spec.ts`, not to this one.
     //
     // `start-endless`, `versus` and `pvp-practice` are on the card too and are
     // skipped here, for one measured reason: none of them opens a screen with a
@@ -366,14 +386,10 @@ test.describe("portal artifact (poki-upload/)", () => {
     // mid-flight for the next iteration.
     //
     // The cost of that skip is stated rather than hidden: the PvP surface is
-    // where `open-live` lives (HUD.ts:2264, 2607), so the one screen that could
-    // most plausibly carry a rival offer is the one this walk does not reach.
-    // Covering it needs a nested walk that enters PvP and then checks what is
-    // inside; until that exists, ad-removal coverage stops at the menu.
-    //
-    // That `open-live` is one level below the home menu rather than on it is a
-    // real product gap, not only a test detail. It is tracked as the home-menu
-    // decision and is deliberately not absorbed into this test.
+    // where a rival offer is most plausible, and `open-live` is the one home
+    // screen this walk does not open. `visual-screens.spec.ts` opens it and
+    // fails on any visual defect, so the page is covered — just not by this
+    // ad-removal scan.
     const screens = [
       "open-shop",
       "open-settings",

@@ -1,4 +1,8 @@
 import { buildStamp } from "./version";
+import { skinShape } from "./Sunbird";
+import { biomeClimb } from "./FlightProgression";
+import { islandTemplate } from "./Biomes";
+import { FRENZY_AT, chainBonus, chainLabel, chainPulse, chainScale, chainTier, isFrenzyMoment } from "./ChainFlair";
 import { splitLayout, splitViews } from "./Viewport";
 import { iconGlyph } from "./MenuIcons";
 import { equalizedRace } from "./Racer";
@@ -34,7 +38,7 @@ import { RoomWatcher, ROOM_POLL_MS, roomSummaryLine, summarizeRooms, type LiveRo
 import { Leaderboard, loadPilotName, savePilotName, isLeaderboardOnline, type BoardMetric, type BoardPage, type BoardScope } from "./Leaderboard";
 import { generatePilotName, isPilotNameClean, moderatePilotName, pilotNameRejection } from "./pilotNameGenerator";
 import { adoptPortalLocale, setLocale, t, whenLocaleReady, type SupportedLocale } from "../i18n";
-import { Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
+import { CUP_TITLES, Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
 import {
   challengeMode,
   dailyChallenge,
@@ -45,6 +49,7 @@ import {
   weeklyGauntlet,
   calendarReward,
   type ChallengeMods,
+  type DailyChallenge,
 } from "./Challenges";
 import { bankMasteryRun, masteryPerks, masteryViews, NO_MASTERY_PERKS, type MasteryPerks } from "./Mastery";
 import { FirstFlight } from "./FirstFlight";
@@ -73,9 +78,16 @@ import {
   AD_SAFETY_SECONDS,
   CONTINUE_TIMEOUT,
   DAYLIGHT_ISLAND_REFILL,
+  ISLAND_REFILL_CEILING,
   DAYLIGHT_MAX,
   DAYLIGHT_MAX_GOLD,
   DAYLIGHT_OCEAN_PENALTY,
+  DAYLIGHT_SPLASH_INTERVAL,
+  CLIMB_DAYLIGHT_BONUS,
+  CLIMB_REFILL_MULT,
+  RENDER_RECENTER_THRESHOLD,
+  SOLO_START_COUNTDOWN,
+  MAX_CATCHUP_STEPS,
   FEVER_DURATION,
   FEVER_NEED,
   HEADSTART_DISTANCE,
@@ -97,7 +109,7 @@ ZENITH_THERMAL_VY,
 SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
 } from "./constants";
-import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
+import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, normalizePerks, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
 import { nextWings, wingsFor, wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
 import { fetchRivalGhost, publishGhost } from "./GhostNet";
@@ -175,6 +187,10 @@ const BIOME_INTRO_HINTS: Record<string, string> = {
 
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };
 
+/** How a run ended. Every branch of `onDaylightOut` used to look
+ *  identical to the player, and one of them fires with daylight to spare. */
+export type RunEndReason = "daylight" | "water" | "settled";
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
@@ -250,8 +266,27 @@ export class Game {
   private today = dateSeed();
   private seed: string;
   private seedMode: SeedMode = "today";
+  /**
+   * Daily Login Ritual banner: dismissed for the day once the player clicks
+   * the primary "Fly now" CTA or closes it with X. Session-only by design
+   * (never persisted) — it resets to false the moment `today` rolls over, in
+   * `dayTick`, so the banner is back tomorrow even if it was dismissed today.
+   */
+  private dismissedDailyPrompt = false;
 
   private state: GameState = "menu";
+  /**
+   * The last world-x the floating origin was rebased to. 0 until the first
+   * rebase, and the value `maybeRecenter` compares against so it only fires on
+   * a threshold crossing, not every frame.
+   */
+  private renderOriginX = 0;
+  /** Climb Breaker: 0..1, set when the run crosses a biome wall. See grantClimbBreaker. */
+  private climbRelief = 0;
+  /** Seconds of extra daylight the run has earned by clearing walls. */
+  private climbDaylight = 0;
+  /** Seconds of extra daylight bought by a store boost. */
+  private boostDaylight = 0;
   private screen: UiScreen = "main";
   private readonly screenHistory = new ScreenHistory<UiScreen>("main");
   private uiVersion = 0;
@@ -322,6 +357,9 @@ export class Game {
   private daylight = DAYLIGHT_MAX;
   /** Seconds the bird has sat settled (grounded/water, slow, no input). */
   private settleAcc = 0;
+  /** Why the last run ended — see `onDaylightOut`. The only thing the player
+   *  is told about their own death. */
+  private endReason: RunEndReason = "daylight";
   /** runTime of the last dive input; passive braking keys off it. */
   private lastInputAt = 0;
   private startX = 64;
@@ -329,6 +367,8 @@ export class Game {
   private lastIsland = 0;
   private perfects = 0;
   private perfectChain = 0;
+  /** Latched once FRENZY has fired this run, so a long chain cannot re-announce it. */
+  private frenzySeen = false;
   private feverTimer = 0;
   private feverOn = false;
   private feverReached = false;
@@ -1007,18 +1047,31 @@ export class Game {
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.loop);
 
-    this.goals.reset(this.today);
+    // Starter goals: the table that exists FOR a new save was never passed the
+    // flag that selects it, so every first run was handed a mid-skill target
+    // (1,339-1,565 m) it cannot reach inside a 52 s day. Opt in while the
+    // player has no runs on record.
+    this.goals.reset(this.today, { starter: this.save.state.runsPlayed <= 1 });
     // monthly VIP really lapses — surface it once per session
     this.vipActive = this.save.isVipActive();
     if (this.save.state.vip === false && this.save.state.vipUntil > 0) this.vipExpiredNotice = true;
 
     const yesterday = dateSeed(new Date(Date.now() - 86400000));
+    // Challenge auto-tune reads "was yesterday's daily done" exactly once per
+    // real day boundary — touchStreak() below already guards a same-day
+    // re-boot via streak.claimedDate, so mirror that guard here rather than
+    // double-counting a failure on every page refresh within the same day.
+    if (this.save.state.streak.claimedDate !== this.today) {
+      this.save.noteDailyChallengeRollover(this.save.isDailyDone(yesterday));
+    }
     const streakReward = this.save.touchStreak(this.today, yesterday);
+    const streakMilestone = this.save.justAchievedStreakMilestone();
     const vipGift = this.save.claimVipDaily(this.today);
     window.setTimeout(() => {
       if (this.disposed) return;
       if (this.save.recoveredFromCorruption) this.hud.toast("Save couldn't be read — kept a backup, starting fresh", "warn");
       if (streakReward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${streakReward} coins`, "gold");
+      if (streakMilestone) this.hud.toast(`🔥 ${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold");
       if (vipGift > 0) this.hud.toast(`VIP daily gift · +${vipGift} coins`, "vip");
     }, 700);
     this.telemetry.track("session_start", {
@@ -1356,10 +1409,25 @@ export class Game {
           break;
         }
         this.acc += simDt;
-        while (this.acc >= PHYS_DT && this.state === "playing") {
+        // Bounded catch-up. `acc` was drained without a ceiling, so one slow
+        // frame asked for a dozen steps, each of which cost the time that made
+        // the next frame slower — the convoy spiral. The Poki portal target is
+        // a mid-range phone on a CPU-bound renderer, which is exactly where
+        // that shows. The backlog is now SERVED to a bound and the stale tail
+        // DROPPED: past the bound the world runs momentarily slow rather than
+        // the page locking up, which is the only honest trade — time the player
+        // spent is theirs, and silently teleporting the bird through a hill to
+        // "catch up" would be far worse than a beat of slow motion.
+        let steps = 0;
+        while (this.acc >= PHYS_DT && this.state === "playing" && steps < MAX_CATCHUP_STEPS) {
           if (this.versus) this.versusTick(PHYS_DT);
           else this.fixedUpdate(PHYS_DT);
           this.acc -= PHYS_DT;
+          steps += 1;
+        }
+        if (this.acc > PHYS_DT * MAX_CATCHUP_STEPS) {
+          this.telemetry.track("sim_backlog_dropped", { seconds: this.acc });
+          this.acc = 0;
         }
         break;
       case "continue":
@@ -1927,7 +1995,7 @@ export class Game {
     }
     this.wasInWater = wet;
     if (wet && this.splashCd <= 0) {
-      this.splashCd = 0.55;
+      this.splashCd = DAYLIGHT_SPLASH_INTERVAL;
       this.particles.emitSplash(this.bird.x, WATER_Y);
       this.audio.splash();
       this.fireMoment("splash", { popup: false });
@@ -2004,10 +2072,23 @@ export class Game {
     if (idx > this.lastIsland) {
       this.lastIsland = idx;
       this.island = idx;
-      const airborne = this.bird.y > WATER_Y + 2 && !this.bird.inWater;
+      // The refill has to be EARNED BY FLYING THE ISLAND, not banked by
+      // overflying it. The old gate was "above the waterline", which a player
+      // cruising at 200 m clears every time — so altitude turned every island
+      // into a free +15 s, the clock stopped being a clock, and a careful low
+      // run was quietly worse than a careless high one. Crossing high also
+      // means skipping the ramp, so it was already leaving coins and launch
+      // quality on the table; now it costs daylight too.
+      //
+      // The band is generous on purpose: you have to actually be flying the
+      // hills, and a legitimate high glide still counts, but the stratosphere
+      // does not.
+      const overhead = this.bird.y < WATER_Y + 2 + ISLAND_REFILL_CEILING;
+      const airborne = overhead && !this.bird.inWater;
       const b = biomeForIsland(idx);
       if (airborne) {
-        this.daylight = Math.min(this.daylightMax(), this.daylight + DAYLIGHT_ISLAND_REFILL);
+        this.daylight = Math.min(this.daylightMax(), this.daylight + DAYLIGHT_ISLAND_REFILL * (1 + this.climbRelief * CLIMB_REFILL_MULT));
+        this.grantClimbBreaker(idx);
         this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
         this.audio.island();
         this.audio.duckMusic(0.5, 0.6);
@@ -2022,6 +2103,34 @@ export class Game {
         this.hud.toast(`Washed ashore on ${b.name}`, "warn");
       }
     }
+  }
+
+  /**
+   * Hand the player a hand over a wall, when the island they just entered is
+   * one (see `biomeClimb` — two of the nine biomes are).
+   *
+   * A wall is a bad moment to find out that the game has decided to be cruel,
+   * and a bad moment to also be watching a clock. So crossing one raises the
+   * rest of the run's daylight cap, warding the weather that arrived with it,
+   * and paying out immediately. The reward is bigger the steeper the wall, and
+   * it is granted ONCE per island, so re-crossing it cannot farm sun.
+   */
+  private grantClimbBreaker(island: number): void {
+    const climb = biomeClimb(island);
+    if (!climb.large) return;
+    this.climbRelief = climb.relief;
+    const bonus = Math.round(CLIMB_DAYLIGHT_BONUS * climb.relief);
+    // The cap rises FIRST, so the grant below is not clipped by the cap the
+    // relief just raised — the ordering here is the whole mechanism.
+    this.climbDaylight += bonus;
+    this.daylight = Math.min(this.daylightMax(), this.daylight + bonus);
+    // Neutralises gusts and ash storms for as long as the relief lasts. `ward`
+    // is already a first-class, tested flag in Weather; this is the cheapest
+    // real compensation the game has, and it costs the world nothing.
+    this.weather.ward = true;
+    this.hud.toast(`${iconGlyph("shield")} Climb Breaker — ${bonus}s sun and the weather is on your side`, "power");
+    this.audio.fanfare();
+    this.glow(1);
   }
 
   /** Pickup collection and what each pickup awards. */
@@ -2261,7 +2370,7 @@ export class Game {
         this.goldenHour = false; // sun flask refilled the day
       }
       if (this.daylight <= 0 && !this.bird.asleep) {
-        this.onDaylightOut();
+        this.onDaylightOut("daylight");
         return;
       }
     }
@@ -2295,7 +2404,7 @@ export class Game {
       this.settleAcc = 0;
     }
     if (this.settleAcc >= 4 && !this.bird.asleep) {
-      this.onDaylightOut();
+      this.onDaylightOut(this.bird.inWater ? "water" : "settled");
       return;
     }
 
@@ -2348,13 +2457,18 @@ export class Game {
     this.launchBannerText = ratingLabel(res.rating, combo);
     this.launchBannerT = res.rating === "perfect" ? 1.25 : 0.9;
     const local = this.terrain.localX(this.bird.x);
-    if (local >= 845 && local < 954) this.audio.rampLaunch(res.speed);
+    // This ISLAND's ramp, not the base pitch's. It was hard-coded at 845/954 —
+    // the pre-lengthening RAMP_START — so the ramp-launch sound had been firing
+    // out in the hills rather than on the ramp, and per-island lengths moved it
+    // again. Read the layout the bird is actually launching from.
+    const ramp = islandTemplate(this.terrain.islandIndex(this.bird.x)).rampStart;
+    if (local >= ramp - 42 && local < ramp + 67) this.audio.rampLaunch(res.speed);
     else this.audio.launchWhoosh(res.rating, res.speed);
 
     if (res.rating === "perfect") {
       this.perfects += 1;
       this.perfectChain += 1;
-      this.bonus += 40 + combo * 15;
+      this.bonus += 40 + combo * 15 + chainBonus(this.perfectChain);
       this.awardXp(XP_RULES.perfect);
       this.audio.perfect();
       this.audio.duckMusic(0.32, 0.35);
@@ -2367,7 +2481,23 @@ export class Game {
       // Hit stop: 2-frame freeze for cinematic impact, 40 ms on the
       // fever-clinching perfect (prototype parity: thuds 80 ms, fever 40 ms).
       if (!this.save.state.settings.reduceMotion) {
-        const clinchesFever = this.perfectChain >= FEVER_NEED && !this.feverOn;
+        // FRENZY. Tiny Wings spent its entire celebration budget here: four clean
+      // take-offs in a row, once, announced. Sunbird already pays out Fever for
+      // the same chain, so the risk is that it arrives unremarked — a reward the
+      // player cannot tell they earned. This is the moment, and it is latched so
+      // a long chain does not re-fire it every step.
+      if (isFrenzyMoment(this.perfectChain, this.frenzySeen)) {
+        this.frenzySeen = true;
+        this.hud.toast(`${iconGlyph("lightning")} FRENZY — ${this.perfectChain} perfect launches in a row!`, "zenith");
+        this.audio.fanfare();
+        this.glow(1.4);
+        this.flash("island");
+        this.shake(1);
+        this.particles.emitPerfectBurst(this.bird.x, this.bird.y, FRENZY_AT);
+        this.fireMoment("frenzy", { shout: "FRENZY!", always: true });
+      }
+
+      const clinchesFever = this.perfectChain >= FEVER_NEED && !this.feverOn;
         this.hitStopTimer = clinchesFever ? 0.04 : 2 / 60;
       }
       this.haptic([50, 30, 50]);
@@ -2805,6 +2935,35 @@ export class Game {
     else if (this.skin.id === "aurora") this.hueT += dt * 0.45;
   }
 
+  /**
+   * Rebase the render origin once the flight is far enough out that float32
+   * vertex buffers start to visibly lose precision.
+   *
+   * Every one of these four systems carried a working `recenter` /
+   * `setRenderOrigin` for its whole life with ZERO callers, while the comments
+   * on all four pointed at a `RENDER_RECENTER_THRESHOLD` in this file that had
+   * never existed. Procedural generation keeps sampling true (float64) world x;
+   * only the BAKED render-space coordinates shift, so terrain shape, physics
+   * and seed determinism are untouched — which is why this is safe to do
+   * mid-flight and why it is worth doing at all. In Endless, the one mode with
+   * no natural end, the origin grew without ever rebasing.
+   *
+   * The threshold is a multiple of itself, so this fires once per
+   * RENDER_RECENTER_THRESHOLD metres rather than every frame: a rebase rebuilds
+   * the handful of loaded chunks, and doing that at 60 Hz would be the very
+   * cost it exists to avoid.
+   */
+  private maybeRecenter(): void {
+    const x = this.bird.x;
+    if (x < RENDER_RECENTER_THRESHOLD) return;
+    if (x - this.renderOriginX < RENDER_RECENTER_THRESHOLD) return;
+    this.renderOriginX = Math.floor(x / RENDER_RECENTER_THRESHOLD) * RENDER_RECENTER_THRESHOLD;
+    this.terrain.recenter(this.renderOriginX, x);
+    this.camera.recenter(this.renderOriginX);
+    this.bird.setRenderOrigin(this.renderOriginX);
+    this.collect.setRenderOrigin(this.renderOriginX);
+  }
+
   /** Streams the glowing ribbon behind the bird, matching the sparkle trail. */
   private updateTrailRibbon(dt: number): void {
     this.advanceTrailHue(dt);
@@ -2898,6 +3057,7 @@ export class Game {
     this.livingBg.update(rawDt, this.bird.x, this.bird.y);
 
     this.applyWorldLook(this.bird.x, this.bird.altitude);
+    this.maybeRecenter();
     this.terrain.update(this.bird.x);
 
     const dayT = Math.max(0, Math.min(1, this.daylight / this.daylightMax()));
@@ -2999,6 +3159,17 @@ export class Game {
 
   /* ------------------------------------------------------------- run flow */
 
+  /**
+   * Today's daily challenge, scaled by this player's own miss streak
+   * (Feature: Challenge Difficulty Auto-Tuning). Every reader of "today's
+   * daily" — the launch, the toast, the finish-line verdict, the journey
+   * card — goes through this one function, so the target a player is shown
+   * is always the exact target their run is checked against.
+   */
+  private todaysDaily(): DailyChallenge {
+    return dailyChallenge(this.today, this.save.state.challenges.dailyChallengeFailures ?? 0);
+  }
+
   private startRun(opts?: RunOptions): void {
     // Poki, "PokiSDK: HTML5" step 4: "we recommend calling commercialBreak()
     // before every gameplayStart(), whenever the player has shown intent to
@@ -3011,7 +3182,9 @@ export class Game {
     if (this.funnel.reached("first_death")) this.markFunnel("first_retry");
     if (this.sessionRuns >= 2) this.markFunnel("second_run");
     if (this.sessionRuns === 2 && !this.save.state.seenShop) {
-      this.hud.toast("Next step: visit the Hangar — your first bird is waiting", "gold");
+      // The cheapest bird is 225 coins; a player on their second run has a
+      // double-digit wallet. Point at the first thing they CAN buy.
+      this.hud.toast("Next step: the Hangar — boosts start at ●40, birds at ●225", "gold");
     }
     this.exitVersus();
     this.mode = modeById(this.modeId);
@@ -3070,7 +3243,7 @@ export class Game {
       this.modeId = challengeModeId;
       this.mode = modeById(challengeModeId);
     }
-    this.challengeMods = this.challengeRun === "daily" ? modsFor(dailyChallenge(this.today).modifier.id) : NO_MODS;
+    this.challengeMods = this.challengeRun === "daily" ? modsFor(this.todaysDaily().modifier.id) : NO_MODS;
     this.eventRun = Boolean(opts?.event);
     if (this.eventRun) this.weeklyMods = weeklyEvent().mods;
     this.serverPlaceApplied = false;
@@ -3172,13 +3345,26 @@ export class Game {
       this.audio.eventStinger();
     }
     if (this.challengeRun === "daily") {
-      const c = dailyChallenge(this.today);
+      const c = this.todaysDaily();
       this.hud.toast(`${iconGlyph(c.modifier.icon)} ${c.title} · ${c.modifier.label}`, "quest");
     } else if (this.challengeRun.startsWith("gauntlet")) {
       const idx = Number(this.challengeRun.slice(8)) || 0;
       const st = weeklyGauntlet(weekKey()).stages[idx];
       if (st) this.hud.toast(`${iconGlyph("lightning")} Gauntlet ${idx + 1}/3 · ${st.label}`, "quest");
     }
+    // A GO countdown before the clock starts.
+    //
+    // The day is 52 seconds and the clock was already running on the first
+    // physics step — so a first-time player lost several seconds of their only
+    // day while still reading Distance / daylight / Coins and the coach line.
+    // The countdown branch in `frame` already freezes the accumulator, so
+    // arming it here is the whole fix: nothing runs, nothing drains, and the
+    // existing beeps mark the beats. Versus and networked starts arm their own
+    // (a shared start, or the room's server time), so they are left alone.
+    if (!this.versus && this.networkStartAt <= 0 && this.roomCode === "") {
+      this.countdown = SOLO_START_COUNTDOWN;
+    }
+
     this.setState("playing");
     this.setScreen("main");
     this.camera.setIntro(0);
@@ -3199,6 +3385,53 @@ export class Game {
         break;
       case "sunflask":
         this.daylight += 12;
+        break;
+      // The in-flight powerups, bought from the shop. `powers.add` is the exact
+      // call a pickup makes (see Game.onPickup), at the same duration, so a
+      // bought Long Glide and a caught one put the bird in the same state — the
+      // store sells the world's powerups rather than a second, weaker version
+      // of them. These ids ARE `PickupKind`s, deliberately: one vocabulary for
+      // one mechanic, so a store row and the pickup it mirrors cannot drift.
+      // The tier-II overcharge cannot fire here (the timers were just reset and
+      // nothing is live yet to double up on), so an armed boost is tier I.
+      case "longglide":
+      case "wingboost":
+      case "feather":
+      case "rocket":
+      case "cloudboost":
+      case "goldenwings": {
+        const kind = id as PickupKind;
+        this.powers.add(kind);
+        this.audio.powerup();
+        const pc = PICKUP_STYLE[kind].color;
+        this.particles.emitPickup(this.bird.x, this.bird.y, ((pc >> 16) & 255) / 255, ((pc >> 8) & 255) / 255, (pc & 255) / 255);
+        // Speed Boost is the one powerup that is also an impulse, not just a
+        // timer — a caught one shoves the bird as well (see onPickup), so a
+        // bought one has to or it would be strictly worse than the pickup.
+        if (kind === "rocket") {
+          this.boostTimer = BOOST_TIME;
+          this.bird.vx += 36;
+          this.bird.vy += 7;
+        }
+        break;
+      }
+      // The timed coin multiplier, which SaveData had implemented and nothing
+      // had ever armed. `setCoinBonus` records the window, so a bonus armed at
+      // takeoff pays for the whole run and never for time it was not live.
+      case "luckycoin":
+        this.save.setCoinBonus(2, 45);
+        break;
+      // The Climb Breaker, bought rather than earned. `boostDaylight` raises the
+      // CAP as well as the grant, because a grant the cap immediately clips is
+      // a booster that does nothing.
+      case "sunrunner":
+        this.boostDaylight += 20;
+        this.daylight = Math.min(this.daylightMax(), this.daylight + 20);
+        break;
+      // `weather.ward` is already a first-class flag: gusts drop to 1/4 and ash
+      // storms stop clamping vertical speed. Nothing new to build.
+      case "tailwind":
+        this.weather.ward = true;
         break;
       case "stormward":
         this.weather.ward = true;
@@ -3228,8 +3461,18 @@ export class Game {
     if (def) this.hud.toast(`${iconGlyph(def.icon)} ${def.name} armed`, "power");
   }
 
-  private onDaylightOut(): void {
+  /**
+   * The run is over. `reason` is the ONLY way the player learns why.
+   *
+   * The three deaths were indistinguishable — the sun running out, washing out,
+   * and simply stopping all produced the same card, and the settle death can
+   * fire with most of the day still on the meter, so "the sun won" is not an
+   * available inference. The settle variant was the worst: a player who
+   * stopped holding for four seconds was shown a full clock and a shrug.
+   */
+  private onDaylightOut(reason: RunEndReason = "daylight"): void {
     this.bird.asleep = true;
+    this.endReason = reason;
     this.daylight = 0;
     // Death drama: the sun wins in slow motion. Reuses the zenith slow-mo
     // plumbing so time restores itself automatically.
@@ -3268,7 +3511,10 @@ export class Game {
         personalBest: this.save.state.bestDistance,
         streakDays: this.save.state.streak.days,
         nearBest: this.save.state.bestDistance > 0 && distance >= this.save.state.bestDistance * 0.85,
-        isRecord: this.save.state.bestDistance > 0 && distance > this.save.state.bestDistance,
+        // `bestDistance` is only written when the run ENDS, so the run that
+        // sets the record could never satisfy this - and that is exactly the
+        // run a new player remembers. A first flight is a record by definition.
+        isRecord: distance > 0 && distance >= this.save.state.bestDistance,
         altitude: this.bird.y,
         adAvailable: canAd,
       });
@@ -3337,7 +3583,8 @@ export class Game {
       momentRecap: this.moments.recapLine(),
     });
     if (this.sessionRuns === 1) {
-      this.hud.toast("Flight logged ✦ Open the Hangar to spend your coins", "quest");
+      // Said "spend your coins" on a first run that yields ~10-30 of them.
+      this.hud.toast("Flight logged ✦ Your first coins are in — ●40 buys your first boost", "quest");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
       this.hud.toast("Ready for the social sky? Challenge a rival or try today's course", "quest");
@@ -3461,7 +3708,7 @@ export class Game {
       this.telemetry.track("rival_settled", { won });
     }
     if (this.challengeRun === "daily") {
-      const c = dailyChallenge(this.today);
+      const c = this.todaysDaily();
       // The mode is part of the claim, not just of the launch: a run only
       // *flagged* as the daily (any "Fly again", any future caller of
       // startRun) can otherwise clear the target in a mode the challenge never
@@ -3563,7 +3810,14 @@ export class Game {
         this.hud.toast(`★ ${this.mode.name} MASTERED · skill unlocked: ${mastery.skill.name} (${mastery.skill.desc}) · +${mastery.coins} coins`, "gold");
         this.audio.chapterFanfare();
       } else {
-        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name} mastery Lv.${mastery.level} · +2% coins in mode · +${mastery.coins} coins`, "gold");
+        // A live mass race equalises flight equipment, so the mastery perk is
+        // NOT live in that mode. Saying otherwise taught the player that every
+        // other counter in the game was also wrong.
+        const live = !this.fairRace;
+        this.hud.toast(
+          `${iconGlyph(this.mode.icon)} ${this.mode.name} mastery Lv.${mastery.level} · ${live ? "+2% coins in mode" : "perks apply in solo runs"} · +${mastery.coins} coins`,
+          "gold",
+        );
         this.audio.milestone();
       }
     }
@@ -3704,7 +3958,11 @@ export class Game {
     if (today === this.today) return;
     const yesterday = this.today;
     this.today = today;
+    // Daily Login Ritual banner: a fresh day means a fresh chance to see it.
+    this.dismissedDailyPrompt = false;
+    this.save.noteDailyChallengeRollover(this.save.isDailyDone(yesterday));
     const reward = this.save.touchStreak(today, yesterday);
+    const streakMilestone = this.save.justAchievedStreakMilestone();
     const gift = this.save.claimVipDaily(today);
     // Monthly ranked season rollover: soft reset + peak-division reward.
     const seasonEnd = this.save.ensureRankSeason();
@@ -3713,6 +3971,7 @@ export class Game {
     // must never yank the terrain out from under a live flight.
     if (this.state === "menu" && this.seedMode === "today") this.rebuildWorld(today);
     if (reward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${reward} coins`, "gold");
+    if (streakMilestone) this.hud.toast(`🔥 ${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold");
     if (gift > 0) this.hud.toast(`VIP daily gift · +${gift} coins`, "vip");
     this.hud.toast("New hills today", "island");
     this.telemetry.track("day_rollover", { date: today });
@@ -3928,11 +4187,21 @@ export class Game {
           this.save.addCoins(sector.value);
           this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${sector.label}! +● ${sector.value}`, "gold");
         } else if (sector.kind === "boost") {
-          this.save.armBoost("sunflask");
-          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${sector.label}! Sun Flask Armed!`, "gold");
+          // The sector names the boost it pays. This used to arm a Sun Flask
+          // whatever landed, so the wheel announced "Coin Magnet!" and handed
+          // over a Sun Flask — the one place a reward must never be a different
+          // thing from its label. `value` is a BoostDef id, and every wheel
+          // sector's value is a real purchasable one.
+          const boost = BOOSTS.find((b) => b.id === sector.value);
+          if (!boost) break;
+          this.save.armBoost(boost.id);
+          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${boost.name}! Armed for your next flight!`, "gold");
         } else if (sector.kind === "vault") {
-          this.buyMysteryVault();
-          this.hud.toast(`${iconGlyph("castle")} Wheel landed on Vault Key!`, "gold");
+          // The wheel is free, so this hatch is free. It used to call the 150
+          // -coin purchase: a player who spun for nothing was either charged
+          // 150 coins or told they had won a prize they never received.
+          this.hatchMysteryVault();
+          this.hud.toast(`${iconGlyph("castle")} Wheel landed on a Mystery Vault hatch!`, "gold");
         }
         this.audio.fanfare();
         this.bump();
@@ -3955,7 +4224,9 @@ export class Game {
           const p = this.save.state.prestige?.multiplier ?? 1.0;
           this.hud.toast(`${iconGlyph("crown")} Reborn with Solar Crown! Permanent ×${p.toFixed(1)} Coin Multiplier!`, "gold");
         } else {
-          this.hud.toast("Need ● 50,000 coins to ascend Solar Crown prestige!", "warn");
+          // The gate is five Nest levels, not a coin total — the old message sent
+          // players after the wrong currency entirely.
+          this.hud.toast("Solar Crown needs Nest Lv.5 — buy Nest upgrades to ascend", "warn");
         }
         this.bump();
         break;
@@ -4110,7 +4381,10 @@ export class Game {
         this.setScreen("progress");
         break;
       case "open-paywall":
-        if (!SELL_AD_REMOVAL) break;
+        // Reachable on every build. The Coin Store sells Gold for coins on
+        // Poki too (`buyCoinGold` has no edition gate), so a screen that can
+        // only be entered by accident — and that then denies the purchase it
+        // just honoured — was strictly worse than no screen.
         this.restoreMessage = "";
         this.setScreen("paywall");
         this.telemetry.track("paywall_open", { from: this.state });
@@ -4433,7 +4707,7 @@ export class Game {
         // this is the second half of the same gate.
         if (!this.adsLive()) return true;
         if (this.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
-          this.hud.toast("Ad rewards capped for this visit", "info");
+          this.hud.toast("Free coin rewards capped for this hour", "info");
           return true;
         };
         void this.multiplyCoinsFromShopAd();
@@ -4495,7 +4769,10 @@ export class Game {
         this.buyCoinGold();
         return true;
       case "vip-buy":
+        // Never silently nothing. VIP has no purchase on a build that removes
+        // the ad break, so say so; the button used to re-render identically.
         if (SELL_AD_REMOVAL) this.buyPortalVip();
+        else this.hud.toast("VIP is not available on this build", "warn");
         return true;
       case "buy-vault":
         this.buyMysteryVault();
@@ -4878,8 +5155,27 @@ export class Game {
         this.audio.uiTick();
         return true;
       }
+      case "set-music-style": {
+        this.save.state.settings.musicStyle =
+          id === "procedural" || id === "songbook"
+            ? id
+            : this.save.state.settings.musicStyle === "songbook"
+              ? "procedural"
+              : "songbook";
+        this.save.persist();
+        this.applySettings();
+        this.audio.uiTick();
+        return true;
+      }
       case "set-haptics":
         this.save.state.settings.haptics = !this.save.state.settings.haptics;
+        this.save.persist();
+        this.bump();
+        return true;
+      case "dismiss-onboarding":
+        // Explicit skip on the "START HERE" route — once dismissed it stays
+        // gone even though `runsPlayed < 2` would otherwise keep showing it.
+        this.save.state.settings.dismissedOnboarding = true;
         this.save.persist();
         this.bump();
         return true;
@@ -4890,6 +5186,11 @@ export class Game {
         return true;
       case "set-colorassist":
         this.save.state.settings.colorAssist = !this.save.state.settings.colorAssist;
+        this.save.persist();
+        this.applySettings();
+        return true;
+      case "set-soft-camera":
+        this.save.state.settings.softCamera = !this.save.state.settings.softCamera;
         this.save.persist();
         this.applySettings();
         return true;
@@ -5177,7 +5478,14 @@ export class Game {
         this.exitVersus();
         this.modeId = "daytrip";
         this.mode = modeById("daytrip");
+        // The primary "Fly now" CTA on the home menu — dismisses the Daily
+        // Login Ritual banner for the rest of today, same as the explicit X.
+        this.dismissedDailyPrompt = true;
         this.startRun();
+        return true;
+      case "dismiss-daily-banner":
+        this.dismissedDailyPrompt = true;
+        this.bump();
         return true;
       case "start-endless":
         this.exitVersus();
@@ -5205,7 +5513,7 @@ export class Game {
   private handleJourneyEvent(action: string, id: string): boolean {
     switch (action) {
       case "play-daily": {
-        const c = dailyChallenge(this.today);
+        const c = this.todaysDaily();
         if (this.save.isDailyDone(this.today)) {
           this.hud.toast("Today's challenge is already complete — back tomorrow!", "info");
           return true;
@@ -5276,7 +5584,9 @@ export class Game {
           return true;
         }
         this.save.addCoins(ch.rewardCoins);
-        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins — ${ch.rewardLabel}`, "gold");
+        // No rewardLabel: the named banner/title/compass is granted by nothing
+        // in the game, and a toast is the worst place to invent one.
+        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins`, "gold");
         this.audio.chapterFanfare();
         this.bump();
         return true;
@@ -5334,6 +5644,14 @@ export class Game {
         return true;
       case "continue-sleep":
         if (this.state === "continue") this.finishRun();
+        return true;
+      case "ad-stuck":
+        // The ad screen could render with ZERO buttons on a portal build (both
+        // ad-skip and ad-gold are false there) and a frozen bar for the whole
+        // 60 s safety window. This returns the run. Deliberately not the same
+        // path as the automatic valve, so the skip is attributable.
+        this.endPortalAd();
+        this.hud.toast("Returned to your flight", "info");
         return true;
       case "ad-skip":
         // Placeholder ads only. A portal-served break is ended by the SDK's own
@@ -5808,12 +6126,30 @@ export class Game {
 
   private buyMysteryVault(): void {
     if (!this.spendCoins(150)) return;
+    this.hatchMysteryVault();
+  }
+
+  /**
+   * The vault's actual payout.
+   *
+   * Split out of `buyMysteryVault` so the free wheel spin can hatch WITHOUT
+   * charging 150 coins — a free daily reward that debits the wallet is not a
+   * reward.
+   */
+  private hatchMysteryVault(): void {
     const rng = Math.random();
     this.audio.fanfare();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
 
     const unownedSkins = SKINS.map((s: SkinDef) => s.id).filter((id: string) => !this.save.state.ownedSkins.includes(id));
-    const unownedTrails = SHOP_TRAILS.map((t: ShopTrailDef) => t.id).filter((id: string) => !this.save.state.ownedUpgrades.includes(id));
+    // Trails are owned in `tournaments.trails` (SaveData.ownTrail writes there,
+    // and the Tournaments screen equips from the same list). This used to check
+    // `ownedUpgrades`, which only ever holds `doubletap` and `goldenfeather` —
+    // so the filter was always true, and the vault kept re-awarding a trail the
+    // player had already paid for while announcing a hatch for it.
+    const unownedTrails = SHOP_TRAILS.map((t: ShopTrailDef) => t.id).filter(
+      (id: string) => !this.save.state.tournaments.trails.includes(id),
+    );
 
     if (rng < 0.35 && unownedSkins.length > 0) {
       const pick = unownedSkins[Math.floor(Math.random() * unownedSkins.length)]!;
@@ -5908,7 +6244,14 @@ export class Game {
 
   /** Keep the chosen artwork, but not paid flight advantages in a live race. */
   private get gameplaySkin(): SkinDef {
-    return this.fairRace ? skinById("sunbird") : this.skin;
+    if (this.fairRace) return skinById("sunbird");
+    // Ranked 1v1 duels swing rating against a seeded-difficulty opponent
+    // (see `duelActive`), so a bought or earned bird's speed/fever/daylight
+    // perks are capped instead of left full — same fairness goal as
+    // `fairRace`, but a modest cap rather than a hard reset to Sunbird, so
+    // the cosmetic still feels like an upgrade without deciding the result.
+    if (this.duelActive) return normalizePerks(this.skin, true);
+    return this.skin;
   }
 
   /** Speed boost for modes with `escalate: true`. Grows with island index and
@@ -5919,12 +6262,27 @@ export class Game {
   }
 
   private daylightMax(): number {
-    return (this.save.state.gold && !this.fairRace ? DAYLIGHT_MAX_GOLD : DAYLIGHT_MAX) + this.gameplaySkin.daylightBonus + this.masteryPerk.daylightBonus;
+    const base =
+      (this.save.state.gold && !this.fairRace ? DAYLIGHT_MAX_GOLD : DAYLIGHT_MAX) +
+      this.gameplaySkin.daylightBonus +
+      this.masteryPerk.daylightBonus +
+      this.climbDaylight +
+      this.boostDaylight;
+    // A mode that hands the player a 90 s day must not have that silently
+    // clipped back to 52 s at the first island — that is what used to happen,
+    // and in Distance mode it quietly destroyed 23 s the moment you cleared
+    // island 0. The cap is a ceiling on REFILL, not a ceiling on the run's
+    // own starting budget.
+    return Math.max(base, this.mode.clock);
   }
 
   private applySkin(): void {
     const s = this.skin;
     this.bird.applySkin({ body: s.body, wing: s.wing, belly: s.belly, beak: s.beak });
+    // Species as well as colour. The shop draws this bird's silhouette from the
+    // same enum (see Sunbird.skinShape), so the bird in the hangar and the bird
+    // in the sky are one animal instead of the same oval in two places.
+    this.bird.setShape(skinShape(s));
   }
 
   /**
@@ -5957,7 +6315,10 @@ export class Game {
     this.audio.setMusicEnabled(s.music);
     this.audio.setVolumes(s.musicVolume, s.sfxVolume);
     this.audio.setMusicTrack(s.musicTrack);
+    this.audio.setMusicStyle(s.musicStyle);
     this.camera.setReduceMotion(s.reduceMotion);
+    // Motion-sickness accessibility: no dolly-zoom, no banked tilt, capped shake.
+    this.camera.setSoftCamera(s.softCamera);
     this.applyBloomPolicy();
     // Accessibility classes live on <html> so every overlay inherits them.
     document.documentElement.classList.toggle("a11y-color", s.colorAssist);
@@ -5992,7 +6353,11 @@ export class Game {
     // DEV-03: a measured-lite device never gets a 2x buffer, whatever its UA
     // claims — fill-rate is the first thing that dies on those GPUs.
     if (this.deviceProfile.tier === "lite" || this.save.state.settings.quality === "low") return 1;
-    return this.isMobile ? 1 : dev;
+    // Phones start at 1 and must be able to go BELOW it. Returning a flat 1
+    // made nextDpr's ceiling `max(1, 1)` — every branch returned 1, the
+    // resolution ladder was dead code on the platform nearly all players are
+    // on, and a struggling phone had no recourse at all.
+    return this.isMobile ? 1.25 : dev;
   }
 
   private adaptQuality(raw: number): void {
@@ -6020,7 +6385,11 @@ export class Game {
     this.qualityTimer = 0;
     // One decision per window, and the anti-oscillation cooldown ticks with it.
     this.dprCooldown = Math.max(0, this.dprCooldown - QUALITY_WINDOW_SECONDS);
-    if (this.save.state.settings.quality !== "auto" || this.state !== "playing") return;
+    // Not gated on `playing`: the menu's attract flight is the first thing a
+    // player sees and the heaviest sustained render, and the results screen is
+    // when the device is hottest. Gating adaptation to gameplay meant the
+    // places most likely to need it never participated.
+    if (this.save.state.settings.quality !== "auto" || this.disposed) return;
 
     // Resolution is two-way: step down when the budget is blown, and back up
     // when headroom returns, with a lock-out so it cannot oscillate. The old
@@ -6851,9 +7220,13 @@ export class Game {
     if (earned) {
       const bonus = this.runCoins * 2;
       this.multiplierClaimed = true;
-      this.save.addCoins(bonus);
+      // Report what was CREDITED, not what was requested. `addCoins` applies
+      // the permanent goldenfeather multiplier, so the old toast promised more
+      // than the player received — the same bug its three sibling awards were
+      // already fixed for.
+      const credited = this.save.addCoins(bonus);
       this.audio.chapterFanfare();
-      this.hud.toast(`3× flight bonus — +● ${bonus} coins`, "gold");
+      this.hud.toast(`3× flight bonus — +● ${credited} coins`, "gold");
       platform.measure("reward", "results-coin-multiplier", "granted");
     } else {
       this.hud.toast("No reward this time — the 3× bonus is still on the card", "warn");
@@ -7418,9 +7791,15 @@ export class Game {
     biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
     atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
     farthestIsland: Math.max(st.farthestIsland, this.island),
+    endReason: this.endReason,
     launchBanner: this.launchBannerText,
     launchBannerT: this.launchBannerT,
     launchRating: this.lastLaunch?.rating ?? "none",
+    chain: this.perfectChain,
+    chainTier: chainTier(this.perfectChain),
+    chainLabel: chainLabel(this.perfectChain),
+    chainScale: chainScale(this.perfectChain),
+    chainPulse: chainPulse(this.perfectChain),
     altitude: this.versus && this.p1 ? this.p1.bird.altitude : this.bird.altitude,
     altZone: this.altZone,
     maxAltitude: this.maxAltitude,
@@ -7467,6 +7846,8 @@ export class Game {
       label: TRAILS[id]?.label ?? id,
       equipped: st.activeTrail === id,
     })),
+    // Cup titles were granted and never read. Give them somewhere to appear.
+    titles: this.cups.ownedTitles().map((id) => ({ id, label: CUP_TITLES[id] ?? id })),
       lastPrize: this.lastPrize ? `${iconGlyph(this.lastPrize.prize.icon)} ${this.lastPrize.prize.label}` : "",
     };
   }
@@ -7567,6 +7948,10 @@ export class Game {
     stipendClaimed: st.lastStipendClaimed === this.today,
     rankPrizeClaimed: st.rankPrizeSeason === rankSeasonId(),
     wingmanBundle: st.wingmanBundle === true,
+    // Daily Login Ritual banner: dismissed for today (Play now / explicit X).
+    // Combined with `daily.done` — see shouldShowDailyBanner in Engagement.ts
+    // — is what the HUD needs to decide whether to render it at all.
+    dismissedDailyPrompt: this.dismissedDailyPrompt,
     showTutorialHand:
       this.state === "playing" &&
       !this.input.diving &&

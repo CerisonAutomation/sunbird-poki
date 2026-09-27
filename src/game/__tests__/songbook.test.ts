@@ -12,6 +12,7 @@ import {
   graceTone,
   harmonyTone,
   parseNote,
+  phraseAt,
   songsFor,
   songsForBiome,
   invertTune,
@@ -583,5 +584,132 @@ describe("songbook: the wiring that fails silently", () => {
     ).not.toMatch(/chordAt\(/);
     expect(src).toContain("this.songbook?.dispose()");
     expect(src).toContain("this.songbook = null;");
+  });
+});
+
+describe("songbook: a second phrase, so a bar is not the whole tune", () => {
+  it("gives every song a written answer the same length as its statement", () => {
+    for (const song of SONGBOOK) {
+      expect(song.alt.length, `${song.title} has no second phrase to sing`).toBe(song.steps);
+    }
+  });
+
+  it("gives every song its own second phrase", () => {
+    // The reason the phrase exists is to be a different idea. A second phrase
+    // that is a copy of the first is one bar of melody wearing a disguise.
+    const seen = new Map<string, string>();
+    const dupes: string[] = [];
+    for (const song of SONGBOOK) {
+      const key = song.alt.join(",");
+      const first = seen.get(key);
+      if (first) dupes.push(`${first} == ${song.title}`);
+      else seen.set(key, song.title);
+    }
+    expect(dupes).toEqual([]);
+  });
+
+  it("actually changes the tune, not just the notes under it", () => {
+    // A phrase that differs only by a rest is not a second phrase.
+    for (const song of SONGBOOK) {
+      const first = song.lead.filter((n) => n > 0).join(",");
+      const second = song.alt.filter((n) => n > 0).join(",");
+      expect(second, `${song.title}'s answer is its statement again`).not.toBe(first);
+    }
+  });
+
+  it("sings the answer on the closing pass and the statement everywhere else", () => {
+    // The whole claim of the feature: the melody changes, not just the
+    // instrumentation. The statement passes must stay verbatim.
+    for (const song of SONGBOOK) {
+      expect(arrange(song, 0, 0).phrase, "the opening states the tune as written").toBe(0);
+      expect(arrange(song, 1, 0).phrase, "nor does the statement").toBe(0);
+      expect(arrange(song, LOOPS_PER_SONG - 1, 0).phrase, "the close must answer").toBe(1);
+    }
+  });
+
+  it("reads whichever phrase the section asked for, without wrapping wrong", () => {
+    const song = SONGBOOK.find((s) => s.title === "Practice Hall")!;
+    expect(phraseAt(song, 0, 0)).toBe(song.lead[0]);
+    expect(phraseAt(song, 1, 0)).toBe(song.alt[0]);
+    // Out of range steps wrap rather than returning silence — a phrase that
+    // goes quiet because the sequencer asked a step it has no answer for is a
+    // dropped note in the middle of a bar.
+    expect(phraseAt(song, 1, song.steps + 2)).toBe(song.alt[2]);
+  });
+});
+
+describe("songbook: the songs the score is built around", () => {
+  it("marks exactly the four the flight rotation weights", () => {
+    const signature = SONGBOOK.filter((s) => s.signature).map((s) => s.title);
+    // Named by title, not by position: a shuffle reorders this file's meaning
+    // constantly, and the identity that matters is which songs they are.
+    expect(signature.sort()).toEqual(["Distant Shore", "Dusty Highway", "Practice Hall", "Side by Side"]);
+  });
+
+  it("keeps the signature songs ones a player can hear without hunting", () => {
+    // Each is a flight song except the lullaby, which owns the results screen —
+    // so a player meets all four on an ordinary session.
+    for (const title of ["Practice Hall", "Side by Side", "Dusty Highway"]) {
+      const song = SONGBOOK.find((s) => s.title === title)!;
+      expect(song.role, `${title} is unreachable: it is in no rotation`).toBe("play");
+      expect(song.biomes.length, `${title} has nowhere to play`).toBeGreaterThan(0);
+    }
+    expect(SONGBOOK.find((s) => s.title === "Distant Shore")!.role).toBe("sleep");
+  });
+
+  it("gives each signature song its own tempo, and does not flatten the meters", () => {
+    // They are weighted above the rest of the book, so they must not sound like
+    // each other. Tempo is the one that must be unique outright — two different
+    // tunes on one tempo read as one track on a short listen. Meter is not:
+    // three of the four ARE in 4/4, and that is the point of choosing them.
+    // What must not happen is all four collapsing onto the same grid.
+    const sig = SONGBOOK.filter((s) => s.signature);
+    const bpms = sig.map((s) => s.bpm);
+    expect(new Set(bpms).size, "two signature songs share a tempo").toBe(sig.length);
+    expect(new Set(sig.map((s) => s.steps)).size, "the signature songs lost their meters").toBeGreaterThan(1);
+    // And the odd one is the march, which is what makes it recognisable.
+    expect(sig.find((s) => s.steps === 12)?.title).toBe("Practice Hall");
+  });
+
+  it("does not duplicate another song's drum map", () => {
+    // The kit is what a listener identifies a track by in the first second.
+    // Sharing one across the whole book is sameness the melodies cannot fix.
+    const seen = new Map<string, string>();
+    for (const song of SONGBOOK) {
+      const drumless = !song.drums.includes("x") && !song.drums.includes("s");
+      if (drumless) continue; // a kitless lullaby is a choice, not a duplicate
+      const first = seen.get(song.drums);
+      expect(first, `${first} and ${song.title} share a drum map`).toBeUndefined();
+      seen.set(song.drums, song.title);
+    }
+  });
+});
+
+describe("songbook: no second phrase smuggles in a wrong note", () => {
+  it("draws every answer from the song's own pitch collection", () => {
+    // The cheapest possible way to make thirty hand-written bars sound wrong is
+    // one note from the wrong key. The collection is the song's own: every pitch
+    // class its chords and its first phrase already use, so a phrase can go
+    // anywhere the song goes and nowhere else. This caught two real notes
+    // (a D in an A-major arpeggio, a Bb in a D-minor storm figure) on the first
+    // run — both audible, neither thrown.
+    for (const song of SONGBOOK) {
+      const collection = new Set<number>();
+      for (const chord of song.bars) for (const midi of chord) collection.add(midi % 12);
+      for (const midi of song.lead) if (midi > 0) collection.add(midi % 12);
+      const foreign = song.alt.filter((midi) => midi > 0 && !collection.has(midi % 12));
+      expect(foreign, `${song.title}'s answer leaves its own key`).toEqual([]);
+    }
+  });
+
+  it("stays in the register the tune already occupies", () => {
+    // A second phrase an octave and a half up is not an answer, it is a jump
+    // cut. Allow the span the first phrase uses, plus a fourth either way.
+    for (const song of SONGBOOK) {
+      const sung = [...song.lead, ...song.alt].filter((m) => m > 0);
+      const low = Math.min(...sung);
+      const high = Math.max(...sung);
+      expect(high - low, `${song.title}'s two phrases span too far to sing`).toBeLessThanOrEqual(19);
+    }
   });
 });

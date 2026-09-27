@@ -135,6 +135,19 @@ describe("the strip shows the run's goals, not just the nearest one", () => {
     expect(career!.count).toContain("to go");
   });
 
+  it("formats a fractional career gap instead of dumping the raw float", async () => {
+    // Regression: lifetime distance accumulates in fractional metres, so
+    // `wings.nextNeeded` (tier.min - lifetime) is not always an integer. The
+    // strip must run it through the same distance formatter as every other
+    // readout, not interpolate it raw (was rendering "47192.0397376381 to go").
+    const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 47192.0397376381 } });
+    const career = rows(strip).find((r) => r.career);
+
+    expect(career, "the career rung must fly with a fractional gap").toBeTruthy();
+    expect(career!.count).toBe("47.19 km to go");
+    expect(career!.count).not.toContain("0397376381");
+  });
+
   it("drops the career rung at the top rank instead of showing a full bar forever", async () => {
     const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 0 } });
 

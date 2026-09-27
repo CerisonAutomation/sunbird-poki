@@ -127,6 +127,32 @@ describe("the break overlay", () => {
       "Poki forbids selling ad removal, whatever the caller passes",
     ).toBeNull();
   });
+
+  // REQ-20 as well as REQ-31: a variant row that offers to sell Gold is an
+  // offer of premium currency, which the portal both forbids and cannot
+  // honour. This render site is the one the e2e policy walk reaches through
+  // `open-shop`, so a guard that held at every other site did not protect it.
+  //
+  // Asserted on `skinAction` directly rather than through a rendered screen:
+  // the shop's rows come from a stubbed collection that renders no locked
+  // variants, so a screen-level assertion passes whether or not the branch is
+  // reachable — which is exactly how this shipped past the unit suite and was
+  // only caught by the browser walk.
+  const lockedGold = {
+    locked: true,
+    lockReason: "gold",
+    owned: false,
+    equipped: false,
+    affordable: true,
+    def: { id: "test-skin", price: 400 },
+  } as never;
+
+  it("never turns a Gold-locked variant into a paywall on the portal edition", async () => {
+    const { skinAction } = await import("../HUD");
+    const html = skinAction(lockedGold, true, 9999);
+    expect(html, "a portal build offered premium currency from a shop row").not.toMatch(/data-action="(open-paywall|gold-buy|vip-buy)"/);
+    expect(html, "the row must still say why the item is locked").toMatch(/portal-lock/);
+  });
 });
 
 describe("the rewarded offer on the results card", () => {

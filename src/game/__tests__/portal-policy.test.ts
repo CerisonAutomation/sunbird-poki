@@ -106,6 +106,15 @@ describe("GOLD.features", () => {
     // VITE_SIM_BREAKS = false in vitest (no VITE_SIM_BREAKS=true env), so
     // the sponsored-breaks bullet is absent — exactly as the Poki build sees it.
     expect(GOLD.features.some((f) => /sponsored breaks/i.test(f))).toBe(false);
-    expect(GOLD.features).toHaveLength(6);
+    // Neither may the two perks the portal build cannot deliver: the free
+    // second wind (its button is portal-only) and seed selection (its picker is
+    // portal-only). Both used to be advertised on a 500-coin tier the player
+    // could not actually get, and the old `toHaveLength(6)` pinned that list.
+    // The length is now an assertion about honesty, not a constant.
+    expect(GOLD.features.some((f) => /free second wind/i.test(f)), "an undeliverable perk is still advertised").toBe(false);
+    expect(GOLD.features.some((f) => /yesterday|wild random seeds/i.test(f)), "an undeliverable perk is still advertised").toBe(false);
+    // The three that ARE deliverable everywhere stay.
+    expect(GOLD.features.some((f) => /2× coins/i.test(f))).toBe(true);
+    expect(GOLD.features.some((f) => /Nest Pass premium/i.test(f))).toBe(true);
   });
 });

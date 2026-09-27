@@ -84,8 +84,8 @@ test("first session: objective timings, gates and interaction counts", async ({ 
 
   // --- Menu → flight ---
   const menuInteractions: Interaction[] = [];
-  await page.getByRole("button", { name: "Play free flight now", exact: true }).click();
-  menuInteractions.push({ at: at(), kind: "click", target: "Play free flight now" });
+  await page.getByRole("button", { name: "Fly now", exact: true }).click();
+  menuInteractions.push({ at: at(), kind: "click", target: "Fly now" });
   await expect(page.locator('[data-action="pause"]')).toBeVisible();
   mark("flight-started");
 

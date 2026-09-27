@@ -26,7 +26,7 @@ test("menu CTA actionability", async ({ page }, info) => {
     const welcome = page.locator('[data-action="confirm-pilot-name"]');
     if (await welcome.isVisible().catch(() => false)) await welcome.click();
     const bootDone = at();
-    const cta = page.getByRole("button", { name: "Play free flight now", exact: true });
+    const cta = page.getByRole("button", { name: "Fly now", exact: true });
     await cta.waitFor({ state: "visible" });
     const visible = at();
 

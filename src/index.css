@@ -480,6 +480,14 @@ textarea {
   display: none;
 }
 
+/* Colorblind-friendly: the ×N count was the only cue this chain was "hot" —
+   the icon is a shape/glyph signal that survives red/green confusion, not
+   just the gold-vs-white background shift. */
+.ring-chain-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
 .ring-chain b {
   font-size: 17px;
   font-weight: 800;
@@ -2028,6 +2036,10 @@ fieldset.squad-fields {
 .flight-footer .fever-wrap,
 .flight-footer .draft-meter,
 .flight-footer .emote-wheel { position: static; transform: none; width: 100%; margin: 0; }
+/* The two objective rows are separate blocks with their own rounded corners and
+   no vertical margin, so they rendered edge-to-edge and read as one broken
+   rectangle rather than two rows. */
+.flight-footer .goal-strip { display: flex; flex-direction: column; gap: 4px; }
 .flight-footer .goal-strip:empty,
 .flight-footer .fever-wrap:not(.on) { display: none; }
 .flight-footer .emote-wheel { overflow-x: auto; pointer-events: auto; touch-action: pan-x; padding: 2px; }
@@ -2045,7 +2057,13 @@ fieldset.squad-fields {
 /* Flight feedback safe zone: the ring/bonus callout belongs under the
    pause+mute controls, never over the coaching copy or score lane. */
 .hud-root[data-flying="true"] .ring-chain {
-  top: calc(env(safe-area-inset-top, 0px) + 66px);
+  /* Derived from the MEASURED header, not a constant. 66px only clears a
+     single-row top bar: on a <=640px phone the sun meter wraps to a second
+     grid row (~85px), and at >=641px the mid-meta chip row starts at ~67px —
+     so the fixed value printed this pill on top of the daylight meter on every
+     phone and on top of the island chips on desktop, exactly while a chain was
+     live. Same lane variable every sibling uses. */
+  top: calc(var(--hud-header-height, 110px) + 4px);
   left: auto;
   right: calc(14px + env(safe-area-inset-right, 0px));
   transform: none;
@@ -2081,9 +2099,21 @@ fieldset.squad-fields {
   .hud-header .sun-meter { grid-row: 2; grid-column: 1 / -1; }
   .hud-header .sun-caption { display: none; }
   .hud-header .stat-value { font-size: 20px; }
+  .hud-header .stat-sub { font-size: 10px; }
   .hud-header .mid-meta { font-size: 10px; }
   .hud-header .mid-meta > * { font-size: 10px; padding: 3px 6px; }
   .flight-footer .goal-strip { font-size: 11px; }
+  /* Mobile HUD declutter (P0 fix): island/biome/multiplier chips only earn
+     their place in the row when they carry new information — otherwise all
+     four .mid-meta chips plus gold/vip/ghost fight for the same 375px-wide
+     row. HUD.ts toggles `.recent`/`.active`/`.hazard-near`; desktop and
+     tablet are unaffected and keep every chip visible all the time. */
+  .hud-header .mid-meta .island-chip { display: none; }
+  .hud-header .mid-meta .island-chip.recent { display: block; }
+  .hud-header .mid-meta .mult-chip { display: none; }
+  .hud-header .mid-meta .mult-chip.active { display: block; }
+  .hud-header .mid-meta .biome-chip { display: none; }
+  .hud-header .mid-meta .biome-chip.hazard-near { display: inline-flex; }
 }
 @media (max-height: 500px) and (min-width: 641px) {
   .hud-header .stat-sub, .hud-header .sun-caption { display: none; }
@@ -2202,7 +2232,8 @@ fieldset.squad-fields {
      file and would otherwise win on source order. The ring pill is 94px wide at
      this size, so +100px centres FLOW just past its right edge. */
   .hud-root .slope-chain {
-    bottom: calc(54px + env(safe-area-inset-bottom));
+    /* Same reasoning at this size: derive it, don't re-hardcode it. */
+    bottom: calc(var(--hud-footer-height, 90px) + 8px + env(safe-area-inset-bottom));
   }
 }
 
@@ -2644,15 +2675,39 @@ label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
 ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #888; }
 
-/* Downslope-to-launch rhythm sits below the ring objective, never on top of it. */
+/* Downslope-to-launch rhythm sits below the ring objective, never on top of it.
+   Colorblind-friendly: an icon (📐) plus a fill bar mirror the ring chain's own
+   icon + count + bar pattern, so the chain reads by shape, not just its
+   coral-on-teal color. */
 .slope-chain {
-  position: absolute; bottom: calc(60px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  /* Off the measured footer, not a constant. The footer is 49px per goal row
+     plus the draft meter, fever wrap and the 44px emote wheel, so a fixed 60px
+     put this pill at 60-85px from the bottom — inside the footer, two
+     translucent pills stacked on each other, for the whole time a slope chain
+     ran. */
+  position: absolute; bottom: calc(var(--hud-footer-height, 90px) + 8px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
   padding: 5px 14px; border-radius: 999px; pointer-events: none;
   background: rgba(16, 39, 32, .82); border: 1px solid rgba(127, 255, 180, .45);
   color: #c8ffda; font-size: 12px; font-weight: 700; letter-spacing: .06em;
   font-variant-numeric: tabular-nums;
 }
 .slope-chain.hidden { display: none; }
+.slope-chain-icon { font-size: 13px; line-height: 1; }
+.slope-chain i {
+  display: block;
+  width: 36px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(100, 200, 100, 0.3);
+  overflow: hidden;
+}
+.slope-chain s {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6fd8c8, #2a9a90);
+  text-decoration: none;
+}
 :root {
   --text-on-sky: #fff;
   --halo-on-sky: rgba(20, 16, 40, 0.78);

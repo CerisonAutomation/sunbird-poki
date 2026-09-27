@@ -9,6 +9,9 @@ import type { Bird } from "./Bird";
 export const CLIP_SHOTS = ["chase", "hero", "finish", "crash", "overtake"] as const;
 export type ClipShot = (typeof CLIP_SHOTS)[number];
 
+/** Ceiling on impact shake under Soft Camera — see `CameraRig.setSoftCamera`. */
+const SOFT_SHAKE_CAP = 0.55;
+
 export type ClipPose = {
   offsetX: number;
   offsetY: number;
@@ -88,6 +91,8 @@ export class CameraRig {
   private intro = 1;
   private punchZ = 0;
   private reduceMotion = false;
+  /** The milder accessibility tier — see `setSoftCamera`. */
+  private softCamera = false;
   private baseFov = 50;
   /**
    * Distance actually used for this frame's framing. The bird reads it for its
@@ -134,9 +139,28 @@ export class CameraRig {
     if (v) this.shake = 0;
   }
 
+  /**
+   * The milder accessibility tier, deliberately separate from Reduce Motion.
+   *
+   * Reduce Motion strips the camera back to almost nothing. Soft Camera keeps
+   * the game fully playable and keeps its follow framing, and removes only the
+   * three things known to provoke motion sickness: the dolly-zoom (a background
+   * that warps while the subject holds still), the banked roll, and un-capped
+   * impact shake. Speed framing, the chase cam and the frame rate all stay —
+   * removing those is what makes a game unplayable rather than uncomfortable.
+   */
+  setSoftCamera(v: boolean): void {
+    this.softCamera = v;
+    if (!v) return;
+    // Switching it on mid-flight has to take effect now, not fade out over the
+    // next second while the player watches the world they were avoiding.
+    this.dolly = this.dollyVel = this.orbit = this.orbitTarget = this.rollTilt = 0;
+    this.shake = Math.min(this.shake, SOFT_SHAKE_CAP);
+  }
+
   bump(amount: number): void {
     if (this.reduceMotion) return;
-    this.shake = Math.min(2.2, this.shake + amount);
+    this.shake = Math.min(this.softCamera ? SOFT_SHAKE_CAP : 2.2, this.shake + amount);
   }
 
   punch(amount: number): void {
@@ -149,13 +173,13 @@ export class CameraRig {
    * a perfect launch — the single most cinematic beat in the game.
    */
   dollyZoom(strength: number): void {
-    if (this.reduceMotion) return;
+    if (this.reduceMotion || this.softCamera) return;
     this.dollyVel += strength;
   }
 
   /** A brief banked camera roll used when a big launch fires. */
   tilt(amount: number): void {
-    if (this.reduceMotion) return;
+    if (this.reduceMotion || this.softCamera) return;
     this.orbitTarget = clamp(amount, -0.32, 0.32);
   }
 
@@ -275,7 +299,7 @@ export class CameraRig {
     this.orbitTarget = lerp(this.orbitTarget, 0, 1 - Math.pow(0.08, dt));
     this.orbit = lerp(this.orbit, this.orbitTarget, 1 - Math.pow(0.02, dt));
     // Airborne pitch reads as the bird "hanging" at apex.
-    this.rollTilt = lerp(this.rollTilt, this.reduceMotion ? 0 : clamp(-bird.vy * 0.004, -0.09, 0.09) * (1 - groundFrame), 1 - Math.pow(0.05, dt));
+    this.rollTilt = lerp(this.rollTilt, this.reduceMotion || this.softCamera ? 0 : clamp(-bird.vy * 0.004, -0.09, 0.09) * (1 - groundFrame), 1 - Math.pow(0.05, dt));
 
     // Dynamic FOV: widens with speed, kicks +8 in fever (spec: FOV+8 fever),
     // and counter-narrows during a dolly-zoom so the subject holds size

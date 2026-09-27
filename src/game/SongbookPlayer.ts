@@ -12,6 +12,7 @@ import {
   graceTone,
   harmonyTone,
   mtof,
+  phraseAt,
   shuffledOrder,
   songsFor,
   songsForBiome,
@@ -74,6 +75,10 @@ export class SongbookPlayer {
   /** Last note of the counter-line, so the next answer moves by step. */
   private counterNote = 0;
   private lastSong: Song | null = null;
+  /** How many times each song has been selected this session, by title. */
+  private readonly played = new Map<string, number>();
+  /** True while a song is playing for the second or later time. */
+  private revisit = false;
   private disposed = false;
   private night = 0;
   private intensity = 0;
@@ -192,7 +197,17 @@ export class SongbookPlayer {
     // An island with no song of its own would be the one silent world on the
     // map, so fall back to the whole flight book rather than to nothing.
     const here = this.biome ? songsForBiome(this.biome) : [];
-    return here.length > 0 ? here : songsFor("play");
+    const pool = here.length > 0 ? here : songsFor("play");
+    // The signature songs get a second turn in the queue.
+    //
+    // Four of the thirty are the score the game is actually for — a martial 3/4
+    // march, a soft D major ballad, a country shuffle, a minor lullaby — and
+    // before this the player heard each of them once per thirty songs, buried in
+    // a shuffle of the rest. Weighting the rotation is the difference between
+    // "the game has a sound" and "the game plays music": the character is
+    // foregrounded, the other twenty-six keep filling in around it, and the
+    // queue stays a queue so nothing is skipped or doubled up.
+    return [...pool, ...pool.filter((song) => song.signature)];
   }
 
   /**
@@ -219,12 +234,34 @@ export class SongbookPlayer {
       this.queued = 0;
     }
     this.songIdx = this.queue[this.queued] ?? 0;
+    // The weighted rotation holds a song twice on purpose, so a shuffle can now
+    // put the two copies next to each other. Two identical stays back to back is
+    // the one thing a queue is supposed to prevent, and the player reads it as a
+    // stutter rather than as variety — so skip the repeat when the pool is big
+    // enough to have an alternative.
+    if (this.rotation.length > 1 && this.rotation[this.songIdx] === this.lastSong) {
+      this.queued += 1;
+      if (this.queued >= this.queue.length) {
+        this.queue = shuffledOrder(this.rotation.length);
+        this.queued = 0;
+      }
+      const alternative = this.rotation[this.queue[this.queued] ?? 0];
+      if (alternative && alternative !== this.lastSong) this.songIdx = this.queue[this.queued]!;
+    }
     this.selectCurrent();
   }
 
   private selectCurrent(): void {
     const song = this.rotation[this.songIdx] ?? SONGBOOK[0]!;
     this.lastSong = song;
+    // A song the player has heard before this session develops on the way in:
+    // the second hearing is not the first hearing again, which is what stops a
+    // favourite that now comes round twice an evening from sounding like a
+    // stuck record. The depth lives in `scheduleStep` — a repeat trades the
+    // statement pass's comping and grows a second voice into it.
+    const seen = this.played.get(song.title) ?? 0;
+    this.played.set(song.title, seen + 1);
+    this.revisit = seen > 0;
     const lanes = drumLanes(song);
     this.lanes = lanes;
     this.kit = lanes.k.includes("x") || lanes.s.includes("s");
@@ -304,7 +341,14 @@ export class SongbookPlayer {
     const swing = this.step % 2 === 1 ? stepDur * song.swing : 0;
     const at = t + swing;
     const st = this.step;
-    const a = arrange(song, this.loop, st);
+    const base = arrange(song, this.loop, st);
+    // A song heard before develops on the way in: the statement pass trades
+    // which voice comps, so the second hearing is a variation rather than a
+    // replay. The counter-line that normally only answers the development (see
+    // below) grows into the statement too, which is the difference between one
+    // voice and two in the same bar.
+    const deepened = this.revisit && base.section === "a";
+    const a = deepened ? { ...base, compSwap: !base.compSwap } : base;
     // A continuous counter, so the progression reaches all four chords (see
     // `chordForStep`), with the development's harmonic shift on top.
     const chord = chordForStep(song, this.loop, st, a.chordShift);
@@ -359,17 +403,20 @@ export class SongbookPlayer {
     // rather than a mistake.
     if (a.chirp && st === 0 && Math.random() < 0.5) this.chirp(at + stepDur * (1 + Math.random()));
 
-    // The tune: presented differently on every pass (see `TuneView`), thinned to
-    // its on-beat notes on the closing pass, and rested for the last half of the
-    // final bar so the phrase ends rather than cuts.
-    const written = song.lead[st] ?? 0;
-    const nextWritten = song.lead[(st + 1) % song.steps] ?? 0;
+    // The tune: presented differently on every pass (see `TuneView`), sung from
+    // the section's phrase (the statement, or the song's written answer), thinned
+    // to its on-beat notes on the closing pass, and rested for the last half of
+    // the final bar so the phrase ends rather than cuts.
+    const written = phraseAt(song, a.phrase, st);
+    const nextWritten = phraseAt(song, a.phrase, (st + 1) % song.steps);
     const thinned = a.thinLead && st % 2 === 1;
     let midi = 0;
     if (a.lead && !a.breath && !thinned) {
       if (a.tuneView === "displaced") {
-        // Half a bar late: the tune answers itself instead of repeating.
-        midi = song.lead[(st + Math.floor(song.steps / 2)) % song.steps] ?? 0;
+        // Half a bar late: the tune answers itself instead of repeating. The
+        // displaced line is always the *statement* — an answer that arrives late
+        // is still an answer to the thing that was said.
+        midi = phraseAt(song, 0, (st + Math.floor(song.steps / 2)) % song.steps);
       } else {
         midi = written;
         if (midi > 0 && a.tuneView === "reharmonised") midi = toChordTone(chord, midi);
@@ -392,9 +439,10 @@ export class SongbookPlayer {
       // The closing pass arrives in harmony: a chord tone a third below.
       const third = a.harmony ? harmonyTone(chord, midi) : 0;
       if (third > 0) this.voice(mtof(third), at, stepDur * 1.6, 0.03);
-    } else if (a.section === "b") {
+    } else if (a.section === "b" || deepened) {
       // The developed pass answers the tune in its gaps — the difference between
-      // hearing a loop and hearing a piece with two voices in it.
+      // hearing a loop and hearing a piece with two voices in it. On a song the
+      // player has heard before, the statement pass grows the same second voice.
       const answer = counterTone(chord, st, written, this.counterNote);
       if (answer > 0) {
         this.counterNote = answer;

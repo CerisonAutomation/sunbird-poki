@@ -1,4 +1,4 @@
-import { GAP_START, ISLAND_PERIOD } from "./constants";
+import { DROP_BLEND_START, DROP_START, GAP_START, ISLAND_PERIOD, RAMP_START } from "./constants";
 import type { BiomeMusicStyle } from "./Music";
 
 export type DecoKind = "tree" | "palm" | "pine" | "spire" | "crystal" | "cactus";
@@ -42,6 +42,19 @@ export type TerrainProfile = {
   troughEvery: number;
   /** Trough depth as a fraction of the height of a neighbouring ordinary arch. */
   troughDepth: number;
+  /**
+   * How long this biome's islands are, as a multiple of the base pitch.
+   *
+   * A world where every island is the same length reads as a stamp: the player
+   * learns one rhythm and the whole map is that rhythm. This is the knob that
+   * makes Dune Sea a long open run and Skyreach Canyon a tight one, so the
+   * island is shaped by where it is rather than only by what it is.
+   *
+   * It scales the whole template — landmarks AND period — because
+   * `buildSegments` spends a `rampStart` budget, so a longer island that did
+   * not also move the landmarks would just be a longer empty shoulder.
+   */
+  islandScale: number;
 };
 
 /** The grammar every hand-tuned world overrides; used as the remix base. */
@@ -54,6 +67,7 @@ const GRAMMAR: TerrainProfile = {
   padSpacing: 1,
   troughEvery: 0,
   troughDepth: 0,
+  islandScale: 1,
 };
 
 /**
@@ -127,7 +141,7 @@ export const BIOMES: BiomeDef[] = [
     skew: 0.0,       // symmetric — pure teaching rhythm
     roughness: 0.02, // almost no noise — read-ahead is easy
     // Teaching world: frequent gentle chains, busy trampolines, no surprises.
-    terrain: grammar({ relief: 0.92, rampEvery: 2, rampChance: 0.75, padSpacing: 0.88 }),
+    terrain: grammar({ relief: 0.92, rampEvery: 2, rampChance: 0.75, padSpacing: 0.88, islandScale: 1.0,}),
     top: 0x86dc7e,
     ridge: 0x4aa85c,
     mid: 0x2f7d5b,
@@ -160,7 +174,7 @@ export const BIOMES: BiomeDef[] = [
     skew: 0.15,      // gentle forward lean — downslopes feel a touch steeper
     roughness: 0.1,
     // Low, springy ground so the six thermals carry you — the sky is the level.
-    terrain: grammar({ relief: 0.9, lenScale: 0.95, rampEvery: 3, rampChance: 0.6, padSpacing: 0.75 }),
+    terrain: grammar({ relief: 0.9, lenScale: 0.95, rampEvery: 3, rampChance: 0.6, padSpacing: 0.75, islandScale: 1.08,}),
     top: 0x7ff0b0,
     ridge: 0x35c48a,
     mid: 0x1f8f80,
@@ -193,7 +207,7 @@ export const BIOMES: BiomeDef[] = [
     skew: -0.18,     // slow climb, fast drop — launches feel punchy
     roughness: 0.15,
     // Lagoon bowls: drop in, surf out, punch back up on the far lip.
-    terrain: grammar({ relief: 1.05, lenScale: 0.88, rampEvery: 3, rampChance: 0.55, chicane: 0.08, padSpacing: 1.05, troughEvery: 5, troughDepth: 0.35 }),
+    terrain: grammar({ relief: 1.05, lenScale: 0.88, rampEvery: 3, rampChance: 0.55, chicane: 0.08, padSpacing: 1.05, troughEvery: 5, troughDepth: 0.35, islandScale: 0.93,}),
     top: 0xffc9d8,
     ridge: 0xf09ab8,
     mid: 0x2fb4a8,
@@ -226,7 +240,7 @@ export const BIOMES: BiomeDef[] = [
     skew: -0.30,     // deep valley then sharp launch lip — rewards late release
     roughness: 0.18,
     // Deep carved valleys under big ramps — the late-release speed run.
-    terrain: grammar({ relief: 1.12, lenScale: 1.15, rampEvery: 2, rampChance: 0.7, chicane: 0.12, padSpacing: 1.14, troughEvery: 4, troughDepth: 0.3 }),
+    terrain: grammar({ relief: 1.12, lenScale: 1.15, rampEvery: 2, rampChance: 0.7, chicane: 0.12, padSpacing: 1.14, troughEvery: 4, troughDepth: 0.3, islandScale: 1.14,}),
     top: 0xd98ac0,
     ridge: 0x9a5a9e,
     mid: 0x5f3a7a,
@@ -259,7 +273,7 @@ export const BIOMES: BiomeDef[] = [
     skew: 0.45,      // classic dune: very gradual windward slope, sharp leeward drop
     roughness: 0.08, // smooth — wind polishes the sand
     // Colossal: very long arches, rare but huge launches, few trampolines.
-    terrain: grammar({ relief: 1.05, lenScale: 1.45, rampEvery: 4, rampChance: 0.5, chicane: 0.06, padSpacing: 1.43 }),
+    terrain: grammar({ relief: 1.05, lenScale: 1.45, rampEvery: 4, rampChance: 0.5, chicane: 0.06, padSpacing: 1.43, islandScale: 1.2,}),
     hazard: "gust",
     top: 0xf2cf7a,
     ridge: 0xdc9a4a,
@@ -292,7 +306,7 @@ export const BIOMES: BiomeDef[] = [
     skew: 0.20,      // choppy storm sea feel — waves are steep-fronted
     roughness: 0.35, // storm roughness — unpredictable micro-bumps
     // Alternating chop, with the odd hole to lose a wing in.
-    terrain: grammar({ relief: 1.0, lenScale: 1.0, rampEvery: 3, rampChance: 0.6, chicane: 0.08, padSpacing: 0.95, troughEvery: 4, troughDepth: 0.3 }),
+    terrain: grammar({ relief: 1.0, lenScale: 1.0, rampEvery: 3, rampChance: 0.6, chicane: 0.08, padSpacing: 0.95, troughEvery: 4, troughDepth: 0.3, islandScale: 0.97,}),
     top: 0x3f5a8a,
     ridge: 0x2c3f68,
     mid: 0x1d2848,
@@ -325,7 +339,7 @@ export const BIOMES: BiomeDef[] = [
     skew: -0.50,     // ice shards: near-vertical front face, gentle backslide
     roughness: 0.28, // crystalline fracture texture
     // Ice shards: tight, tall, and mirrored arch to arch — a hard chicane.
-    terrain: grammar({ relief: 0.9, lenScale: 1.0, rampEvery: 2, rampChance: 0.65, chicane: 0.15, padSpacing: 1.57 }),
+    terrain: grammar({ relief: 0.9, lenScale: 1.0, rampEvery: 2, rampChance: 0.65, chicane: 0.15, padSpacing: 1.57, islandScale: 0.91,}),
     top: 0xe6f7ff,
     ridge: 0x9fd0ee,
     mid: 0x5a7fc0,
@@ -358,7 +372,7 @@ export const BIOMES: BiomeDef[] = [
     skew: 0.0,       // symmetric spikes — equally brutal both directions
     roughness: 0.55, // volcanic rubble — chaotic, jagged surface noise
     // Rubble chatter with pits, and a launch chain almost every other arch.
-    terrain: grammar({ relief: 0.92, lenScale: 0.95, rampEvery: 2, rampChance: 0.65, chicane: 0.08, padSpacing: 0.84, troughEvery: 6, troughDepth: 0.3 }),
+    terrain: grammar({ relief: 0.92, lenScale: 0.95, rampEvery: 2, rampChance: 0.65, chicane: 0.08, padSpacing: 0.84, troughEvery: 6, troughDepth: 0.3, islandScale: 1.06,}),
     top: 0x5a4448,
     ridge: 0x3c2a30,
     mid: 0x281a20,
@@ -391,7 +405,7 @@ export const BIOMES: BiomeDef[] = [
     skew: -0.60,     // canyon walls: long plateau then sheer cliff drop
     roughness: 0.22, // wind-carved — some texture but readable
     // A corridor: the walls swap sides as you go, and the floor drops away.
-    terrain: grammar({ relief: 1.15, lenScale: 1.3, rampEvery: 3, rampChance: 0.7, chicane: 0.45, padSpacing: 1.24, troughEvery: 5, troughDepth: 0.4 }),
+    terrain: grammar({ relief: 1.15, lenScale: 1.3, rampEvery: 3, rampChance: 0.7, chicane: 0.45, padSpacing: 1.24, troughEvery: 5, troughDepth: 0.4, islandScale: 0.86,}),
     top: 0xe08a5a,
     ridge: 0xb85c3c,
     mid: 0x8a3c2c,
@@ -483,6 +497,9 @@ export function biomeForIsland(island: number): BiomeDef {
       rampChance: clampF(base.terrain.rampChance + (rnd() - 0.5) * 0.12 + lap * 0.02, 0.4, 0.85),
       chicane: clampF(base.terrain.chicane + (rnd() - 0.5) * 0.24, 0, 1),
       padSpacing: clampF(base.terrain.padSpacing * (1 + (rnd() - 0.5) * 0.3), 0.6, 1.8),
+      // Island length drifts with the rest of the grammar, so a remixed world
+      // is a different SHAPE as well as a different rhythm.
+      islandScale: clampF(base.terrain.islandScale * (1 + (rnd() - 0.5) * 0.12), 0.8, 1.3),
       troughEvery: base.terrain.troughEvery > 0 ? Math.max(2, base.terrain.troughEvery + Math.floor((rnd() - 0.5) * 2)) : 0,
       troughDepth: clampF(base.terrain.troughDepth + (rnd() - 0.5) * 0.1, 0.15, 0.6),
     },
@@ -498,13 +515,165 @@ export function biomeForIsland(island: number): BiomeDef {
 /**
  * Ocean gaps widen gradually, but always leave a landing shelf before the
  * island wraps. Later difficulty comes from the biomes, not impossible gaps.
+ *
+ * The `island * 4` term used to be dead: the `min` cap bound at island 0, so
+ * every gap from the second island onward was the same 201 m. The shelf
+ * reservation is now scaled to the new pitch and the widening term is large
+ * enough to actually reach it, which makes the doc comment true.
  */
 export function gapEndFor(island: number): number {
   // Reserve a real landing shelf: a local-x gap must never wrap past the island.
-  return Math.min(ISLAND_PERIOD - 24, GAP_START + 200 + Math.max(0, island) * 4);
+  return islandTemplate(island).gapEnd;
 }
 
-/** Ramp height grows with the crossing, capped to preserve a rideable slope. */
+/**
+ * Ramp height — which is to say, LAUNCH HEIGHT for the gap behind it.
+ *
+ * It scales with the island for the same reason every other landmark does: a
+ * 2,294 m dune sea presents a wider water gap than a 1,644 m canyon, and a
+ * launch that clears one does not clear the other. Without the scale factor
+ * the bird stopped clearing the long islands altogether: it launched, ran out
+ * of height halfway across, and swam.
+ */
 export function rampPeakFor(island: number): number {
-  return 28 + Math.min(20, Math.max(0, island) * 2);
+  return (34 + Math.min(22, Math.max(0, island) * 2)) * islandScaleFor(island);
+}
+
+/* ------------------------------------------------------- the island layout */
+
+/**
+ * One island's geometry, all of it derived from its biome's `islandScale`.
+ *
+ * Every landmark moves with the period, so a long island is a genuinely longer
+ * island — more arches, a longer run-in, a longer drop — rather than the same
+ * island with a longer flat shoulder at the end. That is the whole difference
+ * between "islands are a different length" and "islands are stamped".
+ */
+export type IslandTemplate = {
+  index: number;
+  /** Total length of this island in world units. */
+  period: number;
+  /** The multiplier every landmark below was scaled by. */
+  scale: number;
+  /** World-x where this island begins. */
+  start: number;
+  dropBlendStart: number;
+  dropStart: number;
+  rampStart: number;
+  gapStart: number;
+  /** Local-x where the ocean ends and the landing shelf begins. */
+  gapEnd: number;
+};
+
+/** How much of an island is kept as a landing shelf, scaled with the island. */
+const SHELF = 32;
+const GAP_BASE = 218;
+const GAP_PER_ISLAND = 4;
+
+/** How many islands the exact layout table covers before extrapolating. */
+const LAYOUT_LIMIT = 2048;
+
+/** Prefix sums of island periods: `starts[i]` is where island `i` begins. */
+let layoutStarts: number[] | null = null;
+
+function ensureLayout(): number[] {
+  if (layoutStarts) return layoutStarts;
+  const starts = new Array<number>(LAYOUT_LIMIT + 1);
+  starts[0] = 0;
+  for (let i = 0; i < LAYOUT_LIMIT; i += 1) {
+    starts[i + 1] = starts[i]! + islandScaleFor(i) * ISLAND_PERIOD;
+  }
+  layoutStarts = starts;
+  return starts;
+}
+
+function islandScaleFor(island: number): number {
+  const scale = biomeForIsland(Math.max(0, Math.floor(island))).terrain.islandScale;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/** The mean island length, used past the end of the exact table. */
+function averagePeriod(): number {
+  const starts = ensureLayout();
+  return starts[LAYOUT_LIMIT]! / LAYOUT_LIMIT;
+}
+
+/**
+ * Which island a world-x falls in.
+ *
+ * Binary search over the prefix table, with a one-entry cache in front of it:
+ * this is called several times per frame and the bird moves forward, so the
+ * overwhelmingly common answer is the last one or the next one.
+ *
+ * Past the table the world keeps going at the mean island length. The world is
+ * infinite, so this has to answer for any x — it cannot throw "out of range",
+ * because a run that reaches island 2100 must still have ground under it.
+ */
+let lastIndex = -1;
+let lastStart = 0;
+export function islandIndexFor(x: number): number {
+  const starts = ensureLayout();
+  if (x <= 0) return 0;
+  if (x >= starts[LAYOUT_LIMIT]!) {
+    return LAYOUT_LIMIT + Math.floor((x - starts[LAYOUT_LIMIT]!) / averagePeriod());
+  }
+  // Forward fast path: the bird rarely skips an island, let alone goes back.
+  if (x >= lastStart && lastIndex >= 0 && lastIndex < LAYOUT_LIMIT) {
+    if (x < starts[lastIndex + 1]!) return lastIndex;
+    if (lastIndex + 2 <= LAYOUT_LIMIT && x < starts[lastIndex + 2]!) {
+      lastIndex += 1;
+      lastStart = starts[lastIndex]!;
+      return lastIndex;
+    }
+  }
+  // Binary search for the largest i with starts[i] <= x.
+  let lo = 0;
+  let hi = LAYOUT_LIMIT;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (starts[mid]! <= x) lo = mid;
+    else hi = mid;
+  }
+  lastIndex = lo;
+  lastStart = starts[lo]!;
+  return lo;
+}
+
+/** The full layout of an island. */
+export function islandTemplate(island: number): IslandTemplate {
+  const index = Math.max(0, Math.floor(island));
+  const starts = ensureLayout();
+  const scale = index < LAYOUT_LIMIT ? islandScaleFor(index) : 1;
+  const period = index < LAYOUT_LIMIT ? starts[index + 1]! - starts[index]! : ISLAND_PERIOD;
+  const start = index < LAYOUT_LIMIT ? starts[index]! : starts[LAYOUT_LIMIT]! + (index - LAYOUT_LIMIT) * averagePeriod();
+  const gapStart = GAP_START * scale;
+  return {
+    index,
+    period,
+    scale,
+    start,
+    dropBlendStart: DROP_BLEND_START * scale,
+    dropStart: DROP_START * scale,
+    rampStart: RAMP_START * scale,
+    gapStart,
+    gapEnd: Math.min(period - SHELF * scale, gapStart + (GAP_BASE + Math.max(0, index) * GAP_PER_ISLAND) * scale),
+  };
+}
+
+/** Local-x within an island, for a world-x. */
+export function localXFor(x: number): number {
+  // Negative x wraps to the far end of the first island, exactly as the old
+  // modulo did. The menu's attract camera and the floating origin both sit
+  // behind the start line at times, and a negative local-x reads as "off the
+  // end of the world" to every caller downstream.
+  if (x < 0) {
+    const p = islandTemplate(0).period;
+    return ((x % p) + p) % p;
+  }
+  return x - islandTemplate(islandIndexFor(x)).start;
+}
+
+/** World-x where an island starts — the start line for a course, not `i * 1450`. */
+export function islandStartFor(island: number): number {
+  return islandTemplate(island).start;
 }

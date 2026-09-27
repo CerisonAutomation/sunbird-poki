@@ -90,4 +90,29 @@ describe("save sealing", () => {
     expect(isSealed(sealPayload(raw))).toBe(true);
     expect(isSealed(raw)).toBe(false);
   });
+
+  it("re-seals an imported save (no bare-JSON gap in the integrity check)", () => {
+    const source = new SaveData();
+    source.state.wallet = 321;
+    const code = source.exportCode();
+
+    const dest = new SaveData();
+    expect(dest.importCode(code)).toBe(true);
+    const stored = storage.getItem(SAVE_KEY)!;
+    // Without re-sealing, this would be bare JSON — openPayload() treats
+    // unsealed data as a legacy pass-through with no checksum, so a later
+    // localStorage edit would go undetected instead of quarantining.
+    expect(isSealed(stored)).toBe(true);
+    expect(JSON.parse(openPayload(stored).data).wallet).toBe(321);
+
+    // Prove the check now actually bites: tamper with the imported save and
+    // confirm the next boot quarantines it instead of trusting it.
+    const env = JSON.parse(stored) as { v: number; crc: string; data: string };
+    const inner = JSON.parse(env.data) as { wallet: number };
+    inner.wallet = 999_999;
+    storage.setItem(SAVE_KEY, JSON.stringify({ ...env, data: JSON.stringify(inner) }));
+    const reloaded = new SaveData();
+    expect(reloaded.recoveredFromCorruption).toBe(true);
+    expect(reloaded.state.wallet).not.toBe(999_999);
+  });
 });

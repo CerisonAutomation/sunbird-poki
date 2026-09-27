@@ -64,7 +64,7 @@ test("steady-state menu has no long frames", async ({ page }) => {
   const app = new SunbirdPage(page);
   await app.open();
   await app.ready();
-  await expect(page.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible();
   const samples = await frameDurations(page, 360); // ~6 s at 60 Hz
   assertJankFree("menu", samples, 60, 250);
   expect(app.errors, `console/page errors in menu: ${app.errors.join(" | ")}`).toEqual([]);

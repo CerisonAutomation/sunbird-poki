@@ -1,5 +1,9 @@
 import { expect, type Page } from "@playwright/test";
 
+/** Budget for any wait on a screen the game has to build, boot or transition
+ *  into. See the note on `ready()` for why this is not Playwright's default. */
+const BOOT_TIMEOUT = 45_000;
+
 /**
  * Browser noise the HARNESS creates, not the game. Two known sources:
  *
@@ -16,6 +20,10 @@ import { expect, type Page } from "@playwright/test";
 const HARNESS_NOISE = [
   /the server responded with a status of 400/,
   /Cross-Origin-Opener-Policy header has been ignored/,
+  // The service worker's own sandboxed `about:blank` frames. Chromium logs one
+  // per frame and the game cannot suppress them or act on them; they were
+  // failing every phone test in mobile-touch.spec.ts on `app.errors`.
+  /Blocked script execution in 'about:blank' because the document's frame is sandboxed/,
 ];
 const isHarnessNoise = (text: string): boolean => HARNESS_NOISE.some((re) => re.test(text));
 
@@ -34,34 +42,42 @@ export class SunbirdPage {
   }
   async open(): Promise<void> { await this.page.goto("/", { waitUntil: "commit" }); }
   async ready(): Promise<void> {
-    await expect(this.page.locator("#boot-shell")).toHaveCount(0);
-    const play = this.page.getByRole("button", { name: "Play free flight now", exact: true });
+    // The boot waits carry an explicit budget rather than Playwright's 5 s
+    // default. The shipping folder is one 2.38 MB self-contained document:
+    // the browser has to fetch, parse and execute all of it, build the WebGL
+    // scene, then generate a call sign before this screen exists. Quiet, that
+    // is about a second; on a machine already running the rest of the gate it
+    // is several times that. portal-policy.spec.ts has always waited 45 s for
+    // these same two elements — leaving the artifact suite on the default made
+    // it the one spec that failed on how busy the box was, not on the build.
+    await expect(this.page.locator("#boot-shell")).toHaveCount(0, { timeout: BOOT_TIMEOUT });
+    const play = this.page.getByRole("button", { name: "Fly now", exact: true });
     const confirmName = this.page.locator('[data-action="confirm-pilot-name"]');
-    await expect(play.or(confirmName)).toBeVisible();
+    await expect(play.or(confirmName)).toBeVisible({ timeout: BOOT_TIMEOUT });
     // Fresh browser contexts now start at the pilot welcome screen.
     if (await confirmName.isVisible()) {
       await this.page.getByRole("button", { name: "Random name", exact: true }).click();
       await confirmName.click();
     }
-    await expect(play).toBeVisible();
+    await expect(play).toBeVisible({ timeout: BOOT_TIMEOUT });
   }
   async fly(): Promise<void> {
-    await this.page.getByRole("button", { name: "Play free flight now", exact: true }).click();
-    await expect(this.page.locator('[data-action="pause"]')).toBeVisible();
+    await this.page.getByRole("button", { name: "Fly now", exact: true }).click();
+    await expect(this.page.locator('[data-action="pause"]')).toBeVisible({ timeout: BOOT_TIMEOUT });
   }
   async pause(): Promise<void> {
     await this.page.locator('[data-action="pause"]').click();
-    await expect(this.page.locator('[data-action="resume"]')).toBeVisible();
+    await expect(this.page.locator('[data-action="resume"]')).toBeVisible({ timeout: BOOT_TIMEOUT });
   }
   async resume(): Promise<void> {
     await this.page.locator('[data-action="resume"]').click();
-    await expect(this.page.locator('[data-action="pause"]')).toBeVisible();
+    await expect(this.page.locator('[data-action="pause"]')).toBeVisible({ timeout: BOOT_TIMEOUT });
   }
   async openMenu(action: string, title: string): Promise<void> {
     const card = this.page.locator('[data-ref="menuCard"]');
     const button = card.locator(`[data-action="${action}"]`).first();
     await button.click();
-    await expect(card.locator(".screen-head h2")).toHaveText(title);
+    await expect(card.locator(".screen-head h2")).toHaveText(title, { timeout: BOOT_TIMEOUT });
   }
   async backHome(): Promise<void> {
     await this.page.locator('[data-ref="menuCard"] [data-action="back"]').click();

@@ -493,7 +493,10 @@ export class Collectibles {
         const r = rng.next();
         if (isCrest && r < 0.16) this.placePickup(this.pickPowerup(rng), x, hh + 3.2);
         else if (isRamp && r > 0.93) this.placePickup("rocket", x + 16, hh + 14);
-        else if (r > 0.985) this.placePickup("sun", x, hh + 3);
+        // Sun is the clock's only mid-island refill. At 1.5% per cell it was
+        // rarer than one per island, which left daylight as a pure speed test
+        // with no pickups to reward a good line; this is roughly one per 900 m.
+        else if (r > 0.972) this.placePickup("sun", x, hh + 3);
       }
       if (lx > 700 && lx < RAMP_START && rng.next() < 0.06) this.placePickup("shield", x, hh + 3);
     }

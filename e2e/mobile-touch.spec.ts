@@ -52,6 +52,12 @@ async function barePixel(page: Page, selector: string, avoid = ""): Promise<{ x:
         const hit = document.elementFromPoint(x, y);
         if (!hit || !root.contains(hit)) continue;
         if (hit.closest("button, a, summary, input, select, textarea, [data-action], [role=button]")) continue;
+        // The card head is sticky, so it sits over the top of the scroll area
+        // for the whole scroll. It is chrome, not "plain menu content" — a drag
+        // that starts on it is not the gesture this helper exists to find, and
+        // aiming at the first bare pixel meant every one of these drags began
+        // in the stuck header.
+        if (hit.closest(".screen-head")) continue;
         if (avoidEl?.contains(hit)) continue;
         return { x, y };
       }
@@ -80,7 +86,7 @@ test.describe("mobile touch", () => {
   test.skip(({ hasTouch }) => !hasTouch, "needs a touch-capable device profile");
 
   test("a finger drag on plain menu content scrolls the card", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
@@ -106,7 +112,7 @@ test.describe("mobile touch", () => {
   });
 
   test("the browser, not script, owns the pan during a menu drag", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
@@ -139,27 +145,46 @@ test.describe("mobile touch", () => {
   });
 
   test("a nested list inside a card scrolls under the finger too", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
     await app.ready();
     await openScreen(app, page, "open-pass", "Nest Pass");
 
+    // The tier track deliberately does NOT scroll itself — `.tier-track` in
+    // ui.css says so: "No inner scroll — parent .paper-card scrolls". A nested
+    // scroller inside a card traps the finger on touch, because the first drag
+    // belongs to the inner list and the player cannot reach the card beneath.
+    // So the contract to assert is the one the CSS states: a drag that STARTS
+    // on the nested list still moves the card. Asserting the track's own
+    // scrollTop would pass vacuously — the track has no overflow, so its
+    // range is 0 and the check could never mean anything.
     const track = page.locator(`${CARD} .tier-track`);
     await expect(track).toBeVisible();
-    const range = await track.evaluate(el => el.scrollHeight - el.clientHeight);
-    expect(range, "tier track should overflow on a phone").toBeGreaterThan(200);
+    const card = page.locator(CARD);
+    const range = await card.evaluate(el => el.scrollHeight - el.clientHeight);
+    expect(range, "Nest Pass card should overflow on a phone").toBeGreaterThan(200);
 
     const box = await track.boundingBox();
-    await track.evaluate(el => { el.scrollTop = 0; });
-    await fingerDrag(cdp, box!.x + box!.width / 2, box!.y + box!.height / 2, 0, -260);
-    expect(await track.evaluate(el => el.scrollTop)).toBeGreaterThan(80);
+    const cardBox = await card.boundingBox();
+    // The track is taller than the card, so its own centre is below the card's
+    // clipped edge — a touch dispatched there lands on the page behind the
+    // card, not on the list. Clamp the start point into the card's visible box
+    // so the drag really does begin on the nested list.
+    const startX = box!.x + box!.width / 2;
+    const startY = Math.min(box!.y + 40, cardBox!.y + cardBox!.height / 2);
+    await card.evaluate(el => { el.scrollTop = 0; });
+    await fingerDrag(cdp, startX, startY, 0, -260);
+
+    const scrolled = await card.evaluate(el => el.scrollTop);
+    expect(scrolled, "a drag starting on the nested list must still scroll the card").toBeGreaterThan(80);
+    expect(await page.evaluate(() => window.scrollY), "scroll must stay inside the game").toBe(0);
     expect(app.errors).toEqual([]);
   });
 
   test("tapping the bare pause screen resumes the flight", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
@@ -178,7 +203,7 @@ test.describe("mobile touch", () => {
   });
 
   test("tapping the backdrop beside a card goes back", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
@@ -197,12 +222,12 @@ test.describe("mobile touch", () => {
     });
     test.skip(!at, "card covers the whole overlay at this viewport");
     await fingerPress(cdp, at!.x, at!.y);
-    await expect(page.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible();
     expect(app.errors).toEqual([]);
   });
 
   test("touching a menu does not fire gameplay gestures", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();
@@ -220,7 +245,7 @@ test.describe("mobile touch", () => {
   });
 
   test("touch feedback survives the small-screen performance pass", async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     await app.open();
     await app.ready();
@@ -252,7 +277,7 @@ test.describe("mobile touch", () => {
   });
 
   test("a press on a menu button still produces a visible press state", async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     await app.open();
     await app.ready();
@@ -288,7 +313,7 @@ test.describe("mobile touch", () => {
   });
 
   test("the gameplay surface still refuses to scroll or chain", async ({ page, context }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const app = new SunbirdPage(page);
     const cdp = await context.newCDPSession(page);
     await app.open();

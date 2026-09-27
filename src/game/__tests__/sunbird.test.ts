@@ -11,10 +11,15 @@ import {
   drawSunbird,
   drawSunDisc,
   rivalPalette,
+  shapeTable,
+  skinPalette,
+  skinShape,
   sunSVG,
   sunbirdSVG,
   type SunbirdPalette,
 } from "../Sunbird";
+import { SHAPES } from "../Sunbird";
+import { SKINS } from "../Economy";
 
 /**
  * The point of Sunbird.ts is that the title-screen bird — the one players
@@ -318,6 +323,82 @@ describe("the shared sun", () => {
   it("produces no undefined or NaN", () => {
     for (const size of [24, 48, 64, 120]) {
       expect(sunSVG({ size })).not.toMatch(/undefined|NaN/);
+    }
+  });
+});
+
+describe("the species shapes", () => {
+  it("gives every skin a shape, and only a real one", () => {
+    for (const skin of SKINS) {
+      const shape = skinShape(skin);
+      expect(SHAPES, `${skin.name} resolves to no known shape`).toContain(shape);
+    }
+  });
+
+  it("is stable — a bird keeps its species across sessions", () => {
+    // Derived from the id, so it cannot drift. A shape that changed between
+    // visits would mean the shop had sold a different animal each time.
+    for (const skin of SKINS) {
+      expect(skinShape(skin)).toBe(skinShape(skin));
+    }
+  });
+
+  it("actually draws differently, or it is a relabelled songbird", () => {
+    // The claim is that a harpy and an owl are not the same bird. Compare the
+    // geometry each shape emits, not the colours.
+    const geometry = (shape: (typeof SHAPES)[number]) =>
+      shapeTable(shape)
+        .map((part) => (part.kind === "path" ? part.d.map((c) => c.join(",")).join(" ") : part.kind))
+        .join("|");
+    const drawn = SHAPES.map(geometry);
+    expect(new Set(drawn).size, `only ${new Set(drawn).size} of ${SHAPES.length} shapes are distinct`).toBe(
+      SHAPES.length,
+    );
+    // And the default must still be the hand-authored title-screen mark, so the
+    // existing assertion that the hero bird is reproduced path-for-path holds.
+    expect(sunbirdSVG({})).toBe(sunbirdSVG({ shape: "songbird" }));
+    expect(geometry("songbird")).toBe(
+      shapeTable("songbird")
+        .map((part) => (part.kind === "path" ? part.d.map((c) => c.join(",")).join(" ") : part.kind))
+        .join("|"),
+    );
+  });
+
+  it("puts two different species in the shop's own bird catalogue", () => {
+    // The catalogue is only useful if it is varied: if every skin hashed to
+    // one shape the rule would be no better than the single silhouette it
+    // replaced.
+    const used = new Set(SKINS.map((s) => skinShape(s)));
+    expect(used.size, "sixty-nine birds resolve to a single species").toBeGreaterThan(1);
+  });
+
+  it("emits a wing class per shape, so a wader does not flap like a raptor", () => {
+    for (const shape of SHAPES) {
+      const svg = sunbirdSVG({ shape, animateWings: true });
+      expect(svg).toContain(`bird-wing--${shape}`);
+      // Both wings flap, and the far one is distinguishable from the near one —
+      // unison reads as a card being shuffled, not a bird beating its wings.
+      expect(svg).toContain("wing-far");
+    }
+  });
+
+  it("flaps only when asked", () => {
+    expect(sunbirdSVG({ shape: "raptor" })).not.toContain("bird-wing");
+  });
+});
+
+describe("the preview is the bird you fly", () => {
+  it("colours the tail from the wing, because the 3-D bird does", () => {
+    // Bird.applySkin paints the tail and crest from the wing material, so a
+    // preview that derives the tail from the body shows a different animal from
+    // the one that then flies. For any skin where wing !== a darkened body,
+    // that was visible in the shop and wrong in the sky.
+    for (const skin of SKINS) {
+      const palette = skinPalette(skin);
+      expect(palette.tail, `${skin.name}'s preview tail is not its flight tail`).toBe(
+        `#${(skin.wing >>> 0).toString(16).padStart(6, "0")}`,
+      );
+      expect(palette.wingNear).toBe(palette.tail);
     }
   });
 });

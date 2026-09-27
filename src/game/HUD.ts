@@ -3,7 +3,12 @@ import { flightTakeaway } from "./FlightGuidance";
 import { menuIcon, menuIconSm, menuHorizon, arrowUpRightSvg, arrowRightSvg, type MenuIconName } from "./MenuIcons";
 import { paginate } from "./Pagination";
 import { flockLoadingMark } from "./FlockLoading";
-import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, type MenuDestination } from "./MenuCatalog";
+// Only what the home menu actually renders. `renderMain` lays every section
+// out as one scroll, so there is no tab strip to drive and nothing else to
+// import.
+import { seasonReward } from "./pvp";
+import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, tournamentCountdownCard, type MenuDestination } from "./MenuCatalog";
+import { shouldShowDailyBanner } from "./Engagement";
 import { OverlayNavigation } from "./OverlayNavigation";
 import { MenuContinuity } from "./MenuContinuity";
 import { MenuSky } from "./MenuSky";
@@ -21,8 +26,9 @@ import type { RosterBird, Standing, RivalNameTag } from "./MassRace";
 import { formatNumberLocalized, SUPPORTED_LOCALES, getLocale, t } from "../i18n";
 import * as THREE from "three";
 import { DAILY_STIPEND, PIGGY_BANK_CAP, PIGGY_BANK_MIN_SMASH, SHOP_AD_COINS, SHOP_AD_SESSION_CAP, VIP_DAILY_GIFT } from "./constants";
+import { TRAILS } from "./Tournaments";
 import { COLLECTIONS, dailyFlashBird, GOLD, skinById, STARTER_PACK, VIP, type BoostView, type ShopTrailView, type SkinView } from "./Economy";
-import { rivalPalette, skinPalette, sunSVG, sunbirdSVG } from "./Sunbird";
+import { rivalPalette, skinPalette, skinShape, sunSVG, sunbirdSVG } from "./Sunbird";
 import { formatDistance } from "./math";
 import type { MissionRow, MissionView, QuestReward, QuestView } from "./Missions";
 import type { CampaignChapterView } from "./Campaign";
@@ -62,7 +68,12 @@ export type UiScreen =
 
 /** Stable screen identifiers used by automation, telemetry, and QA. */
 export const SCREEN = {
-  leaderboard: "scores", raceLobby: "live", aiPvp: "practice", challenges: "challenges",
+  // `board` is the leaderboard's own screen and `savedScores` is the "Your
+  // scores" one. They used to share a slot: `leaderboard` pointed at "scores",
+  // which is the saved-scores screen's value, so the leaderboard rendered the
+  // saved-scores heading and icon and vice versa.
+  leaderboard: "board", savedScores: "scores",
+  raceLobby: "live", aiPvp: "practice", challenges: "challenges",
   campaign: "campaign", squad: "squad", rivalRank: "rank", tournaments: "cups",
   gameModes: "modes", atlas: "atlas", shop: "shop", coinStore: "paywall",
   confirmUnlock: "checkout", highGlides: "progress", nestPass: "pass",
@@ -78,6 +89,7 @@ export const SCREEN = {
  */
 export const SCREEN_HEADINGS: Readonly<Record<keyof typeof SCREEN, string>> = {
   leaderboard: "Leaderboard",
+  savedScores: "Your scores",
   raceLobby: "Race Lobby",
   aiPvp: "AI PvP",
   challenges: "Challenges",
@@ -129,6 +141,8 @@ export type LoadoutView = {
   bird: string;
   trail: string;
   boosts: number;
+  /** Preview of what the ranked duel fair-play cap does to this bird's perks. */
+  rankedNote: string;
 };
 
 export type AtlasEntry = {
@@ -266,9 +280,17 @@ export type HudSnapshot = {
   farthestIsland: number;
   showTutorialHand: boolean;
   /* --- momentum / flight readouts --- */
+  /** How the run ended, so the card can say so. */
+  endReason: "daylight" | "water" | "settled";
   launchBanner: string;
   launchBannerT: number;
   launchRating: string;
+  /** The perfect-launch chain, and how loudly to present it (see ChainFlair). */
+  chain: number;
+  chainTier: string;
+  chainLabel: string;
+  chainScale: number;
+  chainPulse: number;
   altitude: number;
   altZone: number;
   maxAltitude: number;
@@ -321,6 +343,8 @@ export type HudSnapshot = {
   slopeScore: number;
   cups: TournamentView[];
   trails: { id: string; label: string; equipped: boolean }[];
+  /** Cup title prizes, which are worn beside the pilot's name. */
+  titles: { id: string; label: string }[];
   lastPrize: string;
   standings: Standing[];
   racePlace: number;
@@ -401,6 +425,8 @@ export type HudSnapshot = {
   rankPrizeClaimed: boolean;
   /** The one-time Ace Wingman crate was bought (it pays 250 for 240 — no re-claims). */
   wingmanBundle: boolean;
+  /** Daily Login Ritual banner dismissed for today (Play now / explicit X). */
+  dismissedDailyPrompt: boolean;
   /* --- monetization max value & portal loops --- */
   piggyCoins: number;
   prestigeLevel: number;
@@ -522,6 +548,8 @@ export class HUD {
   private ringChainCount!: HTMLElement;
   private ringChainFill!: HTMLElement;
   private slopeChainEl!: HTMLElement;
+  private slopeChainText!: HTMLElement;
+  private slopeChainFill!: HTMLElement;
   private hintEl!: HTMLElement;
   private menuEl!: HTMLElement;
   private menuCard!: HTMLElement;
@@ -554,11 +582,13 @@ export class HUD {
   private biomeChip!: HTMLElement;
   private speedLines!: HTMLElement;
   private handEl!: HTMLElement;
+  private handHintEl!: HTMLElement;
   private altGauge!: HTMLElement;
   private altFill!: HTMLElement;
   private altBird!: HTMLElement;
   private altRead!: HTMLElement;
   private launchBanner!: HTMLElement;
+  private chainReadout!: HTMLElement;
   private powerStrip!: HTMLElement;
   private countdownEl!: HTMLElement;
   private versusBar!: HTMLElement;
@@ -596,8 +626,26 @@ export class HUD {
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
+  /**
+   * Tournament countdown urgency (mid-week push): cup ids the "only N days
+   * left" toast has already fired for. Never needs manual reset — a cup's
+   * `def.id` embeds the ISO week (see Tournaments.weekKey), so it is a
+   * different id every week regardless of when this HUD instance was made.
+   */
+  private tournamentPushed = new Set<string>();
   private lastCombo = -1;
   private lastBiome = "";
+  private lastIsland = -1;
+  /**
+   * Mobile HUD declutter (P0 fix): the island chip only needs to grab
+   * attention right when it changes — on a 375px phone it otherwise
+   * permanently competes with the biome/multiplier chips for the same row.
+   * `.recent` keeps it visible for 3s after a change; the pending timer (from
+   * `this.after`, so `dispose()` already sweeps it) lets a second island
+   * change — e.g. a fast restart — restart the window instead of letting an
+   * earlier timeout hide it early.
+   */
+  private islandRecentTimer: number | null = null;
   /** Per-frame text write memoization: DOM writes only when content changes. */
   private readonly textCache = new Map<string, string>();
   private readonly styleCache = new Map<string, string>();
@@ -638,6 +686,7 @@ export class HUD {
   private lastKey = "";
   private lastHint = "";
   private readonly shopBrowse = newShopBrowse();
+  private lastChainKey = "";
   private shopSnapshot: HudSnapshot | null = null;
   private currentSnapshot: HudSnapshot | null = null;
   private lastChips = "";
@@ -680,13 +729,14 @@ export class HUD {
           </div>
           <div class="alt-read" data-ref="altRead">0 m</div>
         </div>
+        <div class="chain-readout" data-ref="chainReadout" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="launch-banner" data-ref="launchBanner"></div>
         <div class="power-strip" data-ref="powerStrip"></div>
         <div class="goal-strip" data-ref="goalStrip"></div>
         <div class="mission-strip hidden" data-ref="missionStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
         <div class="goal-pop" data-ref="goalPop" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="rank-up" data-ref="rankUp" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="countdown" data-ref="countdown"></div>
+        <div class="countdown" role="status" aria-live="assertive" aria-atomic="true" data-ref="countdown"></div>
         <div class="versus-bar hidden" data-ref="versusBar"></div>
         <div class="standings hidden" data-ref="standings"></div>
         <div class="roster-bar hidden" data-ref="rosterBar"></div>
@@ -699,7 +749,7 @@ export class HUD {
           <div class="emote-options hidden" id="flight-emotes">${[["👋", "Wave"], ["🔥", "Fire"], ["😂", "Laugh"], ["🙌", "Bravo"], ["👑", "Crown"], ["🤝", "GG"]].map(([icon, label]) => `<button data-ui data-action="emote" data-id="${icon}" aria-label="Send ${label}" title="Send ${label}">${icon} ${label}</button>`).join("")}</div>
         </div>
         <div class="mid-meta">
-          <div class="island-chip" data-ref="island">Island 1</div>
+          <div class="island-chip" data-ref="island">${t("hud.ui.I1", undefined, "Island 1")}</div>
           <div class="biome-chip" data-ref="biome"></div>
           <div class="mult-chip" data-ref="mult">×1.0</div>
           <div class="gold-chip hidden" data-ref="goldChip">✦ GOLD</div>
@@ -711,19 +761,28 @@ export class HUD {
              until the first hoop of a chain, then it counts down the window so
              the player can see the next ring is still worth diving for. -->
         <div class="ring-chain hidden" data-ref="ringChain">
+          <span class="ring-chain-icon" aria-hidden="true">🔥</span>
           <b data-ref="ringChainCount">×2</b>
           <i><s data-ref="ringChainFill"></s></i>
         </div>
-        <div class="slope-chain hidden" data-ref="slopeChain">〽 FLOW ×1</div>
-        <div class="fever-wrap" data-ref="feverWrap">
+        <!-- Colorblind-friendly: the flow chain used to be identified only by a
+             coral-on-teal color and an ambiguous 〽 glyph — a shape cue (📐) plus
+             a fill bar mirror the ring chain's own icon + count + bar pattern so
+             color is never the only signal. -->
+        <div class="slope-chain hidden" data-ref="slopeChain">
+          <span class="slope-chain-icon" aria-hidden="true">📐</span>
+          <span data-ref="slopeChainText">FLOW ×1</span>
+          <i><s data-ref="slopeChainFill"></s></i>
+        </div>
+        <div class="fever-wrap hidden" data-ref="feverWrap">
           <div class="fever-label">FEVER</div>
           <div class="fever-bar"><div class="fever-fill" data-ref="feverFill"></div></div>
         </div>
-        <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="Mute sound" title="Mute sound"><span class="audio-glyph" aria-hidden="true"></span></button>
+        <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
         <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="Pause">❙❙</button>
         <div class="combo" data-ref="combo"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="hand" data-ref="hand">☝<span class="hand-hint">Tap · Space · ↑</span></div>
+        <div class="hand" data-ref="hand">☝<span class="hand-hint" data-ref="handHint"></span></div>
         <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
       </div>
 
@@ -731,8 +790,8 @@ export class HUD {
 
       <div class="overlay pause hidden" data-ref="pause" role="dialog" aria-modal="true" aria-label="Paused">
         <div class="paper-card slim pause-card">
-          <div class="pause-kicker">FLIGHT ON HOLD</div>
-          <h2>Take a breath</h2>
+          <div class="pause-kicker">${t("hud.ui.FHOLD", undefined, "FLIGHT ON HOLD")}</div>
+          <h2>${t("hud.ui.TBreath", undefined, "Take a breath")}</h2>
           <p class="tagline">Your run is safe. Adjust settings, grab boosts, or rally your flock — ready when you are.</p>
           <div class="pause-run-stats">
             <span class="prs"><em>Distance</em><b data-ref="pauseDistance">0 m</b></span>
@@ -742,9 +801,9 @@ export class HUD {
           <div class="pause-actions">
             <button class="primary-btn pause-resume" data-ui data-action="resume"><span class="pause-action-icon">${menuIcon("flight")}</span>${t("hud.pause.resume", undefined, "Keep flying")}</button>
           </div>
-          <div class="pause-quick-grid" role="group" aria-label="Quick access">
+          <div class="pause-quick-grid" role="group" aria-label="${t("hud.ui.QAccess", undefined, "Quick access")}">
             <button class="pause-q pause-mute" data-ui data-action="set-mute" data-ref="pauseMute" aria-pressed="false">
-              <i data-ref="pauseMuteIco">${menuIcon("sound")}</i><span data-ref="pauseMuteLbl">Sound on</span>
+              <i data-ref="pauseMuteIco">${menuIcon("sound")}</i><span data-ref="pauseMuteLbl">${t("hud.ui.S", undefined, "Sound on")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="settings">
               <i>${menuIcon("settings")}</i><span>${t("hud.menu.settings", undefined, "Settings")}</span>
@@ -759,7 +818,7 @@ export class HUD {
               <i>${menuIcon("scores")}</i><span>${t("hud.pause.myScores", undefined, "My Scores")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="pass">
-              <i>${menuIcon("pass")}</i><span>Nest Pass</span>
+              <i>${menuIcon("pass")}</i><span>${t("hud.ui.NPass", undefined, "Nest Pass")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="squad">
               <i>${menuIcon("squad")}</i><span>Squad</span>
@@ -798,7 +857,7 @@ export class HUD {
         <div class="btn-row mm-actions">
           <button class="primary-btn mm-ready hidden" data-ui data-ref="matchmakingReady" data-action="mm-ready">Ready up ✓</button>
           <button class="primary-btn gold mm-ai hidden" data-ui data-ref="matchmakingAi" data-action="mm-ai">🤖 Race the AI flock instead</button>
-          <button class="soft-btn mm-keep hidden" data-ui data-ref="matchmakingKeep" data-action="mm-keep-search">Keep searching</button>
+          <button class="soft-btn mm-keep hidden" data-ui data-ref="matchmakingKeep" data-action="mm-keep-search">${t("hud.ui.KSearching", undefined, "Keep searching")}</button>
           <button class="soft-btn mm-cancel" data-ui data-action="mm-cancel">Cancel</button>
         </div>
       </div>
@@ -1052,7 +1111,7 @@ export class HUD {
     this.dismissCopy();
     const dialog = document.createElement("div");
     dialog.className = "overlay copy-dialog";
-    dialog.innerHTML = '<div class="paper-card slim"><h2>Copy manually</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="Text to copy" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>';
+    dialog.innerHTML = '<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>';
     const field = dialog.querySelector("textarea")!;
     field.value = text; // never inject codes/URLs as markup
     this.root.appendChild(dialog);
@@ -1095,7 +1154,13 @@ export class HUD {
   /** Mirror a name field's current length into its character counter. */
   private syncNameCount(field: HTMLInputElement | HTMLTextAreaElement): void {
     const count = field.closest(".name-input-wrapper")?.querySelector(".name-char-count span");
-    if (count) count.textContent = String(field.value.length);
+    if (!count) return;
+    const next = String(field.value.length);
+    // Write only on a real change. This runs on every HUD push while the name
+    // screen is mounted, and an unconditional `textContent` write is a mutation
+    // on every frame — which re-ran layout and left the dice button next to it
+    // permanently "moving" as far as a click was concerned.
+    if (count.textContent !== next) count.textContent = next;
   }
 
   updateNameTags(tags: RivalNameTag[], camera: THREE.Camera, width: number, height: number): void {
@@ -1155,6 +1220,10 @@ export class HUD {
     this.currentSnapshot = s;
     if (s.state === "playing" && !this.wasInFlight) this.resultsContinuity.reset();
     this.wasInFlight = s.state === "playing";
+    // Tournament countdown urgency push: menu-only, so it never interrupts a
+    // flight in progress with a toast about something the player can't act
+    // on until they land anyway.
+    if (s.state === "menu") this.maybeTournamentPush(s.cups);
     // Keep the menu bird animated by default. The in-game Reduce motion
     // switch remains the explicit opt-out; relying solely on the browser's
     // media query made the hero appear frozen on some desktop profiles.
@@ -1162,7 +1231,11 @@ export class HUD {
     // Network presence is asynchronous and doesn't increment the save/UI
     // version. Include it or a connected room stays stuck on disabled Ready.
     const roomKey = s.state === "menu" && s.screen === "live"
-      ? `${s.netState}|${s.netError}|${s.roomCode}|${s.roomCount}|${s.roomReady}|${s.roomReadyCount}|${JSON.stringify(s.lobbyRivals)}` : "";
+      // Key on SHAPE, not content. This serialised the whole rival array 30x a
+      // second - a few KB of fresh string per tick, thrown away - and it never
+      // short-circuited, because the array is a new object on every presence
+      // tick. The rows rebuild only when the roster's SIZE or ready-flags move.
+      ? `${s.netState}|${s.netError}|${s.roomCode}|${s.roomCount}|${s.roomReady}|${s.roomReadyCount}|${s.lobbyRivals.length}|${s.lobbyRivals.map((r) => (r.ready ? 1 : 0)).join("")}` : "";
     const key = `${s.state}|${s.screen}|${s.version}|${roomKey}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
@@ -1234,7 +1307,27 @@ export class HUD {
       this.setText(this.coinsEl, "coins", formatNumberLocalized(s.coins));
       this.setText(this.bestEl, "best", distanceText(s.bestDistance));
       this.setText(this.islandEl, "island", `Island ${s.island + 1}`);
+      // Mobile HUD declutter: the island chip flashes "recent" for 3s right
+      // after the island changes, then fades back to unobtrusive (CSS scopes
+      // `.recent` to <=640px only — desktop/tablet keep it always visible).
+      if (s.island !== this.lastIsland) {
+        this.lastIsland = s.island;
+        this.islandEl.classList.add("recent");
+        if (this.islandRecentTimer !== null) this.cancelTimer(this.islandRecentTimer);
+        this.islandRecentTimer = this.after(() => {
+          this.islandEl.classList.remove("recent");
+          this.islandRecentTimer = null;
+        }, 3000);
+      }
       this.setText(this.multEl, "mult", `×${s.multiplier.toFixed(1)}`);
+      // Mobile HUD declutter: the multiplier chip is only "relevant" once it
+      // is actually boosting the run — at the baseline ×1.0 it is hidden on
+      // narrow phones (CSS scopes this to <=640px; desktop keeps it visible).
+      this.multEl.classList.toggle("active", s.multiplier > 1);
+      // Mobile HUD declutter: the biome chip only matters when a hazard is
+      // live nearby (headwind gust or thermal) — otherwise it just crowds the
+      // same row as island/multiplier on a 375px phone.
+      this.biomeChip.classList.toggle("hazard-near", s.gust > 0.3 || s.inThermal);
       this.goldChip.classList.toggle("hidden", !s.gold);
       this.vipChip.classList.toggle("hidden", !s.vip);
       if (this.vipChip.textContent !== `♛ VIP · ${s.vipDaysLeft}d`) this.vipChip.textContent = `♛ VIP · ${s.vipDaysLeft}d`;
@@ -1255,14 +1348,25 @@ export class HUD {
       this.setStyle(this.sunKnob, "sunKnob", "left", `${day * 100}%`);
       this.sunFill.classList.toggle("low", day < 0.28);
 
-      this.feverWrap.classList.toggle("on", s.feverOn);
+      // Visible whenever the meter has something to say. It was shown only
+      // while fever was LIT, but off-fever it carries the chain->fever
+      // progress — which is the moment the player is actually asking "how close
+      // am I?", and the moment it was hidden.
+      this.feverWrap.classList.toggle("on", s.feverOn || s.fever > 0);
+      this.feverWrap.classList.toggle("hidden", !s.feverOn && s.fever <= 0);
       this.setStyle(this.feverFill, "feverFill", "width", `${Math.max(0, Math.min(1, s.fever)) * 100}%`);
 
       // Ring chain: the airborne objective, so it is always visible while it
       // is live — count first (big), remaining window second (the bar).
       const slopeLinked = s.slopeChain > 0;
       this.slopeChainEl.classList.toggle("hidden", !slopeLinked);
-      if (slopeLinked) this.setText(this.slopeChainEl, "slopeChain", `〽 FLOW ×${s.slopeChain} · ${s.slopeScore}`);
+      if (slopeLinked) {
+        this.setText(this.slopeChainText, "slopeChainText", `FLOW ×${s.slopeChain} · ${s.slopeScore}`);
+        // No timed window backs this chain (unlike the ring chain's countdown
+        // fraction) — the fill instead reads as "how established is the
+        // streak", climbing toward full at a 5-landing chain.
+        this.setStyle(this.slopeChainFill, "slopeChainFill", "width", `${Math.max(0, Math.min(1, s.slopeChain / 5)) * 100}%`);
+      }
 
       const chained = s.ringChain > 1;
       this.ringChainEl.classList.toggle("hidden", !chained);
@@ -1289,7 +1393,12 @@ export class HUD {
 
       if (s.combo !== this.lastCombo) {
         this.lastCombo = s.combo;
-        this.comboEl.textContent = s.combo >= 2 ? `×${s.combo} chain` : "";
+        // "streak", not "chain": this counter is the launch streak (it counts
+        // great OR perfect launches, and decays on a grace timer), while the
+        // centre readout is the perfect-launch chain that drives Fever. One
+        // word over two different numbers read as the HUD disagreeing with
+        // itself — which it was, the moment anyone landed a single "great".
+        this.comboEl.textContent = s.combo >= 2 ? `×${s.combo} streak` : "";
         this.comboEl.classList.toggle("show", s.combo >= 2);
         if (s.combo >= 2) {
           this.comboEl.classList.remove("pop");
@@ -1315,6 +1424,18 @@ export class HUD {
       this.setStyle(this.altBird, "altBird", "bottom", `calc(${aN * 100}% - 9px)`);
       this.setText(this.altRead, "altRead", `${Math.round(s.altitude)} m`);
       this.altGauge.dataset.zone = String(s.altZone);
+
+      const chainKey = `${s.chainLabel}|${s.chainTier}`;
+      if (chainKey !== this.lastChainKey && this.chainReadout) {
+        this.lastChainKey = chainKey;
+        this.chainReadout.textContent = s.chainLabel;
+        this.chainReadout.className = `chain-readout tier-${s.chainTier}`;
+        // Custom properties rather than inline style strings assembled per
+        // frame: the tier class carries the look, the scale and pulse carry the
+        // magnitude, and the browser does the interpolating.
+        this.chainReadout.style.setProperty("--chain-scale", s.chainScale.toFixed(3));
+        this.chainReadout.style.setProperty("--chain-pulse", `${s.chainPulse.toFixed(2)}s`);
+      }
 
       const bannerKey = `${s.launchBanner}|${s.launchBannerT > 0}`;
       if (bannerKey !== this.lastBanner) {
@@ -1393,7 +1514,7 @@ export class HUD {
         // Career rung: only when no beat row and there's a next rank to chase
         if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
           const cpct = Math.min(100, s.wings.progress * 100);
-          rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${s.wings.nextNeeded} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
         }
 
         // Trophy progress: lowest priority — only when a slot is still free.
@@ -1450,8 +1571,8 @@ export class HUD {
             `<span class="rm-count">${s.roster.length} birds</span>` +
             `${s.roomCode ? `<span class="rm-room">ROOM ${escapeHtml(s.roomCode)}</span>` : ""}` +
             `<span class="rm-net ${s.netState}">${s.multiplayerLive ? s.netState : "practice"}</span>` +
-            `${s.multiplayerLive && s.linkQuality !== "unknown" ? `<span class="link-quality ${s.linkQuality}" title="Live state cadence">${s.linkQuality} link</span>` : ""}</div>` +
-            `<div class="roster-track" role="img" aria-label="Live race positions">${s.roster
+            `${s.multiplayerLive && s.linkQuality !== "unknown" ? `<span class="link-quality ${s.linkQuality}" title="${t("hud.ui.LStateCadence", undefined, "Live state cadence")}">${s.linkQuality} link</span>` : ""}</div>` +
+            `<div class="roster-track" role="img" aria-label="${t("hud.ui.LRacePositions", undefined, "Live race positions")}">${s.roster
               .map(
                 (r) =>
                   `<span class="rb ${r.you ? "you" : ""} ${r.remote ? "remote" : ""} ${r.ghost ? "ghost" : ""} ${r.finished ? "done" : ""}" ` +
@@ -1533,6 +1654,12 @@ export class HUD {
         }
       }
       this.handEl.classList.toggle("show", s.showTutorialHand);
+      // One verb, one source. The hand said "Tap . Space . up" - a TAP on a
+      // HOLD game, naming two keys that do not exist on the device this
+      // ships to - on screen at the same moment as a coach saying HOLD.
+      this.handHintEl.textContent = s.settings.tapToggleDive
+        ? t("onboarding.tapToDive", undefined, "Tap to dive")
+        : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
       if (html !== this.lastChips) {
         this.lastChips = html;
         this.powersEl.innerHTML = renderCoins(html);
@@ -1548,7 +1675,8 @@ export class HUD {
       this.wingsNear.classList.toggle("hidden", !prox.visible);
       if (prox.visible) {
         const pct = Math.round(prox.fill * 100);
-        const label = t("hud.progress.proximity", { n: prox.remaining, name: prox.name }, `${prox.remaining} m to ${prox.name}`);
+        const remainingText = distanceText(prox.remaining);
+        const label = t("hud.progress.proximity", { n: remainingText, name: prox.name }, `${remainingText} to ${prox.name}`);
         const bar = this.wingsNear.firstElementChild as HTMLElement;
         bar.style.width = `${pct}%`;
         // The bar is the accessible element, not the mirrored text beside it:
@@ -1593,6 +1721,23 @@ export class HUD {
       }
     }
     this.overlayNavigation.sync(this.copyDialog ?? (this.matchmakingEl.classList.contains("hidden") ? this.root.querySelector<HTMLElement>(".overlay:not(.hidden)") : this.matchmakingEl));
+  }
+
+  /**
+   * Tournament Countdown Urgency mid-week push: fires once, the moment a cup
+   * crosses into its final 3 days, and only when there is still a tier worth
+   * climbing for — a player already at Diamond gets no nag, since there is
+   * nothing left to reach.
+   */
+  private maybeTournamentPush(cups: readonly TournamentView[]): void {
+    for (const cup of cups) {
+      const daysLeft = Math.ceil(cup.endsInMs / 86_400_000);
+      if (daysLeft > 3 || daysLeft < 1 || !cup.nextTier) continue;
+      if (this.tournamentPushed.has(cup.def.id)) continue;
+      this.tournamentPushed.add(cup.def.id);
+      const tierLabel = cup.nextTier[0]!.toUpperCase() + cup.nextTier.slice(1);
+      this.toast(`Only ${daysLeft} day${daysLeft === 1 ? "" : "s"} left to reach ${tierLabel} tier!`, "warn");
+    }
   }
 
   toast(text: string, kind = "info"): void {
@@ -1689,6 +1834,16 @@ export class HUD {
       const wide = s.state === "paused" ? "" : (s.screen === "shop" || s.screen === "pass" ? "wide" : "");
       const cls = `paper-card ${s.state === "menu" && s.screen === "main" ? "menu-hero" : wide}`;
       this.menuContinuity.render(this.menuCard, s.screen, renderCoins(this.renderScreen(s)), cls);
+      // The character counter is rendered from the snapshot, but the field it
+      // describes is not owned by the snapshot: boot writes the generated call
+      // sign into it, and the async portal identity adoption rewrites it again
+      // when it resolves. Whichever of those lands last, a counter rendered
+      // from an older snapshot is simply wrong — measured on the portal build:
+      // a 14-character field under a counter frozen at "12". Reading the field
+      // back after every mount makes the two agree by construction, whatever
+      // order the writes land in.
+      const nameField = this.menuCard.querySelector<HTMLInputElement>('[data-ref="pilotNameInput"]');
+      if (nameField) this.syncNameCount(nameField);
     }
     if (s.state === "gameover") this.resultsContinuity.render(this.overCard, "results", renderCoins(renderGameOver(s)), "paper-card results-card");
     if (s.state === "continue") {
@@ -1755,6 +1910,7 @@ export class HUD {
 
   private bind(): void {
     const grab = (name: string): HTMLElement => this.root.querySelector(`[data-ref="${name}"]`) as HTMLElement;
+    this.chainReadout = grab("chainReadout");
     this.playHud = grab("playHud");
     this.distanceEl = grab("distance");
     this.coinsEl = grab("coins");
@@ -1773,6 +1929,8 @@ export class HUD {
     this.ringChainCount = grab("ringChainCount");
     this.ringChainFill = grab("ringChainFill");
     this.slopeChainEl = grab("slopeChain");
+    this.slopeChainText = grab("slopeChainText");
+    this.slopeChainFill = grab("slopeChainFill");
     this.hintEl = grab("hint");
     this.menuEl = grab("menu");
     this.menuCard = grab("menuCard");
@@ -1797,6 +1955,7 @@ export class HUD {
     this.biomeChip = grab("biome");
     this.speedLines = grab("speedlines");
     this.handEl = grab("hand");
+    this.handHintEl = grab("handHint");
     this.altGauge = grab("altGauge");
     this.altFill = grab("altFill");
     this.altBird = grab("altBird");
@@ -1913,11 +2072,11 @@ function renderMissions(list: MissionView[], newly: string[] = []): string {
       </div>`;
     })
     .join("");
-  return `<details class="missions-details"><summary class="mission-head">Nest missions <span class="mission-count">${done}/${list.length}</span></summary><div class="missions">${rows}</div></details>`;
+  return `<details class="missions-details"><summary class="mission-head">${t("hud.renderMissions.NMissions", undefined, "Nest missions ")}<span class="mission-count">${done}/${list.length}</span></summary><div class="missions">${rows}</div></details>`;
 }
 
 function renderQuests(list: QuestView[]): string {
-  return `<div class="quests"><div class="mission-head">Today's quests</div>${list
+  return `<div class="quests"><div class="mission-head">${t("hud.renderQuests.TSQuests", undefined, "Today's quests")}</div>${list
     .map((q) => {
       const pct = Math.min(100, (q.progress / q.def.target) * 100);
       return `<div class="quest ${q.done ? "done" : ""}">
@@ -1941,12 +2100,30 @@ function distanceText(meters: number): string {
   return formatDistance(meters, getLocale());
 }
 
+/**
+ * How each ending is named on the results card.
+ *
+ * Three deaths used to produce one card reading "Flight completed" — including
+ * a settle-death that fires with most of the daylight still on the meter, which
+ * cannot be read as "the sun won" by any player.
+ */
+const END_REASON_TITLE: Record<string, string> = {
+  daylight: "The sun beat you",
+  water: "You washed out",
+  settled: "You stopped flying",
+};
+const END_REASON_LINE: Record<string, string> = {
+  daylight: "Your daylight ran out. Each new island refills it — keep moving.",
+  water: "The sea took the run. Hit the ramp before you run out of hill.",
+  settled: "Four seconds without flying ends the run. Keep the dive going.",
+};
+
 function renderScoreTable(rows: HighScore[]): string {
-  if (!rows.length) return `<div class="score-table"><div class="row empty">No flights yet</div></div>`;
+  if (!rows.length) return `<div class="score-table"><div class="row empty">${t("hud.renderScoreTable.NFlightsYet", undefined, "No flights yet")}</div></div>`;
   return `<div class="score-table">${rows
     .map(
       (h, i) =>
-        `<div class="row ${h.vip ? "vip" : ""}"><span>${i + 1}${h.vip ? "<i class='spark'>✦</i>" : ""}</span><span>${distanceText(h.distance)}</span><span>${h.coins}c</span><span>${Math.floor(h.score).toLocaleString()}</span></div>`,
+        `<div class="row ${h.vip ? "vip" : ""}"><span>${i + 1}${h.vip ? "<i class='spark'>✦</i>" : ""}</span><span>${distanceText(h.distance)}</span><span>${h.coins}c</span><span>${formatNumberLocalized(Math.floor(h.score))}</span></div>`,
     )
     .join("")}</div>`;
 }
@@ -2038,7 +2215,7 @@ function renderBoard(s: HudSnapshot): string {
     s.boardMetric === "distance" || s.boardMetric === "altitude"
       ? `${Math.round(v)} m`
       : s.boardMetric === "score"
-        ? Math.round(v).toLocaleString()
+        ? formatNumberLocalized(Math.round(v))
         : String(Math.round(v));
 
   // Never imply a device-only ladder is worldwide.
@@ -2046,7 +2223,7 @@ function renderBoard(s: HudSnapshot): string {
   const status = !s.boardOnline
     ? `<span class="board-badge local">${source.chip}</span>`
     : page?.stale
-      ? `<span class="board-badge warn">Offline — showing cached</span>`
+      ? `<span class="board-badge warn">${t("hud.renderBoard.OShowingCached", undefined, "Offline — showing cached")}</span>`
       : `<span class="board-badge live">${source.chip}</span>`;
 
   const medals = ["🥇", "🥈", "🥉"];
@@ -2083,7 +2260,7 @@ function renderBoard(s: HudSnapshot): string {
       .map((x) => `<button data-ui data-action="board-metric" data-id="${x.id}" class="${s.boardMetric === x.id ? "on" : ""}">${x.label}</button>`)
       .join("")}</div>
     <div class="board-list">${rows}</div>
-    ${page && page.yourRank > 0 ? `<div class="board-rank">Your rank · <b>#${page.yourRank}</b> of ${page.total}</div>` : ""}
+    ${page && page.yourRank > 0 ? `<div class="board-rank">${t("hud.renderBoard.R", undefined, "Your rank · ")}<b>#${page.yourRank}</b> of ${page.total}</div>` : ""}
     ${s.portalLeaderboard
       ? `<button class="soft-btn wide" data-ui data-action="open-portal-leaderboard">🏆 ${PORTAL_DISPLAY_NAME} leaderboard</button>`
       : ""}
@@ -2091,23 +2268,23 @@ function renderBoard(s: HudSnapshot): string {
       CUSTOM_PILOT_NAMES
         ? `<div class="redeem pilot-name-row">
       <input data-ui data-ref="pilotName" aria-label="Pilot name" maxlength="14" placeholder="Pilot name" value="${escapeHtml(s.pilotName)}" />
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Autogenerate random pilot name">🎲 Random</button>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.ARandomPilotName", undefined, "Autogenerate random pilot name")}">🎲 Random</button>
       <button class="mini-btn primary" data-ui data-action="rename-pilot">Save</button>
     </div>`
         : /* Portal editions broadcast this name to real players, so it is a
            curated generated name rather than free text — read-only display
            plus the dice, no typing surface at all. */
           `<div class="redeem pilot-name-row">
-      <span class="pilot-name-readonly" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Roll a new pilot name">🎲 Random</button>
+      <span class="pilot-name-readonly" aria-label="${t("hud.renderBoard.PName", undefined, "Pilot name")}">${escapeHtml(s.pilotName)}</span>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.RNewPilotName", undefined, "Roll a new pilot name")}">🎲 Random</button>
     </div>`
     }
     <div class="prize-card">
       ${sectionTitle("🏆 Tournament Rank Prizes")}
       <div class="prize-grid">
-        <div class="prize-tier gold"><span>🥇 1st Place</span><b>500 Coins + Crown</b></div>
-        <div class="prize-tier silver"><span>🥈 2nd Place</span><b>250 Coins + 10 Gems</b></div>
-        <div class="prize-tier bronze"><span>🥉 3rd Place</span><b>100 Coins</b></div>
+        <div class="prize-tier gold"><span>🥇 ${t("hud.rank.peak", undefined, "Peak rating")}</span><b>${seasonReward(s.rival.rating).division.name} &middot; ${seasonReward(s.rival.rating).coins} coins</b></div>
+        <div class="prize-tier silver"><span>🥈 ${t("hud.rank.now", undefined, "You now")}</span><b>${escapeHtml(s.rival.division ?? seasonReward(s.rival.rating).division.name)}</b></div>
+        <div class="prize-tier bronze"><span>🥉 ${t("hud.rank.resets", undefined, "Resets")}</span><b>${t("hud.rank.resetsBody", undefined, "every month")}</b></div>
       </div>
       ${s.rankPrizeClaimed
         ? `<div class="pc-claimed" style="width:100%; justify-content:center; padding:8px;">✓ Claimed · next prize at the season rollover</div>`
@@ -2119,6 +2296,35 @@ function renderBoard(s: HudSnapshot): string {
 }
 
 /** Compact top-wings leaderboard embedded on the main menu. */
+/**
+ * The AI-flock rival controls: how many computer birds, how good they are, and
+ * every format you can throw at them.
+ *
+ * Extracted from the old standalone AI screen so the combined PvP screen and the
+ * AI-only shortcut render the *same* controls. Two copies of this drifted once —
+ * the lobby advertised formats the practice screen did not offer — and the only
+ * thing that can stop that recurring is there being one of them.
+ */
+function aiRivalSection(s: HudSnapshot): string {
+  const currentMode = s.pvpModes.find((m) => m.id === s.selectedPvpMode) ?? s.pvpModes[0] ?? { name: "Sprint GP" };
+  return `<section class="race-section race-section-ai" aria-label="${t("hud.aiRivalSection.RAIFlockOffline", undefined, "Race the AI flock offline")}">
+      <div class="race-section-head"><h3>${menuIcon("bird")} Race the AI flock</h3><span class="section-step">offline · starts instantly</span></div>
+      <p>Every format below starts immediately against computer-controlled birds — no server, no room, no rating. Learning the circuits here is the fastest way to win them online.</p>
+      <div class="room-controls">
+        <div class="room-ctl"><span class="room-ctl-label">${t("hud.aiRivalSection.AOpponents", undefined, "AI opponents ")}<small>plus you</small></span><div class="seg" role="group" aria-label="${t("hud.aiRivalSection.AOpponentsx", undefined, "AI opponents")}">${[5, 10, 20, 40].map((n) => `<button data-ui data-action="room-size" data-id="${n}" aria-pressed="${s.roomSize === n}" class="${s.roomSize === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
+        <div class="room-ctl"><span class="room-ctl-label">${t("hud.aiRivalSection.ASkill", undefined, "AI skill")}</span><div class="seg" role="group" aria-label="${t("hud.aiRivalSection.ASkillx", undefined, "AI skill")}">${(["chill", "sharp", "ace"] as const).map((k) => `<button data-ui data-action="room-skill" data-id="${k}" aria-pressed="${s.roomSkill === k}" class="${s.roomSkill === k ? "on" : ""}">${k === "chill" ? "Chill" : k === "sharp" ? "Sharp" : "Ace"}</button>`).join("")}</div></div>
+      </div>
+      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${currentMode.name}</button>
+      <details class="practice-formats"><summary><h3>${t("hud.aiRivalSection.RFormats", undefined, "Race formats")}</h3></summary>
+        <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
+        ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${menuIconSm(m.icon)} ${m.name} · ${m.blurb}</button>`).join("")}
+        <button class="soft-btn wide" data-ui data-action="pvp-duel">⚔ 1v1 Seeded Rival Duel</button>
+        <button class="soft-btn wide" data-ui data-action="practice-storm">⛈ Stormfront Race · wild weather</button>
+        <button class="soft-btn wide" data-ui data-action="practice-ranked">🏆 40-Pilot Flock Grand Prix</button>
+      </details>
+    </section>`;
+}
+
 function renderLive(s: HudSnapshot): string {
   const connected = s.netState === "lobby" || s.netState === "racing";
   // The AI fallback seats four generated pilots in the same roster as real
@@ -2145,25 +2351,25 @@ function renderLive(s: HudSnapshot): string {
   const activeWorld = s.pvpWorlds.find((w) => w.id === s.selectedPvpWorld) ?? s.pvpWorlds[0] ?? { name: "Emerald Circuit", emoji: "🌿" };
 
   return `${head(SCREEN.raceLobby)}
-    <p class="tagline">40-pilot live &amp; neural AI racing across 9 scenic worlds.</p>
+    <p class="tagline">Live pilots, private rooms, or the offline AI flock — both rivals live on this one screen.</p>
     ${s.netState === "error" && s.netError ? `<p class="network-notice" role="alert">${escapeHtml(s.netError)}</p>` : ""}
     <p class="race-fairness">${menuIcon("medal")} Equal flight equipment · your bird, your timing. Store boosts are saved for solo play.</p>
 
-    ${s.roomCode ? `      <section class="race-section private-session" aria-label="Your private room">
+    ${s.roomCode ? `      <section class="race-section private-session" aria-label="${t("hud.renderLive.PRoom", undefined, "Your private room")}">
         <div class="race-section-head">
-          <h3>Flock Room: <strong>${escapeHtml(s.roomCode)}</strong></h3>
+          <h3>${t("hud.renderLive.FRoom", undefined, "Flock Room: ")}<strong>${escapeHtml(s.roomCode)}</strong></h3>
           <span class="board-badge ${connected ? "live" : "island"}" role="status">${status}</span>
         </div>
         <div class="room-now">
-          <span class="room-now-label">Invite code</span>
+          <span class="room-now-label">${t("hud.renderLive.ICode", undefined, "Invite code")}</span>
           <strong class="room-now-code">${escapeHtml(s.roomCode)}</strong>
-          <button class="mini-btn" data-ui data-action="copy-invite">Copy link</button>
+          <button class="mini-btn" data-ui data-action="copy-invite">${t("hud.renderLive.CLink", undefined, "Copy link")}</button>
         </div>
 
         <div class="lobby-selector-box">
-          <div class="lobby-selector-label"><span>Race Format</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
+          <div class="lobby-selector-label"><span>${t("hud.renderLive.RFormat", undefined, "Race Format")}</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
           <div class="pills-scroll">${modePills}</div>
-          <div class="lobby-selector-label"><span>World Circuit</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
+          <div class="lobby-selector-label"><span>${t("hud.renderLive.WCircuit", undefined, "World Circuit")}</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
           <div class="pills-scroll">${worldPills}</div>
         </div>
 
@@ -2174,15 +2380,22 @@ function renderLive(s: HudSnapshot): string {
           <button class="soft-btn ${s.roomReady ? "on" : ""}" data-ui data-action="ready-room" aria-pressed="${s.roomReady}" ${connected ? "" : "disabled"} title="${connected ? "" : "Race connection lost — close the room to race again"}">${s.roomReady ? "Cancel ready" : "Ready up ✓"}</button>
         </div>
 
-        <div class="room-flock" aria-label="Pilots in this room">
+        <div class="room-flock" aria-label="${t("hud.renderLive.PRoomx", undefined, "Pilots in this room")}">
           <div class="room-bird ${s.roomReady ? "is-ready" : ""}">
-            ${sunbirdSVG({ width: 48, palette: s.skins.some((v) => v.equipped) ? skinPalette(s.skins.find((v) => v.equipped)!.def) : undefined })}
+            ${(() => {
+              const mine = s.skins.find((v) => v.equipped);
+              const def = mine?.def;
+              return sunbirdSVG({ width: 48, animateWings: true, palette: def ? skinPalette(def) : undefined, shape: def ? skinShape(def) : undefined });
+            })()}
             <b>You</b>
             <small>${s.roomReady ? "Ready ✓" : "In room"}</small>
           </div>
           ${live.slice(0, 7).map((p, i) => `
             <div class="room-bird ${p.ready ? "is-ready" : ""}">
-              ${sunbirdSVG({ width: 48, palette: s.skins.some((v) => v.def.id === p.skin) ? skinPalette(s.skins.find((v) => v.def.id === p.skin)!.def) : rivalPalette(i + 1) })}
+              ${(() => {
+                const def = s.skins.find((v) => v.def.id === p.skin)?.def;
+                return sunbirdSVG({ width: 48, animateWings: true, palette: def ? skinPalette(def) : rivalPalette(i + 1), shape: def ? skinShape(def) : undefined });
+              })()}
               <b>${escapeHtml(p.name)}</b>
               <small>${p.ready ? "Ready ✓" : s.roomAiFallback ? "AI pilot" : "In room"}</small>
             </div>
@@ -2191,78 +2404,70 @@ function renderLive(s: HudSnapshot): string {
         ${!live.length ? `<p class="fineprint">Just you so far — share the code above and the room fills with real pilots.</p>` : ""}
         ${s.roomCount > 8 ? `<p class="fineprint">And ${s.roomCount - 8} more ${s.roomAiFallback ? "AI pilots" : "connected pilots"}</p>` : ""}
 
-        <button class="ghost-btn" data-ui data-action="room-close">Leave room</button>
+        <button class="ghost-btn" data-ui data-action="room-close">${t("hud.renderLive.LRoom", undefined, "Leave room")}</button>
       </section>` : `
-      <section class="race-section quick-match-hero" aria-label="Quick Match">
+      <section class="race-section quick-match-hero" aria-label="${t("hud.renderLive.QMatch", undefined, "Quick Match")}">
         <div class="race-section-head">
           <h3>⚡ Quick Match</h3>
-          <span class="board-badge live">Live search</span>
+          <span class="board-badge live">${t("hud.renderLive.LSearch", undefined, "Live search")}</span>
         </div>
         <p class="qm-desc">Search this circuit for live pilots. If nobody answers, you choose — keep waiting or race the AI flock.</p>
 
         <div class="quick-match-btns">
           <button class="primary-btn gold large-btn" data-ui data-action="quick-match-instant">⚡ ${activeMode.name} on ${activeWorld.name}</button>
           <button class="soft-btn" data-ui data-action="quick-match-shuffle">🎲 Surprise me — random race</button>
-          <button class="soft-btn" data-ui data-action="pvp-casual">Search Online Pilots</button>
+          <button class="soft-btn" data-ui data-action="pvp-casual">${t("hud.renderLive.SOnlinePilots", undefined, "Search Online Pilots")}</button>
         </div>
 
         <details class="customize-race">
           <summary>Customize · format &amp; world (${activeMode.name} · ${activeWorld.name})</summary>
           <div class="lobby-selector-box">
-            <div class="lobby-selector-label"><span>PvP Format</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
+            <div class="lobby-selector-label"><span>${t("hud.renderLive.PFormat", undefined, "PvP Format")}</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
             <div class="pills-scroll">${modePills}</div>
-            <div class="lobby-selector-label"><span>World Circuit</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
+            <div class="lobby-selector-label"><span>${t("hud.renderLive.WCircuitx", undefined, "World Circuit")}</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
             <div class="pills-scroll">${worldPills}</div>
           </div>
         </details>
       </section>
 
-      <section class="race-section room-entry" aria-label="Invite friends">
+      <section class="race-section room-entry" aria-label="${t("hud.renderLive.IFriends", undefined, "Invite friends")}">
         <div class="room-entry-crest">${menuIcon("online")}</div>
-        <h3>Fly with your flock</h3>
+        <h3>${t("hud.renderLive.FFlock", undefined, "Fly with your flock")}</h3>
         ${s.multiplayerConfigured
           ? `<p>Create a private room with a custom code and link. Race your squad on any course!</p>
-        <button class="primary-btn" data-ui data-action="host-room">Create Private Room</button>`
+        <button class="primary-btn" data-ui data-action="host-room">${t("hud.renderLive.CPrivateRoom", undefined, "Create Private Room")}</button>`
           : `<p class="pilot-note island" role="note">Live rooms are not available in this edition. AI practice and same-screen 1v1 below still race.</p>
-        <button class="primary-btn" data-ui data-action="host-room" disabled>Create Private Room</button>`}
+        <button class="primary-btn" data-ui data-action="host-room" disabled>${t("hud.renderLive.CPrivateRoomx", undefined, "Create Private Room")}</button>`}
         <!-- Room-code entry is shared markup: the id must exist exactly once
              in the document (duplicate ids break label/for and getElementById). -->
-        <label class="field-label" for="race-room-code">Or enter a friend's room code</label>
+        <label class="field-label" for="race-room-code">${t("hud.renderLive.EFriendSRoomCode", undefined, "Or enter a friend's room code")}</label>
         <div class="redeem">
-          <input id="race-room-code" data-ui data-ref="roomCode" data-enter-action="join-room" aria-label="Room code" maxlength="2048" placeholder="Code or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <input id="race-room-code" data-ui data-ref="roomCode" data-enter-action="join-room" aria-label="${t("hud.renderLive.RCode", undefined, "Room code")}" maxlength="2048" placeholder="Code or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" />
           <button class="mini-btn" data-ui data-action="join-room" ${s.multiplayerConfigured ? "" : "disabled"}>Join</button>
         </div>
       </section>
-      <nav class="destination-grid" aria-label="More ways to race">
-        <button class="destination" data-ui data-action="open-practice"><span class="destination-art">${menuIcon("compass")}</span><span class="destination-copy"><b>AI Practice</b><span>Custom opponent count &amp; skill</span></span></button>
-        <button class="destination" data-ui data-action="versus"><span class="destination-art">${menuIcon("versus")}</span><span class="destination-copy"><b>Same-screen 1v1</b><span>Local split-screen flight</span></span></button>
+      <nav class="destination-grid" aria-label="${t("hud.renderLive.MWaysRace", undefined, "More ways to race")}">
+        <button class="destination" data-ui data-action="open-practice"><span class="destination-art">${menuIcon("compass")}</span><span class="destination-copy"><b>${t("hud.renderLive.APracticeOnly", undefined, "AI practice only")}</b><span>${t("hud.renderLive.SLobbyStraightFlock", undefined, "Skip the lobby — straight to the flock")}</span></span></button>
+        <button class="destination" data-ui data-action="versus"><span class="destination-art">${menuIcon("versus")}</span><span class="destination-copy"><b>${t("hud.renderLive.SScreen1v1", undefined, "Same-screen 1v1")}</b><span>${t("hud.renderLive.LSplitScreenFlight", undefined, "Local split-screen flight")}</span></span></button>
         <button class="destination" data-ui data-action="open-squad"><span class="destination-art">${menuIcon("squad")}</span><span class="destination-copy"><b>Squad</b><span>${SQUAD_CHAT ? "Friends &amp; club chat" : "Friends &amp; clubs"}</span></span></button>
       </nav>`}
+    <!-- The other half of the PvP offer, on the same screen as the lobby rather
+         than behind a second home tile: an offline AI race is a rival, and
+         picking an opponent is the player's decision, not the menu's. -->
+    <div class="section-title race-rival-divider"><span>${t("hud.renderLive.RAI", undefined, "Or race the AI")}</span><small>${t("hud.renderLive.ONOWAITING", undefined, "OFFLINE · NO WAITING")}</small></div>
+    ${aiRivalSection(s)}
     <button class="soft-btn wide" data-ui data-action="open-shop">${t("hud.changeLoadout", undefined, "Change loadout")}</button>
     <p class="fineprint">${t("hud.loadoutTip", undefined, "Hold downhill to build speed. Release uphill to launch. Slipstream behind rivals for slingshot surges!")}</p>`;
 }
 
 function renderPractice(s: HudSnapshot): string {
-  const currentMode = s.pvpModes.find((m) => m.id === s.selectedPvpMode) ?? s.pvpModes[0] ?? { name: "Sprint GP" };
+  // The AI-only view. Still reachable from the lobby's "more ways to race" row
+  // for a player who wants to skip the lobby chrome entirely, and it renders the
+  // same `aiRivalSection` as the combined PvP screen, so the two cannot drift.
   return `${head(SCREEN.aiPvp)}
-    <section class="race-section" aria-label="AI race practice">
-      <div class="race-section-head"><h3>Race the AI flock offline</h3><span class="section-step">AI pilots · no waiting</span></div>
-      <p>Every format below starts immediately against computer-controlled birds — no server, no room, no rating. Learning the circuits here is the fastest way to win them online.</p>
-      <div class="room-controls">
-        <div class="room-ctl"><span class="room-ctl-label">AI opponents <small>plus you</small></span><div class="seg" role="group" aria-label="AI opponents">${[5, 10, 20, 40].map((n) => `<button data-ui data-action="room-size" data-id="${n}" aria-pressed="${s.roomSize === n}" class="${s.roomSize === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
-        <div class="room-ctl"><span class="room-ctl-label">AI skill</span><div class="seg" role="group" aria-label="AI skill">${(["chill", "sharp", "ace"] as const).map((k) => `<button data-ui data-action="room-skill" data-id="${k}" aria-pressed="${s.roomSkill === k}" class="${s.roomSkill === k ? "on" : ""}">${k === "chill" ? "Chill" : k === "sharp" ? "Sharp" : "Ace"}</button>`).join("")}</div></div>
-      </div>
-      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${currentMode.name}</button>
-      <div class="practice-formats"><h3>Race formats</h3>
-        <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
-        ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${menuIconSm(m.icon)} ${m.name} · ${m.blurb}</button>`).join("")}
-        <button class="soft-btn wide" data-ui data-action="pvp-duel">⚔ 1v1 Seeded Rival Duel</button>
-        <button class="soft-btn wide" data-ui data-action="practice-storm">⛈ Stormfront Race · wild weather</button>
-        <button class="soft-btn wide" data-ui data-action="practice-ranked">🏆 40-Pilot Flock Grand Prix</button>
-      </div>
-    </section>
-    <button class="soft-btn wide" data-ui data-action="open-live">🌐 Want human rivals? Open PvP</button>
-    <button class="soft-btn wide" data-ui data-action="open-shop">Change loadout</button>`;
+    ${aiRivalSection(s)}
+    <button class="soft-btn wide" data-ui data-action="open-live">🌐 Want human rivals? Open the lobby</button>
+    <button class="soft-btn wide" data-ui data-action="open-shop">${t("hud.renderPractice.CLoadout", undefined, "Change loadout")}</button>`;
 }
 
 function renderChallenges(s: HudSnapshot): string {
@@ -2270,9 +2475,9 @@ function renderChallenges(s: HudSnapshot): string {
   const g = s.gauntlet;
   const c = s.calendar;
   const raceChallenges = `
-    <section class="race-section challenge-races" aria-label="Race challenges">
+    <section class="race-section challenge-races" aria-label="${t("hud.renderChallenges.RChallenges", undefined, "Race challenges")}">
       <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched</span></div>
-      <p class="fineprint">World and format are matched to whoever's available — jump in and race.</p>
+      <p class="fineprint">${t("hud.renderChallenges.WFormatAreMatchedWhoeverSAvailableJumpRace", undefined, "World and format are matched to whoever's available — jump in and race.")}</p>
       <div class="quick-match-btns challenge-actions">
         <button class="primary-btn gold wide" data-ui data-action="quick-match-shuffle">⚡ Race Now · random match</button>
         <button class="soft-btn wide" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">🤖 vs AI flock · instant</button>
@@ -2332,7 +2537,7 @@ function renderChallenges(s: HudSnapshot): string {
             <em>${
               m.maxed
                 ? `Mastered · ${m.skillDesc} — always on in this mode`
-                : `${m.runs} runs · next level at ${Math.round(m.nextAt ?? 0).toLocaleString()}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
+                : `${m.runs} runs · next level at ${formatNumberLocalized(Math.round(m.nextAt ?? 0))}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
             }</em>
             ${m.maxed ? "" : `<div class="qb"><i style="width:${Math.round(m.progress * 100)}%"></i></div>`}</div>
             <span class="m-stars">${"★".repeat(m.level)}${"☆".repeat(Math.max(0, 5 - m.level))}</span>
@@ -2348,7 +2553,7 @@ function renderChallenges(s: HudSnapshot): string {
     ${sectionTitle("Live event", "new twist every week")}
     <div class="event-card">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
-      <div class="event-meta"><span>Fly ${ev.target.toLocaleString()} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
+      <div class="event-meta"><span>Fly ${formatNumberLocalized(ev.target)} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
       <button class="primary-btn" data-ui data-action="play-event">${menuIconSm(ev.icon)} FLY THE EVENT</button>
       <div class="theme-strip ${trailDone ? "done" : ""}">
         <span class="theme-icon">${menuIconSm(th.icon)}</span>
@@ -2358,8 +2563,8 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   return `
-    ${head(SCREEN.challenges, "back", `<span class="pill">Daily · Weekly</span>`)}
-    <p class="tagline">Same hills as everyone else today. Modifiers change how you fly them.</p>
+    ${head(SCREEN.challenges, "back", `<span class="pill">${t("hud.renderChallenges.DWeekly", undefined, "Daily · Weekly")}</span>`)}
+    <p class="tagline">${t("hud.renderChallenges.SHillsAsEveryoneElseTodayModifiersChangeHowFlyThe", undefined, "Same hills as everyone else today. Modifiers change how you fly them.")}</p>
     ${raceChallenges}
     ${event}
     ${daily}
@@ -2377,14 +2582,14 @@ function renderCampaign(s: HudSnapshot): string {
           (g) => `<div class="camp-goal ${g.done ? "done" : ""}">
             <span class="check">${g.done ? "✓" : ""}</span>
             <span class="cg-label">${escapeHtml(g.def.label)}</span>
-            <span class="cg-prog">${Math.floor(g.progress).toLocaleString()}/${g.def.target.toLocaleString()}</span>
+            <span class="cg-prog">${formatNumberLocalized(Math.floor(g.progress))}/${formatNumberLocalized(g.def.target)}</span>
           </div>`,
         )
         .join("");
       const cta = !ch.unlocked
         ? `<span class="tag">🔒 Finish chapter ${ch.index} first</span>`
         : ch.claimed
-          ? `<span class="tag on">✓ ${escapeHtml(ch.def.rewardLabel)}</span>`
+          ? `<span class="tag on">✓ ${formatNumberLocalized(ch.def.rewardCoins)} coins</span>`
           : ch.complete
             ? `<button class="mini-btn gold" data-ui data-action="claim-campaign" data-id="${ch.def.id}">CLAIM ● ${ch.def.rewardCoins}</button>`
             : `<span class="tag">● ${ch.def.rewardCoins} on completion</span>`;
@@ -2440,15 +2645,15 @@ export function renderSquad(s: HudSnapshot): string {
     }
     const stats = [
       lookup.club ? `🏰 ${escapeHtml(lookup.club)}` : "",
-      lookup.bestDistance > 0 ? `🛫 best ${lookup.bestDistance.toLocaleString()} m` : "",
+      lookup.bestDistance > 0 ? `🛫 best ${formatNumberLocalized(lookup.bestDistance)} m` : "",
       lookup.rank > 0 ? `#${lookup.rank} global` : "",
     ].filter(Boolean).join(" · ");
     const action = lookup.friend
-      ? `<span class="fineprint">Already in your wingmen</span>`
+      ? `<span class="fineprint">${t("hud.renderCampaign.AWingmen", undefined, "Already in your wingmen")}</span>`
       : lookup.incoming
-        ? `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">Accept their request</button>`
+        ? `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${t("hud.renderCampaign.ATheirRequest", undefined, "Accept their request")}</button>`
         : lookup.outgoing
-          ? `<span class="fineprint">Request sent — waiting for them</span>`
+          ? `<span class="fineprint">${t("hud.renderCampaign.RSentWaitingThem", undefined, "Request sent — waiting for them")}</span>`
           : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">🪽 Add wingman</button>`;
     return `
       <div class="pilot-card">
@@ -2459,8 +2664,8 @@ export function renderSquad(s: HudSnapshot): string {
         <div class="pilot-card-meta"><span class="pilot-code">${escapeHtml(lookup.code)}</span>${stats ? `<span>${stats}</span>` : ""}</div>
         <div class="pilot-card-actions">
           ${action}
-          <button class="mini-btn" data-ui data-action="pilot-invite" data-id="${escapeHtml(lookup.name)}">Invite to my room</button>
-          <button class="mini-btn" data-ui data-action="pilot-copy" data-id="${escapeHtml(lookup.code)}">Copy code</button>
+          <button class="mini-btn" data-ui data-action="pilot-invite" data-id="${escapeHtml(lookup.name)}">${t("hud.renderCampaign.IMyRoom", undefined, "Invite to my room")}</button>
+          <button class="mini-btn" data-ui data-action="pilot-copy" data-id="${escapeHtml(lookup.code)}">${t("hud.renderCampaign.CCode", undefined, "Copy code")}</button>
         </div>
       </div>`;
   })();
@@ -2478,7 +2683,7 @@ export function renderSquad(s: HudSnapshot): string {
     ${sectionTitle("🔍 Pilot Lookup", sq.live && !sq.isAutonomous ? "online directory" : "offline build")}
     <p class="fineprint">Look a pilot up by their exact code. Results come from the pilot directory — nothing here is invented, and an unknown or unreachable code says so.</p>
     <div class="redeem">
-      <input data-ui data-ref="pilotCode" data-enter-action="pilot-add" aria-label="Friend code" placeholder="Friend code (SUN-9F3K2A)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${escapeHtml(sq.pilotQuery)}" />
+      <input data-ui data-ref="pilotCode" data-enter-action="pilot-add" aria-label="${t("hud.renderCampaign.FCodex", undefined, "Friend code")}" placeholder="Friend code (SUN-9F3K2A)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${escapeHtml(sq.pilotQuery)}" />
       <button class="mini-btn" data-ui data-action="pilot-lookup">${sq.lookupBusy ? "Looking…" : "Look up"}</button>
     </div>
     ${lookupCard}
@@ -2495,7 +2700,7 @@ export function renderSquad(s: HudSnapshot): string {
     <div class="friend-list">${(page.items as typeof sq.friends)
       .map((f) => {
         const presence = f.local ? "met in a race" : f.online ? "● online" : "○ offline";
-        const best = f.bestDistance && f.bestDistance > 0 ? ` · best ${Math.round(f.bestDistance).toLocaleString()} m` : "";
+        const best = f.bestDistance && f.bestDistance > 0 ? ` · best ${formatNumberLocalized(Math.round(f.bestDistance))} m` : "";
         return `<div class="friend-row"><span class="fr-name">🐦 ${escapeHtml(f.name)} <small>${escapeHtml(presence)}${best}</small></span><span class="fr-code">${escapeHtml(f.code || "")}</span><button class="mini-btn" data-ui data-action="friend-challenge" aria-label="Challenge ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">🏁 Challenge</button><button class="mini-btn ghost" data-ui data-action="squad-remove" aria-label="Remove ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">✕</button></div>`;
       })
       .join("")}</div>${pages("friends", page)}`;
@@ -2512,7 +2717,7 @@ export function renderSquad(s: HudSnapshot): string {
     const rows = challenges
       .map((ch) => {
         const status = ch.status === "accepted" ? "racing — fly to settle it" : "posted — tap to race";
-        return `<div class="friend-row"><span class="fr-name">🏁 vs ${escapeHtml(ch.challengerName)} <small>${escapeHtml(status)}</small></span><span class="fr-code">beat ${Math.round(ch.ghostDistance).toLocaleString()} m ${kindLabel[ch.challengeKind]}</span><button class="mini-btn gold" data-ui data-action="challenge-race" data-id="${escapeHtml(ch.id)}">🏁 Race ghost</button></div>`;
+        return `<div class="friend-row"><span class="fr-name">🏁 vs ${escapeHtml(ch.challengerName)} <small>${escapeHtml(status)}</small></span><span class="fr-code">beat ${formatNumberLocalized(Math.round(ch.ghostDistance))} m ${kindLabel[ch.challengeKind]}</span><button class="mini-btn gold" data-ui data-action="challenge-race" data-id="${escapeHtml(ch.id)}">🏁 Race ghost</button></div>`;
       })
       .join("");
     return `${sectionTitle("🏁 Ghost Challenges", `${challenges.length} active`)}
@@ -2528,14 +2733,14 @@ export function renderSquad(s: HudSnapshot): string {
     }
     const rows = mates.slice(0, 8).map((m) => `<div class="friend-row">
       <span class="fr-name">🐦 ${escapeHtml(m.name)}</span>
-      <span class="fr-code">room ${escapeHtml(m.roomCode)} · ${escapeHtml(seenAgo(m.lastSeenAt, Date.now()))}${m.bestDistance > 0 ? ` · ${m.bestDistance.toLocaleString()} m` : ""}</span>
+      <span class="fr-code">room ${escapeHtml(m.roomCode)} · ${escapeHtml(seenAgo(m.lastSeenAt, Date.now()))}${m.bestDistance > 0 ? ` · ${formatNumberLocalized(m.bestDistance)} m` : ""}</span>
       <button class="mini-btn" data-ui data-action="mate-wingman" data-id="${escapeHtml(m.name)}">Save</button>
       <button class="mini-btn ghost" data-ui data-action="mate-invite" data-id="${escapeHtml(m.name)}">Invite</button>
       <button class="mini-btn ghost" data-ui data-action="mate-forget" data-id="${escapeHtml(m.name)}" aria-label="Forget ${escapeHtml(m.name)}">✕</button>
     </div>`).join("");
     return `${sectionTitle("🛫 Flew with", `${s.recentPilots.length} remembered`)}
-      <p class="fineprint">Kept on this device from races you actually flew together.</p>
-      <div class="friend-list">${rows || `<div class="empty-note">Everyone you flew with is already in your wingmen.</div>`}</div>`;
+      <p class="fineprint">${t("hud.renderCampaign.KDeviceFromRacesActuallyFlewTogether", undefined, "Kept on this device from races you actually flew together.")}</p>
+      <div class="friend-list">${rows || `<div class="empty-note">${t("hud.renderCampaign.EFlewAlreadyWingmen", undefined, "Everyone you flew with is already in your wingmen.")}</div>`}</div>`;
   })();
 
   const friends = `${lookupPanel}${wingmen}${ghostChallenges}${flewWith}`;
@@ -2546,10 +2751,10 @@ export function renderSquad(s: HudSnapshot): string {
       <div class="chat-box" data-scroll-memory="squad-chat" data-stick-bottom role="log" aria-label="Club chat history">
         ${sq.chat.length
           ? sq.chat.map((m) => `<div class="chat-line"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(m.text)}</span></div>`).join("")
-          : `<div class="empty-note">Say hello to your club — messages stay between members.</div>`}
+          : `<div class="empty-note">${t("hud.renderCampaign.SHelloClubMessagesStayBetweenMembers", undefined, "Say hello to your club — messages stay between members.")}</div>`}
       </div>
       <div class="redeem">
-        <input data-ui data-enter-action="squad-chat" aria-label="Club message" placeholder="Message your club" maxlength="140" autocomplete="off" />
+        <input data-ui data-enter-action="squad-chat" aria-label="${t("hud.renderCampaign.CMessage", undefined, "Club message")}" placeholder="Message your club" maxlength="140" autocomplete="off" />
         <button class="mini-btn" data-ui data-action="squad-chat">Send</button>
       </div>
     </div>`
@@ -2570,10 +2775,10 @@ export function renderSquad(s: HudSnapshot): string {
               (c) => `<div class="club-row"><div><b>🏰 ${escapeHtml(c.name)}</b><em>${escapeHtml(c.motto)} · ${c.members}/30</em></div><button class="mini-btn" data-ui data-action="squad-join-club" data-id="${c.id}" ${c.members >= 30 ? "disabled" : ""}>Join</button></div>`,
             )
             .join("")}</div>`
-        : `<div class="empty-note">No clubs yet — found the first one.</div>`
+        : `<div class="empty-note">${t("hud.renderCampaign.NClubsYetFoundFirstOne", undefined, "No clubs yet — found the first one.")}</div>`
     }
     ${pages("clubs", clubPage)}
-    <div class="redeem"><input data-ui data-enter-action="squad-create-club" aria-label="Club name" placeholder="Club name" maxlength="24" autocomplete="off" /><button class="mini-btn gold" data-ui data-action="squad-create-club">Found club</button></div>`;
+    <div class="redeem"><input data-ui data-enter-action="squad-create-club" aria-label="${t("hud.renderCampaign.CName", undefined, "Club name")}" placeholder="Club name" maxlength="24" autocomplete="off" /><button class="mini-btn gold" data-ui data-action="squad-create-club">${t("hud.renderCampaign.FClub", undefined, "Found club")}</button></div>`;
 
   const hubBanner = sq.isAutonomous
     ? `<div class="reward-strip" style="background:linear-gradient(135deg,#fff8e1,#ffe082); color:#5d4037; border:1px solid #ffcc80; margin-bottom:12px;">📴 Offline build · wingman requests and pilot lookup need the online service. Pilots you actually raced with still work.</div>`
@@ -2583,28 +2788,28 @@ export function renderSquad(s: HudSnapshot): string {
   // birds live in the save file, not in the Squad service. The honest path
   // is an explicit, confirmed re-enrollment into a fresh profile.
   const recovery = sq.credentialError && !sq.isAutonomous
-    ? `<section class="squad-recovery" role="region" aria-label="Squad profile recovery">
+    ? `<section class="squad-recovery" role="region" aria-label="${t("hud.renderRank.SProfileRecovery", undefined, "Squad profile recovery")}">
         ${sectionTitle("Squad profile recovery", "key missing")}
         <p>${escapeHtml(sq.error || "This browser cannot unlock the saved Squad profile.")} Your flight progress, coins and birds are untouched — only the Squad identity is locked.</p>
         <label class="recovery-consent"><input type="checkbox" data-ui /> I understand this creates a separate Squad profile.</label>
         <div class="room-actions-bar">
-          <button class="primary-btn" data-ui data-action="squad-new-profile" ${sq.busy || sq.loading ? "disabled" : ""}>Create a new Squad profile</button>
-          <button class="soft-btn" data-ui data-action="squad-refresh" ${sq.loading ? "disabled" : ""}>Try reconnecting</button>
+          <button class="primary-btn" data-ui data-action="squad-new-profile" ${sq.busy || sq.loading ? "disabled" : ""}>${t("hud.renderCampaign.CNewSquadProfile", undefined, "Create a new Squad profile")}</button>
+          <button class="soft-btn" data-ui data-action="squad-refresh" ${sq.loading ? "disabled" : ""}>${t("hud.renderCampaign.TReconnecting", undefined, "Try reconnecting")}</button>
         </div>
       </section>`
     : "";
 
   return `
     ${head(SCREEN.squad, "back", sq.myCode ? `<span class="pill">${escapeHtml(sq.myCode)}</span>` : "")}
-    <p class="tagline">A little flock. A bigger adventure.</p>
+    <p class="tagline">${t("hud.renderCampaign.LFlockBiggerAdventure", undefined, "A little flock. A bigger adventure.")}</p>
     ${hubBanner}
     ${recovery}
-    ${sq.myCode ? `<div class="squad-invite"><span class="squad-invite-art">${menuIcon("squad")}</span><div><b>Your friend code</b><p>Share it with someone you want to fly with.</p></div><button class="mini-btn" data-ui data-action="squad-copy-code">Copy code</button></div>` : ""}
+    ${sq.myCode ? `<div class="squad-invite"><span class="squad-invite-art">${menuIcon("squad")}</span><div><b>${t("hud.renderCampaign.FCode", undefined, "Your friend code")}</b><p>${t("hud.renderCampaign.SSomeoneWantFly", undefined, "Share it with someone you want to fly with.")}</p></div><button class="mini-btn" data-ui data-action="squad-copy-code">${t("hud.renderCampaign.CCodex", undefined, "Copy code")}</button></div>` : ""}
     ${notice}
     ${quests}
-    <fieldset class="squad-fields"><legend class="sr-only">Squad actions</legend>${friends + clubs}</fieldset>
+    <fieldset class="squad-fields"><legend class="sr-only">${t("hud.renderCampaign.SActions", undefined, "Squad actions")}</legend>${friends + clubs}</fieldset>
     <button class="soft-btn wide" data-ui data-action="squad-refresh" ${sq.loading || sq.busy ? "disabled" : ""}>${sq.loading ? "Connecting…" : "Refresh Squad"}</button>
-    <button class="soft-btn wide" data-ui data-action="open-live">Race with friends</button>
+    <button class="soft-btn wide" data-ui data-action="open-live">${t("hud.renderCampaign.RFriends", undefined, "Race with friends")}</button>
   `;
 }
 
@@ -2618,11 +2823,11 @@ function renderRank(s: HudSnapshot): string {
       <div class="rank-hero-num">${r.rating}</div>
       <div class="rank-hero-div">${r.division}</div>
       <div class="rank-bar big"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
-      <div class="rank-hero-next">${r.nextNeeded > 0 ? `${Math.round(r.nextNeeded).toLocaleString()} rating to ${r.nextName}` : "Top division — defend it"}</div>
+      <div class="rank-hero-next">${r.nextNeeded > 0 ? `${formatNumberLocalized(Math.round(r.nextNeeded))} rating to ${r.nextName}` : "Top division — defend it"}</div>
     </div>
     <div class="rank-stats">
       <div><span>W–L</span><b>${r.wins}–${r.losses}</b></div>
-      <div><span>Win rate</span><b>${wl}%</b></div>
+      <div><span>${t("hud.renderRank.WRate", undefined, "Win rate")}</span><b>${wl}%</b></div>
       <div><span>Streak</span><b class="streak-b ${r.streak > 0 ? "lit" : ""}"><svg viewBox="0 0 24 24" class="fl"><path d="M12 2C13 6 17 8 17 13a5 5 0 0 1-10 0c0-2 1-3.4 2-4.6 0 1.6.6 2.6 1.8 3 -.4-3.4 1.4-6.6 1.2-9.4z" fill="currentColor"/></svg>${r.streak}</b></div>
       <div><span>Best</span><b>×${r.bestStreak}</b></div>
     </div>
@@ -2640,12 +2845,19 @@ function renderRank(s: HudSnapshot): string {
                 `<div class="match-row ${m.won ? "won" : ""}"><span class="m-place">${m.won ? "🏅" : ""}P${m.place}</span><span class="m-meta">of ${m.field} · ${escapeHtml(m.mode)}</span><span class="m-date">${escapeHtml(m.date)}</span></div>`,
             )
             .join("")}</div>`
-        : `<p class="fineprint">No ranked races yet. Your first 40-bird finish sets the tone.</p>`
+        : `<p class="fineprint">${t("hud.renderRank.NRankedRacesYetFirst40BirdFinishSetsTone", undefined, "No ranked races yet. Your first 40-bird finish sets the tone.")}</p>`
     }
     ${sectionTitle("Duels", "ranked 1v1 · ±16 rating")}
     <div class="duel-card">
       <div class="vs-stage slim">
-        <div class="vs-you"><span class="bird-badge you">${sunbirdSVG({ width: 62, flap: 0.55, title: "Your sunbird" })}</span><b>YOU</b><span class="vs-sub">${r.rating}</span></div>
+        <div class="vs-you"><span class="bird-badge you">${(() => {
+        // The badge sat directly above the line that names the bird you are
+        // flying, and drew the default Sunbird in default orange — so the one
+        // place a ranked player checks their own bird showed them the wrong one.
+        const mine = s.skins.find((v) => v.equipped) ?? s.skins.find((v) => v.owned);
+        const def = mine?.def;
+        return sunbirdSVG({ palette: def ? skinPalette(def) : undefined, shape: def ? skinShape(def) : undefined, width: 62, animateWings: true, title: def ? def.name : "Your sunbird" });
+      })()}</span><b>YOU</b><span class="vs-sub">${r.rating}</span></div>
         <div class="vs-mark">VS</div>
         <div class="vs-foes"><div class="vs-foe"><span class="bird-badge">${sunbirdSVG({ palette: rivalPalette(0), width: 54, flap: 0.35, title: s.duelFoe.name })}</span><b>${escapeHtml(s.duelFoe.name)}</b><span class="vs-sub">${escapeHtml(s.duelFoe.tag)} · ~${s.duelFoe.rating}</span></div></div>
       </div>
@@ -2656,6 +2868,7 @@ function renderRank(s: HudSnapshot): string {
         <div><span>Prize</span><b>${s.duel.wins >= 10 ? "🐦 won" : `${s.duel.wins}/10`}</b></div>
       </div>
       <button class="primary-btn hero" data-ui data-action="pvp-duel"><span class="hero-label">⚔ DUEL</span><span class="hero-hint">1v1 · first to 4,000 m · win 10 for the Hummingbird</span></button>
+      <p class="fineprint ranked-perk-note" title="${t("hud.renderCups.RModeCosmeticPerksAreBalancedFairPlay", undefined, "In ranked mode, cosmetic perks are balanced for fair play")}">🛡 In ranked duels, cosmetic perks are balanced for fair play — max +3% speed, +3s buffs, earned birds included. Flying <b>${escapeHtml(s.loadout.bird)}</b>: ${escapeHtml(s.loadout.rankedNote)}</p>
     </div>
     <button class="primary-btn race40 hero" data-ui data-action="pvp-ranked"><span class="hero-label">⚔ RACE RANKED</span><span class="hero-hint">climb or defend ${r.division}</span></button>
     <p class="fineprint">Your rating changes based on how you finish in ranked 40-bird races and duels. Reaching Sunbird Legend unlocks the Solstice bird. Seasons soft-reset monthly with a division reward.</p>
@@ -2694,20 +2907,30 @@ function renderCups(s: HudSnapshot): string {
         .join("")}</div>`
     : "";
 
+  // The diamond cup's title prize was written to `state.titles` and read
+  // nowhere, so the hardest prize in the game vanished on claim. Shown here
+  // beside the prize trails, which is where won cosmetics already live.
+  const titles = s.titles.length
+    ? `${sectionTitle("Prize titles")}<div class="btn-row">${s.titles
+        .map((title) => `<span class="soft-btn prize-title" title="${t("hud.renderCups.wornBesideName", undefined, "Worn beside your name")}">♛ ${escapeHtml(title.label)}</span>`)
+        .join("")}</div>`
+    : "";
+
   return `
     ${head(SCREEN.tournaments, "back", `<span class="pill">Weekly</span>`)}
     <p class="tagline">Two cups run every week. Beat a division cut-off, then claim the prize — it lands in your account immediately.</p>
     <div class="cup-list">${cups}</div>
     ${s.lastPrize ? `<div class="reward-strip">Last prize · ${s.lastPrize}</div>` : ""}
     ${trails}
-    <p class="fineprint">Cups reset every Monday. Won cosmetics are permanent.</p>
+    ${titles}
+    <p class="fineprint">${t("hud.renderCups.CResetEveryMondayWonCosmeticsArePermanent", undefined, "Cups reset every Monday. Won cosmetics are permanent.")}</p>
   `;
 }
 
 function renderModes(s: HudSnapshot): string {
   return `
     ${head(SCREEN.gameModes)}
-    <p class="tagline">Solo flights below are you against the course. A <b>PvP circuit</b> opens the PvP options — ranked and casual online racing, private rooms, or the AI flock. All modes share your unlocks.</p>
+    <p class="tagline">${t("hud.renderModes.SFlightsBelowAreAgainstCourse", undefined, "Solo flights below are you against the course. A ")}<b>${t("hud.renderModes.PCircuit", undefined, "PvP circuit")}</b> opens the PvP options — ranked and casual online racing, private rooms, or the AI flock. All modes share your unlocks.</p>
     <div class="mode-list">
       ${s.modes
         .map(
@@ -2778,7 +3001,7 @@ function renderVersusResult(s: HudSnapshot): string {
 function renderAtlas(s: HudSnapshot): string {
   return `
     ${head(SCREEN.atlas, "back", `<span class="pill">Farthest: ${s.farthestIsland + 1}</span>`)}
-    <p class="tagline">Every island has its own weather. Learn them, then chain them.</p>
+    <p class="tagline">${t("hud.renderAtlas.EIslandHasItsOwnWeatherLearnThemThenChainThem", undefined, "Every island has its own weather. Learn them, then chain them.")}</p>
     <div class="atlas">
       ${s.atlas
         .map(
@@ -2827,7 +3050,7 @@ function renderNameEntry(s: HudSnapshot): string {
   // says "We picked a name for you" — only toasted "Please enter a pilot name".
   // A first-run player who did not notice the dice had no way past the screen.
   const field = CUSTOM_PILOT_NAMES
-    ? `<label class="name-entry-label" for="pilot-name-input">Your call sign</label>
+    ? `<label class="name-entry-label" for="pilot-name-input">${t("hud.renderNameEntry.CSign", undefined, "Your call sign")}</label>
       <div class="name-input-row">
         <div class="name-input-wrapper">
           <input
@@ -2837,15 +3060,15 @@ function renderNameEntry(s: HudSnapshot): string {
             data-ref="pilotNameInput"
             placeholder="e.g. Rook, Ivy, Vale…"
             maxlength="14"
-            aria-label="Pilot name"
+            aria-label="${t("hud.homeBoardStrip.PName", undefined, "Pilot name")}"
             autocomplete="off"
             value="${escapeHtml(s.pilotName)}"
           />
           <div class="name-char-count"><span>${s.pilotName.length}</span>/14</div>
         </div>
-        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Suggest a name" aria-label="Random name">🎲</button>
+        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="${t("hud.homeBoardStrip.SName", undefined, "Suggest a name")}" aria-label="${t("hud.homeBoardStrip.RName", undefined, "Random name")}">🎲</button>
       </div>`
-    : `<span class="name-entry-label">Your call sign</span>
+    : `<span class="name-entry-label">${t("hud.renderNameEntry.CSignx", undefined, "Your call sign")}</span>
       <div class="name-input-row">
         <span class="pilot-name-readonly name-entry-plate" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
         <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Roll a new name" aria-label="Random name">🎲</button>
@@ -2858,7 +3081,7 @@ function renderNameEntry(s: HudSnapshot): string {
     </div>
 
     <div class="name-entry-headline">
-      <h2 class="name-entry-title">Welcome, Pilot</h2>
+      <h2 class="name-entry-title">${t("hud.renderNameEntry.WPilot", undefined, "Welcome, Pilot")}</h2>
       <p class="name-entry-sub">We picked a name for you — ${CUSTOM_PILOT_NAMES ? "change it" : "roll it"} or fly right now.</p>
     </div>
 
@@ -2866,7 +3089,7 @@ function renderNameEntry(s: HudSnapshot): string {
       ${field}
 
       <label class="name-language" for="welcome-language-select">
-        <span>Language / Idioma</span>
+        <span>${t("hud.renderNameEntry.LIdioma", undefined, "Language / Idioma")}</span>
         <select id="welcome-language-select" data-ui data-action="set-language" aria-label="Choose language">
           ${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}
         </select>
@@ -2906,7 +3129,7 @@ function homeBoardStrip(s: HudSnapshot): string {
   // grid: the earlier three-card version cost ~3x this height and pushed PvP
   // off a 640-tall phone entirely.
   return `
-    <button class="home-board" data-ui data-action="open-board" aria-label="Open the leaderboards">
+    <button class="home-board" data-ui data-action="open-board" aria-label="${t("hud.renderOnboardingRoute.OLeaderboards", undefined, "Open the leaderboards")}">
       <span class="hb-head">
         <span class="hb-title">🏆 Top pilots</span>
         <span class="hb-go">All boards ›</span>
@@ -2921,6 +3144,83 @@ function homeBoardStrip(s: HudSnapshot): string {
         )
         .join("")}
     </button>`;
+}
+
+/**
+ * Daily Login Ritual banner: "Daily Challenge ready! +N coins waiting",
+ * shown at boot and on every return to the home menu until either the daily
+ * is completed or the player dismisses it (Play now / the X). Uses the same
+ * `pc pc--gold pc-row` card the "Do this now" strip uses elsewhere, so the
+ * home menu and the progress screen share one visual language for "act now".
+ */
+function renderDailyRitualBanner(s: HudSnapshot): string {
+  if (!shouldShowDailyBanner(s.daily.done, s.dismissedDailyPrompt)) return "";
+  // Clickable. It announced coins waiting and offered no route to them; the only
+  // child control was a dismiss, which is a way to make the problem go away.
+  return `<div class="pc pc--gold pc-row daily-ritual-banner">
+    <button class="pc-open" data-ui data-action="open-challenges">
+    <span class="pc-icon">☀️</span>
+    <div class="pc-body"><b>${t("hud.renderDailyRitualBanner.DChallengeReady", undefined, "Daily Challenge ready!")}</b><span>+${s.daily.reward} coins waiting — open ›</span></div>
+    </button>
+    <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="Dismiss">✕</button>
+  </div>`;
+}
+
+/**
+ * Persistent tournament countdown card (Feature: Tournament Countdown
+ * Urgency): "<cup> ends in N day(s) — You're currently <tier>!", for the
+ * soonest-ending of this week's two cups. Tapping it opens Tournaments.
+ */
+function renderTournamentCountdown(s: HudSnapshot): string {
+  const card = tournamentCountdownCard(s.cups);
+  if (!card) return "";
+  // Reuses the already-styled `event-strip` card (weekly-event strip on the
+  // progress screen) rather than inventing unstyled markup — same visual
+  // language for "a clock is running on this", different destination.
+  return `<button class="event-strip" data-ui data-action="open-cups" aria-label="${t("hud.renderMain.VTournaments", undefined, "View tournaments")}">
+    <span class="ds-icon">🏆</span>
+    <span class="ds-body">${escapeHtml(card.text)}</span>
+    <span class="ds-go">›</span>
+  </button>`;
+}
+
+/**
+ * The three things a new pilot is shown, under the main "Fly now" button.
+ *
+ * These used to be "Feel the glide / Choose your bird / Race the flock" — but
+ * step 1 was the same action as the button directly above it, so the panel
+ * opened by offering the player something they had just been handed, and the
+ * two text destinations it taught (racing, the shop) were not the two the game
+ * actually needs explained first. It is now the three surfaces a first run has
+ * to meet: the rivals, the hangar, and the settings.
+ *
+ * The steps are honest about WHERE they are: step 1 used to say "Spend the coins
+ * you just earned" on a brand-new save, which starts at zero.
+ */
+function renderOnboardingRoute(): string {
+  const steps: readonly { n: string; action: string; title: string; sub: string; go: string }[] = [
+    {
+      n: "01", action: "pvp-practice", go: t("onboarding.step1Action", undefined, "Fly ›"),
+      title: t("onboarding.step1Title", undefined, "Fly your first run"),
+      sub: t("onboarding.step1Sub", undefined, "One input · the goal is on the strip"),
+    },
+    {
+      n: "02", action: "open-shop", go: t("onboarding.step2Action", undefined, "Shop ›"),
+      title: t("onboarding.step2Title", undefined, "Choose your bird"),
+      sub: t("onboarding.step2Sub", undefined, "Birds, trails and boosts for your next flight"),
+    },
+    {
+      n: "03", action: "open-live", go: t("onboarding.step3Action", undefined, "Race ›"),
+      title: t("onboarding.step3Title", undefined, "Meet your rivals"),
+      sub: t("onboarding.step3Sub", undefined, "Live pilots or the offline AI flock"),
+    },
+  ];
+  return `<section class="onboarding-route" aria-label="${escapeHtml(t("onboarding.routeLabel", undefined, "Your first flight plan"))}">
+      <div class="onboarding-route-head"><span>✦ ${t("onboarding.startHere", undefined, "START HERE")}</span><small>${t("onboarding.startSubtitle", undefined, "three things worth knowing")}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">✕</button></div>
+      <div class="onboarding-route-steps">
+        ${steps.map((step, i) => `<button class="onboarding-route-step${i === 0 ? " active" : ""}" data-ui data-action="${step.action}"><b>${step.n}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.sub)}</small></span><i>${escapeHtml(step.go)}</i></button>`).join("")}
+      </div>
+    </section>`;
 }
 
 function renderMain(s: HudSnapshot): string {
@@ -2953,28 +3253,23 @@ function renderMain(s: HudSnapshot): string {
       </div>
     </header>
 
-    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="Play free flight now"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
-    ${s.runsPlayed < 2 ? `<section class="onboarding-route" aria-label="Your first flight plan">
-      <div class="onboarding-route-head"><span>✦ ${t("onboarding.startHere", undefined, "START HERE")}</span><small>${t("onboarding.startSubtitle", undefined, "one input · three small wins")}</small></div>
-      <div class="onboarding-route-steps">
-        <button class="onboarding-route-step active" data-ui data-action="pvp-practice"><b>01</b><span><strong>${t("onboarding.step1Title", undefined, "Feel the glide")}</strong><small>${t("onboarding.step1Sub", undefined, "Hold downhill · release to soar")}</small></span><i>${t("onboarding.step1Action", undefined, "Fly ›")}</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-shop"><b>02</b><span><strong>${t("onboarding.step2Title", undefined, "Choose your bird")}</strong><small>${t("onboarding.step2Sub", undefined, "Spend the coins you just earned")}</small></span><i>${t("onboarding.step2Action", undefined, "Shop ›")}</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>${t("onboarding.step3Title", undefined, "Race the flock")}</strong><small>${t("onboarding.step3Sub", undefined, "Choose online or AI when you are ready")}</small></span><i>${t("onboarding.step3Action", undefined, "Race ›")}</i></button>
-      </div>
-    </section>` : ""}
+    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="${t("onboarding.flyNow", undefined, "Fly now")}"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
+    ${renderDailyRitualBanner(s)}
+    ${renderTournamentCountdown(s)}
+    ${s.runsPlayed < 2 && !s.settings.dismissedOnboarding ? renderOnboardingRoute() : ""}
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:
          "how am I doing" is a different question from "what shall I play", and
          one bar at the end reads as the section's full stop. -->
-    <div class="home-section-title"><span>Play now</span><small>FLY · RACE · EXPLORE</small></div>
+    <div class="home-section-title"><span>${t("hud.renderMain.PNow", undefined, "Play now")}</span><small>${t("hud.renderMain.FRACEEXPLORE", undefined, "FLY · RACE · EXPLORE")}</small></div>
     <nav class="destination-grid play-destinations home-hub-grid" aria-label="Play">${menuLinks(playDestinations)}</nav>
     ${homeBoardStrip(s)}
-    <div class="home-section-title"><span>Personalize</span><small>BIRD · FLOCK · SETTINGS</small></div>
-    <nav class="destination-grid utility-destinations" aria-label="Your hangar">${menuLinks(COLLECTION_DESTINATIONS)}</nav>
-    <div class="home-section-title"><span>Progress</span><small>GOALS · RANK · REWARDS</small></div>
+    <div class="home-section-title"><span>Personalize</span><small>${t("hud.renderMain.BFLOCKSETTINGS", undefined, "BIRD · FLOCK · SETTINGS")}</small></div>
+    <nav class="destination-grid utility-destinations" aria-label="${t("hud.renderProgress.H", undefined, "Your hangar")}">${menuLinks(COLLECTION_DESTINATIONS)}</nav>
+    <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="Progress">${menuLinks(progressDestinations)}</nav>
-    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><span class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</span><span class="record-wallet">● ${s.wallet.toLocaleString()} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
+    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
   `;
 }
 
@@ -3001,30 +3296,30 @@ function renderProgress(s: HudSnapshot): string {
   // --- Do This Now: time-sensitive actions ---
   const doNow: string[] = [];
   if (!s.calendar.claimedToday) doNow.push(`<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>`);
-  if (s.canFreeSpin) doNow.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>Daily Lucky Wheel</b><span>Free spin available now!</span></div><button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button></div>`);
-  if (s.piggyCoins >= PIGGY_BANK_MIN_SMASH) doNow.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>Piggy Bank ready</b><span>● ${s.piggyCoins} coins saved — smash it!</span></div><button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button></div>`);
+  if (s.canFreeSpin) doNow.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheel", undefined, "Daily Lucky Wheel")}</b><span>${t("hud.renderProgress.FSpinAvailableNow", undefined, "Free spin available now!")}</span></div><button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button></div>`);
+  if (s.piggyCoins >= PIGGY_BANK_MIN_SMASH) doNow.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>${t("hud.renderProgress.PBankReady", undefined, "Piggy Bank ready")}</b><span>● ${s.piggyCoins} coins saved — smash it!</span></div><button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button></div>`);
 
   // --- Collect section: non-urgent systems ---
   const collectSections: string[] = [];
-  if (!s.canFreeSpin) collectSections.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>Daily Lucky Wheel</b><span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys</span></div><button class="soft-btn" disabled>🎡 Tomorrow</button></div>`);
-  if (s.piggyCoins < PIGGY_BANK_MIN_SMASH) collectSections.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>Coin Piggy Bank</b><span>+20% flight bonus: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span></div><span class="tag need">Fly to fill</span></div>`);
+  if (!s.canFreeSpin) collectSections.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheelx", undefined, "Daily Lucky Wheel")}</b><span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys</span></div><button class="soft-btn" disabled>🎡 Tomorrow</button></div>`);
+  if (s.piggyCoins < PIGGY_BANK_MIN_SMASH) collectSections.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>${t("hud.renderProgress.CPiggyBank", undefined, "Coin Piggy Bank")}</b><span>+20% flight bonus: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span></div><span class="tag need">${t("hud.renderProgress.FFill", undefined, "Fly to fill")}</span></div>`);
   if (s.nestLevel >= 5 || s.prestigeLevel > 0) collectSections.push(`<div class="pc pc--purple pc-row"><span class="pc-icon">👑</span><div class="pc-body"><b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b><span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span></div><button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth 👑</button></div>`);
 
   return `${head(t("hud.progress.title", undefined, "Your progress"))}
     <div class="hero-meta">
       <span class="pill seed-pill">${s.seedLabel}</span>
       <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${menuIconSm(s.wings.icon)} ${s.wings.name}</span>
-      <span class="pill">● ${s.wallet.toLocaleString()}</span>
+      <span class="pill">● ${formatNumberLocalized(s.wallet)}</span>
       <span class="pill">🔥 ${s.streakDays}d</span>
     </div>
     ${
       s.wings.nextNeeded > 0
-        ? `<div class="wings-track" aria-label="Career progress"><i style="width:${Math.round(s.wings.progress * 100)}%"></i><span>${distanceText(s.wings.nextNeeded)} to ${s.wings.nextName}</span></div>`
+        ? `<div class="wings-track" aria-label="${t("hud.renderSkinCollections.CProgress", undefined, "Career progress")}"><i style="width:${Math.round(s.wings.progress * 100)}%"></i><span>${distanceText(s.wings.nextNeeded)} to ${s.wings.nextName}</span></div>`
         : ""
     }
     ${s.rivalBanner ? renderRivalBanner(s.rivalBanner) : ""}
 
-    ${doNow.length ? `<div class="section-title progress-do-now"><span>Do this now</span></div>${doNow.join("")}` : ""}
+    ${doNow.length ? `<div class="section-title progress-do-now"><span>${t("hud.renderProgress.DNow", undefined, "Do this now")}</span></div>${doNow.join("")}` : ""}
 
     ${sectionTitle("Today", "QUESTS &amp; GOALS")}
     ${renderGoalList(s.sessionGoals)}
@@ -3032,7 +3327,7 @@ function renderProgress(s: HudSnapshot): string {
 
     <button class="event-strip" data-ui data-action="play-event">
       <span class="ds-icon">${menuIconSm(s.weeklyEvent.icon)}</span>
-      <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${menuIconSm(s.monthlyTheme.icon)} ${s.monthlyTheme.name} · fly ${s.weeklyEvent.target.toLocaleString()} m · ● ${s.weeklyEvent.reward}</em></span>
+      <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${menuIconSm(s.monthlyTheme.icon)} ${s.monthlyTheme.name} · fly ${formatNumberLocalized(s.weeklyEvent.target)} m · ● ${s.weeklyEvent.reward}</em></span>
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
 
@@ -3043,7 +3338,7 @@ function renderProgress(s: HudSnapshot): string {
       <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>
       <span class="rank-sub">${
         s.rival.nextNeeded > 0
-          ? `${s.rival.rating.toLocaleString()} / ${(s.rival.rating + Math.round(s.rival.nextNeeded)).toLocaleString()} to ${s.rival.nextName}`
+          ? `${formatNumberLocalized(s.rival.rating)} / ${formatNumberLocalized(Math.round(s.rival.rating + s.rival.nextNeeded))} to ${s.rival.nextName}`
           : "Top division — defend it"
       } · 🔥${s.rival.streak} streak</span>
     </button>
@@ -3089,7 +3384,7 @@ function skinStatBars(d: { speedMult: number; feverBonus: number; daylightBonus:
 function renderSkinCollections(s: HudSnapshot, browse: ShopBrowse): string {
   const matches = browseSkins(s.skins, browse);
   const filtered = browse.query.trim() !== "" || browse.filter !== "all";
-  if (!matches.length) return `<div class="shop-empty">${menuIcon("compass")}<b>No birds in this view</b><p>Try a bird name, a perk, or a different filter.</p><button class="soft-btn" data-ui data-action="shop-clear">Show all birds</button></div>`;
+  if (!matches.length) return `<div class="shop-empty">${menuIcon("compass")}<b>${t("hud.renderSkinCollections.NBirdsView", undefined, "No birds in this view")}</b><p>${t("hud.renderSkinCollections.TBirdNamePerkDifferentFilter", undefined, "Try a bird name, a perk, or a different filter.")}</p><button class="soft-btn" data-ui data-action="shop-clear">${t("hud.renderSkinCollections.SAllBirds", undefined, "Show all birds")}</button></div>`;
   const portal = s.portalName !== "none";
   const byId = new Map<string, SkinView[]>();
   for (const v of matches) {
@@ -3113,7 +3408,7 @@ function renderSkinCollections(s: HudSnapshot, browse: ShopBrowse): string {
     .join("");
 }
 
-function skinAction(v: SkinView, portal: boolean, wallet: number): string {
+export function skinAction(v: SkinView, portal: boolean, wallet: number): string {
   const d = v.def;
   const price = v.dealPrice ?? d.price;
   const priceLabel = v.dealPrice !== undefined ? `<s>● ${d.price}</s> ● ${price}` : `● ${price}`;
@@ -3122,11 +3417,20 @@ function skinAction(v: SkinView, portal: boolean, wallet: number): string {
   else if (v.owned) action = `<button class="mini-btn" data-ui data-action="equip-skin" data-id="${d.id}">Equip</button>`;
   else if (d.prizeOnly) action = `<span class="tag prize" title="${d.prizeOnly}">🏆 ${d.prizeOnly}</span>`;
   else if (v.locked && portal)
-    action = `<span class="tag portal-lock">Portal event</span>`;
+    // A Gold-locked variant must not become a paywall on the portal build.
+    // Selling premium currency is forbidden there (Poki REQ-20) and the portal
+    // carries no Gold checkout, so a button here would be an offer the portal
+    // edition cannot honour — the same defect REQ-31 covers for the break
+    // overlay. It is named as a perk instead, so the row still says why the
+    // item is locked rather than hiding behind a dead end.
+    action =
+      v.lockReason === "gold"
+        ? `<span class="tag portal-lock">${t("hud.skinAction.GPerk", undefined, "Gold perk")}</span>`
+        : `<span class="tag portal-lock">♛ VIP — not on this build</span>`;
   else if (v.locked && SELL_AD_REMOVAL)
     action = `<button class="mini-btn ${v.lockReason === "vip" ? "vip" : "gold"}" data-ui data-action="open-paywall">${v.lockReason === "vip" ? "♛ VIP" : "✦ Gold"}</button>`;
   else if (v.locked)
-    action = `<span class="tag portal-lock">Gold perk</span>`;
+    action = `<span class="tag portal-lock">${t("hud.skinAction.GPerk", undefined, "Gold perk")}</span>`;
   else
     action = `<button class="mini-btn ${v.affordable ? (v.dealPrice !== undefined ? "gold" : "") : "off"}" data-ui data-action="buy-skin" data-id="${d.id}" ${v.affordable ? "" : "disabled"} aria-label="${v.affordable ? `Buy ${d.name} for ${price} coins` : `${d.name} costs ${price} coins; earn more coins to unlock`}">${priceLabel}</button>`;
   return action + (!v.owned && !v.locked && !d.prizeOnly && !v.affordable ? `<small class="purchase-shortfall">${Math.max(0, price - wallet)} more coins</small>` : "");
@@ -3134,7 +3438,11 @@ function skinAction(v: SkinView, portal: boolean, wallet: number): string {
 
 function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: number): string {
   const d = v.def, rarity = skinRarity(d);
-  const birdSvg = sunbirdSVG({ palette: skinPalette(d), width: 88, flap: 0.38 });
+  // Species and colour together, and a real wingbeat. This card is the product
+  // shot: it was 88px, static, and one silhouette for all sixty-nine birds, so
+  // the shop read as a colour chart. Bigger, alive, and drawn as the species it
+  // sells.
+  const birdSvg = sunbirdSVG({ palette: skinPalette(d), shape: skinShape(d), width: 104, animateWings: true, title: d.name });
   const dealTag = v.dealPrice !== undefined && !v.owned ? `<span class="deal-tag">TODAY −40%</span>` : "";
   return `<div class="skin-card r-${rarity.key} ${v.equipped ? "equipped" : ""} ${v.owned ? "owned" : ""} ${v.dealPrice !== undefined ? "deal" : ""}" data-skin="${d.id}">
     <span class="rarity">${rarity.label}</span>
@@ -3159,7 +3467,7 @@ function renderBoostRow(v: BoostView, wallet: number): string {
       ? `<button class="mini-btn ${v.dealPrice !== undefined ? "gold" : ""}" data-ui data-action="buy-boost" data-id="${d.id}">${priceLabel}</button>`
       : `<span class="tag need">Need ${missing}●</span>`;
   const dealTag = v.dealPrice !== undefined && !v.armed ? `<span class="deal-tag">TODAY −50%</span>` : "";
-  return `<div class="boost-row ${v.armed ? "armed" : ""} ${v.dealPrice !== undefined ? "deal" : ""}"><span class="bi">${menuIcon("boost")}</span><div><div class="mt">${d.name}${d.permanent ? `<span class="boost-once">permanent</span>` : `<span class="boost-once">one flight</span>`}${dealTag}</div><div class="md">${d.desc}</div></div>${action}</div>`;
+  return `<div class="boost-row ${v.armed ? "armed" : ""} ${v.dealPrice !== undefined ? "deal" : ""}"><span class="bi">${menuIcon("boost")}</span><div><div class="mt"><b class="boost-name">${escapeHtml(d.name)}</b>${d.permanent ? `<span class="boost-once">permanent</span>` : `<span class="boost-once">one flight</span>`}${dealTag}</div><div class="md">${d.desc}</div></div>${action}</div>`;
 }
 
 function renderTrailCard(v: ShopTrailView, wallet: number): string {
@@ -3184,14 +3492,14 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
   const equippedSkin = s.skins.find(v => v.def.id === browse.preview) ?? s.skins.find(v => v.equipped);
   const matches = browseSkins(s.skins, browse).length;
   const heroSvg = equippedSkin
-    ? sunbirdSVG({ palette: skinPalette(equippedSkin.def), width: 128, flap: 0.45, title: equippedSkin.def.name })
-    : sunbirdSVG({ width: 88, flap: 0.45, title: "Sunbird" });
+    ? sunbirdSVG({ palette: skinPalette(equippedSkin.def), shape: skinShape(equippedSkin.def), width: 168, animateWings: true, title: equippedSkin.def.name })
+    : sunbirdSVG({ width: 128, animateWings: true, title: "Sunbird" });
 
   const flash = s.dailyFlash ?? dailyFlashBird("today");
   const flashDef = skinById(flash.id);
   const flashView = s.skins.find(v => v.def.id === flash.id);
   const flashOwned = flashView?.owned ?? false;
-  const flashSvg = sunbirdSVG({ palette: skinPalette(flashDef), width: 90, flap: 0.45, title: flashDef.name });
+  const flashSvg = sunbirdSVG({ palette: skinPalette(flashDef), shape: skinShape(flashDef), width: 104, animateWings: true, title: flashDef.name });
 
   const filters = [
     ["all", "All birds"],
@@ -3204,13 +3512,13 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
   ] as const;
 
   return `
-    ${head(SCREEN.shop, "back", `<span class="pill coin">● ${s.wallet.toLocaleString()}</span>`)}
-    <p class="shop-intro">YOUR HANGAR <span>Find your wings. Make them yours.</span></p>
+    ${head(SCREEN.shop, "back", `<span class="pill coin">● ${formatNumberLocalized(s.wallet)}</span>`)}
+    <p class="shop-intro">${t("hud.renderShop.H", undefined, "YOUR HANGAR ")}<span>${t("hud.renderShop.FWingsMakeThemYours", undefined, "Find your wings. Make them yours.")}</span></p>
 
     <div class="pc pc--gold pc-row">
       <span class="pc-icon">🪙</span>
       <div class="pc-body">
-        <b>Daily Flight Stipend</b>
+        <b>${t("hud.renderShop.DFlightStipend", undefined, "Daily Flight Stipend")}</b>
         <span>Daily test &amp; hangar allowance</span>
       </div>
       ${s.stipendClaimed
@@ -3222,16 +3530,16 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
     <div class="pc pc--gold pc-row">
       <span class="pc-icon">📺</span>
       <div class="pc-body">
-        <b>Free Coins</b>
-        <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/visit)</span>
+        <b>${t("hud.renderShop.FCoins", undefined, "Free Coins")}</b>
+        <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/hour)</span>
       </div>
-      <button class="primary-btn gold" data-ui data-action="shop-free-coins">Watch Ad</button>
+      <button class="primary-btn gold" data-ui data-action="shop-free-coins">${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
     </div>` : ""}
 
     <div class="pc pc--red">
       <div class="pc-header">
         <span class="pc-badge">🔥 DAILY FLASH SALE · 40% OFF</span>
-        <span class="pc-label" style="color:#c62828;">Resets at Midnight</span>
+        <span class="pc-label" style="color:#c62828;">${t("hud.renderShop.RMidnight", undefined, "Resets at Midnight")}</span>
       </div>
       <div class="pc-row">
         <div class="pc-preview">${flashSvg}</div>
@@ -3269,13 +3577,13 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
 
     <div class="pc pc--blue">
       <div class="pc-header">
-        <span class="pc-badge">📦 ACE PILOT CRATE · SAVE 54%</span>
-        <span class="pc-label">Value Pack</span>
+        <span class="pc-badge">📦 ACE PILOT CRATE · SAVE 73%</span>
+        <span class="pc-label">${t("hud.renderShop.VPack", undefined, "Value Pack")}</span>
       </div>
       <div class="pc-row" style="margin-bottom:10px;">
         <span class="pc-icon">✈️</span>
         <div class="pc-body">
-          <b>Ace Wingman Bundle</b>
+          <b>${t("hud.renderShop.AWingmanBundle", undefined, "Ace Wingman Bundle")}</b>
           <span>3 Boosts · Tideglass Trail · +${DAILY_STIPEND} Coins</span>
         </div>
       </div>
@@ -3290,8 +3598,8 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
     <div class="pc pc--vault pc-row">
       <span class="pc-icon">🥚</span>
       <div class="pc-body">
-        <b>Golden Mystery Vault</b>
-        <span>35% Rare Bird · 35% Radiant Trail · 30% Coin Jackpot</span>
+        <b>${t("hud.renderShop.GMysteryVault", undefined, "Golden Mystery Vault")}</b>
+        <span>35% Bird Skin · 35% Radiant Trail · 30% Coin Jackpot</span>
       </div>
       ${s.wallet >= 150
         ? `<button class="primary-btn gold" data-ui data-action="buy-vault">Open · ● 150</button>`
@@ -3299,25 +3607,25 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
       }
     </div>
 
-    <div class="section-title shop-catalog-divider">Browse catalog <small>Birds · Boosts · Trails</small></div>
-    <nav class="shop-jumps" aria-label="Shop sections">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
+    <div class="section-title shop-catalog-divider">${t("hud.renderShop.BCatalog", undefined, "Browse catalog ")}<small>${t("hud.renderShop.BBoostsTrails", undefined, "Birds · Boosts · Trails")}</small></div>
+    <nav class="shop-jumps" aria-label="${t("hud.renderPaywall.SSections", undefined, "Shop sections")}">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
 
-    <section class="shop-browser" aria-label="Browse birds">
-      <div class="section-title shop-section-birds">Bird collection <small>${owned}/${s.skins.length} owned</small></div>
-      <label class="field-label" for="shop-search">Find a bird</label>
+    <section class="shop-browser" data-ref="shopBirds" aria-label="Browse birds">
+      <div class="section-title shop-section-birds">${t("hud.renderShop.BCollection", undefined, "Bird collection ")}<small>${owned}/${s.skins.length} owned</small></div>
+      <label class="field-label" for="shop-search">${t("hud.renderShop.FBird", undefined, "Find a bird")}</label>
       <input id="shop-search" type="search" data-ui data-ref="shopSearch" value="${escapeHtml(browse.query)}" placeholder="Name, collection or perk" maxlength="80" autocomplete="off" />
-      <div class="shop-filters" role="group" aria-label="Filter birds">${filters.map(([id, label]) => `<button class="mini-btn ${browse.filter === id ? "gold" : ""}" data-ui data-action="shop-filter" data-id="${id}" aria-pressed="${browse.filter === id}">${label}</button>`).join("")}</div>
+      <div class="shop-filters" role="group" aria-label="${t("hud.vipBlock.FBirds", undefined, "Filter birds")}">${filters.map(([id, label]) => `<button class="mini-btn ${browse.filter === id ? "gold" : ""}" data-ui data-action="shop-filter" data-id="${id}" aria-pressed="${browse.filter === id}">${label}</button>`).join("")}</div>
       <p class="shop-match-count" role="status">${matches} ${matches === 1 ? "bird" : "birds"} shown${browse.filter === "affordable" ? " · unowned, purchasable with your coins" : ""}</p>
       ${renderSkinCollections(s, browse)}
     </section>
 
-    <details class="shop-section"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
+    <details class="shop-section" data-ref="shopBoosts"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
       <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
       <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
       ${sectionTitle("Nest", "permanent score multiplier")}
       <div class="boost-list"><div class="boost-row nest-row">
         <span class="bi">${menuIcon("story")}</span>
-        <div><div class="mt">Nest upgrade <span class="boost-once">forever</span></div>
+        <div><div class="mt">${t("hud.renderShop.NUpgrade", undefined, "Nest upgrade ")}<span class="boost-once">forever</span></div>
         <div class="md">Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score${s.nestMaxed ? " · fully upgraded" : ` · next ×${(s.nestMult + 0.12).toFixed(2)}`}</div></div>
         ${
           s.nestMaxed
@@ -3329,12 +3637,12 @@ function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
       </div></div>
     </details>
 
-    <details class="shop-section"><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>Cosmetic · yours forever</span></summary>
+    <details class="shop-section" data-ref="shopTrails"><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>${t("hud.renderShop.CYoursForever", undefined, "Cosmetic · yours forever")}</span></summary>
       <div class="trail-list">${s.shopTrails.map((t) => renderTrailCard(t, s.wallet)).join("")}</div>
     </details>
 
     ${s.portalName === "none" && !(s.gold && s.vip) ? upsellStrip() : ""}
-    <p class="fineprint">Earn coins by flying, daily quests, streaks and the Nest Pass.</p>
+    <p class="fineprint">${t("hud.renderShop.ECoinsByFlyingDailyQuestsStreaksNestPass", undefined, "Earn coins by flying, daily quests, streaks and the Nest Pass.")}</p>
   `;
 }
 
@@ -3342,7 +3650,7 @@ function renderPaywall(s: HudSnapshot): string {
   const starter = !s.starterOwned
     ? `
     <div class="starter-card">
-      <div class="starter-flag">ONE-TIME OFFER</div>
+      <div class="starter-flag">${t("hud.renderPaywall.OTIMEOFFER", undefined, "ONE-TIME OFFER")}</div>
       <h3>🎁 First Flight Pack · ${STARTER_PACK.price}</h3>
       <ul class="feature-list tight">${s.starterFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
       ${
@@ -3354,7 +3662,7 @@ function renderPaywall(s: HudSnapshot): string {
     : "";
   return `
     ${head(SCREEN.coinStore)}
-    <div class="wallet-row" style="margin-bottom:12px"><span class="pill coin">Your Balance: ● ${s.wallet.toLocaleString()}</span></div>
+    <div class="wallet-row" style="margin-bottom:12px"><span class="pill coin">Your Balance: ● ${formatNumberLocalized(s.wallet)}</span></div>
     ${starter}
     <div class="gold-hero"><div class="gold-badge">✦</div><div class="gold-price">${GOLD.price}<small> lifetime</small></div></div>
     <ul class="feature-list">${s.goldFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
@@ -3365,7 +3673,22 @@ function renderPaywall(s: HudSnapshot): string {
           ? `<button class="primary-btn gold" data-ui data-action="gold-buy">Unlock Gold · ${GOLD.price}</button>`
           : `<button class="primary-btn gold off" data-ui data-action="gold-buy">Need ● ${GOLD.coinPrice - s.wallet} more coins</button>`
     }
-    <div class="gold-hero vip"><div class="gold-badge vip">♛</div><div class="gold-price">${VIP.price}<small> 30 days</small></div></div>
+    ${SELL_AD_REMOVAL ? `${vipBlock(s)}` : `<p class="fineprint">♛ VIP is not sold on this build.</p>`}
+    <div class="redeem"><input data-ui aria-label="${t("hud.renderSettings.PCode", undefined, "Promo code")}" placeholder="Promo code" maxlength="16" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem">Redeem</button></div>
+    <button class="ghost-btn" data-ui data-action="restore">${t("hud.renderPaywall.RPasses", undefined, "Restore passes")}</button>
+    ${s.restoreMessage ? `<p class="note">${s.restoreMessage}</p>` : ""}
+    <p class="fineprint">All passes &amp; packs are earnable 100% through in-game flight coins!</p>
+  `;
+}
+
+/**
+ * The VIP upsell. Never rendered on a build that cannot sell it — it used to
+ * render a fully-styled primary button and a six-bullet feature list, then
+ * toast "not available on this build" when tapped, which is worse than saying
+ * nothing at all.
+ */
+function vipBlock(s: HudSnapshot): string {
+  return `<div class="gold-hero vip"><div class="gold-badge vip">♛</div><div class="gold-price">${VIP.price}<small> 30 days</small></div></div>
     <ul class="feature-list">${s.vipFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
     ${
       s.vip
@@ -3376,18 +3699,13 @@ function renderPaywall(s: HudSnapshot): string {
         : s.wallet >= VIP.coinPrice
           ? `<button class="primary-btn vip" data-ui data-action="vip-buy">Unlock VIP · ${VIP.price}</button>`
           : `<button class="primary-btn vip off" data-ui data-action="vip-buy">Need ● ${VIP.coinPrice - s.wallet} more coins</button>`
-    }
-    <div class="redeem"><input data-ui aria-label="Promo code" placeholder="Promo code" maxlength="16" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem">Redeem</button></div>
-    <button class="ghost-btn" data-ui data-action="restore">Restore passes</button>
-    ${s.restoreMessage ? `<p class="note">${s.restoreMessage}</p>` : ""}
-    <p class="fineprint">All passes &amp; packs are earnable 100% through in-game flight coins!</p>
-  `;
+    }`;
 }
 
 function renderCheckout(s: HudSnapshot): string {
   if (s.checkoutOk) {
     const okLabel = s.checkoutSku === "sunbird_vip" ? "VIP" : s.checkoutSku === "sunbird_starter" ? "ready for takeoff" : "Gold";
-    return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? "🎁" : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">Your perks are active immediately</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;
+    return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? "🎁" : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">${t("hud.renderCheckout.PAreActiveImmediately", undefined, "Your perks are active immediately")}</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;
   }
   const item =
     s.checkoutSku === "sunbird_vip"
@@ -3401,7 +3719,7 @@ function renderCheckout(s: HudSnapshot): string {
     ${head(SCREEN.confirmUnlock, "checkout-cancel")}
     <div class="sheet">
       <div class="sheet-row"><span>${item.name}</span><b>${item.price}</b></div>
-      <p class="tagline">Wallet: ● ${s.wallet.toLocaleString()}</p>
+      <p class="tagline">Wallet: ● ${formatNumberLocalized(s.wallet)}</p>
       ${
         canAfford
           ? `<button class="primary-btn gold" data-ui data-action="${item.action}">Confirm Unlock · ${item.price}</button>`
@@ -3423,7 +3741,7 @@ function renderSettings(s: HudSnapshot): string {
   const sPct = Math.round((s.settings.sfxVolume ?? 0.9) * 100);
   return `
     ${head(t("hud.settings.title", undefined, "Settings"))}
-    <p class="settings-intro">Make the flight feel right for you. Changes save automatically.</p>
+    <p class="settings-intro">${t("hud.renderSettings.MFlightFeelRightChangesSaveAutomatically", undefined, "Make the flight feel right for you. Changes save automatically.")}</p>
     ${sectionTitle(t("hud.settings.section.pilot", undefined, "Pilot"))}
     ${CUSTOM_PILOT_NAMES
       ? `<div class="redeem pilot-name-row">
@@ -3441,7 +3759,7 @@ function renderSettings(s: HudSnapshot): string {
     ${volumeControl(t("hud.settings.effectsVolume", undefined, "Effects volume"), "sfx-vol", sPct)}
     ${toggle(t("hud.settings.musicToggle", undefined, "Music"), "music", s.settings.music)}
     ${volumeControl(t("hud.settings.music", undefined, "Music Volume"), "music-vol", mPct)}
-    <div class="setting-row setting-select"><label for="music-track">Music track</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>Shuffle all tracks</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
+    <div class="setting-row setting-select"><label for="music-track">${t("hud.renderSettings.MTrack", undefined, "Music track")}</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>${t("hud.renderSettings.SAllTracks", undefined, "Shuffle all tracks")}</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
     <div class="setting-row setting-select"><label for="language-select">${t("hud.settings.language", undefined, "Language")} / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.distancesIn", undefined, "Show distances in")}</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
     ${sectionTitle(t("hud.settings.section.comfort", undefined, "Comfort &amp; controls"))}
@@ -3463,7 +3781,7 @@ function renderSettings(s: HudSnapshot): string {
          identically in every edition. -->
     <button class="soft-btn wide" data-ui data-action="open-privacy">🔒 ${t("hud.settings.privacy", undefined, "Privacy Policy")}</button>
     ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">⬇ Install Sunbird</button>` : ""}
-    <details class="danger-zone"><summary>Manage saved progress</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
+    <details class="danger-zone"><summary>${t("hud.renderSettings.MSavedProgress", undefined, "Manage saved progress")}</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
     <button class="ghost-btn danger" data-ui data-action="reset-progress">${s.resetArmed ? "Confirm: erase saved progress" : "Reset progress"}</button></details>
     <p class="fineprint">Sunbird 1.0 · ${s.seedLabel}</p>
   `;
@@ -3471,18 +3789,21 @@ function renderSettings(s: HudSnapshot): string {
 
 function renderScores(s: HudSnapshot): string {
   return `
-    ${head(SCREEN.highGlides)}
+    ${head(SCREEN.savedScores)}
     ${renderScoreTable(s.highScores)}
-    ${!s.highScores.length ? `<p class="tagline">Your first flight starts your story. Fly a little farther each time.</p><button class="primary-btn" data-ui data-action="pvp-practice">Take your first flight</button>` : ""}
-    <div class="menu-stats"><div>Today's best <b>${distanceText(s.todayBest)}</b></div><div>Flights <b>${s.runsPlayed}</b></div></div>
+    ${!s.highScores.length ? `<p class="tagline">${t("hud.renderScores.FFlightStartsStoryFlyLittleFartherEachTime", undefined, "Your first flight starts your story. Fly a little farther each time.")}</p><button class="primary-btn" data-ui data-action="pvp-practice">${t("hud.renderScores.TFirstFlight", undefined, "Take your first flight")}</button>` : ""}
+    <div class="menu-stats"><div>${t("hud.renderScores.TSBest", undefined, "Today's best ")}<b>${distanceText(s.todayBest)}</b></div><div>Flights <b>${s.runsPlayed}</b></div></div>
   `;
 }
 
 function rewardLabel(r: { kind: string; amount?: number; id?: string }): string {
   if (r.kind === "coins") return `● ${r.amount}`;
-  if (r.kind === "skin") return `🐦 ${r.id}`;
-  if (r.kind === "trail") return `✨ ${r.id?.replace("trail_", "") ?? "trail"}`;
-  return `🎁 ${r.id}`;
+  // Map through the catalogues. This printed the raw id — "🐦 paradise",
+  // "✨ star" — on a fifty-tier track, which is the game's own plumbing shown
+  // to the player as if it were a name.
+  if (r.kind === "skin") return `🐦 ${skinById(r.id ?? "").name}`;
+  if (r.kind === "trail") return `✨ ${TRAILS[r.id ?? ""]?.label ?? "Trail"}`;
+  return `🎁 ${r.id ?? "Reward"}`;
 }
 
 function renderPass(s: HudSnapshot): string {
@@ -3491,8 +3812,8 @@ function renderPass(s: HudSnapshot): string {
     ${head(SCREEN.nestPass, "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
     <div class="pass-progress"><i style="width:${pct}%"></i></div>
     <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks the premium track." : " Fly to unlock rewards."}</p>
-    ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>Double the tier rewards with Gold</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
-    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — premium rewards shown for reference; this build has no Gold purchase, so the free track is what you actually earn.</p>` : ""}
+    ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>${t("hud.renderPass.DTierRewardsGold", undefined, "Double the tier rewards with Gold")}</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
+    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — the free Nest Pass track is fully earnable. Gold is a one-time purchase with flight coins.</p>` : ""}
     <div class="tier-track">
       ${s.season.tiers
         .map((t) => {
@@ -3507,7 +3828,7 @@ function renderPass(s: HudSnapshot): string {
         })
         .join("")}
     </div>
-    <p class="fineprint">The Nest Pass resets every month — spend rewards before it does!</p>
+    <p class="fineprint">${t("hud.renderPass.NPassResetsEveryMonthSpendRewardsBeforeDoes", undefined, "The Nest Pass resets every month — spend rewards before it does!")}</p>
   `;
 }
 
@@ -3549,9 +3870,9 @@ function renderAccount(s: HudSnapshot): string {
     <div class="sheet">
       ${
         s.portalAccountName
-          ? `<div class="code-row"><span>Signed in as <b>${escapeHtml(s.portalAccountName)}</b></span><span class="tag on">Linked</span></div>
+          ? `<div class="code-row"><span>${t("hud.renderAccount.SAs", undefined, "Signed in as ")}<b>${escapeHtml(s.portalAccountName)}</b></span><span class="tag on">Linked</span></div>
              <p class="fineprint">Your progress and leaderboard scores follow this ${PORTAL_DISPLAY_NAME} account across devices.</p>`
-          : `<div class="code-row"><span>Not signed in</span><button class="mini-btn" data-ui data-action="portal-sign-in">Sign in</button></div>
+          : `<div class="code-row"><span>${t("hud.renderAccount.NSigned", undefined, "Not signed in")}</span><button class="mini-btn" data-ui data-action="portal-sign-in">${t("hud.renderAccount.S", undefined, "Sign in")}</button></div>
              <p class="fineprint">Sign in to carry your progress between devices and appear on the board under your own name.</p>`
       }
     </div>`
@@ -3563,7 +3884,7 @@ function renderAccount(s: HudSnapshot): string {
     ${!SELL_AD_REMOVAL ? "" : `
     <div class="sheet">
       <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
-        s.gold ? `<span class="tag on">Active</span>` : SELL_AD_REMOVAL ? `<button class="mini-btn gold" data-ui data-action="open-paywall">Get Gold</button>` : `<span class="tag">Portal member</span>`
+        s.gold ? `<span class="tag on">Active</span>` : SELL_AD_REMOVAL ? `<button class="mini-btn gold" data-ui data-action="open-paywall">${t("hud.renderAccount.GGold", undefined, "Get Gold")}</button>` : `<span class="tag">${t("hud.renderAccount.PMember", undefined, "Portal member")}</span>`
       }</div>
       ${SELL_AD_REMOVAL ? `<div class="code-row"><span>♛ VIP · ${s.vip ? `${s.vipDaysLeft} day${s.vipDaysLeft === 1 ? "" : "s"} left` : "inactive"}</span>${
         s.vip
@@ -3587,29 +3908,29 @@ function renderAccount(s: HudSnapshot): string {
       <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>
       ${
         s.referralRedeemed
-          ? `<p class="note">You've already redeemed a friend code. Thanks for joining!</p>`
-          : `<div class="redeem"><input data-ui data-ref="friendcode" aria-label="Friend referral code" placeholder="Friend's code (SUN-XXXXXX)" maxlength="10" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem-referral">Apply</button></div>`
+          ? `<p class="note">${t("hud.renderAccount.VAlreadyRedeemedFriendCodeThanksJoining", undefined, "You've already redeemed a friend code. Thanks for joining!")}</p>`
+          : `<div class="redeem"><input data-ui data-ref="friendcode" aria-label="${t("hud.renderCelebration.FReferralCode", undefined, "Friend referral code")}" placeholder="Friend's code (SUN-XXXXXX)" maxlength="10" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem-referral">Apply</button></div>`
       }
       ${s.referralMessage ? `<p class="note">${s.referralMessage}</p>` : ""}
     </div>
     ${sectionTitle("Transfer saved progress")}
     <div class="sheet">
-      <p class="tagline">Copy this code to move your progress to another device.</p>
-      <textarea class="cloud-box" data-ui aria-label="Your exportable save code" readonly rows="3">${s.cloudCode}</textarea>
-      <button class="mini-btn" data-ui data-action="copy-cloud">Copy code</button>
-      <p class="tagline" style="margin-top:10px">Paste a code from another device to restore it here:</p>
-      <textarea class="cloud-box" data-ui aria-label="Save code to import" rows="3" placeholder="Paste save code…"></textarea>
-      <label class="import-confirm"><input type="checkbox" data-ui/>Replace progress on this device with this save.</label>
-      <button class="mini-btn" data-ui data-action="import-cloud">Import save</button>
+      <p class="tagline">${t("hud.renderAccount.CCodeMoveProgressAnotherDevice", undefined, "Copy this code to move your progress to another device.")}</p>
+      <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.ESaveCode", undefined, "Your exportable save code")}" readonly rows="3">${s.cloudCode}</textarea>
+      <button class="mini-btn" data-ui data-action="copy-cloud">${t("hud.renderAccount.CCode", undefined, "Copy code")}</button>
+      <p class="tagline" style="margin-top:10px">${t("hud.renderAccount.PCodeFromAnotherDeviceRestoreHere", undefined, "Paste a code from another device to restore it here:")}</p>
+      <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.SCodeImport", undefined, "Save code to import")}" rows="3" placeholder="Paste save code…"></textarea>
+      <label class="import-confirm"><input type="checkbox" data-ui/>${t("hud.renderAccount.RProgressDeviceSave", undefined, "Replace progress on this device with this save.")}</label>
+      <button class="mini-btn" data-ui data-action="import-cloud">${t("hud.renderAccount.ISave", undefined, "Import save")}</button>
       ${s.cloudMessage ? `<p class="note" role="status">${s.cloudMessage}</p>` : ""}
     </div>
-    <p class="fineprint">Copy your save code to transfer progress between devices.</p>
+    <p class="fineprint">${t("hud.renderAccount.CSaveCodeTransferProgressBetweenDevices", undefined, "Copy your save code to transfer progress between devices.")}</p>
   `;
 }
 
 function renderGoalList(goals: SessionGoal[]): string {
   if (!goals.length) return "";
-  return `<div class="quests"><div class="mission-head">Session goals</div>${goals
+  return `<div class="quests"><div class="mission-head">${t("hud.renderGoalList.SGoals", undefined, "Session goals")}</div>${goals
     .map((g) => {
       const pct = Math.min(100, (g.progress / g.target) * 100);
       return `<div class="quest ${g.done ? "done" : ""}">
@@ -3639,7 +3960,7 @@ export function renderFlightRecap(path: [number, number][]): string {
   let peak = path[0]!;
   for (const p of path) if (p[1] > peak[1]) peak = p;
   return `
-    <div class="flight-recap" aria-label="Flight altitude profile">
+    <div class="flight-recap" aria-label="${t("hud.renderGameOver.FAltitudeProfile", undefined, "Flight altitude profile")}">
       <svg viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none">
         <defs><linearGradient id="fr-g" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#ffb020" stop-opacity="0.55"/>
@@ -3812,16 +4133,16 @@ function renderGameOver(s: HudSnapshot): string {
       ${sectionTitle("🔗 Shared run", "friend's code · async race")}
       ${
         s.share.code
-          ? `<div class="friend-row"><span class="fr-name">Run code</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">Copy code</button></div>`
+          ? `<div class="friend-row"><span class="fr-name">${t("hud.renderGameOver.RCode", undefined, "Run code")}</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">${t("hud.renderGameOver.CCode", undefined, "Copy code")}</button></div>`
           : `<button class="soft-btn wide" data-ui data-action="share-run" ${s.share.busy ? "disabled" : ""}>${s.share.busy ? "Publishing…" : "Share this run for a friend"}</button>`
       }
       <div class="redeem">
-        <input data-ui data-enter-action="load-run" aria-label="Shared run code" placeholder="A friend's run code" maxlength="40" autocomplete="off" spellcheck="false" />
+        <input data-ui data-enter-action="load-run" aria-label="${t("hud.renderNextFlight.SRunCode", undefined, "Shared run code")}" placeholder="A friend's run code" maxlength="40" autocomplete="off" spellcheck="false" />
         <button class="mini-btn" data-ui data-action="load-run" ${s.share.busy ? "disabled" : ""}>Load</button>
       </div>
       ${
         s.share.loaded
-          ? `<div class="pilot-note">Loaded <b>${escapeHtml(s.share.loaded.name)}</b>'s run — ${Math.round(s.share.loaded.distance).toLocaleString()} m on the same hills. <button class="mini-btn gold" data-ui data-action="race-share">Race their mark</button></div>`
+          ? `<div class="pilot-note">Loaded <b>${escapeHtml(s.share.loaded.name)}</b>'s run — ${formatNumberLocalized(Math.round(s.share.loaded.distance))} m on the same hills. <button class="mini-btn gold" data-ui data-action="race-share">${t("hud.renderGameOver.RTheirMark", undefined, "Race their mark")}</button></div>`
           : ""
       }
       ${s.share.error ? `<div class="pilot-note warn" role="status">${escapeHtml(s.share.error)}</div>` : ""}
@@ -3830,7 +4151,8 @@ function renderGameOver(s: HudSnapshot): string {
 
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
-    <h2>${t("hud.gameover.title", undefined, "Flight completed")}</h2>
+    <h2>${escapeHtml(END_REASON_TITLE[s.endReason] ?? "Flight completed")}</h2>
+    <p class="end-reason">${escapeHtml(END_REASON_LINE[s.endReason] ?? "")}</p>
     <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
@@ -3847,7 +4169,7 @@ function renderGameOver(s: HudSnapshot): string {
     </div>
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
+      <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
 
@@ -3861,13 +4183,13 @@ function renderGameOver(s: HudSnapshot): string {
     ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
 
     ${renderNextFlight(s)}
-    <details class="result-details"><summary>Flight details <span>Landmarks &amp; skill</span></summary><div class="over-stats">
+    <details class="result-details"><summary>${t("hud.renderGameOver.FDetails", undefined, "Flight details ")}<span>Landmarks &amp; skill</span></summary><div class="over-stats">
       <div><span>Perfects</span><b>${s.perfects}</b></div>
-      <div><span>Skyline moments</span><b>${s.zeniths}</b></div>
+      <div><span>${t("hud.renderGameOver.SMoments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
       <div><span>Rings</span><b>${s.rings}</b></div>
       <div><span>Balloons</span><b>${s.balloons}</b></div>
       <div><span>Sunflowers</span><b>${s.sunflowers}</b></div>
-      <div><span>Slope flow</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
+      <div><span>${t("hud.renderGameOver.SFlow", undefined, "Slope flow")}</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
       <div><span>Islands</span><b>${s.island + 1}</b></div>
     </div></details>
     ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! 👻` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
@@ -3889,14 +4211,14 @@ function renderGameOver(s: HudSnapshot): string {
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}
     ${renderMissions(s.missions, s.newlyCompleted)}
-    <h3 class="table-title">High glides</h3>
+    <h3 class="table-title">${t("hud.renderGameOver.HGlides", undefined, "High glides")}</h3>
     ${renderScoreTable(s.highScores.slice(0, 5))}</details>
   `;
 }
 
 function renderNextFlight(s: HudSnapshot): string {
   const lesson = flightTakeaway(s), bird = nextBird(s.skins);
-  return `<section class="next-flight" aria-label="Next flight plan"><span class="next-flight-art">${menuIcon("compass")}</span><div><small>TAKE THIS INTO YOUR NEXT FLIGHT</small><b>${lesson.title}</b><p>${lesson.tip}</p>${bird ? `<p class="next-unlock">${s.wallet >= bird.def.price ? `${bird.def.name} is within reach · ${bird.def.price} coins in the Shop` : `${bird.def.name} · ${bird.def.price - s.wallet} more coins to unlock`}</p>` : ""}</div></section>`;
+  return `<section class="next-flight" aria-label="${t("hud.renderAd.NFlightPlan", undefined, "Next flight plan")}"><span class="next-flight-art">${menuIcon("compass")}</span><div><small>${t("hud.renderNextFlight.TINTONEXTFLIGHT", undefined, "TAKE THIS INTO YOUR NEXT FLIGHT")}</small><b>${lesson.title}</b><p>${lesson.tip}</p>${bird ? `<p class="next-unlock">${s.wallet >= bird.def.price ? `${bird.def.name} is within reach · ${bird.def.price} coins in the Shop` : `${bird.def.name} · ${bird.def.price - s.wallet} more coins to unlock`}</p>` : ""}</div></section>`;
 }
 
 function renderContinue(s: HudSnapshot): string {
@@ -3913,12 +4235,12 @@ function renderContinue(s: HudSnapshot): string {
   // exit — never hidden, never the only way out.
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
-    <h2>Second wind?</h2>
+    <h2>${t("hud.renderContinue.SWind", undefined, "Second wind?")}</h2>
     <p class="tagline">Sunbird is dozing off at ${distanceText(s.distance)}.</p>
     ${s.continueReason ? `<p class="continue-reason${s.continueHighlight ? " is-highlight" : ""}">${escapeHtml(s.continueReason)}</p>` : ""}
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>Score</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
+      <div><span>Score</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
@@ -3926,7 +4248,7 @@ function renderContinue(s: HudSnapshot): string {
       : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
-      <button class="soft-btn" data-ui data-action="continue-sleep">Let it sleep</button>
+      <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
     </div>
     ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ Gold · free wake-up</button>` : ""}
     <p class="fineprint replay-note">Sleep ends the flight and shows your recap. Waking up keeps this run alive from where it landed.</p>
@@ -3953,7 +4275,11 @@ function renderAd(s: HudSnapshot): string {
       ${
         s.adSkippable
           ? `<button class="mini-btn" data-ui data-action="ad-skip" data-live="adSkip" disabled>Continues in ${Math.ceil(s.adTimer)}</button>`
-          : ""
+          // Never render an empty .ad-actions. On Poki BOTH branches above are
+          // false, so the panel was a frozen bar and "Your run is paused" for up
+          // to 60 s with nothing to press. After the safety window the run is
+          // returned to, and the button says so.
+          : `<button class="mini-btn" data-ui data-action="ad-stuck">${s.adTimer > 0 ? `Taking longer than usual — return (${Math.ceil(s.adTimer)})` : "Return to flight"}</button>`
       }
       ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
     </div>

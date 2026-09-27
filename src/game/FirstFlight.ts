@@ -86,7 +86,15 @@ export class FirstFlight {
       tapMode
         ? `⬆ ${t("onboarding.tapToLaunch", undefined, "TAP again at the top to launch")}`
         : `⬆ ${t("onboarding.releaseToLaunch", undefined, "RELEASE at the top to launch")}`,
-      `${iconGlyph("bird")} ${t("onboarding.soarInAir", undefined, "RELEASE & SOAR — stay airborne!")}`,
+            // Step 3 fires the moment the bird is already airborne, so "RELEASE" is
+      // over before it can be done - and it had no tapMode branch, so a
+      // player who enabled tap-to-toggle was told to RELEASE a game with
+      // nothing to release.
+      `${iconGlyph("bird")} ${
+        tapMode
+          ? t("onboarding.tapSoar", undefined, "TAP to soar - stay airborne!")
+          : t("onboarding.soarInAir", undefined, "RELEASE & SOAR - stay airborne!")
+      }`,
     ][this.step]!;
     return { text, step: this.step, steps: STEPS, justCompleted: false };
   }

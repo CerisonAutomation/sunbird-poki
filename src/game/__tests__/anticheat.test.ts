@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defaultProfile, verifyRunSubmission } from "../AntiCheat";
+import { BOOST_EXTRA_SPEED, MAX_SPEED_FEVER } from "../constants";
 
 describe("AntiCheat & Profiles", () => {
   it("generates a valid canonical profile", () => {
@@ -73,6 +74,38 @@ describe("run submissions the game really sends", () => {
     const res = verifyRunSubmission({ distance: 5000, score: 6100, durationMs: 0 });
     expect(res.valid).toBe(false);
     expect(res.reason).toContain("Instantaneous");
+  });
+
+  it("accepts a legal fever-and-boost run, which used to be quarantined", () => {
+    // MAX_SPEED_FEVER (128) plus a boost (42) is 170 m/s of legal ceiling. The
+    // speed gate was a literal 120, so a player who used both — the exact play
+    // the leaderboard is supposed to reward — averaged out above the ceiling and
+    // got filed as a cheater. The gate is now derived from the physics.
+    const topSpeed = MAX_SPEED_FEVER + BOOST_EXTRA_SPEED;
+    const res = verifyRunSubmission({
+      distance: 5000,
+      score: 6100,
+      durationMs: (5000 / topSpeed) * 1000, // a run held flat at the ceiling
+    });
+    expect(res, res.reason).toEqual({ valid: true, quarantined: false });
+  });
+
+  it("still quarantines a run beyond the physics ceiling", () => {
+    const res = verifyRunSubmission({
+      distance: 5000,
+      score: 6100,
+      durationMs: (5000 / (MAX_SPEED_FEVER + BOOST_EXTRA_SPEED) / 2) * 1000,
+    });
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain("Unrealistic average speed");
+  });
+
+  it("applies the physics gate to a SHORT run too, not only past 100 m", () => {
+    // The checks used to be skipped entirely below 100 m, so a 90 m run could
+    // claim any speed at all and pass clean.
+    const res = verifyRunSubmission({ distance: 90, score: 100, durationMs: 40 });
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain("Unrealistic average speed");
   });
 
   it("rejects a run whose score density is physically impossible", () => {

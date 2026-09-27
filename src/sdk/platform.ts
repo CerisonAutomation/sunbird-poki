@@ -21,7 +21,7 @@ import { runLoadingNet } from "./net";
 // vice-versa for non-Crazy builds. The shim also means the dynamic import
 // is unnecessary; we can instantiate directly and let Rollup DCE the
 // unused branch completely.
-import { PokiAdapter, pokiInitOptions } from "./poki";
+import { PokiAdapter, markPokiBooted, pokiInitOptions } from "./poki";
 import { BANNER_HOST_ID, hasDisplayAd } from "./banner";
 
 export type PlatformName = "poki" | "none";
@@ -500,6 +500,15 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
         // submitPlatformScore(). Passing no options would silently leave the
         // portal leaderboards unwired.
         await getPoki()?.init?.(pokiInitOptions());
+        // The one place the SDK counts as booted. The HTML5 doc requires init to
+        // finish before anything else is called, and the ad surface is what
+        // breaks loudly when it is not ("The Poki SDK was not yet booted"): the
+        // global exists from the first line of the CDN script, so the adapter
+        // has no way to tell an unfinished boot from a ready one on its own.
+        // Inside the try on purpose — a rejected init leaves the flag false,
+        // because an SDK that never booted cannot serve a break, and every
+        // earlier line of this function has the same fate.
+        markPokiBooted();
         // Game Events: the SDK only reports measure() checkpoints once event
         // tracking is switched on, and the dashboard's drop-off funnel / C2P
         // read-outs are built from exactly those events. Same handshake shape

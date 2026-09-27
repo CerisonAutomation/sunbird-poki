@@ -93,6 +93,40 @@ const POKI_LEADERBOARD = (import.meta.env.VITE_POKI_LEADERBOARD as string | unde
  */
 let scoreSubmit: ((leaderboard: string, score: number) => void) | null = null;
 
+/**
+ * True only once Poki's own `init()` has RESOLVED.
+ *
+ * The SDK global is installed the moment the CDN script evaluates, which is
+ * well before `init()` finishes — so "does `window.PokiSDK` exist" is not a
+ * readiness test, it is a boot-order bug waiting to happen. Gating the breaks
+ * on the global's existence is exactly what a phone e2e run caught: the game
+ * asked for an ad while init was still in flight and got back
+ * "Requesting ad before PokiSDK.init() is done" plus a thrown
+ * "The Poki SDK was not yet booted". The HTML5 doc is explicit that init must
+ * complete first, so every ad entry point tests THIS instead.
+ *
+ * Set only on a successful init (see `markPokiBooted`) and never from a catch:
+ * an init that genuinely failed cannot serve an ad, and "not every
+ * commercialBreak() triggers an ad" makes an opportunity that quietly does
+ * nothing ordinary rather than exceptional.
+ *
+ * Declared here, above the module-level `setLoadingNet` registration below, for
+ * the reason src/i18n/index.ts spells out: a module-scope `let` read by code
+ * that runs during module evaluation must come first, or the read is a
+ * ReferenceError against the temporal dead zone on every cold boot.
+ */
+let booted = false;
+
+/** Record that `PokiSDK.init()` resolved. Only the boot path calls this. */
+export function markPokiBooted(): void {
+  booted = true;
+}
+
+/** Whether Poki's init handshake has completed. See `booted` above. */
+export function pokiSdkBooted(): boolean {
+  return booted;
+}
+
 /** Options for the boot path's `PokiSDK.init()` — the leaderboard handshake. */
 export function pokiInitOptions(): PokiInitOptions {
   return {
@@ -177,8 +211,11 @@ export class PokiAdapter implements PlatformAdapter {
     // "ads" is reported from the live SDK, not from the build target. Off the
     // Poki CDN (local preview, CDN blocked, SDK rejected) there is no ad
     // surface at all, and the game must not offer breaks or rewarded buttons
-    // that can only fail — it offers the coin/gold paths instead.
-    if (typeof this.sdk?.commercialBreak === "function" || typeof this.sdk?.rewardedBreak === "function") {
+    // that can only fail — it offers the coin/gold paths instead. Readiness is
+    // part of that test for the same reason: before init resolves the break
+    // methods exist but refuse, so reporting "ads" then would be offering a
+    // surface the SDK is not yet able to serve.
+    if (pokiSdkBooted() && (typeof this.sdk?.commercialBreak === "function" || typeof this.sdk?.rewardedBreak === "function")) {
       caps.push("ads");
     }
     // Reported from what the deployed SDK actually exposes, so the UI never
@@ -292,7 +329,14 @@ export class PokiAdapter implements PlatformAdapter {
   /* ads */
   async commercialBreak(): Promise<void> {
     const sdk = this.sdk;
-    if (!sdk?.commercialBreak) return;
+    // Readiness, not existence. The doc requires init to have completed before
+    // any break is requested, and the SDK global is present well before that —
+    // asking anyway is what threw "The Poki SDK was not yet booted" in the
+    // field. A break that cannot be served must simply not happen: the doc's
+    // own "not every commercialBreak() triggers an ad" makes a skipped
+    // opportunity ordinary, so resolving immediately is the correct outcome,
+    // not an error path.
+    if (!pokiSdkBooted() || !sdk?.commercialBreak) return;
     let opened = false;
     try {
       // Exactly the documented shape: the callback pauses audio and input, and
@@ -319,7 +363,11 @@ export class PokiAdapter implements PlatformAdapter {
 
   async rewardedBreak(): Promise<boolean> {
     const sdk = this.sdk;
-    if (!sdk?.rewardedBreak) return false;
+    // Same init gate as the commercial break: a rewarded request raised before
+    // init resolves fails, and a false here is the honest answer — the player
+    // watched nothing, so nothing is owed (doc step 5: the promise's verdict
+    // decides the reward).
+    if (!pokiSdkBooted() || !sdk?.rewardedBreak) return false;
     let opened = false;
     try {
       // Documented shape again: the SDK's own verdict decides the reward, and a

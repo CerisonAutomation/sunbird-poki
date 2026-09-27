@@ -1100,6 +1100,13 @@ export class Game {
     // should be noticed (the production gate forbids console.* in shipped
     // client code, so this is the sanctioned observability surface).
     this.telemetry.track("device_summary", { summary: describeDeviceProfile(this.deviceProfile) });
+    // Poki requirement: space/arrow keys and the wheel must not scroll the
+    // host page while the game is embedded in it. Installed HERE rather than
+    // in the initPlatform continuation below: the doc's guard is about the page,
+    // not about the portal handshake, and from inside that continuation the
+    // first seconds of a session — the menu a player is already pressing space
+    // on — ran unguarded whenever the CDN was slow to answer.
+    this.detachPageScrollGuards = installPageScrollGuards();
     // Portal SDK initialization is intentionally late: the first interactive
     // menu frame should never wait on a third-party CDN.
     void initPlatform({
@@ -1124,9 +1131,6 @@ export class Game {
       // Surface runtime failures in the portal's error dashboard, not only in
       // a console nobody watches on a portal.
       this.detachPortalErrorReporters = attachPortalErrorReporters(adapter);
-      // Poki requirement: space/arrow keys and the wheel must not scroll the
-      // host page while the game is embedded in it.
-      this.detachPageScrollGuards = installPageScrollGuards();
       // Poki User Accounts: a signed-in player is shown under their Poki
       // username rather than a generated call sign — that is the name their
       // friends recognise and the name that belongs on the board. It is only

@@ -487,6 +487,16 @@ export class Game {
   private boardMetric: BoardMetric = "distance";
   private boardPage: BoardPage | null = null;
   private boardLoading = false;
+  /** When the last board fetch FAILED, and how long to wait before trying
+   *  again. `boardLoading` only stops two fetches overlapping; without this a
+   *  failing backend is re-asked on every trigger, and the measured cost on a
+   *  session the platform could not authenticate was three rejected calls in
+   *  five seconds — from the boot warm-up, the player opening the board, and
+   *  the scope settling. A logged-out Poki visitor is a real, common case, and
+   *  the right behaviour is to fall back to local scores quietly, not to keep
+   *  knocking on a door that is not going to open. */
+  private boardFailedAt = 0;
+  private static readonly BOARD_RETRY_MS = 30_000;
   private lastPrize: PrizeGrant | null = null;
   private racePlace = 0;
   /** Outcome of the in-flight run for the portal funnel (`complete` only when the goal was reached). */
@@ -7061,6 +7071,9 @@ export class Game {
   /** Pulls the selected board page; keeps the last page visible while loading. */
   private async refreshBoard(force = false): Promise<void> {
     if (this.boardLoading) return;
+    // A recent failure is not retried by passive triggers. `force` is the
+    // player's own "refresh" tap, which is exactly the moment to try again.
+    if (!force && this.boardFailedAt && Date.now() - this.boardFailedAt < Game.BOARD_RETRY_MS) return;
     if (!force) {
       const cached = this.board.peek(this.boardScope, this.boardMetric);
       if (cached) {
@@ -7072,6 +7085,9 @@ export class Game {
     this.bump();
     try {
       this.boardPage = await this.board.fetch(this.boardScope, this.boardMetric);
+      // The page carries the backend's own error state, so a rejected call is
+      // visible here rather than thrown.
+      this.boardFailedAt = this.board.failed ? Date.now() : 0;
     } finally {
       this.boardLoading = false;
       this.bump();

@@ -189,6 +189,25 @@ describe("runtime packs (generated from the barrel)", () => {
       expect(lossy, `${file} nulls a slot English cannot fill`).toEqual([]);
     }
   });
+
+  // A placeholder syntax `t()` cannot resolve is worse than no translation: the
+  // broken string wins over the correct default passed alongside it, and the
+  // player reads the template. The home screen shipped "%Perfect Circuit ends
+  // in %day — You're %Unranked!" for exactly this reason — `%{}` where the
+  // interpolator only understands `{}` and `{{}}`.
+  it("no string carries a placeholder syntax the interpolator cannot resolve", () => {
+    const root = resolve(__dirname, "../../..");
+    const barrel = JSON.parse(readFileSync(resolve(root, "src/i18n/translations.barrel.json"), "utf8")) as {
+      barrel: Record<string, { translations: Record<string, string> }>;
+    };
+    const unsupported = /%\{|\{[^{}]*$/;
+    for (const [key, entry] of Object.entries(barrel.barrel)) {
+      for (const [locale, text] of Object.entries(entry.translations ?? {})) {
+        expect(typeof text, `${key}.${locale} is not a string`).toBe("string");
+        expect(text, `${key}.${locale} uses a placeholder t() cannot resolve`).not.toMatch(unsupported);
+      }
+    }
+  });
 });
 
 describe("localized number formatting (the coin counters)", () => {

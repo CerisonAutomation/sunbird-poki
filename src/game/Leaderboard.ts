@@ -253,6 +253,13 @@ export class Leaderboard {
   private cache = new Map<string, BoardPage>();
   private inflight = new Map<string, Promise<BoardPage>>();
   private lastError = "";
+  /** Whether the most recent `fetch()` left a backend error behind.
+   *  `page.stale` cannot answer this on a portal build: it is gated on the
+   *  self-hosted `API` being configured, and this fork ships Poki-only, so
+   *  `stale` is permanently false even when every AUDS call was rejected. */
+  get failed(): boolean {
+    return this.lastError.length > 0;
+  }
   /** Score uploads that failed while offline queue here (deduped per
    * run/metric, capped, 7-day TTL) and drain on the next online moment. */
   private readonly outbox = new OfflineOutbox({ storeKey: "sunbird.outbox.score.v1" });
@@ -317,6 +324,14 @@ export class Leaderboard {
       if (AUDS && scope === "global") {
         try {
           const res = await AUDS.fetchTop({ metric, deviceId: this.deviceId, limit: 50 });
+          // `fetchTop` reports every failure as `null` — a rejected status, a
+          // dead network, a session the platform will not authenticate — and
+          // never throws, so nothing downstream could tell "no answer" from
+          // "answered with nothing". That is how a rejected call went
+          // unrecorded and the caller kept re-asking: five rejected requests
+          // in ten seconds while the local board rendered perfectly well
+          // beside them. Record it here, where the expectation is known.
+          if (!res && !this.lastError) this.lastError = "leaderboard unavailable";
           if (res) {
             this.lastError = "";
             const entries: BoardEntry[] = res.entries.map((it) => ({

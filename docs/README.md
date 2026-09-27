@@ -81,7 +81,7 @@ markdown — so this stays true instead of being true once.
 
 ```bash
 pnpm gate          # lint · audit:ui · i18n:audit · docs:audit · typecheck (client+server)
-                   # · 1,781 unit tests · 48 server tests · verify:prod · build:portals
+                   # · 2,319 unit tests · 48 server tests · verify:prod · build:poki
                    # · verify:portals · audit:zips · verify:upload · verify:thumbnail
                    # · isolation:check · policy/artifact/mobile e2e
 pnpm verify:csp      # the built dist-poki bundle vs the CSP request (inside verify:portals)
@@ -89,14 +89,26 @@ pnpm poki:preflight  # the portal half of the gate, ending in a live poki:audit 
 pnpm poki:audit      # 131 extracted rules → 116 satisfied / 5 human actions / 10 informational
 ```
 
-Numbers as of 2026-09-24: **1,781 unit tests** across 134 files (+48 server),
-**36 locales × 154 barrel keys** with 100% pack coverage and **312** literal
-player-facing strings still untranslated (ratcheted, only allowed to fall —
-it was 363 before the first two toast batches; the celebration strip removed ten
-by replacing literal run-end toasts with translated beats; batch 3 took all 17
-screen titles and the back-button label, so the `screenTitle` category is zero),
-**three portal zips** —
-poki 940 KB, crazy 927 KB, generic 925 KB — all passing the forbidden-string and
-foreign-portal-marker gates. The three
+Numbers as of 2026-09-27: **2,319 unit tests** across 161 files,
+**36 locales × 484 barrel keys** with 100% pack coverage and **250 of 16,940**
+non-English cells still holding English — **1.48%**, down from 55% before the
+translation pass. What remains is correct by design and will not be translated:
+the brand name `Sunbird`, the mode/onomatopoeia names (`FRENZY`, `BOING`,
+`BONK`, `PERFECT`, `RECORD`), acronyms (`AI PvP`), and cognates where the
+English word *is* the native word (`Pilot` in de/tr/pl, `Shop` in de,
+`Account` in it/nl, `Distance`/`Score` in fr).
+
+The locale packs are **fetched, not bundled**. They were once `import.meta.glob`ed
+into lazy chunks that `vite-plugin-singlefile` then inlined whole, so every
+player downloaded all 36 locales to read one. They now ship as an `i18n/`
+sidecar beside `fonts/` and `icons/` and load on demand, which is what lets the
+game carry real translations and still ship at **2.07 MB** against a 2.50 MB
+budget.
+
+This fork builds the **Poki portal edition only** — there are no crazy/generic
+zips. `src/game/edition.ts` is the Poki edition and `vite.config.ts` defines
+`VITE_SELL_AD_REMOVAL` to false for every build, so the ad-removal upsell is
+compiled out of the portal artifact entirely. The one Poki zip is **1,128 KB**.
+The three
 Playwright stages of `pnpm gate` need browser binaries; in a sandbox that cannot
 download them they fail on environment, not on code, and CI runs them for real.

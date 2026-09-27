@@ -25,7 +25,7 @@ Every claim below was produced by a command in this tree, not remembered.
 | `pnpm i18n:audit` | pass — debt **down to 312** (two toast batches, the celebration strip, then batch 3: every screen title — that category is now **0**), ratchet re-blessed |
 | `pnpm docs:audit` | pass — no broken links, no orphans, every snapshot statused |
 | `pnpm typecheck` + `pnpm typecheck:server` | pass |
-| `pnpm test` | **1,781 passed**, 9 skipped, 134 files |
+| `pnpm test` | **2,319 passed**, 9 skipped, 161 files |
 | `pnpm test:server` | **48 passed**, 7 files |
 | `pnpm verify:prod` | **PRODUCTION READY** — coverage 49.3% + 19 module floors, JS 1.69 / 2.50 MB (positional i18n packs took it down from 1.78 MB), zero debug artifacts in shipped client code |
 | `pnpm build:portals` + `pnpm verify:portals` | **3/3 zips shippable** — poki 945 KB, crazy 932 KB, generic 929 KB (the positional pack format took ~105 KB of repeated key names out of every bundle) |
@@ -35,8 +35,15 @@ Every claim below was produced by a command in this tree, not remembered.
 | `pnpm gate` → `test:policy` / `test:artifact` / `test:mobile` | **environment-blocked**: Playwright cannot download browser binaries in this sandbox. CI runs them. Not a code failure. |
 
 Localization: **36 locales** (the 34 codes the portal inspector offers, plus `vi`
-and `mt` that already shipped, plus `"auto"` = browser detection) × **154 barrel
+and `mt` that already shipped, plus `"auto"` = browser detection) × **484 barrel
 keys**, 100% pack coverage, drift-checked by `src/i18n/__tests__/locales.test.ts`.
+
+Packs live in `public/i18n/` and are **fetched on demand**, not bundled — see
+the i18n entry in `docs/README.md` for why. The barrel is the source of truth;
+`node scripts/gen-i18n-packs.mjs` projects it to the packs and the test fails
+on drift. `node scripts/merge-i18n-jobs.mjs` is the only writer the translation
+pipeline uses, and it refuses on a placeholder mismatch or a cell still sitting
+in English rather than writing a partial merge.
 
 ## 2. Standing decisions — do not re-litigate without new evidence
 

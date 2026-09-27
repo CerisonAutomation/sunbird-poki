@@ -66,6 +66,11 @@ export type UiScreen =
   | "squad"
   | "nameEntry";
 
+/** The home screen's launch CTA. Handed to MenuContinuity as the anchor for a
+ * restored view: whatever the player last scrolled, landing on the home menu
+ * must never park the one button that starts a run above the fold. */
+const LAUNCH_CTA = ".home-launch";
+
 /** Stable screen identifiers used by automation, telemetry, and QA. */
 export const SCREEN = {
   // `board` is the leaderboard's own screen and `savedScores` is the "Your
@@ -1833,7 +1838,7 @@ export class HUD {
       // never add "wide" — pause overlays should stay compact over the flight.
       const wide = s.state === "paused" ? "" : (s.screen === "shop" || s.screen === "pass" ? "wide" : "");
       const cls = `paper-card ${s.state === "menu" && s.screen === "main" ? "menu-hero" : wide}`;
-      this.menuContinuity.render(this.menuCard, s.screen, renderCoins(this.renderScreen(s)), cls);
+      this.menuContinuity.render(this.menuCard, s.screen, renderCoins(this.renderScreen(s)), cls, LAUNCH_CTA);
       // The character counter is rendered from the snapshot, but the field it
       // describes is not owned by the snapshot: boot writes the generated call
       // sign into it, and the async portal identity adoption rewrites it again

@@ -145,7 +145,7 @@ describe("runtime packs (generated from the barrel)", () => {
         return code !== "en" && value !== "" && value === englishOf(key) ? null : value;
       });
       const expected = JSON.stringify(values) + "\n";
-      const actual = readFileSync(resolve(root, `src/i18n/packs/${code}.json`), "utf8");
+      const actual = readFileSync(resolve(root, `public/i18n/${code}.json`), "utf8");
       if (actual !== expected) drift.push(code);
     }
     expect(drift).toEqual([]);
@@ -159,10 +159,10 @@ describe("runtime packs (generated from the barrel)", () => {
     const keys = JSON.parse(readFileSync(resolve(root, "src/i18n/pack-keys.json"), "utf8")) as string[];
     expect(keys.length, "pack-keys covers every barrel key").toBe(Object.keys(barrel.barrel).length);
 
-    const english = JSON.parse(readFileSync(resolve(root, "src/i18n/packs/en.json"), "utf8")) as (string | null)[];
+    const english = JSON.parse(readFileSync(resolve(root, "public/i18n/en.json"), "utf8")) as (string | null)[];
 
-    for (const file of readdirSync(resolve(root, "src/i18n/packs"))) {
-      const pack = JSON.parse(readFileSync(resolve(root, "src/i18n/packs", file), "utf8")) as (string | null)[];
+    for (const file of readdirSync(resolve(root, "public/i18n"))) {
+      const pack = JSON.parse(readFileSync(resolve(root, "public/i18n", file), "utf8")) as (string | null)[];
       const isEnglish = file === "en.json";
       // Position is meaning: a pack that is a different length from the key
       // list would shift every string after the gap onto the wrong key.

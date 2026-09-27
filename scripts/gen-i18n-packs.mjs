@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const barrelPath = join(root, "src/i18n/translations.barrel.json");
-const outDir = join(root, "src/i18n/packs");
+const outDir = join(root, "public/i18n");
 
 const barrel = JSON.parse(readFileSync(barrelPath, "utf8"));
 // Locale codes come from the entries themselves (the union of every

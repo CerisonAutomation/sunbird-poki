@@ -141,7 +141,12 @@ if (existsSync(UPLOAD)) {
   // The same anatomy `package-portal.mjs`'s ENTRY_DIRS produces, plus the
   // manifest this script reads. `animated/` is deliberately absent from both:
   // the promo art lives in `promo/` and must not ride along in the upload.
-  const allowedTop = new Set(["index.html", "icons", "fonts", "upload-manifest.json"]);
+  // `i18n/` is the locale packs. They are not optional: the game fetches its
+  // pack from `./i18n/<locale>.json`, so a zip without this directory boots
+  // into English-only — which is why it belongs beside `fonts/` rather than
+  // being inlined into index.html, where all 35 locales would ride along in
+  // every download.
+  const allowedTop = new Set(["index.html", "icons", "fonts", "i18n", "upload-manifest.json"]);
   const top = readdirSync(UPLOAD);
   const unexpected = top.filter((e) => !allowedTop.has(e));
   if (unexpected.length) bad("ROOT-04", `${UPLOAD}/ has unexpected entries: ${unexpected.join(", ")}`);

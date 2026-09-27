@@ -132,11 +132,27 @@ let EN: Pack = {};
 
 const packs = new Map<string, Pack>();
 
-/** Vite-native per-file dynamic imports: each pack becomes its own chunk. */
-const PACK_MODULES = import.meta.glob("./packs/*.json") as Record<
-  string,
-  () => Promise<{ default: Pack }>
->;
+/**
+ * Packs are fetched, not bundled.
+ *
+ * They used to be `import.meta.glob`ed, which made each locale its own lazy
+ * chunk — and then `vite-plugin-singlefile` inlined every one of those chunks
+ * into the shipped HTML, so a player downloaded all 36 locales to use one.
+ * With real translations that inlining costs 688 KB and pushed the single-file
+ * payload over budget; the null-compaction that used to hide it only worked
+ * because most cells were still English.
+ *
+ * The packs now live in `public/i18n/` and are fetched on demand at the
+ * relative path, exactly like the `fonts/` and `icons/` sidecars the portal
+ * zip already ships. A player downloads the English pack plus the one locale
+ * they picked. `base` is "./", so the path resolves from a deep portal subpath.
+ */
+const packUrl = (locale: string): string => `./i18n/${encodeURIComponent(locale)}.json`;
+
+/** In-flight fetches, so two callers racing for the same locale (the boot
+ *  preload and the startup locale resolving to English) share one request
+ *  instead of both hitting the network. */
+const loading = new Map<string, Promise<boolean>>();
 
 let packVersion = 0;
 const packListeners = new Set<() => void>();
@@ -162,22 +178,29 @@ if (typeof window !== "undefined") {
  * fetched — callers keep English text rather than raw keys. */
 export async function loadPack(locale: string): Promise<boolean> {
   if (packs.has(locale)) return true;
+  const inFlight = loading.get(locale);
+  if (inFlight) return inFlight;
+  const request = fetchPack(locale).finally(() => loading.delete(locale));
+  loading.set(locale, request);
+  return request;
+}
+
+async function fetchPack(locale: string): Promise<boolean> {
 
   // One pack per supported locale, same filename as the code. The old mapping
   // special-cased `pt-BR` → `pt` and `zh-CN` → `zh` because the locale list
   // carried region codes; `matchLocale()` already folds a regional tag
   // ("pt-BR", "zh-CN") down to its base before this runs, so the indirection
   // only ever hid a missing pack.
-  const load = PACK_MODULES[`./packs/${locale}.json`];
-  if (!load) return false;
   try {
-    const mod = await load();
+    const res = await fetch(packUrl(locale));
+    if (!res.ok) return false;
     // A slot is `string | null`: the generator collapses every cell that is
     // byte-identical to English down to `null` rather than storing the same
     // characters twice. Skipping those slots leaves the key absent from the
     // pack, so `t()`'s `pack[key] ?? EN[key]` resolves it to English — the
-    // same result, without the duplicated bytes in the shipped payload.
-    const packArray = (mod.default as unknown) as (string | null)[];
+    // same result, without the duplicated bytes.
+    const packArray = (await res.json()) as (string | null)[];
     // Convert array pack to object pack using pack-keys mapping
     const packObj: Pack = {};
     for (let i = 0; i < packArray.length; i++) {

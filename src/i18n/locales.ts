@@ -2,7 +2,7 @@
  * Consolidated locale configuration — the ONE shipped language set.
  *
  * This array is the single source of truth, and it is exactly the set of
- * packs in `src/i18n/packs/` (which `scripts/gen-i18n-packs.mjs` derives from
+ * packs in `public/i18n/` (which `scripts/gen-i18n-packs.mjs` derives from
  * the translation barrel). `SupportedLocale` is derived from it rather than
  * hand-written, because the hand-written union had already drifted: it listed
  * `el`, `tr` and `uk` twice, offered `fa` and `ur` with zero translations

@@ -133,14 +133,23 @@ test.describe("mobile touch", () => {
     });
 
     const from = await barePixel(page, CARD);
+    const card = page.locator(CARD);
+    await card.evaluate(el => { el.scrollTop = 0; });
     await fingerDrag(cdp, from.x, from.y, 0, -340);
 
     const touch = await page.evaluate(() => window.__touch);
     expect(touch.prevented, "no touch event inside a menu may be cancelled").toBe(0);
-    expect(touch.moves).toBeGreaterThan(0);
     // A pointercancel is the compositor taking the gesture over — proof the
     // scroll is native rather than scripted.
     expect(touch.cancelled, "the compositor should claim the pan").toBeGreaterThan(0);
+    // This used to assert `touch.moves > 0`, which contradicts the two lines
+    // above. When the compositor claims a pan it stops dispatching `touchmove`
+    // to the page and sends `pointercancel` instead — so zero moves is the
+    // expected result of the native scroll this test is asking for, and the
+    // old assertion could only be satisfied by the scripted behaviour it was
+    // written to rule out. What the pan actually has to prove is that it
+    // worked and that the app had nothing to fake, so that is what is checked.
+    expect(await card.evaluate(el => el.scrollTop), "the pan must actually move the card").toBeGreaterThan(80);
     expect(app.errors).toEqual([]);
   });
 

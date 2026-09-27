@@ -127,7 +127,7 @@ function stageHtml() {
  * into every build; `pnpm gen-icons` still generates it there for hand-submission
  * to a portal, it just does not ship inside the game package any more.
  */
-const ENTRY_DIRS = ["icons", "fonts"];
+const ENTRY_DIRS = ["icons", "fonts", "i18n"];
 const ENTRIES = ["index.html", ...ENTRY_DIRS];
 
 /** Write a staged bundle into `target` (fresh every run). */

@@ -647,9 +647,12 @@ textarea {
 .hint {
   position: absolute;
   left: 50%;
-  top: 38%;
+  /* Higher than the hand (top:52%). At 38% a 28px line wrapped and its
+     second line landed on the hand, so "HOLD to dive down the hill" printed
+     "hill" across the hand emoji. */
+  top: 30%;
   transform: translate(-50%, -50%);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--text-on-sky);
   text-shadow: 0 3px 0 rgba(42, 28, 40, 0.25), 0 10px 24px rgba(20, 20, 40, 0.25);
@@ -664,6 +667,13 @@ textarea {
   opacity: 1;
   animation: hintpop 0.5s ease;
 }
+
+/* The centre cue and the hand were both saying the same thing at the same
+   time — "HOLD to dive down the hill" over "Hold to dive" — stacked in the
+   middle of the screen. The hand is a pointer at the control; the cue is the
+   sentence. When the sentence is up, the hand keeps the gesture but drops the
+   duplicate wording. */
+.hint.show ~ .hand .hand-hint { visibility: hidden; }
 
 .overlay {
   position: absolute;

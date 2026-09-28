@@ -102,13 +102,26 @@ export class MenuContinuity {
    */
   private settle(card: HTMLElement, wanted: number, anchor?: string): void {
     card.scrollTop = wanted;
-    queueMicrotask(() => {
+    const reassert = (): void => {
       if (!card.isConnected) return;
+      // A `display:none` scroller silently discards scrollTop writes, and the
+      // browser reapplies whatever offset it held once the card is shown again.
+      // The HUD renders the card BEFORE it unhides it, so a microtask alone
+      // still lands while hidden and the write is dropped — which is how the
+      // home menu could open pinned to its own bottom with the launch CTA 707px
+      // above the viewport, unreachable on a first run. Re-assert on the next
+      // frame, which is after the class toggle has taken effect.
       card.scrollTop = wanted;
       if (!anchor) return;
       const cardTop = card.getBoundingClientRect().top;
       const anchorTop = card.querySelector<HTMLElement>(anchor)?.getBoundingClientRect().top;
-      if (anchorTop !== undefined && anchorTop < cardTop) card.scrollTop -= cardTop - anchorTop;
-    });
+      if (anchorTop === undefined || anchorTop >= cardTop) return;
+      // Scroll memory is a convenience; being able to start a run is not. If
+      // the restore would strand the screen's primary action above the fold,
+      // the top is the only acceptable landing.
+      card.scrollTop = Math.max(0, wanted - (cardTop - anchorTop));
+    };
+    queueMicrotask(reassert);
+    requestAnimationFrame(reassert);
   }
 }

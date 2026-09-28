@@ -5413,15 +5413,22 @@ h1, h2, h3, h4, h5, h6, .heading-art {
    thing the eye lands on when it crosses, not the permanent goal row. */
 .mission-strip {
   position: absolute;
-  left: 50%;
-  /* Off the measured footer. Three quest rows span ~90px, so the old fixed
-     150px put the top row at y~80 on a 568x320 landscape phone — on the
-     header — and the bottom rows inside the footer during a mass race. */
+  /* Anchored to the LEFT edge, not the centre. It used to sit at 50% and
+     translateX(-50%), which parks a five-row stack directly under the bird —
+     over the terrain the player is reading to decide whether to dive. Centre
+     is where the gaze and the gameplay are; nothing but transient feedback
+     belongs there. */
+  left: calc(10px + env(safe-area-inset-left));
   bottom: calc(var(--hud-footer-height, 90px) + 16px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  width: min(340px, 74vw);
+  width: min(210px, 46vw);
+  /* Cap what can show during a run. Five rows climbed ~140px into the play
+     field; the full set is still on the results card and in the pause menu,
+     so nothing is lost — it just stops covering the hill. */
+  max-height: 78px;
+  overflow: hidden;
   pointer-events: none;
 }
+.mission-strip .ms-row:nth-child(n+4) { display: none; }
 .mission-strip.hidden { display: none; }
 .mission-strip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ms-row {

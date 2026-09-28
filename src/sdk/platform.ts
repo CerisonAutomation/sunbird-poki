@@ -22,6 +22,7 @@ import { runLoadingNet } from "./net";
 // is unnecessary; we can instantiate directly and let Rollup DCE the
 // unused branch completely.
 import { PokiAdapter, markPokiBooted, pokiInitOptions } from "./poki";
+import { pokiSdk } from "./poki-canon";
 import { BANNER_HOST_ID, hasDisplayAd } from "./banner";
 
 export type PlatformName = "poki" | "none";
@@ -433,14 +434,13 @@ function ensureSdk(): Promise<PlatformName> {
   if (loadPromise) return loadPromise;
 
   if (TARGET === "poki") {
-    // Poki global
-    type PokiGlobal = {
-      init?: () => Promise<void>;
-      setDebug?: (v: boolean) => void;
-      gameLoadingStart?: () => void;
-      movePill?: (x: number, y: number) => void;
-    };
-    const getPoki = (): PokiGlobal | undefined => (window as unknown as { PokiSDK?: PokiGlobal }).PokiSDK;
+    // The canonical surface, from `poki-canon`: the published `@poki/sdk`
+    // typings plus the CDN members those typings predate. This block used to
+    // declare its own `PokiGlobal` by hand, and a second copy lived further
+    // down the same function — two hand-written surfaces that could drift from
+    // the SDK they describe, which is exactly how `gameLoadingStart` (never in
+    // the published typings) ended up typed twice by hand.
+    const getPoki = pokiSdk;
     loadPromise = new Promise((resolve) => {
       // Poki Inspector injects the SDK before the bundle loads; wait up to
       // 2 s, then fall back to loading from the Poki CDN.
@@ -498,15 +498,8 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
 
   let boot: Promise<{ name: PlatformName; platformEnvironment: string | null }>;
   if (TARGET === "poki") {
-    type PokiGlobal = {
-      init?: (options?: { submitScore?: (submit: (leaderboard: string, score: number) => void) => void }) => Promise<void>;
-      setDebug?: (v: boolean) => void;
-      gameLoadingStart?: () => void;
-      movePill?: (x: number, y: number) => void;
-      /** Game Events (`measure()`) reporting — see developers.poki.com/guide/game-events. */
-      enableEventTracking?: () => void;
-    };
-    const getPoki = (): PokiGlobal | undefined => (window as unknown as { PokiSDK?: PokiGlobal }).PokiSDK;
+    // Same canonical accessor as the loader above — one surface, one source.
+    const getPoki = pokiSdk;
     boot = ensureSdk().then(async (loaded) => {
       if (loaded !== "poki") return { name: "none", platformEnvironment: null };
       try {

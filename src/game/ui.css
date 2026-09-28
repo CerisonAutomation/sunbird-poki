@@ -2006,6 +2006,9 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .gs-career { opacity: 0.8; }
 .gs-career b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
 
+.gs-trophy { opacity: 0.85; }
+.gs-trophy b { background: linear-gradient(90deg, #e8c850, #fff4a0); }
+
 .next-action {
   font-size: 13px;
   font-weight: 600;

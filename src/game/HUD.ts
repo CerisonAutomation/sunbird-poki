@@ -4120,7 +4120,7 @@ function renderCelebration(s: HudSnapshot): string {
       </div>`,
     )
     .join("");
-  const growth = `<div class="growth-ledger" data-ref="growthLedger"><span class="gl-title">${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}</span>${
+  const growth = `<div class="growth-ledger"><span class="gl-title">${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}</span>${
     ledger ? `<dl>${ledger}</dl>` : ""
   }</div>`;
   if (!cel || (!cel.staged.length && !cel.ledger.length && !cel.folded)) return growth;

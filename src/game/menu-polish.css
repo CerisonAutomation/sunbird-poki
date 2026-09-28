@@ -4146,3 +4146,11 @@ hr.divider {
   .menu-hero .hero h1 { font-size: 30px; }
   .menu-hero .hero { min-height: 84px; }
 }
+
+/* ── Audit-flagged missing rules ──────────────────────────────────────── */
+/* Catalog divider in shop: extra top margin separates daily from browse. */
+.shop-catalog-divider { margin-top: 18px; }
+
+/* Meta-progress strip on game-over: lighter background to distinguish
+   from the primary result-summary below it. */
+.over-stats.meta-progress-strip div { background: rgba(255,255,255,0.35); }

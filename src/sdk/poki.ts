@@ -65,7 +65,7 @@ type PokiShareableData = Record<string, string | number | boolean>;
  * `PokiUser`, `PokiShareableData` and `PokiInitOptions` stay local: they
  * describe our call sites, not Poki's published surface.
  */
-import { sanitizeMeasure, type PokiSdk } from "./poki-canon";
+import { pokiAuthToken, sanitizeMeasure, type PokiSdk } from "./poki-canon";
 
 /**
  * `init({ submitScore })` is Poki's leaderboard handshake: the SDK hands us a
@@ -85,6 +85,17 @@ type PokiInitOptions = {
  * default stays the one the game has always submitted to.
  */
 const POKI_LEADERBOARD = (import.meta.env.VITE_POKI_LEADERBOARD as string | undefined)?.trim() || "distance";
+
+/**
+ * The placeholder the shipped core returns when nobody is signed in:
+ * `User_${Math.floor(9e8 * Math.random()) + 1e8}` (core build 0df3a52d).
+ *
+ * It is a truthy string, so every "is there a username?" check passes on it.
+ * Without matching it explicitly, an anonymous visitor's throwaway handle
+ * would be adopted as their pilot name and written into their save, where it
+ * would outlive the session and read like a real account to the player.
+ */
+const ANONYMOUS_USERNAME = /^User_\d{9,10}$/;
 
 /**
  * The submit function Poki hands us during `init({ submitScore })`. Held at
@@ -386,10 +397,6 @@ export class PokiAdapter implements PlatformAdapter {
     }
   }
 
-  async showMidgameAd(): Promise<void> {
-    await this.commercialBreak();
-  }
-
   async showRewardedAd(): Promise<boolean> {
     return this.rewardedBreak();
   }
@@ -437,6 +444,18 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   /** Cached ad-block detection result (probed once at boot). */
+  /**
+   * Reads Poki's ad-block probe.
+   *
+   * NOTE: this can never report a block. The shipped core build defines
+   * `isAdBlocked = () => !1` (hardcoded false) and the loader's stub returns
+   * undefined; the real detection lives inside the core, is inferred from a
+   * MISSED ad fill, and is used only to annotate its own analytics. So
+   * `hasAdBlock()` below is always false on a Poki build. Kept because the
+   * member is real and a future core build may expose it properly — but do not
+   * write code that depends on it returning true, and do not treat it as the
+   * thing that protects MON-12 (see `syncSettings`).
+   */
   private adBlockProbed = false;
   private cachedAdBlock = false;
 
@@ -451,9 +470,22 @@ export class PokiAdapter implements PlatformAdapter {
     } catch { /* ignore */ }
   }
 
-  /* Cloud gamesaves: Poki syncs localStorage/IndexedDB automatically for
-   * signed-in players. Keep the same storage facade used by the game so the
-   * official SDK owns synchronization instead of a parallel custom ledger. */
+  /* Cloud gamesaves.
+   *
+   * These are NOT Poki SDK methods. `saveCloud`/`loadCloud`/`removeCloud`/
+   * `clearCloud`/`hasCloud` appear nowhere in @poki/sdk@0.0.5, nowhere in the
+   * CDN loader, nowhere in the shipped core build, and nowhere in the HTML5
+   * guide. Poki's portal may sync localStorage/IndexedDB for a signed-in
+   * player, but that is a portal-side behaviour with no client API — the only
+   * cloud-related string in the whole core is a read-only URL flag
+   * (`cloudsavegames=y`).
+   *
+   * So these are a plain localStorage facade, deliberately shaped like a cloud
+   * API so the storage layer has one call site. They are also currently
+   * uncalled: the game persists through `Storage.ts` directly. If Poki's sync
+   * does run, it will pick up whatever is in localStorage; the `poki_ignore.*`
+   * key prefix that Storage.ts writes to opt keys out is likewise undocumented
+   * in the SDK and unverifiable from these artifacts. */
   async saveCloud<T>(key: string, value: T): Promise<void> {
     return localCloudFallback.save(key, value);
   }
@@ -479,6 +511,13 @@ export class PokiAdapter implements PlatformAdapter {
     try {
       const u = await sdk.getUser();
       if (!u || !u.username || u.optedIn === false) return null;
+      // The shipped core substitutes a synthetic anonymous handle
+      // (`User_<random>`) when there is no session, and `optedIn` defaults to
+      // false in that case — but it is truthy, so the `!u.username` guard above
+      // does not catch it. Treating that placeholder as a real account would
+      // let an anonymous visitor's throwaway name be adopted as their pilot
+      // name and persisted into their save. Only a genuine account is identity.
+      if (ANONYMOUS_USERNAME.test(u.username)) return null;
       return {
         id: u.username,
         name: u.username,
@@ -572,15 +611,16 @@ export class PokiAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * Poki's account JWT, for verifying a purchase server-side.
+   *
+   * Shares one short-lived cache with AUDS (`pokiAuthToken`), so a write to
+   * storage and a purchase check in the same minute cost one round trip to the
+   * parent frame rather than one each. The token is deliberately not stored —
+   * it is fetched, handed to the caller, and dropped.
+   */
   async getIapToken(): Promise<string | null> {
-    const sdk = this.sdk;
-    if (!sdk?.getToken) return null;
-    try {
-      const token = await sdk.getToken();
-      return typeof token === "string" && token ? token : null;
-    } catch {
-      return null;
-    }
+    return pokiAuthToken();
   }
 
   /* invites / rooms / share */
@@ -687,6 +727,10 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   /* ad-block state */
+  /**
+   * Always false on a Poki build — see `probeAdBlock`. Kept on the interface so
+   * the intent survives a core build that implements the probe for real.
+   */
   hasAdBlock(): boolean {
     this.probeAdBlock();
     return this.cachedAdBlock;
@@ -696,9 +740,14 @@ export class PokiAdapter implements PlatformAdapter {
   syncSettings(): void {
     // Poki exposes no "is the site muted" API — its volume controls are for ads,
     // not for the player's preference — so the game's own mute setting is the
-    // single source of truth and there is nothing to poll. The ad-block probe is
-    // still worth taking once at boot, because it is what stops a break being
-    // requested that could never serve (MON-12).
+    // single source of truth and there is nothing to poll.
+    //
+    // The ad-block probe is taken once at boot, but it does NOT gate anything:
+    // the shipped core hardcodes isAdBlocked to false (see `probeAdBlock`), so
+    // this cannot stop a break from being requested. MON-12 is in fact upheld by
+    // the platform instead — the core rejects a blocked break with
+    // ads.limit/busy/stopped and resolves `rewardedBreak` to false, so the
+    // promise never hangs and no reward is granted.
     this.probeAdBlock();
   }
 

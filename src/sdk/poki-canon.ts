@@ -26,9 +26,15 @@
  *      This is the contract Poki publishes to integrators, and it is what
  *      `PokiSdkOfficial` below is mapped from.
  * T2 — the live CDN loader `https://game-cdn.poki.com/scripts/v2/poki-sdk.js`
- *      (core build `78defe077b641dcd4b549b3dc7b497926c34393c`), which assigns
- *      `window.PokiSDK` and lists every runtime method by name. It exposes
- *      members the v0.0.5 typings predate — those live in `PokiSdkRuntime`.
+ *      and the core build it pulls,
+ *      `poki-sdk-core-0df3a52d1f37602f598b9432c7bae77681d8e3ea.js`. The loader
+ *      assigns `window.PokiSDK`: a 28-name stub list via `forEach`, plus a
+ *      handful of keys written directly into its object literal
+ *      (`initWithVideoHB` among them — present, but not in the 28). The core
+ *      build then overwrites the stubs in place and adds 3 more the loader never
+ *      names (`isAdBlocked`, `getLeaderboard`, `generateScreenshot`). Between
+ *      them they expose members the v0.0.5 typings predate — those live in
+ *      `PokiSdkRuntime`.
  * T3 — the integration guides: developers.poki.com/guide/sdk-html5 (init,
  *      loading, gameplay, breaks, shareable URLs, movePill),
  *      /guide/game-events (`measure(category, what, action)` + the special
@@ -103,6 +109,79 @@ export type PokiSdkRuntime = {
 export type PokiSdk = PokiSdkOfficial & PokiSdkRuntime;
 
 /**
+ * The live Poki SDK global, typed against the canonical surface.
+ *
+ * One accessor, on purpose. This file exists so that a member Poki does not
+ * publish is a *compile error*, and that guarantee evaporates the moment a
+ * module reaches in with its own `as { PokiSDK?: … }` cast — which is what
+ * `auds.ts` did for `getToken`, and what would let a renamed or dropped member
+ * compile cleanly and then no-op in production. Anything outside `poki.ts`
+ * that needs the SDK goes through here.
+ *
+ * Returns undefined on a non-Poki build (the resolve-alias shim contains no
+ * SDK reference at all), so callers must still treat every member as optional.
+ */
+export function pokiSdk(): PokiSdk | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { PokiSDK?: PokiSdk }).PokiSDK;
+}
+
+/**
+ * Poki's account JWT, cached for most of its life.
+ *
+ * `getToken()` is a postMessage round trip to the parent frame with an
+ * 8-second timeout, and the token is valid for about a minute. Two callers
+ * needed it — the adapter's `getIapToken()` and AUDS's bearer token — and each
+ * used to fetch its own, so every AUDS write cost a fresh round trip to the
+ * parent. One cache, shared, with the TTL deliberately under the token's own
+ * lifetime so a cached value is never handed out near its expiry.
+ */
+const AUTH_TOKEN_TTL_MS = 45_000;
+let authToken: { value: string | null; at: number } | null = null;
+let authTokenInFlight: Promise<string | null> | null = null;
+
+export async function pokiAuthToken(force = false): Promise<string | null> {
+  const now = Date.now();
+  if (!force && authToken && now - authToken.at < AUTH_TOKEN_TTL_MS) return authToken.value;
+  // Collapse concurrent callers: AUDS can fire several writes at once on boot.
+  if (!force && authTokenInFlight) return authTokenInFlight;
+  // Keep the receiver. `getToken` is a member of the SDK object like every
+  // other one — it reads `this` to reach the parent frame — so detaching it
+  // into a bare function throws a TypeError and, worse, latches the in-flight
+  // handle below to an already-settled promise (the async body runs
+  // synchronously to its first await, so a synchronous throw clears the flag
+  // *before* it is assigned). Call it as a member.
+  const sdk = pokiSdk();
+  if (typeof sdk?.getToken !== "function") return null;
+  const request = (async () => {
+    try {
+      const value = await sdk.getToken!();
+      const next = typeof value === "string" && value ? value : null;
+      authToken = { value: next, at: Date.now() };
+      return next;
+    } catch {
+      // Off-iframe, or no signed-in user. Do NOT cache a failure: the next
+      // caller may be inside the iframe and able to succeed.
+      return null;
+    }
+  })();
+  // Clear on settlement, outside the IIFE, so it cannot be assigned a handle
+  // that has already finished.
+  const clear = () => {
+    if (authTokenInFlight === request) authTokenInFlight = null;
+  };
+  request.then(clear, clear);
+  authTokenInFlight = request;
+  return request;
+}
+
+/** Drop the cached token (used when signing out or on teardown). */
+export function clearPokiAuthToken(): void {
+  authToken = null;
+  authTokenInFlight = null;
+}
+
+/**
  * Names that were invented in this repo and must never come back. Pinned by
  * `src/sdk/__tests__/poki-canon.test.ts`, which greps the adapter for them.
  */
@@ -117,25 +196,60 @@ export const POKI_SDK_NON_CANONICAL = [
   "onPortalMute",
 ] as const;
 
-/** T2 members with the verdict on each: wired, or deliberately not. */
-export const POKI_SDK_RUNTIME_ONLY: ReadonlyArray<{ name: keyof PokiSdkRuntime; wired: boolean; why: string }> = [
-  { name: "gameLoadingStart", wired: true, why: "opens the loading phase; the engine wrappers all call it before asset work" },
-  { name: "gameLoadingProgress", wired: false, why: "fraction vs. percent is undocumented — guessing would misreport the bar" },
-  { name: "gameInteractive", wired: false, why: "legacy marker; gameLoadingFinished is the documented conversion signal" },
-  { name: "happyTime", wired: true, why: "documented in the Defold guide as an intensity 0…1 for celebration moments" },
-  { name: "isAdBlocked", wired: true, why: "canonical ad-block probe; replaces the invented hasAdBlock/setAdBlockActive pair" },
-  { name: "sendHighscore", wired: false, why: "legacy; init({ submitScore }) in the official typings is the leaderboard handshake" },
-  { name: "getLeaderboard", wired: false, why: "our board is AUDS-backed; showLeaderboard is the portal UI side" },
-  { name: "customEvent", wired: false, why: "the Game Events guide steers all checkpoints through measure()" },
-  { name: "logError", wired: false, why: "captureError already routes runtime failures to the portal dashboard" },
-  { name: "muteAd", wired: false, why: "mutes the ad, not the game; undocumented and not ours to drive" },
-  { name: "roundStart", wired: false, why: "legacy round markers; gameplayStart/Stop is the documented lifecycle" },
-  { name: "roundEnd", wired: false, why: "legacy round markers; gameplayStart/Stop is the documented lifecycle" },
-  { name: "setPlayerAge", wired: false, why: "age gating belongs to the portal placement, not the game" },
-  { name: "generateScreenshot", wired: false, why: "we render our own share card; no dependency on portal capture" },
-  { name: "initWithVideoHB", wired: false, why: "video-heartbeat init variant; plain init() is the documented path" },
-  { name: "setDebugTouchOverlayController", wired: false, why: "Inspector touch-overlay debugging only" },
-  { name: "setPlaytestCanvas", wired: false, why: "alias of playtestSetCanvas, which the adapter does call" },
+/**
+ * T2 members with the verdict on each.
+ *
+ * `impl` is the member's body in the shipped core build
+ * (`poki-sdk-core-0df3a52d….js`), transcribed verbatim. It is here because a
+ * name being real says nothing about whether it does anything, and this table
+ * was originally filled in from Poki's *name lists* alone. That mistake marked
+ * three members `wired: true` whose shipped bodies are empty — the celebration
+ * overlay, the ad-block probe and the loading-phase opener all no-op in
+ * production while this table claimed they worked. 11 of the 17 are stubs
+ * today; only the 6 with a real body are worth calling.
+ *
+ * `poki-canon.test.ts` pins these strings, so a Poki CDN bump that changes a
+ * body fails here instead of silently becoming a no-op in the portal.
+ */
+export const POKI_SDK_RUNTIME_ONLY: ReadonlyArray<{
+  name: keyof PokiSdkRuntime;
+  wired: boolean;
+  /** Verbatim body in the shipped core; `stub` = compiles to a no-op. */
+  impl: string;
+  why: string;
+}> = [
+  {
+    name: "gameLoadingStart",
+    wired: true,
+    impl: "()=>{} — stub",
+    why: "called, but the shipped core defines it as an empty function, so it never opens a loading phase. Harmless: gameLoadingFinished() is the signal that actually works",
+  },
+  { name: "gameLoadingProgress", wired: false, impl: "()=>{} — stub", why: "empty in the core, and fraction-vs-percent is undocumented anyway" },
+  { name: "gameInteractive", wired: false, impl: "()=>{} — stub", why: "empty in the core; gameLoadingFinished is the documented conversion signal" },
+  {
+    name: "happyTime",
+    wired: true,
+    impl: "()=>{} — stub",
+    why: "called with a clamped intensity, but the shipped core defines it as an empty function: the celebration overlay NEVER fires. The name is documented (Defold guide) but there is no HTML5 implementation",
+  },
+  {
+    name: "isAdBlocked",
+    wired: true,
+    impl: "()=>!1 — hardcoded false",
+    why: "the shipped core returns literal false (loader stub returns undefined). Real detection exists inside the core but is never exposed, so the ad-block probe is permanently false and any comment claiming it gates a break is wrong",
+  },
+  { name: "sendHighscore", wired: false, impl: "()=>{} — stub", why: "empty in the core; init({ submitScore }) is the real leaderboard handshake" },
+  { name: "getLeaderboard", wired: false, impl: "()=>Promise.resolve([]) — always empty", why: "always resolves an empty array; our board is AUDS-backed" },
+  { name: "customEvent", wired: false, impl: "(t,i,n={})=>{…} — real", why: "works, but the Game Events guide steers all checkpoints through measure()" },
+  { name: "logError", wired: false, impl: "e=>{this.captureError(e)} — real", why: "works; captureError already routes runtime failures to the portal dashboard" },
+  { name: "muteAd", wired: false, impl: "()=>{…this.__monetization.muteAd()} — real", why: "mutes the ad, not the game; we mute our own audio instead" },
+  { name: "roundStart", wired: false, impl: "()=>{} — stub", why: "empty in the core; gameplayStart/Stop is the documented lifecycle" },
+  { name: "roundEnd", wired: false, impl: "()=>{} — stub", why: "empty in the core; gameplayStart/Stop is the documented lifecycle" },
+  { name: "setPlayerAge", wired: false, impl: "()=>{} — stub", why: "empty in the core, and age gating belongs to the portal placement anyway" },
+  { name: "generateScreenshot", wired: false, impl: "async ()=>…Wr(null) — resolves null", why: "resolves null rather than a data URL; we render our own share card" },
+  { name: "initWithVideoHB", wired: false, impl: "()=>this.init() — real", why: "a video-heartbeat init variant; plain init() is the documented path" },
+  { name: "setDebugTouchOverlayController", wired: false, impl: "()=>{} — stub", why: "empty in the core; Inspector touch-overlay debugging only" },
+  { name: "setPlaytestCanvas", wired: false, impl: "e=>{…} — real", why: "alias of playtestSetCanvas, which the adapter does call" },
 ];
 
 /**
@@ -194,16 +308,26 @@ export type MeasureAction =
  * `measure()` arguments as the live SDK will accept them, or null when the SDK
  * would drop the event.
  *
- * These rules are lifted from the CDN loader's own implementation, so an event
- * we reject here is one Poki would have discarded silently (it only logs a
- * console error the player never sees and the dashboard never receives):
+ * These three rules are transcribed from the CDN loader's own `measure`
+ * implementation, which validates and then *silently discards* anything that
+ * fails — it logs a console error the player never sees, the `pokiTrackingMeasure`
+ * postMessage is never sent, and the dashboard never hears about it:
  *
  *  1. `category` and `what` are required and non-empty after trimming;
- *  2. no argument may contain `/` or `^` — Poki reserves `/` for rendering
- *     event paths and `^` for joining the three values into a funnel key;
+ *  2. every character of all three must be in the loader's whitelist
+ *     `A-Z a-z 0-9 space _ : . + | -` — it tests `/[^A-Za-z0-9_: .+|-]/` and
+ *     rejects on a match, so this is a positive allowlist, not a pair of
+ *     reserved characters;
  *  3. at most **two** numeric values across category+what+action combined
  *     (the loader counts digit runs and literal `{n}` placeholders), so a
  *     distance or a score must be bucketed, never passed raw.
+ *
+ * Rule 2 is a whitelist on purpose. An earlier version banned only `/` and `^`
+ * on the belief that Poki reserved those two for its own path syntax — the
+ * loader contains no such reservation. That belief let 28 further characters
+ * through (`, ! ? " ' ( ) [ ] { } # % & * < > = ~ ; @ $ \` é 日` and any
+ * whitespace) into events the SDK then dropped without a word, which is the
+ * exact failure this function exists to make visible.
  */
 export function sanitizeMeasure(
   category: string,
@@ -214,7 +338,7 @@ export function sanitizeMeasure(
   const w = `${what ?? ""}`.trim();
   const a = `${action ?? ""}`.trim();
   if (!c || !w) return null;
-  if (/[\/^]/.test(`${c} ${w} ${a}`)) return null;
+  if (/[^A-Za-z0-9_: .+|-]/.test(`${c} ${w} ${a}`)) return null;
   const numerics = `${c} ${w} ${a}`.split(/\d+|\{n\}/i).length - 1;
   if (numerics > 2) return null;
   return { category: c, what: w, action: a };

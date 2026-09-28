@@ -207,6 +207,13 @@ const literal = (arg: string | undefined): string | null =>
 const DYNAMIC_ACTION_DOMAINS: Record<string, string[]> = {
   // `Game.ts`: `private runOutcome: "complete" | "fail" = "fail"`.
   "this.runOutcome": ["complete", "fail"],
+  // `Telemetry.ts`: the whole triple comes out of `sanitizeMeasure` a few lines
+  // above, so category/what/action are loader-legal by construction. Replaying
+  // probe values through the REAL adapter here still proves the call reaches
+  // the SDK; the guard itself is pinned separately by `telemetry.test.ts`
+  // ("never emits a value the live loader would reject"), which runs every
+  // emitted triple through the loader's own validator.
+  "clean.action": ["reached", "complete", "fail", "interact", "visible", "granted"],
 };
 
 /**

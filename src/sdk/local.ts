@@ -110,17 +110,17 @@ export class LocalAdapter implements PlatformAdapter {
   gameplayStart(): void {}
   gameplayStop(): void {}
   pause(): void {}
-  happyTime(): void {}
+  happyTime(_intensity?: number): void {}
 
   /* ads — none */
   async commercialBreak(): Promise<void> {}
   async rewardedBreak(): Promise<boolean> {
     return false;
   }
-  async showMidgameAd(): Promise<void> {}
   async showRewardedAd(): Promise<boolean> {
     return false;
   }
+  destroyBanner(): void {}
   mountBanner(_container: HTMLElement): void {}
 
   /** No portal language: the game's own browser detection is authoritative. */

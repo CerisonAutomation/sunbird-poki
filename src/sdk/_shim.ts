@@ -24,11 +24,11 @@ class StubAdapter implements PlatformAdapter {
   gameplayStart(): void {}
   gameplayStop(): void {}
   pause(): void {}
-  happyTime(): void {}
+  happyTime(_intensity?: number): void {}
   async commercialBreak(): Promise<void> {}
   async rewardedBreak(): Promise<boolean> { return false; }
-  async showMidgameAd(): Promise<void> {}
   async showRewardedAd(): Promise<boolean> { return false; }
+  destroyBanner(): void {}
   mountBanner(_container: HTMLElement): void {}
 
   getLanguage(): string | null {

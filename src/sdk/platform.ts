@@ -99,17 +99,33 @@ export interface PlatformAdapter {
   /** Ask the portal to treat the game as paused (best-effort). */
   pause(): void;
   /** Portal celebration for a special moment (personal best). Never throws. */
-  /** Poki's milestone celebration (`PokiSDK.happyTime`, capital T). */
-  happyTime(): void;
+  /**
+   * Poki's milestone celebration (`PokiSDK.happyTime`, capital T).
+   *
+   * Takes the intensity so the value means something. The interface used to
+   * declare `happyTime(): void`, which made the adapter's intensity parameter
+   * unreachable: every one of the five call sites passed nothing and every
+   * celebration fired at the default 1.0, while `ProgressBeats.Celebration.peak`
+   * — documented as "the one happyTime() value for this run" — was computed
+   * from the run's shape and then thrown away.
+   */
+  happyTime(intensity?: number): void;
 
   /* -------------------------------------------------------------- ads */
   /** Midgame/commercial break. Resolves when the break is over or unavailable. */
   commercialBreak(): Promise<void>;
   /** Rewarded break. Resolves true only when the portal explicitly granted the reward. */
   rewardedBreak(): Promise<boolean>;
-  showMidgameAd(): Promise<void>;
   showRewardedAd(): Promise<boolean>;
   mountBanner(container: HTMLElement): void;
+  /**
+   * Tear the display-ad slot down.
+   *
+   * `destroyAd` is a real member of the shipped core and the display slot is
+   * never unmounted by the page, so without this the only way to release it is
+   * a reload. Games call it on dispose; it is a no-op when nothing is mounted.
+   */
+  destroyBanner(): void;
 
   /* -------------------------------------------------------- cloud save */
   saveCloud<T>(key: string, value: T): Promise<void>;
@@ -509,10 +525,14 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
         // because an SDK that never booted cannot serve a break, and every
         // earlier line of this function has the same fate.
         markPokiBooted();
-        // Game Events: the SDK only reports measure() checkpoints once event
-        // tracking is switched on, and the dashboard's drop-off funnel / C2P
-        // read-outs are built from exactly those events. Same handshake shape
-        // as init — optional, so an older CDN build degrades to plain events.
+        // NOT a measure() gate. The CDN loader's `measure` forwards
+        // unconditionally; this member does not enable or gate it. In the
+        // shipped core it is a GDPR/CMP consent hook — it installs a
+        // `window.__tcfapi` Google Consent Mode listener — and it is a
+        // complete no-op inside the portal, because the core short-circuits
+        // the whole call when already running in the Poki iframe. Called
+        // anyway: it is the right place to register consent plumbing, and the
+        // same handshake shape as init degrades cleanly on older builds.
         try { getPoki()?.enableEventTracking?.(); } catch { /* events optional */ }
         // gameLoadingStart() fires exactly once, right after init, before
         // any asset/3D scene work begins. Game.loadingFinished() is called

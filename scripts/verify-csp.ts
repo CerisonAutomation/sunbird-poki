@@ -162,16 +162,24 @@ export function crossCheckBundle(options: {
   };
 }
 
-/** The absolute policy URL host, read the same way `gen-csp-request.ts` reads it. */
+/**
+ * The absolute policy URL host.
+ *
+ * Read from `src/game/legal.ts`, NOT from an env var or a package.json script.
+ * Both of those are unset on the Poki build, so the check resolved an empty
+ * string, never learned about the privacy host, and then reported the host
+ * that actually SHIPS in the bundle as "undeclared" — a false failure that
+ * reads exactly like a real one, which is the kind of thing a team learns to
+ * ignore. `PRIVACY_URL` in legal.ts is the single source of truth (env with a
+ * hardcoded fallback), so read the fallback out of that file rather than
+ * re-deriving it from somewhere that can drift.
+ */
 function privacyHost(): string {
-  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
-    scripts?: Record<string, string>;
-  };
-  const url =
-    (process.env.VITE_PRIVACY_URL ?? "").trim() ||
-    /VITE_PRIVACY_URL=(\S+)/.exec(pkg.scripts?.["build:poki"] ?? "")?.[1]?.trim() ||
-    "";
-  return /^https?:\/\/([^/]+)/.exec(url)?.[1]?.toLowerCase() ?? "";
+  const env = (process.env.VITE_PRIVACY_URL ?? "").trim();
+  if (env) return /^https?:\/\/([^/]+)/.exec(env)?.[1]?.toLowerCase() ?? "";
+  const legal = readFileSync(join(root, "src/game/legal.ts"), "utf8");
+  const fallback = /PRIVACY_URL[^=]*=\s*[^;]*?"(https?:\/\/[^"]+)"/.exec(legal)?.[1] ?? "";
+  return /^https?:\/\/([^/]+)/.exec(fallback)?.[1]?.toLowerCase() ?? "";
 }
 
 function main(): void {

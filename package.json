@@ -25,7 +25,7 @@
     "verify:thumbnail": "node scripts/verify-thumbnail.mjs",
     "render:thumbnail": "node scripts/render-thumbnail.mjs",
     "poki:audit": "node scripts/poki-audit.mjs",
-    "poki:preflight": "pnpm audit:ui && pnpm build:poki && pnpm verify:portals && pnpm isolation:check && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm poki:audit -- --run",
+    "poki:preflight": "pnpm audit:ui && pnpm build:poki && pnpm verify:portals && pnpm verify:csp && pnpm isolation:check && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm poki:audit -- --run",
     "test:mp": "node scripts/mp-smoke.mjs",
     "test:pvp": "vitest run src/game/__tests__/pvp-live.test.ts",
     "pvp:check": "node scripts/pvp-check.mjs",
@@ -48,12 +48,13 @@
     "setup:browser": "node scripts/setup-browser.mjs",
     "test:artifact": "pnpm build:poki && playwright test -c playwright.artifact.config.ts",
     "test:policy": "pnpm build:poki && pnpm build && playwright test -c playwright.policy.config.ts",
-    "gate": "pnpm lint && pnpm audit:ui && pnpm typecheck && pnpm test && pnpm verify:prod && pnpm build:poki && pnpm verify:portals && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm isolation:check && pnpm test:policy && pnpm test:artifact && pnpm test:mobile",
+    "gate": "pnpm lint && pnpm audit:ui && pnpm typecheck && pnpm test && pnpm verify:prod && pnpm build:poki && pnpm verify:portals && pnpm verify:csp && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm isolation:check && pnpm test:policy && pnpm test:artifact && pnpm test:mobile",
     "serve:upload": "node scripts/serve-upload.mjs",
     "test:visual": "playwright test -c playwright.visual.config.ts",
     "board:check": "node scripts/board-check.mjs",
     "verify:auds": "pnpm verify:upload && pnpm isolation:check",
-    "verify:inspector-qa": "pnpm verify:upload && pnpm audit:zips && pnpm verify:thumbnail"
+    "verify:inspector-qa": "pnpm verify:upload && pnpm audit:zips && pnpm verify:thumbnail",
+    "verify:csp": "tsx scripts/verify-csp.ts"
   },
   "dependencies": {
     "@poki/netlib": "^0.0.20",

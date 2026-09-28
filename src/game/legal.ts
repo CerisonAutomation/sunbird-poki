@@ -13,7 +13,11 @@
  * wrapper is what keeps the link compliant there (Poki opens external links in
  * its own modal instead of navigating the game frame away).
  */
-const raw = (import.meta.env.VITE_PRIVACY_URL as string | undefined)?.trim();
+// `?.` on `import.meta.env` itself, not only on the key. Vite always defines
+// it, but the tooling under `scripts/` (verify-csp, gen-csp-request) imports
+// this module through plain `tsx`, where `import.meta.env` is undefined and
+// `.VITE_PRIVACY_URL` throws before the fallback below can ever be reached.
+const raw = (import.meta.env?.VITE_PRIVACY_URL as string | undefined)?.trim();
 
 /** Live privacy policy page. */
 export const PRIVACY_URL = raw && raw.length > 0 ? raw : "https://sunbird-snowy.vercel.app/privacy.html";

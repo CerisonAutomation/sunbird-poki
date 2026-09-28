@@ -1,4 +1,14 @@
 import { isPortalBuild } from "../sdk/platform";
+import { pokiSdk, sanitizeMeasure } from "../sdk/poki-canon";
+
+/**
+ * True only on a Poki build, where measure() is the sanctioned egress.
+ *
+ * Read at module scope, like `TARGET` in `sdk/platform.ts`, so Vite folds it to
+ * a literal at build time (non-Poki bundles lose the whole `measure` path) and
+ * so a test can flip it with resetModules + a fresh import.
+ */
+const POKI_BUILD = (import.meta.env.VITE_PORTAL_TARGET ?? "none") === "poki";
 
 type Props = Record<string, string | number | boolean>;
 type Entry = { name: string; props: Props; t: number };
@@ -44,6 +54,59 @@ export function coarseEvent(name: string, props: Props): CoarseEvent {
 
 const ENV = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
 
+/**
+ * The portal-sanctioned channel.
+ *
+ * Portal builds must not post to a backend of our own — that rule above is
+ * correct and stays. But it used to mean engagement telemetry went NOWHERE on
+ * Poki: 72 event names, including the whole first-session funnel and the
+ * drop-off summary the code calls "the number that makes this actionable",
+ * were written into a local ring buffer and never left the device.
+ *
+ * `measure()` is the channel the portal itself provides and expects games to
+ * use, so high-value engagement rides it instead. No external network egress,
+ * no new endpoint, no PII — just the same coarse counters the backend would
+ * have received, delivered through the SDK the portal is already running.
+ *
+ * This is deliberately a short list, not all 72 names. Poki's dashboard is the
+ * game's own reporting surface; flooding it with bespoke event names would
+ * bury the funnel it is actually for. Each entry maps one engagement event onto
+ * a published `MeasureCategory` so it lands in a grouping Poki already has.
+ */
+/**
+ * Engagement events that ride Poki's own `measure()`.
+ *
+ * Every name here must be one the game actually calls `track()` with, and each
+ * is emitted exactly once. Two rules learned the hard way:
+ *
+ *  - NO `funnel_stage`. `Game.markFunnel` already sends the funnel to Poki
+ *    directly, through the platform adapter, as category `player` / what
+ *    `funnel-<stage>` / action `reached`. Listing it here too produced two SDK
+ *    calls per milestone with different `what` values — a duplicate the budget
+ *    could not see, because only one of the two paths spent from it.
+ *  - The action is data-driven where the event carries an outcome. `run_end`
+ *    fires for every finished run including goal completions, so a hardcoded
+ *    "fail" would file every win as a loss in Poki's round dashboard.
+ */
+const POKI_MEASURE_EVENTS: Record<
+  string,
+  { category: string; action: string | ((props: Props) => string) }
+> = {
+  funnel_summary: { category: "player", action: "complete" },
+  // "mode", not "round": the run LIFECYCLE (start → complete|fail) is
+  // measured under "mode" with the mode slug as `what` (see Game.ts), so a
+  // finished run belongs in the same funnel its start opened. `round` is a
+  // different question — a scored lap — and filing run_end there split one
+  // funnel across two categories.
+  run_end: { category: "mode", action: (p) => (p.outcome === "complete" ? "complete" : "fail") },
+  portal_identity: { category: "player", action: "interact" },
+  portal_break_request: { category: "button", action: "visible" },
+};
+
+/** How many measure() events one session may emit, so a long session cannot
+ *  flood the dashboard. The funnel's own milestones are a handful per player. */
+const POKI_MEASURE_BUDGET = 40;
+
 /** Backend telemetry endpoint. Empty string = no sink configured = network
  * telemetry is a no-op. In portal builds (CrazyGames/Poki/generic), external
  * network telemetry is strictly disabled per portal compliance rules.
@@ -76,6 +139,7 @@ export class Telemetry {
   /** Keep spectacular moments useful without turning a single flight into a
    * telemetry flood. The first five are exact; later moments are sampled. */
   private viralMoments = 0;
+  private pokiMeasureBudget = POKI_MEASURE_BUDGET;
   private readonly debug =
     typeof location !== "undefined" && /localhost|127\.0\.0\.1/.test(location.hostname);
 
@@ -101,6 +165,11 @@ export class Telemetry {
     // beacon is off there too — see endpoint()).
     if (!isPortalBuild()) w.dataLayer?.push({ event: name, ...props });
     if (this.debug) console.debug("[telemetry]", name, props);
+    // On Poki, route the curated engagement set through the portal's own
+    // analytics channel. Every value goes through sanitizeMeasure first, so a
+    // prop the live loader would reject is dropped here rather than silently
+    // lost server-side — the same rule PokiNetlibClient's measure() follows.
+    if (POKI_BUILD) this.emitPokiMeasure(name, props);
     // Queue a coarse copy for the aggregate backend counter (hard-capped).
     if (endpointUrl() && this.outbox.length < 64) {
       this.outbox.push(coarseEvent(name, props));
@@ -108,6 +177,33 @@ export class Telemetry {
     // A completed run is the natural flush boundary. This keeps the funnel
     // intact even when a player closes the tab before visibilitychange fires.
     if (name === "run_end") this.flush();
+  }
+
+  private emitPokiMeasure(name: string, props: Props): void {
+    const mapping = POKI_MEASURE_EVENTS[name];
+    if (!mapping) return;
+    if (this.pokiMeasureBudget <= 0) return;
+    // `what` is the second measure() argument and therefore required. It must
+    // be the event's own discriminator, not a copy of its name: falling back to
+    // `name` satisfied the "never empty" rule while making every event of a
+    // kind identical on the dashboard — four distinct `portal_break_request`
+    // placements collapsed into one indistinguishable row.
+    const what = String(props.stage ?? props.placement ?? props.stalledAt ?? props.mode ?? "")
+      .replace(/[^A-Za-z0-9_: .|-]/g, "-")
+      .slice(0, 40);
+    // No discriminator means the event carries nothing Poki can group on.
+    if (!what) return;
+    const action = typeof mapping.action === "function" ? mapping.action(props) : mapping.action;
+    const clean = sanitizeMeasure(mapping.category, what, action);
+    if (!clean) return;
+    try {
+      const sdk = pokiSdk();
+      if (typeof sdk?.measure !== "function") return; // don't drain on a dead SDK
+      sdk.measure(clean.category, clean.what, clean.action);
+      this.pokiMeasureBudget -= 1;
+    } catch {
+      /* measurement must never break gameplay */
+    }
   }
 
   recent(): readonly Entry[] {

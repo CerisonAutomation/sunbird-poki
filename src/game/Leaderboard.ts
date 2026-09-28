@@ -188,12 +188,46 @@ function localBestByDevice(): Map<BoardMetric, number> {
 
 /* ----------------------------------------------------------- local store */
 
+/**
+ * Coerce one persisted row into a `StoredRow`, or reject it.
+ *
+ * localStorage is player-writable, and a bare `parsed as StoredRow[]` trusts it.
+ * `[{"name":123}]` then reaches `escapeHtml`, which calls `.replace` on a
+ * number and throws inside the HUD template build; `[null]` throws in
+ * `metricOf` on the run-submit path. Both are self-inflicted (a tampered row
+ * cannot be uploaded on the Poki build, where the HTTP sink is disabled), but a
+ * corrupted cache should degrade to an empty board, not a broken screen.
+ *
+ * Every other persistence boundary here re-validates on read — `SaveData.load`
+ * is CRC-sealed and coerces, `pilots.ts` and `Squad.ts` shape-guard. This was
+ * the one store that got a type assertion where its neighbours got a guard.
+ */
+function coerceStoredRow(value: unknown): StoredRow | null {
+  if (!value || typeof value !== "object") return null;
+  const r = value as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    deviceId: String(r.deviceId ?? ""),
+    name: String(r.name ?? "Pilot").slice(0, 24),
+    skin: String(r.skin ?? "sunbird").slice(0, 32),
+    seed: String(r.seed ?? "").slice(0, 40),
+    mode: String(r.mode ?? "").slice(0, 24),
+    distance: Math.max(0, num(r.distance)),
+    altitude: Math.max(0, num(r.altitude)),
+    perfects: Math.max(0, Math.floor(num(r.perfects))),
+    coins: Math.max(0, Math.floor(num(r.coins))),
+    score: Math.max(0, num(r.score)),
+    durationMs: Math.max(0, Math.floor(num(r.durationMs))),
+    date: String(r.date ?? ""),
+  };
+}
+
 function readLocal(): StoredRow[] {
   try {
     const raw = storage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed as StoredRow[];
+    return parsed.map(coerceStoredRow).filter((r): r is StoredRow => r !== null);
   } catch {
     return [];
   }

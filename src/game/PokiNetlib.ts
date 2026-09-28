@@ -24,7 +24,7 @@ import type {
   RemoteSnapshot,
 } from "./MassRace";
 import { truncate } from "./math";
-import { PROTOCOL_VERSION } from "./protocol/v1";
+import { MOVEMENT_LIMITS, PROTOCOL_VERSION } from "./protocol/v1";
 import { isPokiMultiplayerAvailable, makePokiRoomCode as makeRoomCode, POKI_NETLIB_GAME_ID as NETLIB_GAME_ID } from "./PokiMpUtils";
 import { gradeStateCadence } from "./Racer";
 import { normalizeRooms, sortRooms, type LiveRoom } from "./RoomBrowser";
@@ -36,6 +36,12 @@ const SEND_DT = 1 / SEND_HZ;
 const INTERP_DELAY = 0.12;
 const STALE_AFTER = 6;
 const MAX_CAPACITY = 40;
+/**
+ * How long a host waits for the first peer before falling back to a local race.
+ * Long enough that a friend who accepted an invite and is still loading is not
+ * written off, short enough that the lobby screen is never a dead end.
+ */
+const LOBBY_WATCHDOG_MS = 45_000;
 
 export type PresenceState = "offline" | "connecting" | "lobby" | "racing" | "error";
 
@@ -163,6 +169,7 @@ export class PokiNetlibClient implements NetTransport {
   private readonly greeted = new Set<string>();
   private boundHandlers: Array<() => void> = [];
   private closedByUs = false;
+  private lobbyWatchdog: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly deviceId: string,
@@ -174,6 +181,10 @@ export class PokiNetlibClient implements NetTransport {
   }
 
   get connected(): boolean {
+    // `state !== "error"` matters: netReady stays true after a `failed`/`close`
+    // event, so without this a dead room reported itself as connected and
+    // startNow() took the networked branch into a lobby that could never race.
+    if (this.state === "error") return false;
     return this.netReady || this.isAutonomous;
   }
 
@@ -252,31 +263,41 @@ export class PokiNetlibClient implements NetTransport {
           if (this.requestedCode) {
             // join() returns the LobbyListEntry for the lobby we joined
             network.join(this.requestedCode).then((info) => {
-              if (info) {
-                this.roomCode = this.requestedCode.toUpperCase();
-                this.capacity = info.maxPlayers || MAX_CAPACITY;
-                this.amHost = info.leader === network.id;
-                this.leaderId = info.leader ?? "";
-                // Compare against what we ASKED for: onLobby has already
-                // adopted the room's seed by the time join() resolves, so the
-                // old comparison could never differ and the "welcome" event
-                // (which is what tells the game to switch course/format) never
-                // fired on this transport.
-                const prevSeed = this.requestedSeed || this.seed;
-                const incoming = String(info.customData?.seed ?? this.seed);
-                // Announce a seed change only when we are NOT the host —
-                // i.e. we joined a friend's room whose format/course differs
-                // from what we selected locally. Hosting or reconnecting must
-                // not fire a spurious "welcome" event.
-                if (!this.amHost && incoming && incoming !== prevSeed) {
-                  this.pendingEvents.push({ type: "welcome", roomCode: this.roomCode, seed: incoming });
-                }
-                this.seed = incoming;
+              // join() resolves `undefined` — not a rejection — when the
+              // service does not know this code. Falling through used to leave
+              // the client in state "lobby" with zero peers and no message, so
+              // a bad invite code produced an empty room that looked fine.
+              if (!info) {
+                this.fail(
+                  `Room ${this.requestedCode} is not available`,
+                  false, // a named room must not silently become an AI race
+                );
+                return;
               }
+              this.roomCode = this.requestedCode.toUpperCase();
+              this.capacity = info.maxPlayers || MAX_CAPACITY;
+              this.amHost = info.leader === network.id;
+              this.leaderId = info.leader ?? "";
+              // Compare against what we ASKED for: onLobby has already
+              // adopted the room's seed by the time join() resolves, so the
+              // old comparison could never differ and the "welcome" event
+              // (which is what tells the game to switch course/format) never
+              // fired on this transport.
+              const prevSeed = this.requestedSeed || this.seed;
+              const incoming = String(info.customData?.seed ?? this.seed);
+              // Announce a seed change only when we are NOT the host —
+              // i.e. we joined a friend's room whose format/course differs
+              // from what we selected locally. Hosting or reconnecting must
+              // not fire a spurious "welcome" event.
+              if (!this.amHost && incoming && incoming !== prevSeed) {
+                this.pendingEvents.push({ type: "welcome", roomCode: this.roomCode, seed: incoming });
+              }
+              this.seed = incoming;
               this.state = "lobby";
+              this.armLobbyWatchdog();
               this.sendHelloAll();
             }).catch((err) => {
-              this.fail(`Could not join room ${this.requestedCode}: ${String(err).slice(0, 80)}`);
+              this.fail(`Could not join room ${this.requestedCode}: ${String(err).slice(0, 80)}`, false);
             });
           } else {
             // QUICK MATCH: browse public lobbies before creating. Join the
@@ -286,27 +307,49 @@ export class PokiNetlibClient implements NetTransport {
             // into a forest of empty rooms.
             let joined = false;
             try {
-              // Push mode + availability filtering to the signaling server
-              // (MongoDB-style operators) so we only receive joinable sunbird
-              // lobbies — avoids downloading lobbies from other games sharing
-              // the same game-id bucket, and reduces client-side sort cost.
+              // Filter server-side so we only receive joinable sunbird lobbies —
+              // avoids downloading lobbies from other games sharing the same
+              // game-id bucket, and reduces client-side sort cost.
+              //
+              // Only two keys are legal here, and all three that were here
+              // before were wrong. The signaling server
+              // (github.com/poki/netlib → stores/postgres.go) builds its filter
+              // converter with
+              //   WithNestedJSONB("custom_data", "code", "playerCount",
+              //                      "createdAt", "updatedAt", "latency")
+              // so every key NOT in that exemption list is redirected into the
+              // `custom_data` JSONB column, and a dotted key is rejected
+              // outright. Verified by running Poki's own converter
+              // (mongodb-filter-to-postgres v1.0.8) over the old filter:
+              //   {"customData.mode":{"$eq":…}} -> ERROR invalid column name
+              //   {"public":{"$eq":true}}       -> "custom_data"->>'public'
+              //   {"hasPassword":{"$eq":false}} -> "custom_data"->>'hasPassword'
+              // The old filter was therefore rejected wholesale: quick-match
+              // found zero rooms every time and silently created a fresh empty
+              // lobby — the exact room-forest the comment above describes.
+              // `playerCount` is exempt (a real column) and our own `mode` sits
+              // at the top level of `custom_data`, so the flat spelling is the
+              // one that actually matches.
               const lobbies = await network.list(
                 {
-                  $and: [
-                    { public: { $eq: true } },
-                    { hasPassword: { $eq: false } },
-                    { playerCount: { $gt: 0 } },
-                    { "customData.mode": { $eq: "sunbird-race" } },
-                  ],
+                  $and: [{ playerCount: { $gt: 0 } }, { mode: { $eq: "sunbird-race" } }],
                 },
                 { playerCount: -1 },
                 20,
               );
               const candidate = (lobbies ?? [])
-                .filter((l) =>
-                  l &&
-                  l.code &&
-                  l.playerCount < (l.maxPlayers || MAX_CAPACITY),
+                .filter(
+                  (l) =>
+                    l &&
+                    l.code &&
+                    // `hasPassword` is a real column but is not in the
+                    // converter's exemption list, so it cannot be filtered
+                    // server-side. The server already restricts the query to
+                    // public lobbies, so dropping passworded ones client-side
+                    // is the whole of what that condition ever did.
+                    !l.hasPassword &&
+                    (l.customData?.mode ?? "sunbird-race") === "sunbird-race" &&
+                    l.playerCount < (l.maxPlayers || MAX_CAPACITY),
                 )
                 .sort((a, b) => {
                   // prefer fuller rooms (faster start) and then lower latency
@@ -348,10 +391,18 @@ export class PokiNetlibClient implements NetTransport {
                 codeFormat: "short",
                 codeLength: 5,
               }).then((lobbyCode: string) => {
+                // create() resolves "" — it does NOT reject — when the service
+                // declines. Adopting that gave roomCode "", amHost true and no
+                // error: a host with no lobby, waiting for peers forever.
+                if (!lobbyCode) {
+                  this.fail("The Poki lobby service would not create a room");
+                  return;
+                }
                 this.roomCode = lobbyCode.toUpperCase();
                 this.requestedCode = this.roomCode;
                 this.amHost = true;
                 this.leaderId = network.id;
+                this.armLobbyWatchdog();
               }).catch((err) => {
                 this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
               });
@@ -413,6 +464,7 @@ export class PokiNetlibClient implements NetTransport {
       };
 
       const onLeft = () => {
+        this.clearLobbyWatchdog();
         this.state = "offline";
         this.roomCode = "";
         this.pendingEvents.push({ type: "interrupted", message: "You left the room" });
@@ -462,7 +514,18 @@ export class PokiNetlibClient implements NetTransport {
             // Remote render clock takes the max of seen peer timestamps
             if (ts > this.serverClock) this.serverClock = ts;
             const prev = t.buffer[t.buffer.length - 1];
-            const dt = prev ? Math.max(1e-4, ts - prev.t) : 1;
+            // Clamp BOTH ends. The floor alone (`Math.max(1e-4, …)`) is a trap on
+            // an unreliable channel: one reordered or duplicated packet arrives
+            // with a non-monotonic `t`, the floor makes `dt` ~1e-4, and the
+            // velocity becomes Δx/1e-4 — roughly 1.4e6 u/s. `poll()` then
+            // extrapolates from that and renders the bird ~19,000 units off
+            // course for a single frame before snapping back. The ceiling
+            // (MOVEMENT_LIMITS.maxSampleIntervalSec) is the same guard the
+            // protocol declares for exactly this reason; it was declared and
+            // never applied on either transport.
+            const dt = prev
+              ? Math.min(MOVEMENT_LIMITS.maxSampleIntervalSec, Math.max(1e-4, ts - prev.t))
+              : 1;
             // Inbound cadence: the same signal the WebSocket transport grades,
             // so the lobby's link badge means the same thing on both.
             if (prev) {
@@ -480,7 +543,7 @@ export class PokiNetlibClient implements NetTransport {
             case "hello": {
               const name = truncate(String(m.name ?? "Pilot"), 14);
               const hue = Number.isFinite(m.hue) ? m.hue : Math.random();
-              const skin = String(m.skin ?? "sunbird");
+              const skin = truncate(String(m.skin ?? "sunbird"), 32);
               this.peerInfo.set(peer.id, { name, hue, skin });
               const first = !this.greeted.has(peer.id);
               this.greeted.add(peer.id);
@@ -525,6 +588,13 @@ export class PokiNetlibClient implements NetTransport {
               break;
             }
             case "emote": {
+              // Bound a peer-authored string. Every render of an emote re-runs
+              // `escapeHtml`, so a peer streaming a multi-megabyte emote at the
+              // 15 Hz state rate makes every other client rebuild that string
+              // 60×/s — the exact cost the HUD's DOM-reuse fix removed. Every
+              // other field on this channel is validated; emote and skin were
+              // the two that were missed.
+              if (typeof m.emote !== "string" || m.emote.length > 8) break;
               const t = this.track(peer.id);
               t.emote = m.emote;
               t.emoteAt = this.clock;
@@ -596,8 +666,24 @@ export class PokiNetlibClient implements NetTransport {
       network.on("connecting", onConnecting);
       network.on("connected", onConnected);
       network.on("disconnected", onDisconnected);
-      network.on("reconnecting", () => { /* noop */ });
-      network.on("reconnected", () => { /* noop */ });
+      network.on("reconnecting", () => { /* netlib retries; nothing to do */ });
+      network.on("reconnected", (peer: Peer) => {
+        // The peer object is a NEW one after a reconnect — the old datachannels
+        // are gone. Nothing was rebuilt, re-announced or re-synced when this was
+        // a no-op: `selfId` still pointed at the pre-drop value, and no hello
+        // went out, so the room had no idea the pilot was back and readiness
+        // only recovered on the 15 s heartbeat. Re-announce, and re-hello the
+        // peer, so a reconnect is not a 15-second hole in the lobby.
+        this.connectedPeers.add(peer.id);
+        try {
+          network.send(
+            "reliable",
+            peer.id,
+            JSON.stringify({ type: "hello", name: this.name, hue: this.hue, skin: this.skin, v: PROTOCOL_VERSION }),
+          );
+        } catch { /* the peer may already be gone again */ }
+        this.pendingEvents.push({ type: "join", name: this.name });
+      });
       network.on("left", onLeft);
       network.on("close", onClose);
       network.on("failed", onFailed);
@@ -619,14 +705,31 @@ export class PokiNetlibClient implements NetTransport {
         try { network.off("message", onMessage); } catch { /* */ }
       });
     } catch (err) {
+      // `fail` degrades to a local room on its own. Calling
+      // `activateAutonomousRoom` again here would wipe the error message it
+      // just set, burn a second room code, and build 8 AI pilots that are
+      // immediately discarded.
       this.fail(String(err).slice(0, 120));
-      this.activateAutonomousRoom(this.requestedCode, this.requestedSeed);
     }
   }
 
   private allReady(): boolean {
     if (!this.localReady) return false;
-    for (const t of this.tracks.values()) {
+    // Only seats that are actually present get a vote.
+    //
+    // A track is created by ANY inbound state frame, so a peer that hard-drops
+    // (mobile handover, network change) without a `disconnected` event leaves a
+    // permanent `ready: false` track behind. The stale sweep is racing-only, so
+    // in the lobby nothing ever removes it — and the countdown waited on every
+    // track, so two players pressing Ready hung forever with no toast, no error
+    // and no fallback. The 45 s watchdog cannot help either: the ghost is still
+    // in `connectedPeers` if it ever completed `connected`.
+    for (const [id, t] of this.tracks) {
+      if (!this.connectedPeers.has(id)) {
+        this.tracks.delete(id);
+        this.greeted.delete(id);
+        continue;
+      }
       if (!t.ready) return false;
     }
     return true;
@@ -652,17 +755,90 @@ export class PokiNetlibClient implements NetTransport {
     }, 120);
   }
 
-  private fail(message: string): void {
-    this.state = "error";
+  /**
+   * Record a failure.
+   *
+   * `degrade: true` (the default) is what upholds the contract in this file's
+   * header: a lobby that cannot be reached falls back to local AI pilots so the
+   * player can still race. That used to be claimed but not done — `fail` only
+   * set `state = "error"`, so 7 of the 9 failure paths ended on an error banner
+   * with a dead room instead of a playable one.
+   *
+   * `degrade: false` is for the case where substituting a room would mislead:
+   * a player who typed a friend's room code must be told the code was no good,
+   * not silently handed a race against bots while the UI shows that code.
+   */
+  private fail(message: string, degrade = true): void {
+    this.clearLobbyWatchdog();
+    // Never degrade a room that has something to lose. `activateAutonomousRoom`
+    // clears every peer track and resets state to "lobby", so running it while
+    // peers are connected would silently replace real humans with local bots
+    // mid-race — a far worse outcome than an honest error, and the opposite of
+    // what "best-effort multiplayer" should mean.
+    if (!degrade || this.state === "racing" || this.tracks.size > 0) {
+      this.state = "error";
+      this.errorText = message;
+      return;
+    }
+    // Keep the reason for the HUD, but land in a room the player can actually
+    // race. activateAutonomousRoom() resets state and errorText, so re-apply
+    // the message after it.
+    this.activateAutonomousRoom();
     this.errorText = message;
   }
 
+  /**
+   * Start the "peers never arrive" watchdog.
+   *
+   * The header has always promised that a room whose peers never connect falls
+   * back to local AI pilots. Nothing implemented that: if signaling came up,
+   * the lobby was created or joined, and no peer ever connected, the client sat
+   * in state "lobby" indefinitely with an empty roster and no fallback — the one
+   * failure mode a player cannot escape, because the UI offers every action.
+   *
+   * Only armed for rooms we opened ourselves. A guest who joined a friend's
+   * room and is waiting for them to launch is exactly the case that must NOT
+   * time out into a bot race — there the empty lobby is the correct state.
+   */
+  private armLobbyWatchdog(): void {
+    this.clearLobbyWatchdog();
+    if (!this.amHost) return;
+    const handle = setTimeout(() => {
+      // Only clear OUR handle. A later room may have armed its own watchdog,
+      // and nulling `this.lobbyWatchdog` here would make it uncancellable.
+      if (this.lobbyWatchdog === handle) this.lobbyWatchdog = null;
+      if (this.isAutonomous || this.state !== "lobby") return;
+      if (this.connectedPeers.size > 0) {
+        // Peers arrived, so the room is fine — but they may all leave again.
+        // Re-arm rather than let the host sit in an empty lobby forever.
+        this.armLobbyWatchdog();
+        return;
+      }
+      this.fail("No other pilots joined — starting a local race");
+    }, LOBBY_WATCHDOG_MS);
+    this.lobbyWatchdog = handle;
+  }
+
+  private clearLobbyWatchdog(): void {
+    if (this.lobbyWatchdog !== null) {
+      clearTimeout(this.lobbyWatchdog);
+      this.lobbyWatchdog = null;
+    }
+  }
+
   private shutdownNet(): void {
+    this.clearLobbyWatchdog();
     for (const off of this.boundHandlers) {
       try { off(); } catch { /* */ }
     }
     this.boundHandlers = [];
     if (this.net) {
+      // leave() is the graceful departure: it sends a `leave` request to the
+      // signaling service and closes every peer. close() alone only drops the
+      // local socket, so without this the service keeps our seat in the lobby
+      // and other clients keep dialling a peer that is gone. leave() checks
+      // `_closing`, so it must run before close() sets it.
+      try { void this.net.leave?.()?.catch?.(() => undefined); } catch { /* */ }
       try { this.net.removeAllListeners(); } catch { /* */ }
       try { this.net.close("leave"); } catch { /* */ }
     }
@@ -712,6 +888,12 @@ export class PokiNetlibClient implements NetTransport {
     this.amHost = false;
     this.finishOrder = 0;
     this.finishedPeers.clear();
+    // Reset the published phase. It was never cleared, so after one race the
+    // client stayed at "racing" forever and `syncLobbyPhase` returned early on
+    // every later room: a fresh lobby was never published as "lobby", the room
+    // browser reported it as already racing, and it was therefore listed as
+    // unjoinable — so nobody could find or join it.
+    this.announcedPhase = "lobby";
   }
 
   setIdentity(name: string, skin: string, hue: number): void {
@@ -775,7 +957,18 @@ export class PokiNetlibClient implements NetTransport {
     this.sendAcc += dt;
     if (this.state === "racing") {
       for (const [id, t] of this.tracks) {
-        if (this.clock - t.lastSeen > STALE_AFTER) this.tracks.delete(id);
+        if (this.clock - t.lastSeen <= STALE_AFTER) continue;
+        this.tracks.delete(id);
+        this.greeted.delete(id);
+        // Emit the SAME `leave` the clean-disconnect path emits.
+        //
+        // Deleting the track alone left the rival frozen on the field for the
+        // rest of the race, and when the peer came back its id matched nothing,
+        // so `applyRemote` fell through to the first unmatched local AI rival
+        // and took it over — silently swapping a bot for a human on this client
+        // only. The host's standings then disagreed with every guest's for the
+        // rest of the run, with no way to repair it.
+        if (t.name) this.pendingEvents.push({ type: "leave", name: t.name });
       }
     }
     this.heartbeat += dt;
@@ -788,6 +981,14 @@ export class PokiNetlibClient implements NetTransport {
   send(x: number, y: number, rotation: number, distance: number): void {
     if (!this.connected && !this.isAutonomous) return;
     if (this.isAutonomous) return; // AI pilots don't need network
+    // A non-finite local value must be dropped, not measured. `moved` compares
+    // with `Math.abs(NaN - n) > k`, which is always false — so a single NaN
+    // would leave `lastSent` frozen and `send()` would return early FOREVER.
+    // The player's own track then aged out on every client and the pilot
+    // vanished mid-race. NaN cannot reach the wire (JSON.stringify emits null,
+    // which the receiver's finite check rejects), so the corruption stays local
+    // — but the cost was a permanent silent blackout rather than one frame.
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(rotation)) return;
     if (this.sendAcc < SEND_DT) return;
     this.sendAcc = 0;
     const moved =
@@ -928,7 +1129,13 @@ export class PokiNetlibClient implements NetTransport {
   async listPublic(): Promise<LiveRoom[]> {
     if (!this.net || !this.netReady) return [];
     try {
-      const lobbies = await this.net.list({ public: true }, { createdAt: -1 }, 20);
+      // `public` is NOT filterable here: the signaling server's converter
+      // redirects every non-exempt key into `custom_data`, so `{public:true}`
+      // compiled to `"custom_data"->>'public'` and matched nothing — the
+      // browser showed an empty list. The server's own query is already
+      // `WHERE game = $1 AND public = true`, so the condition was redundant
+      // anyway. `mode` is our own `custom_data` key and does filter correctly.
+      const lobbies = await this.net.list({ mode: { $eq: "sunbird-race" } }, { createdAt: -1 }, 20);
       return sortRooms(normalizeRooms(lobbies.map(lobbyToRoomInput)));
     } catch {
       return [];
@@ -1034,7 +1241,9 @@ export async function listPublicLobbies(
         });
       });
     }
-    const entries = await net.list({ public: true }, { createdAt: -1 }, 20);
+    // See `listPublic` — `{public:true}` is not a legal filter key here and made
+  // the browser return nothing.
+  const entries = await net.list({ mode: { $eq: "sunbird-race" } }, { createdAt: -1 }, 20);
     return sortRooms(normalizeRooms(entries.map(lobbyToRoomInput)));
   } catch (err) {
     // Drop the connection so the next attempt starts clean instead of reusing

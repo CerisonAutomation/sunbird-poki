@@ -450,6 +450,12 @@ export class RealtimeClient implements NetTransport {
   }
 
   private dispatch(msg: ServerMsg): void {
+    // Every `msg.id` below is used as a Map key and emitted into a
+    // `RemoteSnapshot[]` typed `id: string`. Only `welcome` checked it, so a
+    // hostile relay could key a track with an object and push a type-confused
+    // id straight into the renderer's snapshot list. Validate once, here, for
+    // every message that carries one.
+    if ("id" in msg && typeof (msg as { id?: unknown }).id !== "string") return;
     switch (msg.type) {
       case "welcome":
         if (typeof msg.id !== "string") break;

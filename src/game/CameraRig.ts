@@ -270,7 +270,9 @@ export class CameraRig {
     // best moment of a run.
     //
     // One pre-filter here fixes all of them at once, and costs two lerps.
-    const kVel = 1 - Math.pow(0.0006, dt);
+    // 25 ms time constant — fast enough to feel snappy on a launch, slow enough
+    // to prevent the single-frame velocity spike from lurching the camera.
+    const kVel = 1 - Math.exp(-dt / 0.025);
     this.smoothVx += (bird.vx - this.smoothVx) * kVel;
     this.smoothVy += (bird.vy - this.smoothVy) * kVel;
     const svx = this.smoothVx;

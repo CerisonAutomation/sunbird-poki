@@ -583,7 +583,13 @@ export class Bird {
     // A time constant turns the same offset into a weight that rises and falls
     // through the same filter as the rest of the rotation, so the nose leads the
     // input instead of trailing it by two-tenths of a second.
-    this.divePitch += ((diving ? -0.12 : 0) - this.divePitch) * (1 - Math.pow(0.0006, dt));
+    // Ramp INTO the dive slowly (50 ms τ) so the nose leads the input rather
+    // than lagging two ticks. Snap OUT fast (20 ms τ) so the release reads
+    // immediately — the player should see the nose lift the frame they let go.
+    const kDive = diving
+      ? 1 - Math.exp(-dt / 0.05)
+      : 1 - Math.exp(-dt / 0.02);
+    this.divePitch += ((diving ? -0.12 : 0) - this.divePitch) * kDive;
     const targetAngle = this.grounded
       ? Math.atan(terrain.slopeAt(this.x))
       : clamp(Math.atan2(this.vy, Math.max(6, this.vx)), -1.15, 0.95) + this.divePitch;

@@ -1519,7 +1519,7 @@ export class HUD {
         if (lead && (!bl || rows.length < 2)) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
-          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
 
         // Career rung: only when no beat row and there's a next rank to chase
@@ -3018,10 +3018,10 @@ function renderAtlas(s: HudSnapshot): string {
         .map(
           (a) => `<div class="atlas-card ${a.reached ? "reached" : ""}" style="--c:${a.color}">
             <div class="atlas-num">Island ${a.island + 1}</div>
-            <div class="atlas-emoji">${a.reached ? a.emoji : "❔"}</div>
+            <div class="atlas-emoji">${a.reached ? menuIconSm(a.emoji) : menuIconSm("question")}</div>
             <div class="atlas-name">${a.reached ? a.name : "Unknown shores"}</div>
             <div class="atlas-tag">${a.reached ? a.tagline : "Reach it to chart it"}</div>
-            ${a.reached && a.hazard !== "none" ? `<div class="atlas-hazard">${a.hazard === "gust" ? "🌬 headwinds" : "🌩 ash storms"}</div>` : ""}
+            ${a.reached && a.hazard !== "none" ? `<div class="atlas-hazard">${a.hazard === "gust" ? `${menuIconSm("cloud")} headwinds` : `${menuIconSm("lightning")} ash storms`}</div>` : ""}
           </div>`,
         )
         .join("")}
@@ -4286,7 +4286,7 @@ function renderGameOver(s: HudSnapshot): string {
     ${s.challengeOutcome ? `<div class="reward-strip ${s.challengeOutcome.includes("missed") ? "nest" : ""}">${escapeHtml(s.challengeOutcome)}</div>` : ""}
     ${duelStrip}
     ${raceStrip}
-    <div class="reached-strip">Reached <b>${s.biomeEmoji} ${s.biomeName}</b> · Island ${s.island + 1}</div>
+    <div class="reached-strip">Reached <b>${menuIconSm(s.biomeEmoji)} ${s.biomeName}</b> · Island ${s.island + 1}</div>
 
     ${clipboardShare}
     ${s.expShareFirst

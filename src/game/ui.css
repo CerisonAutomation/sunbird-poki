@@ -1458,6 +1458,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 28px;
   margin: 2px 0;
 }
+.atlas-emoji .icon-sm { width: 28px; height: 28px; display: block; margin: 0 auto; }
 
 .atlas-name {
   font-weight: 700;

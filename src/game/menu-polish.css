@@ -269,7 +269,7 @@
    column 1 empty and stacked the icon above the label in two rows. Pin both
    cells explicitly instead of fighting the cascade. */
 .quick-rail-btn { grid-template-columns: auto minmax(0, 1fr); grid-auto-rows: min-content; }
-.quick-rail-art { grid-column: 1; grid-row: 1; }
+.quick-rail-btn .quick-rail-art { grid-column: 1; grid-row: 1; }
 /* The icon must be sized. `menuIcon()` emits an SVG with no width/height and
    `.menu-illustration` is 100%/100%, so against an auto-height row it resolved
    to 1:1 at the full track width — a 320px phone got a ~75px icon and a button
@@ -3907,6 +3907,12 @@ button.upsell:active,
     0 1px 0 var(--halo-on-sky),
     0 1px 2px rgba(24, 16, 40, 0.78) !important;
   background: none !important;
+}
+.stat-value.coin .coin-glyph {
+  color: var(--amber);
+}
+.gs u .coin-glyph {
+  color: var(--coin-gold);
 }
 .stat-label {
   font: 700 10px/1.4 var(--body) !important;

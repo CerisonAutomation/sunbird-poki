@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { Telemetry, coarseEvent } from "../Telemetry";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Telemetry, coarseEvent, endpointUrl } from "../Telemetry";
+import { sanitizeMeasure } from "../../sdk/poki-canon";
 import { BIG_LAUNCH_QUIPS, SLEEP_QUIPS, quip } from "../Surprises";
 
 describe("telemetry", () => {
@@ -81,5 +82,111 @@ describe("coarseEvent: what is allowed to leave the device", () => {
     expect(coarseEvent("funnel_stage", { stage: "boot", step: -4 }).si).toBe(0);
     expect(coarseEvent("funnel_stage", { stage: "boot", step: Number.NaN }).si).toBeUndefined();
     expect(coarseEvent("funnel_stage", { stage: "boot", step: 2.4 }).si).toBe(2);
+  });
+});
+
+/**
+ * On a Poki build the engagement funnel used to go nowhere at all.
+ *
+ * `endpointUrl()` correctly returns "" for portal builds (no external egress
+ * is allowed), which meant every event — including `funnel_summary`, the
+ * drop-off report the code calls "the number that makes this actionable" —
+ * was written into a local ring buffer and never left the device. `measure()`
+ * is the channel the portal itself provides, so the curated set rides that
+ * instead.
+ */
+describe("portal egress", () => {
+  // `POKI_BUILD` is read at module scope (like `TARGET` in sdk/platform.ts) so
+  // Vite can fold it. That means it has to be flipped the way the rest of the
+  // suite does it: reset the module registry, stub the env, then re-import.
+  async function pokiTelemetry() {
+    vi.resetModules();
+    vi.stubEnv("VITE_PORTAL_TARGET", "poki");
+    return (await import("../Telemetry")).Telemetry;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
+  });
+
+  it("sends nothing to a backend on a portal build", () => {
+    // The compliance rule stands: portal builds must not post to our own sink.
+    // Checked against the statically-imported binding — the point is that the
+    // endpoint stays empty, which does not depend on the measure path.
+    expect(endpointUrl()).toBe("");
+  });
+
+  it("routes the curated engagement set through Poki's measure()", async () => {
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    const Telemetry = await pokiTelemetry();
+    const t = new Telemetry();
+    t.track("funnel_summary", { stage: "first_death" });
+    t.track("portal_break_request", { portal: "poki", placement: "run_start" });
+    expect(calls).toContain("player|first_death|complete");
+    // The placement is the discriminator — a name-echo fallback made all four
+    // break placements indistinguishable on the dashboard.
+    expect(calls).toContain("button|run_start|visible");
+  });
+
+  it("never emits a value the live loader would reject", async () => {
+    const calls: string[][] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push([c, w, a]),
+    };
+    const Telemetry = await pokiTelemetry();
+    // A stage built from a URL or a player name can carry anything at all.
+    new Telemetry().track("funnel_stage", { stage: "h\u00e9llo, world!/^" });
+    for (const [c, w, a] of calls) {
+      expect(sanitizeMeasure(c, w, a), `emitted ${JSON.stringify([c, w, a])}`).not.toBeNull();
+    }
+  });
+
+  it("stops after its budget instead of flooding the dashboard", async () => {
+    let count = 0;
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = { measure: () => void count++ };
+    const Telemetry = await pokiTelemetry();
+    const t = new Telemetry();
+    for (let i = 0; i < 500; i++) t.track("run_end", { stage: `s${i}` });
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThanOrEqual(40);
+  });
+
+  it("files a completed run as a win, not a loss", async () => {
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    const Telemetry = await pokiTelemetry();
+    const t = new Telemetry();
+    t.track("run_end", { mode: "daytrip", outcome: "complete" });
+    t.track("run_end", { mode: "daytrip", outcome: "fail" });
+    expect(calls).toContain("mode|daytrip|complete");
+    expect(calls).toContain("mode|daytrip|fail");
+  });
+
+  it("never double-reports the funnel", async () => {
+    // `Game.markFunnel` already sends the funnel straight to Poki. This map
+    // must not list `funnel_stage` as well, or every milestone goes twice.
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    const Telemetry = await pokiTelemetry();
+    new Telemetry().track("funnel_stage", { stage: "first_flight" });
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves events outside the curated set alone", async () => {
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    const Telemetry = await pokiTelemetry();
+    new Telemetry().track("some_debug_event", { stage: "x" });
+    expect(calls).toEqual([]);
   });
 });

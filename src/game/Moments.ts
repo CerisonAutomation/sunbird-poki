@@ -473,7 +473,15 @@ export function clipFromMoment(kind: MomentKind): ClipKind | null {
   }
 }
 
-/** HappyTime intensity — Poki asks we use this sparingly. Crashes stay silent. */
+/**
+ * HappyTime intensity for a clip, 0…1. Crashes stay silent.
+ *
+ * NOT YET WIRED. `PlatformAdapter.happyTime(intensity?)` now accepts the
+ * value (it used to declare `happyTime(): void`, which made every call site
+ * fire at the default 1.0), but no call site passes one yet — the celebration
+ * sites all call `happyTime()` bare. Wire this in when a celebration is
+ * refactored; it is the missing half of that change.
+ */
 export function clipHappyTime(kind: ClipKind): number {
   switch (kind) {
     case "last_second":

@@ -69,22 +69,18 @@
 .menu-hero .hero-kicker { color: #8d4f2c; font-size: 10px; letter-spacing: .18em; }
 .menu-hero h1 { font-size: clamp(36px, 10vw, 48px); line-height: 1.05; margin: 4px 0 8px; }
 .menu-hero .hero-sub { font-size: 12px; max-width: 290px; margin: 0 auto; line-height: 1.5; }
-/* Eight .menu-hero .hero-play rules used to sit here. .hero-play is not emitted
-   in any markup — the launch grid it describes was replaced by the destination
-   grid and quick actions below — so every one of them was inert. */
-.menu-hero .menu-quick-actions { gap: 10px; margin: 0 0 12px; }
+/* Eight .menu-hero .hero-play rules used to sit here, followed by a
+   `.menu-quick-actions` container and a `.home-more` details block. Neither
+   class is emitted by any renderer — the container is superseded by
+   `.home-quick-rail` (which reuses `.quick-action` itself, and the rules for
+   that class below are still live) and the details block went with the
+   "Explore" drawer. All removed rather than left inert. */
 .menu-hero .quick-action { min-height: 48px; padding: 8px 12px; background: #fffaf2; border: 1px solid #dfcfbc; box-shadow: none; }
 .menu-hero .quick-action b { font-size: 11px; letter-spacing: .06em; }
 .menu-hero .quick-action span { font-size: 11px; }
-.menu-hero .home-more { margin: 12px 0 0; background: #fffaf2; border-color: #dfcfbc; }
-.menu-hero .home-more > summary { display: flex; flex-wrap: wrap; gap: 2px 8px; padding: 12px; min-height: 52px; font-size: 13px; }
-.menu-hero .home-more > summary span { margin-left: 0; font-size: 11px; font-weight: 400; color: var(--clay); }
-.menu-hero .home-more[open] > summary span { visibility: visible; }
 .menu-hero .daily-strip { min-height: 62px; margin: 0; border: 1px solid #e5d2aa; }
 .menu-hero .hero-meta { flex-wrap: wrap; }
 .menu-hero .hangar-nav { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.menu-hero .home-more .mode-cards { grid-template-columns: minmax(0,1fr); }
-.menu-hero .home-more .mode-card-main { min-height: 80px; }
 /* Settings: meaningful state, continuous volume, explicit choices.
    The canonical .setting-row shape lives in the FINAL PASS block near the end
    of this file (flat flex rows); here only the spacing that block keeps. */
@@ -180,7 +176,6 @@
   .menu-hero .hero { margin: 0; }
   .menu-hero h1 { font-size: 30px; margin: 0 0 4px; }
   .menu-hero .hero-sub { display: none; }
-  .menu-hero .menu-quick-actions { margin-bottom: 8px; }
 }
 .overlay .room-ctl .seg button { min-width: 44px; padding-inline: 8px; }
 .overlay .trophy-collection > summary { text-transform: capitalize; }
@@ -249,6 +244,64 @@
 @media(max-width:400px) { .race-section { padding:14px; } .race-intro { gap:10px; } }
 .race-section .room-now .mini-btn { background:#f0e5d4; color:#51473e; border:1px solid #d9c8ae; box-shadow:none; }
 
+/* Quick rail — four destinations directly under the main button.
+   The buttons reuse `.quick-action` from index.css, which already carries the
+   card's 44px touch target, focus ring and pressed state. This block is LAYOUT
+   ONLY and adds no colour literals: the colour-sprawl ratchet
+   (css-tokens.test.ts) counts hex declarations, and a rail that re-declares the
+   palette it sits inside is how that number creeps up. */
+.home-quick-rail {
+  display: grid;
+  /* Four across needs 4x72 + 3x6 = 306px of CARD width, and the card only has
+     256px at a 320px viewport (320 - 32 overlay - 32 card padding). auto-fit
+     therefore rendered 3 + an orphan on every phone under 384px — iPhone SE,
+     12/13 mini, most sub-390px Androids. A 2x2 block is honest at any width
+     and never leaves a ragged row; the three-up tier below only applies where
+     there is genuinely room for four. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-inline: 0;
+}
+.home-quick-rail .quick-action { min-width: 0; }
+/* The base `.quick-action span { grid-column: 2 }` is a DESCENDANT selector, so
+   it also claimed the icon span and pushed it into column 2 — which left
+   column 1 empty and stacked the icon above the label in two rows. Pin both
+   cells explicitly instead of fighting the cascade. */
+.quick-rail-btn { grid-template-columns: auto minmax(0, 1fr); grid-auto-rows: min-content; }
+.quick-rail-art { grid-column: 1; grid-row: 1; }
+/* The icon must be sized. `menuIcon()` emits an SVG with no width/height and
+   `.menu-illustration` is 100%/100%, so against an auto-height row it resolved
+   to 1:1 at the full track width — a 320px phone got a ~75px icon and a button
+   taller than the "Fly now" CTA it is supposed to sit under. */
+.quick-rail-art { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; }
+.quick-rail-art svg { width: 100%; height: 100%; display: block; }
+.quick-rail-copy { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Narrowest shipped phone: stack the icon over the label rather than
+   truncating the only word the player reads. */
+@media (max-width: 359px) {
+  .home-quick-rail { gap: 6px; }
+  .quick-rail-btn { justify-items: center; text-align: center; }
+  .quick-rail-copy { white-space: normal; overflow: visible; }
+}
+
+/* Landscape phones have almost no vertical room; the rail sits directly under
+   the hero, so it is the first thing allowed to compress. */
+@media (max-height: 500px) and (min-width: 550px) {
+  .home-quick-rail { margin-bottom: 10px; gap: 6px; }
+  /* 44px is a floor, not a default — landscape is exactly where a short
+     button is most likely to be dropped below it. Compress the padding
+     instead and let the rail margin absorb the space. */
+  .home-quick-rail .quick-action { padding: 5px 7px; }
+}
+
+/* A completed walkthrough step dims and strikes through. Opacity rather than a
+   second palette — "done" is a state, not a colour. */
+.onboarding-route-step.done { opacity: 0.6; cursor: default; }
+.onboarding-route-step.done strong { text-decoration: line-through; text-decoration-thickness: 1px; }
+.onboarding-route-step.done i { visibility: hidden; }
+
 /* Visible home navigation replaces the catch-all Explore dropdown. */
 .menu-hero { container-type: inline-size; }
 .home-launch { width:100%; margin:8px 0 16px; min-height:64px; }
@@ -285,7 +338,15 @@
    own `justify-content: space-between` — without `margin-left: auto` a third
    flex child would land in the middle, between the kicker and the subtitle. */
 .onboarding-route-head .onboarding-dismiss { margin-left:auto; flex-shrink:0; padding:4px 9px; font-size:12px; line-height:1; }
-.onboarding-route-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+/* An ordered list now — the step numbers are an actual sequence, not decoration,
+   so the markup says so. List semantics are reset visually; the counter is
+   rendered in the markup where a screen reader reads it. */
+.onboarding-route-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px; margin:0; padding:0; list-style:none; }
+.onboarding-route-steps > li { min-width:0; display:flex; }
+/* A completed step keeps its place but stops asking. Dimmed, struck through,
+   and marked aria-disabled so assistive tech reads it as done rather than as a
+   button that happens to look faded. */
+
 .onboarding-route-step { display:grid; grid-template-columns:auto 1fr; gap:7px; min-width:0; min-height:70px; padding:9px; border:1px solid #ead9ae; border-radius:12px; background:#fffdf5; color:#4a3825; text-align:left; cursor:pointer; }
 .onboarding-route-step.active { border-color:#d99c35; background:#fff0bd; box-shadow:inset 0 2px 0 #fff8d7; }
 .onboarding-route-step > b { color:#b77b1f; font:800 11px var(--body); }

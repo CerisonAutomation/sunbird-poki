@@ -17,7 +17,7 @@
  *
  * Portal builds are covered by `src/sdk/__tests__/poki-breaks.test.ts`: Poki and
  * CrazyGames supply real `commercialBreak` / `rewardedBreak` calls and own ad
- * frequency (REQ-20), so they must never simulate one.
+ * frequency (MON-13), so they must never simulate one.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -167,18 +167,38 @@ textarea {
   background: radial-gradient(ellipse at center, transparent 52%, rgba(18, 10, 28, 0.28) 100%);
 }
 
-/* Portal ad-banner host (CrazyGames 320x50). Sits above the game canvas
-   but below toasts/modals, and stays clickable — a banner that can't be
-   tapped can't pay. */
+/* Portal ad-banner host.
+   Sized from the configured Poki format (VITE_POKI_DISPLAY_AD_SIZE, e.g.
+   "728x90") rather than a hard-pinned 320x50: the SDK builds its inner slot
+   from that exact string, so a fixed host either clips the creative or leaves
+   a band of dead space. The fallbacks only apply to a build with no format
+   configured, which renders no host at all. */
 .portal-banner {
   position: fixed;
   left: 12px;
   bottom: 12px;
-  width: 320px;
+  width: var(--portal-banner-w, 320px);
   max-width: calc(100vw - 24px);
-  height: 50px;
+  height: var(--portal-banner-h, 50px);
   z-index: 30;
   pointer-events: auto;
+  /* The SDK's inner slot is sized in px and can exceed the host while an
+     unfilled request is in flight; clip it rather than let it bleed. */
+  overflow: hidden;
+}
+
+/* No fill for this slot.
+   `displayAd`'s onDisplayRendered(isEmpty) reports "nothing to show", and the
+   adapter toggles this class so the host collapses instead of leaving a grey
+   rectangle the player reads as a broken game. The comment in sdk/poki.ts
+   describing that collapse was true only once this rule existed — before it,
+   `.ad-empty` was set on the element and matched nothing at all. */
+.portal-banner.ad-empty {
+  width: 0;
+  height: 0;
+  margin: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .game-canvas {

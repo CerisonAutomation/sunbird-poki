@@ -7,7 +7,7 @@ import { flockLoadingMark } from "./FlockLoading";
 // out as one scroll, so there is no tab strip to drive and nothing else to
 // import.
 import { seasonReward } from "./pvp";
-import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, tournamentCountdownCard, type MenuDestination } from "./MenuCatalog";
+import { PLAY_DESTINATIONS, PROGRESS_DESTINATIONS, QUICK_ACTIONS, destinationByKey, tournamentCountdownCard, type MenuDestination } from "./MenuCatalog";
 import { shouldShowDailyBanner } from "./Engagement";
 import { OverlayNavigation } from "./OverlayNavigation";
 import { MenuContinuity } from "./MenuContinuity";
@@ -246,6 +246,9 @@ export type HudSnapshot = {
   boosts: BoostView[];
   shopTrails: ShopTrailView[];
   settings: Settings;
+  /** First-visit milestones for the home walkthrough. Stored, not derived:
+   *  "did you open the shop" has no counter that means only that. */
+  firstSteps: { shop: boolean; pve: boolean; pvp: boolean; settings: boolean };
   goldPrice: string;
   starterPrice: string;
   starterFeatures: string[];
@@ -1116,7 +1119,10 @@ export class HUD {
     this.dismissCopy();
     const dialog = document.createElement("div");
     dialog.className = "overlay copy-dialog";
-    dialog.innerHTML = '<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>';
+    // Backticks, not single quotes. With `'…'` the ${t(...)} expressions were
+    // emitted as literal text, so the dialog heading literally read
+    // `${t("hud.ui.CManually", …)}` in every locale.
+    dialog.innerHTML = `<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>`;
     const field = dialog.querySelector("textarea")!;
     field.value = text; // never inject codes/URLs as markup
     this.root.appendChild(dialog);
@@ -3122,7 +3128,12 @@ function renderNameEntry(s: HudSnapshot): string {
  */
 function homeBoardStrip(s: HudSnapshot): string {
   const rows = s.homeBoard.slice(0, 3);
-  if (!rows.length) return "";
+  // Render even with no rows. This strip is now the home menu's ONLY route to
+  // the leaderboards (the tile moved to SECONDARY_DESTINATIONS), and `homeBoard`
+  // is empty whenever the board cache is cold — first boot, a failed fetch, an
+  // offline launch. Returning "" there left the leaderboards unreachable from
+  // the menu at all, on exactly the boots where a player is most likely to go
+  // looking. An empty state that still opens the page beats no control.
   // Rank badges are drawn, not emoji: medal glyphs render as tofu boxes on
   // font sets without the emoji face (several platforms ship none by default),
   // and a row of empty squares under "Top pilots" reads as broken.
@@ -3139,15 +3150,17 @@ function homeBoardStrip(s: HudSnapshot): string {
         <span class="hb-title">🏆 Top pilots</span>
         <span class="hb-go">All boards ›</span>
       </span>
-      ${rows
-        .map(
-          (row, i) => `<span class="hb-row${row.you ? " you" : ""}">
+      ${rows.length
+        ? rows
+            .map(
+              (row, i) => `<span class="hb-row${row.you ? " you" : ""}">
             <span class="hb-medal">${medals[i]}</span>
             <span class="hb-name">${escapeHtml(row.name)}</span>
             <span class="hb-val">${row.value}</span>
           </span>`,
-        )
-        .join("")}
+            )
+            .join("")
+        : `<span class="hb-empty">${escapeHtml(t("hud.boardStrip.empty", undefined, "No runs posted yet — set the first mark"))}</span>`}
     </button>`;
 }
 
@@ -3177,55 +3190,125 @@ function renderDailyRitualBanner(s: HudSnapshot): string {
  * soonest-ending of this week's two cups. Tapping it opens Tournaments.
  */
 function renderTournamentCountdown(s: HudSnapshot): string {
+  // The countdown card is the home screen's ONLY route to Tournaments (the
+  // tile moved to SECONDARY_DESTINATIONS), and it used to return "" whenever
+  // `tournamentCountdownCard` had nothing to say — so tournaments vanished
+  // from the menu entirely on exactly the boots where the cups had not loaded
+  // yet. With no card there is still a tournament to enter, so the strip
+  // renders in a plain state rather than withdrawing the route.
   const card = tournamentCountdownCard(s.cups);
-  if (!card) return "";
   // Reuses the already-styled `event-strip` card (weekly-event strip on the
   // progress screen) rather than inventing unstyled markup — same visual
   // language for "a clock is running on this", different destination.
   return `<button class="event-strip" data-ui data-action="open-cups" aria-label="${t("hud.renderMain.VTournaments", undefined, "View tournaments")}">
     <span class="ds-icon">🏆</span>
-    <span class="ds-body">${escapeHtml(card.text)}</span>
+    <span class="ds-body">${escapeHtml(card?.text ?? t("hud.tournaments.idle", undefined, "Weekly score challenges"))}</span>
     <span class="ds-go">›</span>
   </button>`;
 }
 
 /**
- * The three things a new pilot is shown, under the main "Fly now" button.
+ * The five things a new pilot is shown, under the main "Fly now" button.
  *
  * These used to be "Feel the glide / Choose your bird / Race the flock" — but
  * step 1 was the same action as the button directly above it, so the panel
  * opened by offering the player something they had just been handed, and the
  * two text destinations it taught (racing, the shop) were not the two the game
- * actually needs explained first. It is now the three surfaces a first run has
- * to meet: the rivals, the hangar, and the settings.
+ * actually needs explained first. It is now the five surfaces a first run has
+ * to meet: fly, the hangar, the AI flock, live rivals, and settings — which is
+ * every action in `QUICK_ACTIONS` plus the first flight itself.
  *
  * The steps are honest about WHERE they are: step 1 used to say "Spend the coins
  * you just earned" on a brand-new save, which starts at zero.
  */
-function renderOnboardingRoute(): string {
-  const steps: readonly { n: string; action: string; title: string; sub: string; go: string }[] = [
+function renderOnboardingRoute(s: HudSnapshot): string {
+  // A walkthrough, not a poster. Each step dims and strikes itself through once
+  // it is done, so the panel shrinks in meaning rather than in height as the
+  // player learns the game. Every step is a real destination, and the four rail
+  // destinations (PvP, AI PvP, shop, settings) are the same handlers the rail
+  // fires, so the panel and the rail can never disagree.
+  //
+  // `done` is STORED, not derived, and deliberately so. The first attempt
+  // derived it from `runsPlayed` / `wallet` / `bestDistance` and every one was
+  // wrong: the wallet is a live balance, so a step completed and then spent
+  // un-completed itself; `bestDistance > 0` marked "Meet your rivals" done
+  // after one solo flight. "Did you open the shop" has no counter that means
+  // only that, so it is a first-visit milestone in the save — monotonic, so it
+  // cannot revert, and readable on a device that never showed this panel.
+  const steps: readonly { n: string; action: string; title: string; sub: string; go: string; done: boolean }[] = [
     {
       n: "01", action: "pvp-practice", go: t("onboarding.step1Action", undefined, "Fly ›"),
       title: t("onboarding.step1Title", undefined, "Fly your first run"),
       sub: t("onboarding.step1Sub", undefined, "One input · the goal is on the strip"),
+      done: s.runsPlayed >= 1,
     },
     {
       n: "02", action: "open-shop", go: t("onboarding.step2Action", undefined, "Shop ›"),
       title: t("onboarding.step2Title", undefined, "Choose your bird"),
       sub: t("onboarding.step2Sub", undefined, "Birds, trails and boosts for your next flight"),
+      // `seenShop`, not `wallet > 0`. The wallet is a live balance: a player
+      // who completed this step and then spent their coins saw it revert to
+      // active. A milestone that un-completes itself is worse than none.
+      done: s.firstSteps.shop,
     },
     {
-      n: "03", action: "open-live", go: t("onboarding.step3Action", undefined, "Race ›"),
-      title: t("onboarding.step3Title", undefined, "Meet your rivals"),
-      sub: t("onboarding.step3Sub", undefined, "Live pilots or the offline AI flock"),
+      n: "03", action: "open-practice", go: t("onboarding.step3Action", undefined, "AI race ›"),
+      title: t("onboarding.step3Title", undefined, "Race the flock"),
+      sub: t("onboarding.step3Sub", undefined, "A real opponent is always there, even offline"),
+      // `seenPve` — actually opening AI PvP. `runsPlayed >= 2` completed this
+      // step for anyone who flew twice, including players who never touched it.
+      done: s.firstSteps.pve,
+    },
+    {
+      n: "04", action: "open-live", go: t("onboarding.step4Action", undefined, "Race ›"),
+      title: t("onboarding.step4Title", undefined, "Meet your rivals"),
+      sub: t("onboarding.step4Sub", undefined, "Live pilots, or a private room for a friend"),
+      // `seenPvp` — actually opening the live lobby. `bestDistance > 0` was
+      // true after one solo flight, so a solo-only player saw "Meet your
+      // rivals" struck through without ever having tried.
+      done: s.firstSteps.pvp,
+    },
+    {
+      n: "05", action: "open-settings", go: t("onboarding.step5Action", undefined, "Settings ›"),
+      title: t("onboarding.step5Title", undefined, "Make it yours"),
+      sub: t("onboarding.step5Sub", undefined, "Sound, controls and how big the world looks"),
+      done: s.firstSteps.settings,
     },
   ];
+  const nextIndex = steps.findIndex((step) => !step.done);
+  const allDone = nextIndex === -1;
+  const head = allDone
+    ? t("onboarding.allDone", undefined, "You know the ropes")
+    : t("onboarding.startSubtitle", undefined, "five things worth knowing");
   return `<section class="onboarding-route" aria-label="${escapeHtml(t("onboarding.routeLabel", undefined, "Your first flight plan"))}">
-      <div class="onboarding-route-head"><span>✦ ${t("onboarding.startHere", undefined, "START HERE")}</span><small>${t("onboarding.startSubtitle", undefined, "three things worth knowing")}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">✕</button></div>
-      <div class="onboarding-route-steps">
-        ${steps.map((step, i) => `<button class="onboarding-route-step${i === 0 ? " active" : ""}" data-ui data-action="${step.action}"><b>${step.n}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.sub)}</small></span><i>${escapeHtml(step.go)}</i></button>`).join("")}
-      </div>
+      <div class="onboarding-route-head"><span>✦ ${allDone ? escapeHtml(t("onboarding.routeDone", undefined, "FLIGHT PLAN")) : escapeHtml(t("onboarding.startHere", undefined, "START HERE"))}</span><small>${escapeHtml(head)}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">✕</button></div>
+      <ol class="onboarding-route-steps">
+        ${steps.map((step, i) => `<li><button class="onboarding-route-step${step.done ? " done" : ""}${i === nextIndex ? " active" : ""}" data-ui data-action="${step.action}"${step.done ? " disabled" : ""}><b>${step.done ? escapeHtml(t("onboarding.stepDoneMark", undefined, "✓")) : step.n}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.sub)}</small></span><i>${escapeHtml(step.go)}</i></button></li>`).join("")}
+      </ol>
     </section>`;
+}
+
+/**
+ * The rail that sits directly under the main button.
+ *
+ * Four destinations, in one row, one tap below "Fly now" — the two things a
+ * returning player does most (race someone, change something) used to be
+ * scrolled off the bottom of a three-section menu.
+ *
+ * Rendered as real buttons with an explicit aria-label, because the visible
+ * label is the destination's short title ("PvP") and the action it performs is
+ * not obvious from it alone ("Race a real pilot" is). The label is the detail
+ * line, so a screen reader announces the destination and not just the tile.
+ *
+ * `aria-current` is deliberately absent: this is navigation, not a position in
+ * a set, and marking one of four as "current" would imply a state none of them
+ * has.
+ */
+function renderQuickRail(): string {
+  return `<nav class="home-quick-rail" aria-label="${escapeHtml(t("hud.quickRail.label", undefined, "Quick actions"))}">${QUICK_ACTIONS.map(
+    (item) =>
+      `<button class="quick-action quick-rail-btn" data-ui data-action="${item.action}" data-icon="${item.icon}" aria-label="${escapeHtml(item.title)} — ${escapeHtml(item.detail)}"><span class="quick-rail-art" aria-hidden="true">${menuIcon(item.icon)}</span><span class="quick-rail-copy"><b>${escapeHtml(item.title)}</b></span></button>`,
+  ).join("")}</nav>`;
 }
 
 function renderMain(s: HudSnapshot): string {
@@ -3259,9 +3342,10 @@ function renderMain(s: HudSnapshot): string {
     </header>
 
     <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="${t("onboarding.flyNow", undefined, "Fly now")}"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
+    ${renderQuickRail()}
     ${renderDailyRitualBanner(s)}
     ${renderTournamentCountdown(s)}
-    ${s.runsPlayed < 2 && !s.settings.dismissedOnboarding ? renderOnboardingRoute() : ""}
+    ${!s.settings.dismissedOnboarding ? renderOnboardingRoute(s) : ""}
     <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
          they sit under the Play heading as one grid. Standings then close the
          section as a single full-width bar instead of a sixth row of choices:
@@ -3270,8 +3354,6 @@ function renderMain(s: HudSnapshot): string {
     <div class="home-section-title"><span>${t("hud.renderMain.PNow", undefined, "Play now")}</span><small>${t("hud.renderMain.FRACEEXPLORE", undefined, "FLY · RACE · EXPLORE")}</small></div>
     <nav class="destination-grid play-destinations home-hub-grid" aria-label="Play">${menuLinks(playDestinations)}</nav>
     ${homeBoardStrip(s)}
-    <div class="home-section-title"><span>Personalize</span><small>${t("hud.renderMain.BFLOCKSETTINGS", undefined, "BIRD · FLOCK · SETTINGS")}</small></div>
-    <nav class="destination-grid utility-destinations" aria-label="${t("hud.renderProgress.H", undefined, "Your hangar")}">${menuLinks(COLLECTION_DESTINATIONS)}</nav>
     <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="Progress">${menuLinks(progressDestinations)}</nav>
     <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>

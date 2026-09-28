@@ -143,6 +143,8 @@ export class Bird {
   private squashAmt = 1;
   private stretchAmt = 1;
   private wingTuck = 0;
+  /** Smoothed dive pitch offset in radians (0 when not diving). See step(). */
+  private divePitch = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -320,6 +322,7 @@ export class Bird {
     this.squashAmt = 1;
     this.stretchAmt = 1;
     this.wingTuck = 0;
+    this.divePitch = 0;
     this.flapT = 0;
     this.root.rotation.set(0, 0, 0);
     this.lidL.scale.y = 0.08;
@@ -568,9 +571,22 @@ export class Bird {
 
     this.altitude = Math.max(0, this.y - terrain.heightAt(this.x) - BIRD_RADIUS);
 
+    // The dive pitch is a RAMP, not a boolean step.
+    //
+    // `(diving ? -0.12 : 0)` put a hard 7° discontinuity into `targetAngle` the
+    // instant the stick went down and again the instant it came up, and the
+    // 0.003-retention rotation filter then took ~176 ms to absorb each one. Two
+    // visible ticks per dive, on top of the bird already being at full dive
+    // gravity (16 → 96) within a single 8.3 ms physics step — which is why a
+    // flick read as "nothing happened, then everything happened".
+    //
+    // A time constant turns the same offset into a weight that rises and falls
+    // through the same filter as the rest of the rotation, so the nose leads the
+    // input instead of trailing it by two-tenths of a second.
+    this.divePitch += ((diving ? -0.12 : 0) - this.divePitch) * (1 - Math.pow(0.0006, dt));
     const targetAngle = this.grounded
       ? Math.atan(terrain.slopeAt(this.x))
-      : clamp(Math.atan2(this.vy, Math.max(6, this.vx)), -1.15, 0.95) + (diving ? -0.12 : 0);
+      : clamp(Math.atan2(this.vy, Math.max(6, this.vx)), -1.15, 0.95) + this.divePitch;
     // ground: fast snap to slope; air: responsive to velocity direction
     this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.00008 : 0.003, dt));
   }
@@ -622,9 +638,17 @@ export class Bird {
     this.squash.scale.set(this.stretchAmt * speedStretch, this.squashAmt, 1);
     this.squash.rotation.x = Math.sin(time * 3.2) * 0.04;
 
+    // `syncVisual` runs at DISPLAY rate, not the fixed 120 Hz physics rate, so
+    // a bare per-frame lerp constant here is frame-rate dependent: the eyelid
+    // closed ~2.4x faster on a 144 Hz screen than a 60 Hz one. Everything
+    // else in this file that touches a per-frame constant is inside `step`,
+    // which is fixed-step, so these two were the only offenders. Retention
+    // form, so the lid takes the same time in wall-clock terms on any display.
+    const kLidShut = 1 - Math.pow(0.0002, dt);
+    const kLidTrack = 1 - Math.pow(0.00002, dt);
     if (this.asleep) {
-      this.lidL.scale.y = lerp(this.lidL.scale.y, 1, 0.12);
-      this.lidR.scale.y = lerp(this.lidR.scale.y, 1, 0.12);
+      this.lidL.scale.y = lerp(this.lidL.scale.y, 1, kLidShut);
+      this.lidR.scale.y = lerp(this.lidR.scale.y, 1, kLidShut);
     } else {
       this.blink -= dt;
       if (this.blink < 0) this.blink = 2.2 + Math.random() * 2.5;
@@ -632,8 +656,8 @@ export class Bird {
       // Eye squint at high speed — adds personality and reads as intensity.
       const speedSquint = clamp((sp - 60) / 60, 0, 0.35);
       const target = Math.max(closed, speedSquint);
-      this.lidL.scale.y = lerp(this.lidL.scale.y, target, 0.4);
-      this.lidR.scale.y = lerp(this.lidR.scale.y, target, 0.4);
+      this.lidL.scale.y = lerp(this.lidL.scale.y, target, kLidTrack);
+      this.lidR.scale.y = lerp(this.lidR.scale.y, target, kLidTrack);
     }
 
     this.glowPulse += dt * 6;

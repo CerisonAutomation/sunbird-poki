@@ -178,9 +178,15 @@ export function visitKind(firstPlayed: string, today: string): VisitKind {
 /* ============================================================ viral KPIs */
 
 /**
- * Closed set of share / rematch / clip event names. Portal builds send no
- * telemetry of ours; the local bus and Poki `measure()` still need a closed
- * set so a dashboard query cannot be poisoned by a typo.
+ * Closed set of share / rematch / clip event names, so a dashboard query
+ * cannot be poisoned by a typo.
+ *
+ * NOT YET WIRED. The vocabulary, `viralEventProps()` and `viralCoefficient()`
+ * are exported and unit-tested (`funnel.test.ts`) but nothing in the game loop
+ * calls them — the share and rematch actions emit their own events without
+ * routing through this set. That is a known gap, not a finished feature: the
+ * coefficient is not reported anywhere yet. Kept, and kept tested, because the
+ * naming is the contract a dashboard will eventually be written against.
  */
 export const VIRAL_EVENT_NAMES = [
   "clip_moment",

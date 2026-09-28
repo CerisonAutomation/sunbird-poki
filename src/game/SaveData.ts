@@ -161,6 +161,9 @@ export type SaveState = {
   seenPve: boolean;
   seenLeaderboards: boolean;
   seenChallenges: boolean;
+  /** First visit to Settings. Same intent as the flags above, which were
+   *  persisted but never written — see the walkthrough. */
+  seenSettings: boolean;
   /** rolling flow-calibration estimate */
   skill: number;
   skillSamples: number;
@@ -323,6 +326,7 @@ function defaults(): SaveState {
     seenPve: false,
     seenLeaderboards: false,
     seenChallenges: false,
+    seenSettings: false,
     skill: 0.25,
     skillSamples: 0,
     bestAltitude: 0,
@@ -632,6 +636,7 @@ export class SaveData {
         seenShop: Boolean(p.seenShop),
         seenPvp: Boolean(p.seenPvp),
         seenPve: Boolean(p.seenPve),
+        seenSettings: Boolean(p.seenSettings),
         seenLeaderboards: Boolean(p.seenLeaderboards),
         seenChallenges: Boolean(p.seenChallenges),
         skill: p.skill === undefined ? 0.25 : num(p.skill),

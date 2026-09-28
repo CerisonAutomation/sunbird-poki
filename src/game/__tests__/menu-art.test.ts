@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS } from "../MenuCatalog";
+import { PLAY_DESTINATIONS, PROGRESS_DESTINATIONS, QUICK_ACTIONS } from "../MenuCatalog";
 import { menuIcon, menuHorizon } from "../MenuIcons";
 
-const destinations = [...PLAY_DESTINATIONS, ...COLLECTION_DESTINATIONS, ...PROGRESS_DESTINATIONS];
+const destinations = [...QUICK_ACTIONS, ...PLAY_DESTINATIONS, ...PROGRESS_DESTINATIONS];
 describe("canonical illustrated menu", () => {
   it("gives every destination a distinct, local, decorative illustration", () => {
     expect(new Set(destinations.map(d => d.action)).size).toBe(destinations.length);

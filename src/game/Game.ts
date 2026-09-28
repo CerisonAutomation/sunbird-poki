@@ -58,7 +58,6 @@ import { continueOffer, continuePlacementLabel, type ContinueOffer } from "./Con
 import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
 import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews, CAMPAIGN } from "./Campaign";
-import { GameFeel } from "./GameFeel";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
 import { emptySquadState, SquadClient } from "./Squad";
 import { PowerUps } from "./PowerUps";
@@ -76,6 +75,7 @@ import {
   CONTINUE_COST,
   CONTINUE_DAYLIGHT,
   AD_SAFETY_SECONDS,
+  COMMERCIAL_BREAK_MIN_GAP_MS,
   CONTINUE_TIMEOUT,
   DAYLIGHT_ISLAND_REFILL,
   ISLAND_REFILL_CEILING,
@@ -317,7 +317,6 @@ export class Game {
   private timeScale = 1;
   private zenithTimer = 0;
   private hitStopTimer = 0;
-  private readonly feel = new GameFeel();
   private frameEma = 1 / 60;
   /** Wall-clock ms of the last emitted frame_error telemetry (throttled). */
   private frameErrAt = 0;
@@ -395,6 +394,8 @@ export class Game {
   private multiplierClaimed = false;
   /** Rewarded-ad coin claims earned via the shop this hour (see adHourKey). */
   private shopAdClaimed = 0;
+  /** In-flight guard for the shop rewarded break (see multiplyCoinsFromShopAd). */
+  private shopAdBusy = false;
   /** Hour-buckets the shopAdClaimed counter; resets when the wall-clock hour rolls. */
   private adHourKey = Math.floor(Date.now() / 3_600_000);
   private runClouds = 0;
@@ -432,6 +433,11 @@ export class Game {
    * player still cannot skip an ad; they simply cannot be imprisoned by one.
    */
   private adWallClock = 0;
+  /** When a commercial break was last REQUESTED (not necessarily served).
+   *  Gate for the run-start break; see `maybeBreakOnRunStart`. */
+  private lastCommercialBreakAt = 0;
+  /** Guards against two overlapping break requests. */
+  private portalBreakPending = false;
   private preAdState: GameState | null = null;
   private adReason: AdReason = "interstitial";
   private skipInterstitialOnce = false;
@@ -876,6 +882,13 @@ export class Game {
     canvas.addEventListener("webglcontextrestored", this.onContextRestored, false);
 
     this.hud = new HUD(host);
+    // "boot" is the one stage with no in-loop trigger: it is where the player
+    // was when the game opened, and nothing in the loop "happens" at boot. It
+    // was never marked, so `Funnel.path()` omitted it and `progress()` capped
+    // at 7/8 — every completion percentage the report printed was low by the
+    // same amount, and a player who did everything still read as stalled.
+    // `mark()` dedupes, so calling it again later costs nothing.
+    this.markFunnel("boot");
     this.input = new Input(host, () => {
       void this.audio.resume();
       this.markFunnel("first_input");
@@ -1280,6 +1293,10 @@ export class Game {
     this.detachPageScrollGuards = null;
     if (this.disposed) return;
     this.disposed = true;
+    // Release the portal display-ad slot. The page never unmounts the banner
+    // host and `destroyAd` is a real member of the shipped core, so without
+    // this the only way to release it was a reload. No-op when nothing is up.
+    try { this.platform?.destroyBanner?.(); } catch { /* best effort */ }
     this.watchdog.stop();
     cancelAnimationFrame(this.raf);
     this.resizeObs.disconnect();
@@ -1384,8 +1401,6 @@ export class Game {
       this.pushHud();
       return;
     }
-    // GameFeel tick — updates trauma shake, fov kick, timescale.
-    this.feel.update(raw);
     if (this.resetArmed) {
       this.resetTimer -= raw;
       if (this.resetTimer <= 0) {
@@ -1446,9 +1461,22 @@ export class Game {
         break;
       case "continue":
         this.acc += raw;
-        while (this.acc >= PHYS_DT) {
-          this.bird.step(PHYS_DT, ASLEEP, this.terrain);
-          this.acc -= PHYS_DT;
+        // Bounded, like the playing loop. This one was bare, so on the 250 ms
+        // frame the dt clamp explicitly allows for a slow phone it ran ~30
+        // physics steps in a single frame — the exact backlog spiral the
+        // playing path is hardened against, on the frame budget where weak
+        // devices can least afford it.
+        {
+          let steps = 0;
+          while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.bird.step(PHYS_DT, ASLEEP, this.terrain);
+            this.acc -= PHYS_DT;
+            steps += 1;
+          }
+          if (this.acc > PHYS_DT * MAX_CATCHUP_STEPS) {
+            this.telemetry.track("sim_backlog_dropped", { seconds: this.acc });
+            this.acc = 0;
+          }
         }
         this.continueTimer -= raw;
         if (this.continueTimer <= 0) this.finishRun();
@@ -1911,7 +1939,13 @@ export class Game {
 
     if (this.bird.inWater && this.shield > 0) {
       this.shield -= 1;
-      this.bird.y = WATER_Y + 1.2;
+      // Clamp rather than assign. The bird sinks to roughly OCEAN_FLOOR + 2, so
+      // `y = WATER_Y + 1.2` was a hard teleport up through the water in one
+      // physics step: a one-frame position jump plus a camera lurch, on the
+      // frame the splash particles are still being drawn from the old spot.
+      // A max() still guarantees the bird is out of the water; it just does not
+      // invent a jump when the bird was barely under.
+      this.bird.y = Math.max(this.bird.y, WATER_Y + 1.2);
       this.bird.vy = 30;
       this.bird.vx = Math.max(this.bird.vx, 34);
       this.bird.inWater = false;
@@ -3036,10 +3070,16 @@ export class Game {
 
     const glow = this.feverOn || this.powers.has("goldenwings") || (this.gameplaySkin.magnetAlways && this.bird.speed() > 30);
     // Render interpolation: draw the bird between the previous and current
-    // physics step so motion stays smooth above 60 Hz. The menu, sleep and
-    // game-over states step the bird directly (or not at all), so they draw
-    // at interp = 1; versus has its own interpolated path in renderVersus().
-    const interp = this.state === "playing" ? clamp(this.acc / PHYS_DT, 0, 1) : 1;
+    // physics step so motion stays smooth above 60 Hz. versus has its own
+    // interpolated path in renderVersus().
+    //
+    // This used to be `interp = 1` for every state except "playing", but the
+    // continue and game-over loops BOTH keep stepping the bird at 120 Hz — so
+    // the exact moment a run ended was the one moment the mesh fell back to
+    // the raw staircase and juddered in ~1-unit steps, and the continue screen
+    // is where the player spends seconds watching a coasting bird. Interpolate
+    // whenever the bird is actually being stepped; only the menu is exempt.
+    const interp = this.state === "menu" ? 1 : clamp(this.acc / PHYS_DT, 0, 1);
     const visX = lerp(this.prevBirdX, this.bird.x, interp);
     const visY = lerp(this.prevBirdY, this.bird.y, interp);
     this.bird.syncVisual(visDt, diving, glow, this.elapsed, this.terrain, visX, visY);
@@ -3056,7 +3096,19 @@ export class Game {
     // Attract framing in the menu only: the demo bird leads into the open
     // margin beside the card. Every other state keeps gameplay framing.
     const attract = this.state === "menu" && !this.versus;
-    this.camera.update(rawDt, this.bird, playing, this.terrain.landingGround(this.bird.x, this.bird.vx), attract, this.feverOn);
+    // Follow the position the bird is DRAWN at, not the raw 120 Hz sim value —
+    // otherwise the camera trails the sprite it is framing by up to a full
+    // physics step and the bird slides around inside its own screen anchor.
+    this.camera.update(
+      rawDt,
+      this.bird,
+      playing,
+      this.terrain.landingGround(this.bird.x, this.bird.vx),
+      attract,
+      this.feverOn,
+      visX,
+      visY,
+    );
     // Tell the bird how far away the camera settled, so it can compensate for
     // the altitude dolly and stay legible. Must follow camera.update().
     this.bird.setViewDistance(this.camera.viewDistance);
@@ -3180,17 +3232,69 @@ export class Game {
    * card — goes through this one function, so the target a player is shown
    * is always the exact target their run is checked against.
    */
+  /**
+   * Offer a commercial break when a run starts, if the portal can serve one.
+   *
+   * Fire-and-forget on purpose: the run begins immediately and the ad, if it
+   * comes, arrives over the top. Awaiting here would make every launch after
+   * the first feel like a loading screen.
+   *
+   * The pacing guard is not a politeness gesture. The shipped core's ad timing
+   * is `timeBetweenAds: 120000` and `startAdsAfter: 120000` with
+   * `preroll: false`, so a request inside those windows is refused and resolves
+   * empty. Asking anyway would cost the player a beat of their run for nothing;
+   * asking inside the real window is an opportunity the portal can actually
+   * honour.
+   *
+   * The FIRST run of a session is skipped, because the core's `startAdsAfter`
+   * refuses any break before gameplayStart has been running. `lastCommercial-
+   * BreakAt` starts at 0, and `Date.now()` is an epoch value, so a plain
+   * `now - last < GAP` test would NOT skip it — it has to be an explicit check.
+   */
+  private maybeBreakOnRunStart(): void {
+    const platform = this.platform;
+    if (!this.adsLive() || !platform || platform.name === "none") return;
+    if (this.portalBreakPending) return;
+    const now = Date.now();
+    // Explicit first-run skip (see above). Also the "no break while another is
+    // in flight" gate for the pause path, which shares this flag.
+    if (this.lastCommercialBreakAt === 0) {
+      this.lastCommercialBreakAt = now;
+      return;
+    }
+    if (now - this.lastCommercialBreakAt < COMMERCIAL_BREAK_MIN_GAP_MS) return;
+
+    this.portalBreakPending = true;
+    this.lastCommercialBreakAt = now;
+    this.telemetry.track("portal_break_request", { portal: platform.name, placement: "run_start" });
+    // No `endPortalAd()` here on purpose. This call never begins a break — no
+    // `beginPortalAd`, no `setState("ad")` — so closing an ad that never opened
+    // would unmute and re-enable input underneath whatever real ad is up
+    // (a shop or continue rewarded break), which is exactly the unbalanced
+    // onAdOpened/onAdClosed pairing `poki-breaks.test.ts` exists to prevent.
+    // The adapter's own balanced onAdClosed covers a break that did open.
+    void platform
+      .commercialBreak()
+      .catch(() => undefined)
+      .finally(() => {
+        this.portalBreakPending = false;
+      });
+  }
+
   private todaysDaily(): DailyChallenge {
     return dailyChallenge(this.today, this.save.state.challenges.dailyChallengeFailures ?? 0);
   }
 
   private startRun(opts?: RunOptions): void {
-    // Poki, "PokiSDK: HTML5" step 4: "we recommend calling commercialBreak()
-    // before every gameplayStart(), whenever the player has shown intent to
-    // continue playing." Every run start in the game funnels through here, so
-    // the rule lives here rather than at the thirteen call sites that used to
-    // skip it — only restarts ever asked for a break, so a player who kept
-    // launching runs from the menu was never offered one at all.
+    // Poki, "PokiSDK: HTML5" step 4 recommends a commercialBreak() before every
+    // gameplayStart() when the player has shown intent to keep playing. That
+    // call now lives in `maybeBreakOnRunStart()`.
+    //
+    // It used to be claimed to be here and was not: the only commercialBreak()
+    // in the game sat in `resumeFromPause`, so a player who never paused and
+    // simply relaunched from the menu was never offered a break at all — the
+    // exact gap the old comment claimed had been closed.
+    this.maybeBreakOnRunStart();
     this.sessionRuns += 1;
     this.markFunnel("first_flight");
     if (this.funnel.reached("first_death")) this.markFunnel("first_retry");
@@ -3206,7 +3310,7 @@ export class Game {
     // `fail` until the goal is actually reached (death/sun-out/elimination
     // all keep it a fail).
     this.runOutcome = "fail";
-    this.platform?.measure("run", this.modeId, "start");
+    this.platform?.measure("mode", this.modeId, "start");
     // Snapshot the record to beat BEFORE this run writes anything, so the
     // mid-run "new record" moment and the results "NEW BEST" banner compare
     // against the genuinely previous best.
@@ -3577,7 +3681,7 @@ export class Game {
     // reached its goal, `fail` when it ended by death/elimination/sun-out.
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
-    this.platform?.measure("run", this.modeId, this.runOutcome);
+    this.platform?.measure("mode", this.modeId, this.runOutcome);
     const stats = this.runStats();
     // Freeze the number the results card shows: `bird.asleep` only damps
     // velocity (see Bird.update), it doesn't zero it, so the bird keeps
@@ -3591,6 +3695,7 @@ export class Game {
     if (this.newBest) this.platform?.happyTime();
     this.telemetry.track("run_end", {
       mode: this.modeId,
+      outcome: this.runOutcome,
       distance: Math.round(stats.distance),
       newBest: this.newBest,
       moments: JSON.stringify(this.moments.toJSON()),
@@ -3759,7 +3864,7 @@ export class Game {
               // `beatCopy` gives it the dedicated "GAUNTLET CLEARED" key and
               // it outranks everything except a record and a rank-up.
               pushChallenge({ variant: "gauntlet", icon: "trophy", label: g.week, coins: g.clearBonus });
-              this.platform?.measure("event", "gauntlet-clear", "complete");
+              this.platform?.measure("quest", "gauntlet-clear", "complete");
               this.platform?.happyTime();
               if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
               // Gauntlet prize skin: 5 lifetime clears earns the Stormcrow.
@@ -3787,7 +3892,7 @@ export class Game {
         this.challengeOutcome = `${iconGlyph(ev.icon)} ${ev.name} clear ×${counts.week} · +${ev.reward} coins`;
         this.hud.toast(this.challengeOutcome, "gold");
         pushChallenge({ variant: "event", icon: ev.icon, label: ev.name, coins: ev.reward });
-        this.platform?.measure("event", "weekly-clear", "complete");
+        this.platform?.measure("quest", "weekly-clear", "complete");
         this.platform?.happyTime();
         this.audio.eventStinger();
         // Monthly theme trail: 3 event clears inside the month.
@@ -3808,7 +3913,7 @@ export class Game {
     // Mode mastery: every finished run banks progress; level-ups pay coins.
     const mastery = bankMasteryRun(this.save, this.modeId);
     if (mastery) {
-      this.platform?.measure("mastery", this.modeId, "complete");
+      this.platform?.measure("level", this.modeId, "complete");
       this.platform?.happyTime();
       progress.mastery = {
         icon: this.mode.icon,
@@ -3885,6 +3990,8 @@ export class Game {
       this.platform?.measure("button", "results-coin-multiplier", "visible");
     }
     this.telemetry.track("run_end", {
+      mode: this.modeId,
+      outcome: this.runOutcome,
       distance: Math.round(stats.distance),
       score: Math.round(score),
       coins: this.runCoins,
@@ -4374,11 +4481,27 @@ export class Game {
         break;
       }
       case "open-live":
+        // First-visit milestone for the home walkthrough. `seenPvp` was
+        // persisted but never written, so it could never be true; the panel
+        // derived completion from counters that moved for unrelated reasons.
+        if (!this.save.state.seenPvp) {
+          this.save.state.seenPvp = true;
+          this.save.persist();
+          this.telemetry.track("onboarding_pvp_opened");
+        }
         // Human rivals. The Race Lobby is the matchmaking hub: quick match
         // against live pilots, the format/world picker, and the invite paths.
         this.setScreen("live");
         break;
       case "open-practice":
+        // First-visit milestone for the home walkthrough. `seenPve` was
+        // persisted but never written, so it could never be true; the panel
+        // derived completion from counters that moved for unrelated reasons.
+        if (!this.save.state.seenPve) {
+          this.save.state.seenPve = true;
+          this.save.persist();
+          this.telemetry.track("onboarding_pve_opened");
+        }
         // AI rivals. This is the same split the home menu shows — one tap to
         // a human lobby, one tap to the offline flock — so the two need
         // different screens. Pointing both at "challenges" left the AI
@@ -4404,6 +4527,14 @@ export class Game {
         this.telemetry.track("paywall_open", { from: this.state });
         break;
       case "open-settings":
+        // First-visit milestone for the home walkthrough. `seenSettings` was
+        // persisted but never written, so it could never be true; the panel
+        // derived completion from counters that moved for unrelated reasons.
+        if (!this.save.state.seenSettings) {
+          this.save.state.seenSettings = true;
+          this.save.persist();
+          this.telemetry.track("onboarding_settings_opened");
+        }
         this.setScreen("settings");
         break;
       case "open-scores":
@@ -6443,8 +6574,17 @@ export class Game {
     }
   }
 
+  /**
+   * Screen shake. `CameraRig.bump` is the whole implementation.
+   *
+   * This used to drive a second, parallel trauma system (`GameFeel`) that
+   * computed shakeX/shakeY/shakeR, an fov kick and a timescale every frame.
+   * Nothing ever read any of it — only the camera's own bump reached the
+   * player — so the class spent a per-frame sine-sum producing a value that
+   * was discarded, and a second, half-wired feel system sat next to the live
+   * one waiting for someone to wire it the wrong way.
+   */
   private shake(amount: number): void {
-    this.feel.addTrauma(amount * 0.5);
     this.camera.bump(amount);
   }
 
@@ -7211,10 +7351,29 @@ export class Game {
     // Collapse any pause sub-screen (shop/settings/...) before returning to flight.
     this.closePauseScreen();
     const platform = this.platform;
-    if (this.adsLive() && platform && platform.name !== "none") {
+    // The same pacing gate as the run-start break, and for the same reason: a
+    // request the core refuses resolves empty, so entering the "ad" state for
+    // one paints a sponsored-break card the portal cannot deliver and then
+    // collapses it a frame later. Ask only when the core can actually serve.
+    if (
+      this.adsLive() &&
+      platform &&
+      platform.name !== "none" &&
+      !this.portalBreakPending &&
+      Date.now() - this.lastCommercialBreakAt >= COMMERCIAL_BREAK_MIN_GAP_MS
+    ) {
+      this.portalBreakPending = true;
+      this.lastCommercialBreakAt = Date.now();
       this.setState("ad");
       this.telemetry.track("portal_break_request", { portal: platform.name, placement: "resume" });
-      await platform.commercialBreak();
+      try {
+        await platform.commercialBreak();
+      } catch { /* a refused break must never wedge the resume */ }
+      // Clear the shared in-flight flag on EVERY exit, including the disposed
+      // one. It is one-way otherwise: `maybeBreakOnRunStart` bails on it, and
+      // nothing else resets it, so a single pause would silently disable the
+      // run-start break for the rest of the session.
+      this.portalBreakPending = false;
       if (this.disposed) return;
       this.endPortalAd();
     }
@@ -7247,7 +7406,7 @@ export class Game {
       const credited = this.save.addCoins(bonus);
       this.audio.chapterFanfare();
       this.hud.toast(`3× flight bonus — +● ${credited} coins`, "gold");
-      platform.measure("reward", "results-coin-multiplier", "granted");
+      platform.measure("item", "results-coin-multiplier", "granted");
     } else {
       this.hud.toast("No reward this time — the 3× bonus is still on the card", "warn");
     }
@@ -7267,14 +7426,25 @@ export class Game {
       this.hud.toast("Free coin rewards capped for this hour", "info");
       return;
     }
+    // In-flight guard, like the other two rewarded placements. The shop button
+    // dispatches this with `void`, unawaited, so repeated taps used to stack
+    // concurrent rewardedBreak() calls — and unlike the results and continue
+    // cards, nothing debounced the click. Each one mutes audio and disables
+    // input, so a burst also left the game muted until the slowest resolved.
+    if (this.shopAdBusy) return;
+    this.shopAdBusy = true;
     this.telemetry.track("portal_break_request", { portal: platform.name, placement: "shop-free-coins" });
     // Shop free-coin break does not bookend gameplay (no gameplayStop/start),
     // so mute + disable input directly around the break instead of begin/endPortalAd
     // (which would risk a duplicate gameplayStop from the sink).
     this.audio.setAdMuted(true);
     this.input.setEnabled(false);
-    const earned = await platform.rewardedBreak();
+    let earned = false;
+    try {
+      earned = await platform.rewardedBreak();
+    } catch { /* a refused break grants nothing and must not strand the mute */ }
     if (this.disposed) return;
+    this.shopAdBusy = false;
     this.audio.setAdMuted(false);
     this.input.setEnabled(true);
     if (earned) {
@@ -7752,6 +7922,12 @@ export class Game {
     boosts: this.boostViews,
     shopTrails: this.shopTrailViews,
     settings: st.settings,
+    firstSteps: {
+      shop: st.seenShop,
+      pve: st.seenPve,
+      pvp: st.seenPvp,
+      settings: st.seenSettings,
+    },
     goldPrice: GOLD.price,
     starterPrice: STARTER_PACK.price,
     starterFeatures: STARTER_PACK.features,

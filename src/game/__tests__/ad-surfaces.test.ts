@@ -16,7 +16,8 @@ import type { HudSnapshot } from "../HUD";
  *     and a failed break is handled without inventing one.
  *   • MON-19 — the rewarded offer is context-driven, and the copy matches the
  *     interaction event measured for the same placement.
- *   • REQ-31 — no "remove ads" upsell reaches a portal edition.
+ *   • REQ-20 — no "remove ads" upsell reaches a portal edition (REQ-31 is the
+ *     no-chat rule and does not cover this).
  */
 
 /** Any field the renderer asks for resolves to another stub, so a partial
@@ -120,7 +121,7 @@ describe("the break overlay", () => {
     expect((card.querySelector('[data-live="adSkip"]') as HTMLButtonElement).disabled, "the way out is enabled once it is actually done").toBe(false);
   });
 
-  it("never offers to remove breaks on the portal edition (REQ-31)", async () => {
+  it("never offers to remove breaks on the portal edition (REQ-20)", async () => {
     const root = await render({ state: "ad", portalName: "poki", adSkippable: false, adTimer: 0, canRemoveBreaks: true });
     expect(
       root.querySelector('[data-action="ad-gold"]'),
@@ -128,7 +129,7 @@ describe("the break overlay", () => {
     ).toBeNull();
   });
 
-  // REQ-20 as well as REQ-31: a variant row that offers to sell Gold is an
+  // REQ-20 throughout: a variant row that offers to sell Gold is an
   // offer of premium currency, which the portal both forbids and cannot
   // honour. This render site is the one the e2e policy walk reaches through
   // `open-shop`, so a guard that held at every other site did not protect it.

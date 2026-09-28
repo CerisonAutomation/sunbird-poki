@@ -473,3 +473,67 @@ describe("terrain: dispose", () => {
     expect(() => { t.dispose(); }).not.toThrow();
   });
 });
+
+/**
+ * The tallest point in a run used to be the authored end-of-island shoulder —
+ * not any procedural hill — sitting ~48 units above the local mean on island 1
+ * and climbing on later islands, because `rampPeakFor` grows with island index.
+ * That is what made a world read as "too much high peak".
+ *
+ * A slope ceiling was tried alongside this and REVERTED: a gentler world felt
+ * calmer but broke the load-bearing invariant in `climb-and-chain.test.ts` that
+ * a climb must cost speed even with the stick held. Steepness is the difficulty
+ * curve here, so the terrain dial is height, and this is the test for it.
+ */
+describe("terrain: shape budgets", () => {
+  const SEEDS = ["daytrip", "gauntlet", "zenith", "pvp_sprint"];
+
+  function interiorProfile(seed: string) {
+    const t = new TerrainSystem(seed);
+    let maxSlope = 0;
+    let maxHeight = -Infinity;
+    let sum = 0;
+    let n = 0;
+    for (let x = 400; x < 6000; x += 1) {
+      // The authored launch drop is deliberately steep and is not what these
+      // budgets are about; sample the interior only.
+      if ((t as unknown as { localX(v: number): number }).localX(x) > RAMP_START - 60) continue;
+      const h = t.heightAt(x);
+      maxSlope = Math.max(maxSlope, Math.abs(t.heightAt(x + 1) - h));
+      maxHeight = Math.max(maxHeight, h);
+      sum += h;
+      n += 1;
+    }
+    return { maxSlope, peakAboveMean: maxHeight - sum / n, maxHeight };
+  }
+
+  it("keeps the skyline from towering over the flight line", () => {
+    for (const seed of SEEDS) {
+      const { peakAboveMean } = interiorProfile(seed);
+      // Was ~48 before the shoulder margin was halved.
+      expect(peakAboveMean, `${seed}: peaks tower over the run`).toBeLessThan(44);
+    }
+  });
+
+  it("still has hills worth flying over", () => {
+    // The counterpart to the test above. If the peak budget is ever tightened
+    // far enough to flatten the world into a conveyor, this is what catches it.
+    const t = new TerrainSystem("daytrip");
+    const hs: number[] = [];
+    for (let x = 400; x < 1400; x += 4) hs.push(t.heightAt(x));
+    expect(Math.max(...hs) - Math.min(...hs)).toBeGreaterThan(25);
+  });
+
+  it("leaves the launch drop steep enough to fly", () => {
+    // The authored ramp must not be flattened by any of the above.
+    const t = new TerrainSystem("daytrip");
+    const tpl = islandTemplate(0);
+    let steepest = 0;
+    // Scan the whole authored transfer — drop, ramp, and the departure over
+    // the gap. The steepest face lives near the end of the ramp, not the start.
+    for (let lx = 0; lx < tpl.gapStart + 200; lx += 2) {
+      steepest = Math.max(steepest, Math.abs(t.slopeAt(tpl.start + lx + 30)));
+    }
+    expect(steepest).toBeGreaterThan(1.5);
+  });
+});

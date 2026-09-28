@@ -273,6 +273,20 @@ export const AD_DURATION = 4;
 // Poki controls ad frequency on the portal; this applies only to dev/standalone builds.
 export const INTERSTITIAL_EVERY = 3;
 
+/**
+ * Minimum gap between commercial breaks, and the minimum time a session must
+ * have been in play before the first one.
+ *
+ * Not our invention — these are the shipped core's own ad-timing defaults
+ * (`adTiming: { timeBetweenAds: 120000, startAdsAfter: 120000, preroll: false }`).
+ * Asking sooner is not "asking more often", it is asking for something the
+ * core refuses ("commercialBreak too soon after previous one" / "not possible
+ * before gameplayStart"), which resolves empty. Matching the real limits means
+ * the run-start request is one the portal can actually serve, instead of a
+ * silent no-op that still cost the player a beat at the start of their run.
+ */
+export const COMMERCIAL_BREAK_MIN_GAP_MS = 120_000;
+
 export const DAILY_STIPEND = 250;
 /** Portal shop: coins granted per watched rewarded ad (kept modest so the
  *  2500+ mythic tier stays a long-term chase, not an ad-weekend grind). */

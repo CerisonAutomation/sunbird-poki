@@ -8,37 +8,23 @@ import type { TournamentView } from "./Tournaments";
  * for. Native buttons keep standard Tab/Enter/Space behavior.
  *
  * Wording rule: a destination must name the thing it actually opens, and a
- * headline feature that only lives one level down is not reachable. Rivals are
- * therefore a single **PvP** tile that opens the race screen, and that screen
- * carries BOTH kinds of opponent — live humans and the offline AI flock — in two
- * labelled sections, so "who do I race" is answered one tap from home instead of
- * one tile per opponent. The rest of the root menu stays about choosing a kind of
- * play, not choosing an implementation detail.
+ * headline feature that only lives one level down is not reachable.
  *
- * The rival tile reuses the canonical screen key (`raceLobby`) rather than
- * inventing a parallel name, so a destination and the screen it opens can never
- * drift apart in naming. The AI-only view (`aiPvp`) still exists as a screen —
- * the in-race "AI Practice" shortcut opens it — but it is deliberately not a
- * second home tile: two rival tiles on one menu made the player choose an
- * opponent *type* before they had chosen to race at all.
+ * Rivals used to be ONE merged tile ("PvP · players & AI") on the reasoning
+ * that asking "human or AI?" before the player has decided to race makes them
+ * choose a category rather than an opponent. That reasoning holds, and it is
+ * why the merged tile is gone rather than merely demoted: the fix was never to
+ * remove a rival, it was to stop burying them. Both now sit at the top of
+ * `QUICK_ACTIONS` — one row under the main button, side by side, so the choice
+ * between them is made in the same glance and neither is hidden behind the
+ * other. The race screen still carries both as labelled sections.
  *
- * `key` is the stable identity. It does three jobs that the display `title`
- * used to do badly:
- *
- *  • it addresses the barrel, so the copy is translated
- *    (`menu.dest.<key>.title` / `.detail`);
- *  • it is what `head()` in HUD.ts matches a screen title to its icon — the
- *    old code matched on the English `title` string, which silently loses its
- *    icon the moment the title is localized;
- *  • it is what tests pin, so renaming the copy cannot break navigation.
- *
- * The English strings stay inline as `t()` fallbacks: the menu renders correct
- * English before a pack lands, and a translator reading this file sees the
- * source text next to its key.
+ * Both keep their canonical screen keys (`raceLobby`, `aiPvp`) rather than
+ * inventing parallel names, so a destination and the screen it opens cannot
+ * drift apart in naming.
  */
 
 /** The three home-menu tabs the catalog groups destinations into. */
-export type MenuSection = "play" | "collection" | "progress";
 
 export type MenuDestination = {
   action: string;
@@ -47,7 +33,6 @@ export type MenuDestination = {
   detail: string;
   icon: MenuIconName;
   /** Which of the three home-menu tabs this destination lives under. */
-  section: MenuSection;
   /**
    * Marks a destination as the one action that must never be more than a glance
    * away (currently PvP). The home menu orders Play first and leads it with
@@ -55,7 +40,6 @@ export type MenuDestination = {
    * array order IS the contract, and a caller that wants the set can filter on
    * this flag rather than reading a second export that can drift from it.
    */
-  pinned?: true;
 };
 
 /** Resolve a destination's localized copy. */
@@ -65,62 +49,100 @@ function dest(
   icon: MenuIconName,
   title: string,
   detail: string,
-  section: MenuSection,
-  pinned?: true,
 ): MenuDestination {
   return {
     action,
     key,
     icon,
-    section,
-    ...(pinned ? { pinned } : {}),
     title: t(`menu.dest.${key}.title`, undefined, title),
     detail: t(`menu.dest.${key}.detail`, undefined, detail),
   };
 }
 
+/**
+ * The four things that sit directly under the main button.
+ *
+ * A rail, not four more tiles. The home menu had grown to three titled sections
+ * and eighteen tiles, and the two actions a returning player reaches for most —
+ * race someone, change something — were scrolled off the bottom of it. PvP and
+ * AI PvP are separate entries on purpose: the race screen offers both, but they
+ * are different decisions (find a person, or find a bird), and collapsing them
+ * into one tile is what buried them in the first place.
+ *
+ * These are the same `MenuDestination` records the grids use, so the rail and
+ * the catalog cannot drift: changing a title here changes it there.
+ */
+export const QUICK_ACTIONS: MenuDestination[] = [
+  dest("raceLobby", "open-live", "online", "PvP", "Race a real pilot",),
+  dest("aiPvp", "open-practice", "bird", "AI PvP", "Race the neural flock",),
+  dest("shop", "open-shop", "shop", "Shop", "Birds & upgrades",),
+  dest("settings", "open-settings", "settings", "Settings", "Sound & display",),
+];
+
 export const PLAY_DESTINATIONS: MenuDestination[] = [
-  // ONE rival tile, and it is `pinned` so it stays reachable above the
-  // Play/Collection/Progress tabs. It opens the race screen, which carries both
-  // the human lobby and the AI flock as two sections of the same page — so a
-  // player picks an *opponent* (live or offline) rather than an opponent
-  // *category* on the way to picking a race. The screen behind it keeps a
-  // dedicated AI-only view for the in-race shortcut, but the home menu stays one
-  // tile: a menu of one thing per destination, not two tiles for one destination.
-  dest("raceLobby", "open-live", "online", "PvP · players & AI", "Live matchmaking, private rooms, or the offline flock", "play", true),
-  dest("challenges", "open-challenges", "challenge", "Challenges", "Daily & weekly goals, auto-matched", "play"),
-  dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush", "play"),
-  dest("leaderboard", "open-board", "board", "Leaderboards", "All-time · weekly · today · you", "play"),
-  dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge", "play"),
-  dest("versus", "versus", "flight", "Same-screen 1v1", "Space / Enter · or touch your half", "play"),
+  dest("challenges", "open-challenges", "challenge", "Challenges", "Daily & weekly goals, auto-matched",),
+  dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush",),
+  dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge",),
+  dest("versus", "versus", "flight", "Same-screen 1v1", "Space / Enter · or touch your half",),
+  // Squad moved here out of its own "Personalize" section: it is a way of
+  // playing (friends and clubs), and a heading with exactly one tenant is a
+  // heading looking for a second one. The detail names chat only when chat
+  // exists — the copy is a promise about what the screen does, and a promise
+  // the build cannot keep is worse than a shorter line.
+  dest("squad", "open-squad", "squad", "Squad", SQUAD_CHAT ? "Friends & club chat" : "Friends & clubs"),
 ];
 
-export const COLLECTION_DESTINATIONS: MenuDestination[] = [
-  dest("shop", "open-shop", "shop", "Shop", "Birds, trails & upgrades", "collection"),
-  // The squad detail names chat only when chat exists — the copy is a promise
-  // about what the screen does, and a promise the build cannot keep is worse
-  // than a shorter line.
-  dest("squad", "open-squad", "squad", "Squad", SQUAD_CHAT ? "Friends & club chat" : "Friends & clubs", "collection"),
-  dest("settings", "open-settings", "settings", "Settings", "Sound, controls & display", "collection"),
-];
-
+/**
+ * Formerly the "Personalize" grid (Shop, Squad, Settings).
+ *
+ * Removed as a section. Shop and Settings are in `QUICK_ACTIONS` — one tap
+ * below the main button instead of a scrolled heading — and Squad moved into
+ * `PLAY_DESTINATIONS`, where a one-tile heading had no business existing.
+ * Keeping duplicate `dest()` records here would give Shop and Settings two
+ * identities and, because they share a `key`, break uniqueness for
+ * `destinationByKey`.
+ */
 export const PROGRESS_DESTINATIONS: MenuDestination[] = [
-  dest("progress", "open-progress", "progress", "Your progress", "Missions, gifts & events", "progress"),
-  dest("tournaments", "open-cups", "trophy", "Tournaments", "Weekly score challenges", "progress"),
-  dest("campaign", "open-campaign", "story", "Story", "The Long Migration", "progress"),
-  dest("rivalRank", "open-rank", "rank", "Rival rank", "Your local race rating", "progress"),
-  dest("nestPass", "open-pass", "pass", "Nest Pass", "Season rewards", "progress"),
-  dest("trophyCase", "open-trophies", "medal", "Trophies", "Achievements & mastery", "progress"),
-  dest("atlas", "open-atlas", "atlas", "Island Atlas", "Islands & hazards", "progress"),
-  dest("scores", "open-scores", "scores", "Your scores", "Saved flight records", "progress"),
-  dest("account", "open-account", "account", "Account", "Name & save transfer", "progress"),
+  dest("progress", "open-progress", "progress", "Your progress", "Missions, gifts & events",),
+  dest("campaign", "open-campaign", "story", "Story", "The Long Migration",),
+  dest("trophyCase", "open-trophies", "medal", "Trophies", "Achievements & mastery",),
+  dest("atlas", "open-atlas", "atlas", "Island Atlas", "Islands & hazards",),
+  dest("scores", "open-scores", "scores", "Your scores", "Saved flight records",),
+  dest("account", "open-account", "account", "Account", "Name & save transfer",),
 ];
 
-/** Every destination, in the order the home menu shows them. */
+/**
+ * Destinations the home screen reaches through a route OTHER than a grid tile.
+ *
+ * They are deliberately NOT in the grids above: `rivalRank` and `nestPass` both
+ * open from inside the Your-progress hub (Nest Pass has a third entry in the
+ * home record bar), `tournaments` opens from the countdown strip, and
+ * `leaderboard` is opened by the board strip's own button. As tiles they were a
+ * second route to a screen you could already reach from the same screen — and
+ * "Leaderboards" under a "Play now" heading was always the wrong question
+ * ("how am I doing?" is not "what shall I play?"). They stay here, and out of
+ * the grids, so `destinationByKey` still resolves them.
+ */
+export const SECONDARY_DESTINATIONS: MenuDestination[] = [
+  dest("rivalRank", "open-rank", "rank", "Rival rank", "Your local race rating",),
+  dest("nestPass", "open-pass", "pass", "Nest Pass", "Season rewards",),
+  dest("tournaments", "open-cups", "trophy", "Tournaments", "Weekly score challenges",),
+  dest("leaderboard", "open-board", "board", "Leaderboards", "All-time · weekly · today · you",),
+];
+
+/**
+ * Every destination, however it is reached — rail, grid, or a second route
+ * from inside another screen.
+ *
+ * `QUICK_ACTIONS` is included because omitting it made `destinationByKey`
+ * unable to resolve `raceLobby` and `aiPvp` once they left the grids, which is
+ * a lookup failure rather than a cosmetic one.
+ */
 export const ALL_DESTINATIONS: readonly MenuDestination[] = [
+  ...QUICK_ACTIONS,
   ...PLAY_DESTINATIONS,
-  ...COLLECTION_DESTINATIONS,
   ...PROGRESS_DESTINATIONS,
+  ...SECONDARY_DESTINATIONS,
 ];
 
 /** Look up a destination by its stable key (never by display title). */

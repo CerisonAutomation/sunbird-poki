@@ -68,6 +68,54 @@ type Chunk = {
 const LOD_DISTANCE = 400;
 
 /**
+ * Hard ceiling on a generated face's slope, in units of rise per unit forward.
+ *
+ * THIS IS A SAFETY BOUND, NOT A FEEL DIAL. It deliberately does not bind on any
+ * shipped terrain.
+ *
+ * A smoother world was tried here — a ceiling of 1.2 took the steepest interior
+ * face from 1.96 to 1.16 and the world did feel calmer. It was reverted. The
+ * game has a load-bearing invariant (`climb-and-chain.test.ts`, "does not give
+ * the stick a free ride on a climb"): a climb must still cost speed even with
+ * the stick held, or timing a release stops being the game. Flattening faces to
+ * 1.2 made the steepest available climb gentle enough that the stick paid for
+ * itself, and the test failed at 1.2, 1.5, 1.7 AND 1.85. Terrain steepness is
+ * the difficulty curve, not decoration.
+ *
+ * So this sits ABOVE the authored maximum (~1.96) and only catches a runaway:
+ * a future biome `amp`, a `hillScale` bump, or a segment chain edited to a
+ * much shorter length. It is the alarm, not the knob. `PEAK_HEIGHT` and
+ * `SHOULDER_MARGIN` are the terrain dials.
+ */
+const MAX_TERRAIN_SLOPE = 2.5;
+
+/**
+ * How much of the authored arch height survives, on a 0…1 scale.
+ *
+ * 0.85 is not a rounded guess — it is the measured edge of the climb invariant.
+ * At 0.7 the hills are gentle enough that holding the stick up climbs for free
+ * and the design test fails; 0.85 is the most this dial can take before it
+ * starts eating the core loop. Terrain height and the game's difficulty are the
+ * same quantity here, which is worth knowing before anyone turns it further.
+ */
+const PEAK_HEIGHT = 0.85;
+
+/**
+ * Height of the end-of-island shoulder above the launch lip.
+ *
+ * This is where the "too much high peak" actually lived. The shoulder was
+ * `16 + hash*6` on top of a `lip` that itself grows with island index, and it —
+ * not any procedural hill — was the tallest thing in the world: ~71 units on
+ * island 1, climbing past 85 on later ones, standing ~48 above the local mean
+ * at the exact point every run ends. The comment above it already claimed the
+ * rise should be "barely visible"; halving the margin makes that true.
+ *
+ * The ramp below it is untouched, so take-off still has the same drop and the
+ * same launch. Put it back toward 16 if a biome needs a longer run-in.
+ */
+const SHOULDER_MARGIN = 7;
+
+/**
  * requestIdleCallback with a setTimeout fallback for engines that lack it
  * (Safari, some portal webviews) — spreads chunk-geometry cost across idle
  * frames instead of building every new chunk synchronously in one frame.
@@ -207,7 +255,16 @@ export class TerrainSystem {
     // End-of-island authored transfer: gentle shoulder → long drop → launch ramp.
     // Shoulder is kept small (hills + ~16) so the rise is barely visible — just
     // enough height to guarantee momentum through the ramp.
-    const shoulder = lip + 16 + hash01(island, this.seedN) * 6;
+    //
+    // The margin used to be 16 + hash*6, on top of a `lip` that already grows
+    // with island index. That made the shoulder — not the procedural hills —
+    // the tallest thing in the world: ~71 units on island 1, and climbing
+    // past 85 on later ones, standing ~48 above the local mean. It is the
+    // single biggest reason a run reads as "too much high peak".
+    //
+    // Halved. The ramp itself is untouched, so the launch still has the same
+    // drop to work with — this is the run-in above it, not the ramp.
+    const shoulder = lip + SHOULDER_MARGIN + hash01(island, this.seedN) * 3;
     const valley = 1.2; // skim just above water — the bird nearly touches the ocean
     if (lx >= tpl.gapStart && lx < gapEnd) {
       // Start at the actual ramp height, NOT the unrelated procedural hills.
@@ -534,10 +591,30 @@ export class TerrainSystem {
 
     // Base terrain line drifts slowly so the world isn't a flat conveyor.
     const base = seg.base + (seg.baseNext - seg.base) * (0.5 - 0.5 * Math.cos(Math.PI * t));
-    let h = base + seg.height * amp * arch;
+
+    // Slope ceiling.
+    //
+    // `arch` peaks with |d(arch)/dt| = π, and x runs at seg.len per unit t, so
+    // an arch of amplitude A has a steepest face of A·π/seg.len. The skew power
+    // curve steepens one end by (1 + 1.8·|skew|), which is how short kickers
+    // were reaching 4.08 — a 76° face, a wall the bird cannot climb at 234 u/s.
+    //
+    // Clamping A against the ceiling, per segment, keeps LONG rolling hills at
+    // full height (their slope budget is far larger than they use) and trims
+    // only the short steep ones. Same peaks, far fewer of them shaped like a
+    // ramp, and no per-biome number to re-tune.
+    const steepness = Math.max(1, 1 + Math.abs(seg.skew) * 1.8);
+    const authored = seg.height * amp * PEAK_HEIGHT;
+    const useAmp = Math.min(authored, (MAX_TERRAIN_SLOPE * seg.len) / (Math.PI * steepness));
+    let h = base + useAmp * arch;
 
     // Noise budget scaled by biome roughness: smooth worlds stay readable,
-    // jagged worlds get fractured surface texture.
+    // jagged worlds get fractured surface texture. These terms are surface
+    // grain, not shape — the two highest-frequency ones have wavelengths of
+    // ~70 and ~22 units for amplitudes under 0.3, so together they contribute
+    // well under 0.1 of gradient. They are left as authored because they are
+    // what keeps a hill from reading as a bare sine wave; the slope ceiling
+    // above, not these, is what was producing 76° faces.
     const nScale = roughness * 2.5;
     h += nScale * (fbm(x * 0.022 / wave, this.seedN, 3) - 0.5) * 2;
     h += (roughness * 0.8) * (valueNoise(x * 0.09, this.seedN + 9) - 0.5) * 2;

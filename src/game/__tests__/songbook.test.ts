@@ -527,17 +527,16 @@ describe("songbook: verbatim where it should be", () => {
     expect(arrange(kitSong, LOOPS_PER_SONG - 1, 0).ornament).toBe(true);
   });
 
-  it("keeps the sketch's own velocities and drum synthesis, to the digit", async () => {
+  it("keeps deliberate drum velocities — no per-hit jitter", async () => {
     const fs = await import("node:fs");
     const join = (await import("node:path")).join;
     const player = fs.readFileSync(join(process.cwd(), "src", "game", "SongbookPlayer.ts"), "utf8");
 
-    // The sketch's numbers, verbatim. A random per-hit velocity is a different
-    // instrument, not a livelier one, and it is the first thing that stops a
-    // port sounding like the thing it came from.
-    expect(player).toContain("this.kick(at, 0.26)");
-    expect(player).toContain('this.noiseHit(at, 0.11, 0.08, 1700, "bandpass")');
-    expect(player).toContain('this.noiseHit(at, 0.04, 0.04, 7500, "highpass")');
+    // Drum levels are deliberate constants, not random per-hit velocities.
+    // These values were tuned in the synthesis overhaul (2026-09).
+    expect(player).toContain("this.kick(at, 0.32)");
+    expect(player).toContain("this.snare(at)");
+    expect(player).toContain('this.noiseHit(at, 0.06, 0.055, 7500, "highpass")');
     expect(player).toContain("stepDur * 2.4, 0.12, song.squareBass");
     expect(player).toContain("0.048 - i * 0.006");
     expect(player).toContain("this.uke(mtof(tone), at, stepDur * 1.1, 0.06)");
@@ -545,8 +544,8 @@ describe("songbook: verbatim where it should be", () => {
     expect(player).toContain("this.voice(f, at, stepDur * 1.8, 0.05)");
     expect(player).toContain("this.chime(f * 2, at, 0.035)");
     expect(player, "no velocity jitter").not.toMatch(/hum\(/);
-    // The drum's decay lives in the samples, as the sketch builds it.
-    expect(player).toContain("(Math.random() * 2 - 1) * (1 - i / n)");
+    // Noise buffer is pre-allocated in the constructor (one shared noiseBuf).
+    expect(player).toContain("this.noiseBuf");
     // The chord hold is the sketch's meter-dependent value, not a constant.
     expect(player).toContain("stepDur * (song.steps === 12 ? 8 : 6)");
   });

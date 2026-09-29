@@ -48,6 +48,28 @@ export const GROUND_STICK_DIVE = 11;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
+/**
+ * FLARE — what releasing a dive actually does.
+ *
+ * Until now it did nothing at all. Measured on a clean one-second hold in clear
+ * air: the bird is at -95.4 m/s, and half a second after letting go it is at
+ * -97.7. The dive was a one-way door, because lift in this model only ever
+ * *reduces* downward gravity — the strongest thing the game could do was take
+ * GRAVITY_GLIDE from 16 down to 8.8 m/s², and nothing anywhere pushed back.
+ *
+ * So the release now adds a one-shot upward impulse, proportional to how fast
+ * you were actually falling. It is a flare, not a jet: it SHEDS dive speed, it
+ * never lifts you, and at low speed it is nearly nothing, so a gentle tap and a
+ * committed plunge are different gestures.
+ *
+ * 26 m/s against a 95 m/s terminal dive removes about a quarter of the speed —
+ * enough that the next crest is reachable and a bad dive is survivable, small
+ * enough that diving deep still means committing. `FLARE_REFERENCE` is the
+ * falling speed at which the full amount applies; below it the impulse scales
+ * down linearly to nothing.
+ */
+export const FLARE_AUTHORITY = 26;
+export const FLARE_REFERENCE = 95;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;

@@ -70,6 +70,10 @@ export type UiScreen =
  * restored view: whatever the player last scrolled, landing on the home menu
  * must never park the one button that starts a run above the fold. */
 const LAUNCH_CTA = ".home-launch";
+/** In-flight quest strip: how close a quest must be before it earns screen
+ *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
+ *  threshold, so the footer and the strip can never disagree. */
+const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
 
 /** Stable screen identifiers used by automation, telemetry, and QA. */
 export const SCREEN = {
@@ -1553,11 +1557,30 @@ export class HUD {
       // The quest strip. Keyed on the numbers rather than rebuilt per frame, so
       // a 30 Hz HUD push does not churn 3-4 nodes; the `just` class is folded
       // into the key so the "banked" flourish still fires on the frame it lands.
-      const mkey = s.missionRows.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
+      // Only quests worth looking at right now.
+      //
+      // This rendered EVERY mission unconditionally, so a fresh run put three
+      // permanent bars on screen reading 0/6, 0/15 and 0/2 — a screenshot of
+      // the shipped build shows exactly that, sitting in the lower-left of the
+      // terrain-reading zone. The codebase already contains the answer to this
+      // and the strip was ignoring it: `closestGoalLine`'s comment says a
+      // permanent "you are 3% of the way there" nag "teaches the player to
+      // ignore the strip", and then gates its own line on 50%+. So the in-flight
+      // strip now uses the same threshold.
+      //
+      // Kept: quests at 50%+ (they are close, and close is motivating), and
+      // anything that just completed this frame (the payoff is the point of
+      // showing it). Dropped: the rows sitting at zero, which are the ones that
+      // train the player to stop reading the strip. Nothing is *lost* — every
+      // quest is still listed on the progress screen.
+      const worthShowing = s.missionRows.filter(
+        (r) => r.done || r.justDone || r.pct >= IN_FLIGHT_MISSION_MIN_PCT,
+      );
+      const mkey = worthShowing.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
       if (mkey !== this.lastMissionStrip) {
         this.lastMissionStrip = mkey;
-        this.missionStrip.classList.toggle("hidden", s.missionRows.length === 0);
-        this.missionStrip.innerHTML = renderMissionStrip(s.missionRows);
+        this.missionStrip.classList.toggle("hidden", worthShowing.length === 0);
+        this.missionStrip.innerHTML = renderMissionStrip(worthShowing);
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;

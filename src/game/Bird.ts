@@ -3,6 +3,8 @@ import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
   AIR_DRAG_DIVE,
+  FLARE_AUTHORITY,
+  FLARE_REFERENCE,
   AIR_DRAG_GLIDE,
   BIRD_RADIUS,
   BOOST_EXTRA_SPEED,
@@ -145,6 +147,12 @@ export class Bird {
   private wingTuck = 0;
   /** Smoothed dive pitch offset in radians (0 when not diving). See step(). */
   private divePitch = 0;
+  /** m/s of upward impulse applied by the most recent flare, 0 if none this
+   *  step. Public so a sound or a particle can react to the pull-out. */
+  flareAmount = 0;
+  /** Whether the previous physics step was a dive. The flare fires on the
+   *  falling edge, so a held dive does not re-apply it every step. */
+  private wasDiving = false;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -396,6 +404,7 @@ export class Bird {
     this.justLanded = false;
     this.justLaunched = false;
     this.impact = 0;
+    this.flareAmount = 0;
     const was = this.grounded;
     this.wasGrounded = was;
 
@@ -464,6 +473,31 @@ export class Bird {
     } else {
       /* ---------- ballistic flight ---------- */
       const sp = Math.max(0.001, this.speed());
+
+      // The flare: what releasing the button actually does.
+      //
+      // Before this, release did nothing measurable. Lift only ever *reduces*
+      // downward gravity, so a 95 m/s dive kept accelerating into the ground
+      // after you let go — a one-way door, and the reason the pull-out felt
+      // like a jolt rather than a recovery. This adds a one-shot upward impulse
+      // on the falling edge, scaled by how fast you were genuinely falling.
+      //
+      // Three properties keep it a flare and not a jet:
+      //  - it only fires on the DIVE -> GLIDE transition, so holding still
+      //    produces one impulse rather than one per step;
+      //  - it is scaled by dive speed, so a gentle tap out of a shallow dip is
+      //    almost nothing and a committed plunge is worth real recovery;
+      //  - it can only ever reduce downward speed. `fall < 0` guards the sign,
+      //    so releasing while already climbing adds nothing at all.
+      //
+      // The fall is captured BEFORE any gravity runs, because by the time this
+      // is reached the bird has already been accelerated downward this step.
+      if (this.wasDiving && !diving && this.vy < 0) {
+        const authority = FLARE_AUTHORITY * Math.min(1, -this.vy / FLARE_REFERENCE);
+        this.vy += authority;
+        this.flareAmount = authority;
+      }
+      this.wasDiving = diving;
       const lift = diving
         ? 0
         : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1)) * glideLiftScale(this.airTime);

@@ -42,6 +42,7 @@ import type { TierView } from "./SeasonPass";
 import { growthLedger } from "./GrowthLedger";
 import type { CelebrationView } from "./ProgressBeats";
 import { streakOpacity } from "./SpeedFeel";
+import { medalStanding, type Medal } from "./RunMedals";
 
 export type UiScreen =
   | "progress"
@@ -70,6 +71,15 @@ export type UiScreen =
  * restored view: whatever the player last scrolled, landing on the home menu
  * must never park the one button that starts a run above the fold. */
 const LAUNCH_CTA = ".home-launch";
+
+/** The medal line's copy. `toNext` null means the ladder is topped, which says
+ *  so rather than going blank — an empty slot reads as a bug, and "maxed" is
+ *  the payoff for clearing every rung. */
+function medalText(earned: Medal, toNext: number | null): string {
+  if (toNext === null) return "◆ Maxed";
+  if (earned === "none") return `${toNext} m to first medal`;
+  return `${toNext} m to next`;
+}
 /** In-flight quest strip: how close a quest must be before it earns screen
  *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
  *  threshold, so the footer and the strip can never disagree. */
@@ -546,6 +556,9 @@ export class HUD {
   private distanceEl!: HTMLElement;
   private coinsEl!: HTMLElement;
   private bestEl!: HTMLElement;
+  /** Live medal line under the distance block. */
+  private medalLine!: HTMLElement;
+  private lastMedalKey = "";
   private islandEl!: HTMLElement;
   private multEl!: HTMLElement;
   private goldChip!: HTMLElement;
@@ -718,6 +731,7 @@ export class HUD {
             <div class="stat-label">${t("hud.stat.distance", undefined, "Distance")}</div>
             <div class="stat-value" data-ref="distance">0 m</div>
             <div class="stat-sub">best <span data-ref="best">0</span></div>
+            <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
             <div class="sun-track">
@@ -1335,6 +1349,29 @@ export class HUD {
       this.setText(this.distanceEl, "dist", distanceText(s.distance));
       this.setText(this.coinsEl, "coins", formatNumberLocalized(s.coins));
       this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      // The medal ladder, shown WHILE flying rather than only at the end.
+      //
+      // "340 m, best 340 m" tells a player where they are and nothing about
+      // what is next. This is the line that answers the question they are
+      // actually asking on the attempt after a near miss, and it is worth far
+      // more in the top-left corner — where the eye already is for the distance
+      // number — than in a results card the player sees once it is over.
+      //
+      // Keyed rather than rewritten every push, same as the other HUD text
+      // here, so a 30Hz push does not churn a node for a string that rarely
+      // changes (once per metre at most).
+      {
+        const m = medalStanding(s.distance);
+        const mkey = `${m.earned}${m.toNext ?? ""}`;
+        if (mkey !== this.lastMedalKey) {
+          this.lastMedalKey = mkey;
+          this.medalLine.textContent = medalText(m.earned, m.toNext);
+          this.medalLine.dataset.medal = m.earned;
+          // Near-miss emphasis: within 25% of the next rung, the goal is close
+          // enough to steer by, and that is the moment it is worth shouting.
+          this.medalLine.classList.toggle("close", m.toNext !== null && m.toNext <= (m.nextAt ?? Infinity) * 0.25);
+        }
+      }
       this.setText(this.islandEl, "island", `Island ${s.island + 1}`);
       // Mobile HUD declutter: the island chip flashes "recent" for 3s right
       // after the island changes, then fades back to unobtrusive (CSS scopes
@@ -1963,6 +2000,7 @@ export class HUD {
     this.distanceEl = grab("distance");
     this.coinsEl = grab("coins");
     this.bestEl = grab("best");
+    this.medalLine = grab("medalLine");
     this.islandEl = grab("island");
     this.multEl = grab("mult");
     this.goldChip = grab("goldChip");

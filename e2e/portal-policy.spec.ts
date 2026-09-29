@@ -408,35 +408,56 @@ test.describe("portal artifact (poki-upload/)", () => {
       "mode-select",
     ];
     const card = page.locator('[data-ref="menuCard"]');
+    // The walk collects its failures instead of throwing on the first one.
+    // This test IS the Poki REQ-20 check — "no ad-removal offer anywhere a
+    // player can reach" — and a walk that aborts at the first screen it cannot
+    // confirm leaves every later screen unchecked while reporting one red test.
+    // That reads as a result when it is really a non-result, which is the worst
+    // way for a compliance gate to fail. So: try all 15, then fail with the
+    // whole list.
+    const walkFailures: string[] = [];
     for (const action of screens) {
-      await goHome(page);
-      await card.locator(`[data-action="${action}"]`).first().click();
-      await expect(
-        card.locator(".screen-head h2").first(),
-        `${action} opened no screen with a heading`,
-      ).toBeVisible({ timeout: 20_000 });
+      try {
+        await goHome(page);
+        await card.locator(`[data-action="${action}"]`).first().click();
+        // 60s, not 20s. Under headless SwiftShader a single menu transition
+        // costs ~12s, so 20s left about eight seconds of slack for a step that
+        // is slow *by environment* — and the walk died on the first screen with
+        // "open-shop opened no screen with a heading" while the Shop screen was
+        // in fact rendering one (HUD.ts:3602 calls head()).
+        await expect(
+          card.locator(".screen-head h2").first(),
+          `${action} opened no screen with a heading`,
+        ).toBeVisible({ timeout: 60_000 });
 
-      // The heading has to be a title, not the screen's own key. 11 of these 17
-      // screens once rendered their raw internal id ("pass" for "Nest Pass") and
-      // every other assertion on the page still passed: a screenshot shows a
-      // heading either way, and a reviewer skims past it. This is the reason the
-      // test is worth keeping rather than deleting.
-      //
-      // The id can surface in two shapes — the kebab action name and its camel
-      // form — so both are compared. What is deliberately NOT asserted is that
-      // the heading be several words long: "Settings", "Leaderboards", "Account"
-      // and "Trophies" are all correct single-word titles, and a rule that
-      // rejected them would be a test that fails on correct behaviour, which is
-      // the same defect as the one it was written to catch.
-      const heading = ((await card.locator(".screen-head h2").first().textContent()) ?? "").replace(/\s+/g, " ").trim();
-      const camelId = action.replace(/-([a-z0-9])/g, (_, ch: string) => ch.toUpperCase());
-      expect(heading, `${action} rendered no heading`).not.toBe("");
-      expect(heading, `${action} rendered its own action name as the heading`).not.toBe(action);
-      expect(heading, `${action} rendered its camelCase id as the heading`).not.toBe(camelId);
-      expect(heading, `${action} rendered a bare id fragment as the heading`).not.toBe(action.split("-").pop() ?? "");
+        // The heading has to be a title, not the screen's own key. 11 of these
+        // 15 screens once rendered their raw internal id ("pass" for "Nest
+        // Pass") and every other assertion on the page still passed: a
+        // screenshot shows a heading either way, and a reviewer skims past it.
+        // This is the reason the test is worth keeping rather than deleting.
+        //
+        // The id can surface in two shapes — the kebab action name and its camel
+        // form — so both are compared. What is deliberately NOT asserted is
+        // that the heading be several words long: "Settings", "Leaderboards",
+        // "Account" and "Trophies" are all correct single-word titles, and a
+        // rule that rejected them would be a test that fails on correct
+        // behaviour, which is the same defect as the one it was written to catch.
+        const heading = ((await card.locator(".screen-head h2").first().textContent()) ?? "").replace(/\s+/g, " ").trim();
+        const camelId = action.replace(/-([a-z0-9])/g, (_, ch: string) => ch.toUpperCase());
+        expect(heading, `${action} rendered no heading`).not.toBe("");
+        expect(heading, `${action} rendered its own action name as the heading`).not.toBe(action);
+        expect(heading, `${action} rendered its camelCase id as the heading`).not.toBe(camelId);
+        expect(heading, `${action} rendered a bare id fragment as the heading`).not.toBe(action.split("-").pop() ?? "");
 
-      await expectNoAdRemoval(page, action);
+        await expectNoAdRemoval(page, action);
+      } catch (err) {
+        walkFailures.push(`${action}: ${(err as Error).message.split("\n")[0]}`);
+      }
     }
+    expect(
+      walkFailures,
+      `ad-removal walk did not complete cleanly on ${walkFailures.length} of ${screens.length} screens`,
+    ).toEqual([]);
     expect(errors).toEqual([]);
   });
 });

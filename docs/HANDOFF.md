@@ -140,9 +140,19 @@ enforces it, because a decision without an enforcing test is a rumour.
 11. **Versions have one inventory and one guard.** `docs/VERSIONS.md` lists every
     identifier (semver, build id, save schema, wire protocol, replay format, HTTP
     namespace, editions) with its owner and what breaks on drift;
-    `version-lockstep.test.ts` fails the build when the client and server copies
-    disagree — the realtime gateway *rejects* frames whose protocol version it
-    does not recognise, so a client-only bump breaks every room. `BUILD_ID` is
+    `version-lockstep.test.ts` keeps the client's protocol constants consistent
+    with each other and the replay/save format decodable. ⚠️ *This entry
+    previously claimed it "fails the build when the client and server copies
+    disagree — the realtime gateway rejects frames whose protocol version it
+    does not recognise, so a client-only bump breaks every room."* That is not
+    what it does **in this fork**: there is no server here (`server/` holds one
+    file, and the Rust gateway lives in the parent monorepo), and the Poki
+    transport is Netlib P2P with no version negotiation at all. The test's own
+    comment already says so. What it actually pins is
+    `PROTOCOL_MIN_VERSION === PROTOCOL_VERSION` — both literals in
+    `src/game/protocol/v1.ts` — so it catches a bump of one without the other
+    and deliberately passes when both move together, which is the correct
+    behaviour for that contract. `BUILD_ID` is
     `<semver>-<portal>-<sha8>` and must stay deterministic: it was
     `Date.now().toString(36)` and nothing read it, which made every rebuild of the
     same commit a new "version" and made the server's `SUNBIRD_CLIENT_BUILD` pin

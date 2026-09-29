@@ -22,6 +22,7 @@ import { PICKUP_STYLE, Collectibles, type CloudKind, type PickupKind } from "./C
 import { evaluateNearMiss, FlowTuner, SessionGoals, type NearMiss } from "./Engagement";
 import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, SURRENDER_QUIPS, THUD_QUIPS, SurpriseEngine, quip } from "./Surprises";
 import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Moments";
+import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
 import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, EFFECT_UP_FRAME_SECONDS, nextBloomBudget, nextDpr, QUALITY_WINDOW_SECONDS } from "./quality";
@@ -382,6 +383,8 @@ export class Game {
   private readonly funnel = new Funnel();
   private funnelSummarySent = false;
   private momentLastAt: Partial<Record<MomentKind, number>> = {};
+  /** Second throttle for musical reactions — see `fireMoment`. */
+  private readonly momentMusicGate = new MusicMomentGate();
   private konamiBuffer: string[] = [];
   /** Edge-trigger for the ocean-entry splash burst (see fixedUpdate). */
   private wasInWater = false;
@@ -6641,6 +6644,16 @@ export class Game {
     if (opts.popup !== false) this.popupAtBird(opts.shout ?? def.shout, def.popup);
     if (opts.toast) this.hud.toast(opts.toast, def.tone);
     this.haptic(def.haptic);
+    // Make the beat a *musical* event, not only a sound effect. This is the one
+    // place every moment passes through, so wiring it here covers all kinds.
+    // The gate is the second throttle: `momentShouldReact` above already decided
+    // this beat is worth showing, and this keeps a burst of them from stacking
+    // six bus automations onto the same frame.
+    const nowMs = this.runTime * 1000;
+    if (this.momentMusicGate.allow(kind, nowMs)) {
+      this.momentMusicGate.mark(kind, nowMs);
+      this.audio.musicReaction(momentMusic(kind));
+    }
     if (this.moments.isFirstEver(kind)) {
       this.telemetry.track("moment_first", { kind, mode: this.modeId });
       this.markFunnel("first_moment");

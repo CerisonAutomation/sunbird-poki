@@ -95,19 +95,22 @@ enforces it, because a decision without an enforcing test is a rumour.
    (public, Node-rendered) lists every edition's hosts. Each bundle carries only
    its own `legal.edition.*`, because a shared policy would put
    `netlib.poki.io` inside the CrazyGames zip.
-7. **A comedy beat is meant to be a musical event, not just a sound effect —
-   and today it is not.** ⚠️ *This entry was previously stated as a standing
-   fact and it was wrong in both repos.* The parent monorepo has
-   `MusicMoments.ts` (199 lines) and a passing `music-moments.test.ts`, and its
-   header claims "`Music` grows four primitives (`faceplant`, `underwater`,
-   `sparkle`, `pushIntensity`)". It never did: those four names appear only in
-   the `MusicReactionTarget` interface and in the test's mock recorder, the real
-   `Music` class implements none of them, and nothing calls `applyMusicActions`.
-   This fork has no `MusicMoments.ts` at all, and `Moments.ts` has no reference
-   to music. **No player has ever heard the score react to a BONK.** The design
-   is sound and worth finishing — the rule it encodes is the right one (a comedy
-   beat gets a stop or a lift, never a slow-down of the flight) — but treat it as
-   unbuilt, not as a regression from the parent.
+7. **A comedy beat is a musical event, not just a sound effect.** ✅ built and
+   wired, 2026-09-29. This entry was previously stated as a standing fact and
+   was false: the parent monorepo has `MusicMoments.ts` and a passing test, and
+   its header claims "`Music` grows four primitives (`faceplant`, `underwater`,
+   `sparkle`, `pushIntensity`)" — it never did, in either repo. Those four names
+   existed only in the `MusicReactionTarget` interface and the test's mock
+   recorder; the real `Music` class implemented none of them and nothing called
+   `applyMusicActions`. So no player had ever heard the score react to a BONK.
+   Now: `Music.ts` implements all eight primitives, `Audio.musicReaction` is the
+   narrow pass-through, and `Game.fireMoment` — the one place every moment
+   passes through — applies the recipe behind a `MusicMomentGate` second
+   throttle. The design rule is enforced by the test, not just documented: only
+   PHEW may pull intensity, and only to −0.2, and no recipe may exceed three
+   gestures. Add a moment kind → the coverage test fails until you give it one.
+   Caveat: the songbook player is a fixed recording with no bus to shape, so a
+   moment played over a songbook track gets its SFX but no musical reaction.
 8. **Speed feel has one source of truth: `src/game/SpeedFeel.ts`.** The bands
    (cruise 0.45 / rush 0.72 / warp 0.90 of `MAX_SPEED`) and every curve derived
    from them — dive FOV kick (`CameraRig`), streak + warp-vignette opacity

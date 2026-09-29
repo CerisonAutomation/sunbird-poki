@@ -1,6 +1,7 @@
 const COIN_SCALE = [1046.5, 1174.66, 1318.51, 1567.98, 1760.0, 2093.0, 2349.32, 2637.02, 3135.96, 3520.0];
 
 import { GLOCK_PARTIALS, Music, type BiomeMusicStyle, type MusicMode } from "./Music";
+import { applyMusicActions, type MusicAction } from "./MusicMoments";
 import { SongbookPlayer } from "./SongbookPlayer";
 import type { BiomeId } from "./Songbook";
 
@@ -374,6 +375,22 @@ export class GameAudio {
   duckMusic(amount = 0.4, release = 0.5): void {
     this.music?.duck(amount, release);
     this.songbook?.ducked(amount, release);
+  }
+
+  /**
+   * Apply a moment recipe to whichever score is playing.
+   *
+   * Takes the action list rather than a `MomentKind` on purpose: this layer owns
+   * Web Audio, not gameplay, so it must not learn what a BONK is. `Game` decides
+   * *which* beat happened; the recipe is data, and applying data is all this does.
+   *
+   * The procedural `Music` implements all eight primitives. The songbook player
+   * does not — it is a fixed recording with no bus to shape — so a moment on
+   * that path falls back to the SFX the moment pipeline already plays, which is
+   * why this is a no-op rather than an error when `music` is null.
+   */
+  musicReaction(actions: MusicAction[]): void {
+    if (this.music) applyMusicActions(this.music, actions);
   }
 
   update(

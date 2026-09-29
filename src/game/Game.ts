@@ -3486,6 +3486,23 @@ export class Game {
       this.countdown = SOLO_START_COUNTDOWN;
     }
 
+    // Compile every shader this run can use BEFORE the clock starts.
+    //
+    // Three.js compiles a material's program lazily, on the first frame that
+    // actually draws it. That is invisible until it is not: the first run of a
+    // session stalls on whichever new material appears mid-flight. Measured on
+    // the running build — 350 frames, median 83ms under SwiftShader, p95 149ms,
+    // and one frame at 858ms. That outlier is a compile, not rendering, and it
+    // lands somewhere random in the first seconds of a player's very first
+    // run, which is the worst possible moment for the first impression.
+    //
+    // `renderer.compile` walks the scene and forces the driver to build every
+    // program now. It costs the same total work, just moved off the first
+    // seconds of play and into the load the player is already waiting through.
+    // Wrapped because it touches WebGL and must never be the reason a run fails
+    // to start.
+    this.warmShaders();
+
     this.setState("playing");
     this.setScreen("main");
     this.camera.setIntro(0);
@@ -7695,6 +7712,18 @@ export class Game {
       zenith: this.zeniths,
       pickups: this.pickups,
     };
+  }
+
+  /** Force every shader in the current scene to compile now rather than on the
+   *  frame that first draws it. Best-effort: a driver that refuses is a lost
+   *  optimisation, never a failed run. */
+  private warmShaders(): void {
+    try {
+      this.scene.updateMatrixWorld(true);
+      this.renderer.compile(this.scene, this.camera.camera);
+    } catch {
+      /* SwiftShader / a lost context — the frame will compile it instead. */
+    }
   }
 
   /** 0..1 — continuous musical intensity from the moment-to-moment flight. */

@@ -890,7 +890,21 @@ export class HUD {
     // puts them there, in normal flow, rather than an absolute offset that has
     // to be kept in sync with the button row's height.
     const header = lane("hud-header", [".top-bar", ".power-strip", ".mid-meta", ".power-chips", ".roster-bar", ".versus-bar"]);
-    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown"]);
+    // `.chain-readout` belongs in this lane and was missing from the list.
+    //
+    // ui.css:5609 documents the intent — "In the flight-messages lane, not
+    // floating at 22% of the screen… Lane placement is what the sibling
+    // announcements already do and is size-proof" — and the rule sets
+    // `position: static`, which only makes it a flow child INSIDE a lane. The
+    // element was never added here, so it stayed a static in-flow child of
+    // `.play-hud` itself: a full-width text block at the top of the play area.
+    // That is the "CHAIN x2 prints over the distance bar" problem the comment
+    // was written to prevent, arriving by a different route.
+    //
+    // It also escaped `e2e/layout.spec.ts`, whose overlap assertion names the
+    // lanes — an element in no lane cannot be asserted into one. The assertion
+    // picks it up automatically now that the lane exists.
+    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]);
     // `.fever-wrap` stays in the footer lane: it is `position: static` there
     // (see `.flight-footer .fever-wrap`), so it is a flow child of the footer.
     // Moving it out made the absolutely-positioned base rule resolve against

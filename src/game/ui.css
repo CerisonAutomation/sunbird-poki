@@ -2273,7 +2273,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .roster-bar {
   position: absolute;
   left: 50%;
-  top: 66px;
+  /* Same fix as `.finish-countdown`: this is a second element in the top zone
+     pinned to a magic pixel count with no safe-area term, so it collided on a
+     notched phone in landscape for the same reason. */
+  top: calc(56px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   width: min(620px, 94vw);
   pointer-events: none;
@@ -2428,7 +2431,15 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .finish-countdown {
   position: absolute;
   left: 50%;
-  top: 120px;
+  /* Was a hardcoded `top: 120px`, which collided with a landscape notch /
+     Dynamic Island because it carried no safe-area term at all. Bound to the
+     same two things the header it must clear is bound to — the shared
+     `--hud-header-height` token and `env(safe-area-inset-top)` — so the
+     countdown can never end up underneath the bar it is supposed to sit below,
+     whatever the device or the header does. The bare 120px also went stale
+     the moment the header height changed, which is exactly the class of bug
+     this removes. */
+  top: calc(var(--hud-header-height, 110px) + 10px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   font-size: 26px;
   font-weight: 800;

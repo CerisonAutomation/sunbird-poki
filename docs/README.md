@@ -45,6 +45,7 @@ markdown — so this stays true instead of being true once.
 | [`ROADMAP.md`](../ROADMAP.md) | Real / written-but-undeployed / fiction — the honesty ledger |
 | [`HANDOFF.md`](./HANDOFF.md) | Current state, standing decisions, verification chain, next queue |
 | [`BENCHMARKS.md`](./BENCHMARKS.md) | Category comparison: what the best games do, what Sunbird adopted, what it exceeds |
+| [`SUNBIRD_REVIEW_360.md`](./SUNBIRD_REVIEW_360.md) | 11-reviewer critique (design, feel, HUD, a11y, perf, audio, balance, ops) with RICE + MoSCoW prioritisation |
 | [`RELEASE-VERDICT.md`](./RELEASE-VERDICT.md) | Dated pre-upload verdict: what was fixed and what was still open when it was written |
 | [`multiplayer-social-audit.md`](./multiplayer-social-audit.md) | Short note on where the multiplayer/social surface stands |
 | [`DEPLOY.md`](../DEPLOY.md) | Hosting a build, env vars, edge functions |

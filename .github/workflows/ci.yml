@@ -29,6 +29,13 @@ jobs:
         run: pnpm lint
       - name: UX/UI audit (dead buttons, null refs, layout hygiene)
         run: pnpm audit:ui
+      # Both are ratchets: they exit 0 while the count is flat or falling and
+      # fail only when debt grows. They were documented as gates for a long
+      # time but never wired into package.json or CI, so nothing ran them.
+      - name: i18n debt ratchet
+        run: pnpm i18n:audit
+      - name: Docs link + orphan audit
+        run: pnpm docs:audit
 
       - name: Typecheck
         run: pnpm typecheck
@@ -125,30 +132,10 @@ jobs:
       - name: Autoperfect production mode
         run: pnpm verify:prod
 
-  build-itch:
-    name: Build (itch.io single-file)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build (itch.io singlefile)
-        env:
-          VITE_PORTAL_TARGET: none
-          VITE_SINGLEFILE: "true"
-        run: pnpm build:itch
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sunbird-dist-itch
-          path: dist-itch/
-          retention-days: 14
-
+  # The itch.io job this replaces ran `pnpm build:itch`, a script that has never
+  # existed in this fork's package.json — the job could only ever fail. This
+  # checkout is the Poki-only fork (see vite.config.ts, where PORTAL is the
+  # literal "poki"), so the itch.io build was removed rather than repaired.
   artifact:
     name: Artifact (Inspector folder in a real browser)
     runs-on: ubuntu-latest
@@ -246,30 +233,15 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  pvp-live:
-    name: PvP · live clients · pilot directory
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # `pvp:check` boots the real room server on a scratch port and runs three
-      # layers against it: the raw protocol smoke, the live two-client suite
-      # (real RealtimeClient, real server, real state frames) and the pilot
-      # directory contract behind the Pilot Lookup panel. It fails unless every
-      # layer passes, so "multiplayer works" is a checked claim on every push,
-      # not something a human has to remember to try.
-      - name: PvP + pilot directory (scratch server, live clients)
-        run: pnpm pvp:check
-
+  # The pvp-live job this replaces ran `pnpm pvp:check`, which spawns
+  # `server/src/index.ts` (scripts/pvp-check.mjs:94). That file is not in this
+  # checkout — `server/` holds exactly one file, `src/anticheat/limits.ts`,
+  # which the client test `anticheat.test.ts` reads from disk. The room server
+  # lives in the parent monorepo (README.md), so the job could only fail here.
+  # The Poki build ships Netlib P2P rooms instead, exercised client-side by the
+  # `pvp-live.test.ts` suite that runs inside `pnpm test`.
   portals:
-    name: Build (Poki + CrazyGames + generic zips)
+    name: Build + verify the Poki zip
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -281,12 +253,18 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build all portal zips
-        run: pnpm build:portals
-      - name: Verify per-version isolation (each build carries only its own portal)
+      # `build:portals` was replaced by `build:poki` in f2ce415 — this fork
+      # ships one portal. The verify/audit scripts were migrated with it
+      # (PORTALS = ["poki"] in verify-portal.mjs and audit-zips.mjs), so this
+      # job was the only thing left naming CrazyGames and generic zips.
+      - name: Build the Poki zip
+        run: pnpm build:poki
+      - name: Verify the shipping zip (marker isolation, anatomy, thumbnail)
         run: pnpm verify:portals && pnpm audit:zips && pnpm verify:thumbnail
       # Source-level half of the same contract: the Rust stack stays
       # platform-agnostic and the Poki edition stays P2P (netlib) + AUDS.
+      # A missing rust/ root is a fact about this checkout, not a failure —
+      # verify-isolation.mjs walks it when present and no-ops when absent.
       - name: Verify the Rust/Poki split at the source level
         run: pnpm isolation:check
       - name: Verify the Poki Inspector upload shape
@@ -296,7 +274,5 @@ jobs:
           name: sunbird-portal-zips
           path: |
             sunbird-poki.zip
-            sunbird-crazy.zip
-            sunbird-generic.zip
             poki-upload/
           retention-days: 14

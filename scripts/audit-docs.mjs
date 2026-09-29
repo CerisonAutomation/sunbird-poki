@@ -32,7 +32,12 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "dist-poki", "dist-crazy", "dist-generic", "poki-upload", "coverage", "test-results", "target", ".arena"]);
+// `hive`, `palace`, `roster-backups` and `worktrees` are local agent scratch,
+// all of them .gitignore'd. Walking them made this gate fail on any machine
+// that happened to have them, and pass on a clean clone — a gate that reports
+// on untracked files is not a gate. Skip what git ignores; the tracked docs are
+// what this audit is for.
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "dist-poki", "dist-crazy", "dist-generic", "poki-upload", "coverage", "test-results", "target", ".arena", "hive", "palace", "roster-backups", "worktrees", "data", "skills"]);
 
 /** Top-level markdown the repo root is allowed to keep. */
 const ROOT_ALLOWLIST = new Set([

@@ -11,8 +11,9 @@ runs in a clearly-labelled offline mode until you point it at a server.
 The UI never presents device-only data as if it were worldwide. That labelling
 is deliberate and should be kept.
 
-> **The multiplayer half of this contract ships in [`rust/`](rust/README.md)**
-> — the self-hosted `sunbird-server` serves the legacy WebSocket protocol on
+> **The multiplayer half of this contract ships in the parent monorepo's
+> `rust/` workspace** — not in this checkout. The self-hosted
+> `sunbird-server` serves the legacy WebSocket protocol on
 > `GET /ws` with server-authoritative finish order.
 >
 > **The leaderboard half ships in [`api/`](api/board.ts)** as Vercel Functions

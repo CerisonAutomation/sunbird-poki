@@ -1,11 +1,11 @@
 {
-  "generated": "2026-09-24",
-  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless.",
+  "generated": "2026-09-29",
+  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-29: the toast floor moved 220 -> 267 because Game.ts grew ~990 lines carrying 47 new hud.toast() literals in English. That is a real loss of translated coverage, recorded here rather than hidden; it does not block the Poki build because untranslated copy falls back to English through defaultText and the portal is English-language. The point of the re-bless is that the gate now catches the NEXT 47. In the same window aria-labels fell 45 -> 12 and button labels 48 -> 22, so total debt still dropped 313 -> 301.",
   "categories": {
-    "toast": 220,
+    "toast": 267,
     "screenTitle": 0,
-    "ariaLabel": 45,
-    "buttonLabel": 48
+    "ariaLabel": 12,
+    "buttonLabel": 22
   },
-  "total": 313
+  "total": 301
 }

@@ -45,6 +45,8 @@ markdown — so this stays true instead of being true once.
 | [`ROADMAP.md`](../ROADMAP.md) | Real / written-but-undeployed / fiction — the honesty ledger |
 | [`HANDOFF.md`](./HANDOFF.md) | Current state, standing decisions, verification chain, next queue |
 | [`BENCHMARKS.md`](./BENCHMARKS.md) | Category comparison: what the best games do, what Sunbird adopted, what it exceeds |
+| [`RELEASE-VERDICT.md`](./RELEASE-VERDICT.md) | Dated pre-upload verdict: what was fixed and what was still open when it was written |
+| [`multiplayer-social-audit.md`](./multiplayer-social-audit.md) | Short note on where the multiplayer/social surface stands |
 | [`DEPLOY.md`](../DEPLOY.md) | Hosting a build, env vars, edge functions |
 | [`PORTAL_PUBLISHING.md`](../PORTAL_PUBLISHING.md) | The four `VITE_PORTAL_TARGET` builds and their monetization matrix |
 | [`SUBMISSION_CHECKLIST.md`](../SUBMISSION_CHECKLIST.md) | Human walkthrough of a portal submission |
@@ -57,7 +59,7 @@ markdown — so this stays true instead of being true once.
 | [`DEPLOYMENT_CHECKLIST.md`](./DEPLOYMENT_CHECKLIST.md) | Deploy-time checks (hosting side; portal side lives in `SUBMISSION_CHECKLIST.md`) |
 | [`AUDS.md`](./AUDS.md) | Poki's Arbitrary User Data Store: contract, keys, failure modes |
 | [`poki/`](./poki/) | The Poki developer guide extracted into 131 numbered rules + `requirements.json` |
-| [`../rust/README.md`](../rust/README.md) | The authoritative realtime server (protocol, rooms, anti-cheat) |
+| Parent monorepo's `rust/` workspace | The authoritative realtime server (protocol, rooms, anti-cheat). Not in this checkout — see the note at the top of the root README |
 
 ## Generated — do not hand-edit
 
@@ -80,17 +82,19 @@ markdown — so this stays true instead of being true once.
 ## Verification chain
 
 ```bash
-pnpm gate          # lint · audit:ui · i18n:audit · docs:audit · typecheck (client+server)
-                   # · 2,319 unit tests · 48 server tests · verify:prod · build:poki
-                   # · verify:portals · audit:zips · verify:upload · verify:thumbnail
-                   # · isolation:check · policy/artifact/mobile e2e
+pnpm gate          # lint · audit:ui · i18n:audit · typecheck · unit tests
+                   # · verify:prod · build:poki · verify:portals · audit:zips
+                   # · verify:upload · verify:thumbnail · isolation:check
+                   # · policy/artifact/mobile e2e
 pnpm verify:csp      # the built dist-poki bundle vs the CSP request (inside verify:portals)
 pnpm poki:preflight  # the portal half of the gate, ending in a live poki:audit --run
 pnpm poki:audit      # 131 extracted rules → 116 satisfied / 5 human actions / 10 informational
+pnpm docs:audit      # doc link / orphan / snapshot-status gate (run separately)
 ```
 
-Numbers as of 2026-09-27: **2,319 unit tests** across 161 files,
-**36 locales × 484 barrel keys** with 100% pack coverage and **250 of 16,940**
+Numbers as of 2026-09-29: **2,358 unit tests** across 162 files (9 skipped —
+the live-socket suites that need a running room server, which is in the parent
+monorepo), **36 locales × 484 barrel keys** with 100% pack coverage and **250 of 16,940**
 non-English cells still holding English — **1.48%**, down from 55% before the
 translation pass. What remains is correct by design and will not be translated:
 the brand name `Sunbird`, the mode/onomatopoeia names (`FRENZY`, `BOING`,

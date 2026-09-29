@@ -1,5 +1,10 @@
 # Sunbird Poki — Expert Findings Fix Loop (Round 3)
 
+> **Status:** archived — complete. Every task below is checked and the run
+> closed with `ALL_TASKS_COMPLETE`. Kept as the evidence for that round's
+> fixes; it is not a work queue. Current state lives in
+> [`../HANDOFF.md`](../HANDOFF.md).
+
 Fix verified defect findings from the 5-expert fan-out (design, compliance,
 bugs, perf, a11y). Improvements/balance speculation stays out; only defects
 with file:line evidence get fixed. Zero behavior change except where the

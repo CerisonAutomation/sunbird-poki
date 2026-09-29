@@ -3313,7 +3313,7 @@ export class Game {
     // `fail` until the goal is actually reached (death/sun-out/elimination
     // all keep it a fail).
     this.runOutcome = "fail";
-    this.platform?.measure("mode", this.modeId, "start");
+    this.platform?.measure("run", this.modeId, "start");
     // Snapshot the record to beat BEFORE this run writes anything, so the
     // mid-run "new record" moment and the results "NEW BEST" banner compare
     // against the genuinely previous best.
@@ -3684,7 +3684,7 @@ export class Game {
     // reached its goal, `fail` when it ended by death/elimination/sun-out.
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
-    this.platform?.measure("mode", this.modeId, this.runOutcome);
+    this.platform?.measure("run", this.modeId, this.runOutcome);
     const stats = this.runStats();
     // Freeze the number the results card shows: `bird.asleep` only damps
     // velocity (see Bird.update), it doesn't zero it, so the bird keeps
@@ -7419,7 +7419,7 @@ export class Game {
       const credited = this.save.addCoins(bonus);
       this.audio.chapterFanfare();
       this.hud.toast(`3× flight bonus — +● ${credited} coins`, "gold");
-      platform.measure("item", "results-coin-multiplier", "granted");
+      platform.measure("reward", "results-coin-multiplier", "granted");
     } else {
       this.hud.toast("No reward this time — the 3× bonus is still on the card", "warn");
     }

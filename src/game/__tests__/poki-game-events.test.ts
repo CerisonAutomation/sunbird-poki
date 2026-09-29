@@ -92,6 +92,35 @@ describe("Poki game events", () => {
     for (const k of kinds) expect(k, `continue kind "${k}" is interpolated into measure()`).not.toMatch(DISALLOWED);
   });
 
+  it("never puts a Poki-reserved character in a measure() value", () => {
+    // GM-03. The portal reserves `/` and `^` — they are its own path and
+    // pointer syntax, and the SDK parses the value as a three-part path, so a
+    // `/` smuggled into a category or label silently splits the event into the
+    // wrong bucket on Poki's side. The client cannot see that happen: the call
+    // succeeds either way, and the loss only shows up in the portal dashboard
+    // weeks later. Hence a source-level check on every value, literals and
+    // dynamic ones alike.
+    //
+    // `DISALLOWED` above is stricter than this and would also fail on other
+    // characters; this test is the narrower, named rule, so a failure points at
+    // the reserved pair specifically.
+    const RESERVED = /[\/^]/;
+    const offenders: string[] = [];
+    for (const call of measureCalls()) {
+      for (const value of call.values) {
+        const literal = value.match(/^"([^"]*)"$/);
+        // Literals are judged directly. The two dynamic sources are checked at
+        // their own definitions by the test above, for the same reason: a
+        // reserved character enters a value where the value is built, not where
+        // it is passed.
+        if (literal && RESERVED.test(literal[1]!)) {
+          offenders.push(`${call.file}:${call.line} reserved char in ${value}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("pairs every rewarded placement with visible + interact", () => {
     const calls = measureCalls();
     const actions = new Set(calls.map((c) => c.values[2]));

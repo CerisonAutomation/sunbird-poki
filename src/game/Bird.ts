@@ -3,8 +3,9 @@ import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
   AIR_DRAG_DIVE,
-  FLARE_AUTHORITY,
-  FLARE_REFERENCE,
+  FLARE_BRAKE,
+  FLARE_DURATION,
+  FLARE_MAX_RISE,
   AIR_DRAG_GLIDE,
   BIRD_RADIUS,
   BOOST_EXTRA_SPEED,
@@ -153,6 +154,8 @@ export class Bird {
   /** Whether the previous physics step was a dive. The flare fires on the
    *  falling edge, so a held dive does not re-apply it every step. */
   private wasDiving = false;
+  /** Seconds of pull-out brake remaining. See the flare in step(). */
+  private flareTimer = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -492,12 +495,37 @@ export class Bird {
       //
       // The fall is captured BEFORE any gravity runs, because by the time this
       // is reached the bird has already been accelerated downward this step.
-      if (this.wasDiving && !diving && this.vy < 0) {
-        const authority = FLARE_AUTHORITY * Math.min(1, -this.vy / FLARE_REFERENCE);
-        this.vy += authority;
-        this.flareAmount = authority;
-      }
+      const flareOpen = this.wasDiving && !diving && this.vy < 0;
+      if (flareOpen) this.flareTimer = FLARE_DURATION;
       this.wasDiving = diving;
+
+      // The pull-out: a DECAYING BRAKE, not an impulse.
+      //
+      // An impulse was measurably not enough. A 26 m/s one-frame nudge took a
+      // 95 m/s dive to 69 and then gravity took it straight back — -70 at 42ms,
+      // -73 at 492ms, never approaching zero. The player released and kept
+      // diving, which is exactly the complaint: the pull-out does not catch.
+      //
+      // What a flare actually is, aerodynamically, is a sustained brake. So it
+      // is one now: strongest the frame the button comes up, falling linearly
+      // to nothing over FLARE_DURATION. The decay is the point — it means the
+      // pull-out has an end, so it is a recovery rather than a free lift, and a
+      // player cannot chain releases into sustained climb.
+      //
+      // Clamped to FLARE_MAX_RISE so it can arrest a dive and never convert one
+      // into a launch. Divided by dt-free scaling: the acceleration is
+      // BRAKE * (remaining/duration), applied over dt.
+      this.flareAmount = 0;
+      if (this.flareTimer > 0) {
+        const strength = FLARE_BRAKE * (this.flareTimer / FLARE_DURATION);
+        this.vy += strength * dt;
+        this.flareTimer = Math.max(0, this.flareTimer - dt);
+        if (this.vy > FLARE_MAX_RISE) {
+          this.vy = FLARE_MAX_RISE;
+          this.flareTimer = 0;
+        }
+        this.flareAmount = strength;
+      }
       const lift = diving
         ? 0
         : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1)) * glideLiftScale(this.airTime);

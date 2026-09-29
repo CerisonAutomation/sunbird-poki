@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Bird } from "../Bird";
-import { FLARE_AUTHORITY, GLIDE_LIFT_MAX, GRAVITY_GLIDE } from "../constants";
+import { FLARE_DURATION, FLARE_MAX_RISE, GLIDE_LIFT_MAX, GRAVITY_GLIDE } from "../constants";
 import { glideLiftScale } from "../FlightPhysics";
 import { TerrainSystem } from "../TerrainSystem";
 
@@ -64,39 +64,60 @@ describe("dive — the bird reaches terminal dive speed", () => {
 });
 
 describe("release — the current behaviour, measured", () => {
-  it("sheds dive speed on release instead of accelerating into the ground", () => {
+  it("brakes the dive on release and HOLDS the recovery, instead of diving on", () => {
     const b = dive(1.0);
     const atRelease = b.vy;
     b.step(DT, GLIDE, terrain);
-    // The flare. One-shot, on the falling edge, scaled by how fast we were
-    // genuinely falling. At a terminal dive it is worth the full authority.
     expect(b.flareAmount).toBeGreaterThan(0);
-    expect(b.flareAmount).toBeLessThanOrEqual(FLARE_AUTHORITY);
-    expect(b.vy).toBeGreaterThan(atRelease); // strictly less downward
-
-    for (let t = 0; t < 0.5; t += DT) b.step(DT, GLIDE, terrain);
-    // Measured: -95.4 at release, -72.6 half a second later. Before the flare
-    // this was -97.7 — the dive was a one-way door and the pull-out did nothing.
     expect(b.vy).toBeGreaterThan(atRelease);
-    expect(b.vy - atRelease, "speed recovered by the pull-out").toBeGreaterThan(12);
+
+    // The measurement that matters is the shape, not one frame. An impulse was
+    // tried first and it did NOT work: 26 m/s in a single frame took -95 to -69
+    // and then gravity took it straight back, -70 at 42ms and -73 at 492ms,
+    // never approaching zero. Releasing felt like a softer dive, not a catch.
+    //
+    // So the brake must not just be an impulse: it has to keep pushing, and the
+    // push has to still be there a third of a second later.
+    const half = [];
+    for (let t = 0; t < 0.3; t += DT) { b.step(DT, GLIDE, terrain); half.push(b.vy); }
+    const at300ms = half[half.length - 1]!;
+    // Still braking hard a third of the way through, i.e. the pull-out is
+    // sustained rather than a single tick.
+    expect(b.flareAmount, "brake still engaged at 300ms").toBeGreaterThan(0);
+    // And it has actually arrested a large share of the dive.
+    expect(at300ms - atRelease, "speed shed by 300ms").toBeGreaterThan(40);
+
+    // The failure this is written against: the old curve was flat or worsening
+    // over this window. A brake that stops helping would look like this.
+    expect(at300ms, "must be better than where it was mid-brake").toBeGreaterThan(atRelease / 2);
   });
 
-  it("scales the flare to how hard you actually dove", () => {
-    const hard = dive(1.0);
-    const hardVy = hard.vy;
-    hard.step(DT, GLIDE, terrain);
-    const hardFlare = hard.flareAmount;
+  it("ends: the brake decays to nothing, so releases cannot chain into a lift", () => {
+    const b = dive(1.0);
+    b.step(DT, GLIDE, terrain);
+    for (let t = 0; t < FLARE_DURATION * 1.5; t += DT) b.step(DT, GLIDE, terrain);
+    expect(b.flareAmount, "brake is over").toBe(0);
+  });
 
-    // A bird that was barely falling gets almost nothing. This is what keeps
-    // a gentle tap-out and a committed plunge different gestures.
-    const shallow = new Bird();
-    shallow.reset(0, 900);
-    shallow.vx = 40;
-    shallow.vy = 0;
-    for (let t = 0; t < DT; t += DT) shallow.step(DT, DIVE, terrain);
+  it("never converts a dive into a climb", () => {
+    const b = dive(1.0);
+    let highest = -Infinity;
+    for (let t = 0; t < 1.5; t += DT) { b.step(DT, GLIDE, terrain); highest = Math.max(highest, b.vy); }
+    // Recovery, not a launch pad. Chained releases must not be a free lift.
+    expect(highest, "the pull-out brakes, it does not lift").toBeLessThanOrEqual(FLARE_MAX_RISE);
+  });
+
+  it("brakes the same regardless of depth, because it decays in time", () => {
+    // Deliberate, and worth stating because the impulse version did the
+    // opposite. The brake is a FIXED strength that fades with the clock, not a
+    // nudge scaled by how fast you happened to be. A fixed brake is what makes
+    // the pull-out predictable — the player learns "releasing always buys me
+    // about this much" — which is the whole point of a verb you can master.
+    const deep = dive(1.0);
+    deep.step(DT, GLIDE, terrain);
+    const shallow = dive(0.15);
     shallow.step(DT, GLIDE, terrain);
-    expect(shallow.flareAmount).toBeLessThan(hardFlare);
-    expect(hardVy).toBeLessThan(-80);
+    expect(shallow.flareAmount).toBeCloseTo(deep.flareAmount, 5);
   });
 
   it("adds nothing when releasing from a climb", () => {

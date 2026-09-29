@@ -68,8 +68,29 @@ export const AIR_DRAG_DIVE = 0.00016;
  * falling speed at which the full amount applies; below it the impulse scales
  * down linearly to nothing.
  */
-export const FLARE_AUTHORITY = 26;
 export const FLARE_REFERENCE = 95;
+/** How long the pull-out brakes for, and how hard it pushes at the start.
+ *
+ *  An IMPULSE was not enough, and the measurement is why. A one-frame nudge of
+ *  26 m/s took a 95 m/s dive to 69 — and then gravity took it straight back:
+ *  -70 at 42ms, -71 at 192ms, -73 at 492ms. The bird never approached zero. It
+ *  just descended slightly more slowly, which reads as a softer dive, not as
+ *  catching anything.
+ *
+ *  So the pull-out is a DECAYING BRAKE instead: a sustained upward acceleration
+ *  for FLARE_DURATION, strongest the instant the button comes up and falling
+ *  linearly to nothing. Linear decay rather than a curve because it gives a
+ *  closed-form impulse — BRAKE * DURATION / 2 ≈ 65 m/s, which takes 95 down to
+ *  about 30 — and because a smooth curve would be tuning by feel against a
+ *  quantity that should be arithmetic.
+ *
+ *  It can brake a dive to FLARE_MAX_RISE but never past it, so the flare can
+ *  never turn into a climb. Releasing is recovery, not a launch pad.
+ */
+export const FLARE_BRAKE = 300;
+export const FLARE_DURATION = 0.42;
+/** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
+export const FLARE_MAX_RISE = -14;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;

@@ -84,6 +84,11 @@ function medalText(earned: Medal, toNext: number | null): string {
  *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
  *  threshold, so the footer and the strip can never disagree. */
 const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
+/** Longest single-run distance, used to decide whether a mid-run goal is
+ *  actually actionable. Measured from the shipped build: a good run reaches
+ *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
+ *  it mid-flight is showing a bar that cannot move. */
+const RUN_REACHABLE_M = 3000;
 
 /** Stable screen identifiers used by automation, telemetry, and QA. */
 export const SCREEN = {
@@ -1577,8 +1582,22 @@ export class HUD {
           rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
 
-        // Career rung: only when no beat row and there's a next rank to chase
-        if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
+        // Career rung: only when no beat row and there's a next rank to chase.
+        //
+        // ...and only when a SINGLE RUN can actually move it. A run covers a
+        // few hundred metres to a couple of km, and the career ladder is measured
+        // in tens of km — so this row was permanently unreachable and permanently
+        // on screen. The shipped build showed "Paper Wings -> Bronze Wings /
+        // 25.00 km to go" during runs measured in hundreds of metres: a progress
+        // bar that cannot move, competing with the terrain, for the whole run.
+        //
+        // This is the same defect the quest strip had, and the same fix. A goal
+        // worth showing mid-run is one the player can chase RIGHT NOW. The full
+        // career ladder is on the progress screen, where a number that big
+        // belongs. The bar is only hidden while a run is in flight; a goal that
+        // becomes reachable mid-run shows itself, because `nextNeeded` is part
+        // of the strip key.
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < 2) {
           const cpct = Math.min(100, s.wings.progress * 100);
           rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
         }
@@ -1742,9 +1761,18 @@ export class HUD {
       // One verb, one source. The hand said "Tap . Space . up" - a TAP on a
       // HOLD game, naming two keys that do not exist on the device this
       // ships to - on screen at the same moment as a coach saying HOLD.
-      this.handHintEl.textContent = s.settings.tapToggleDive
-        ? t("onboarding.tapToDive", undefined, "Tap to dive")
-        : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
+      //
+      // And when the coach line IS up, the hand does not repeat it. Both were
+      // showing at once in the shipped build: "HOLD to dive down the hill" with
+      // "Hold to dive" stacked directly beneath it, saying the same thing
+      // twice, mid-screen, over the terrain the player is trying to read. The
+      // hand still gestures - a gesture is not noise, it is the affordance -
+      // it just stops talking while something else already is.
+      this.handHintEl.textContent = s.hint
+        ? ""
+        : s.settings.tapToggleDive
+          ? t("onboarding.tapToDive", undefined, "Tap to dive")
+          : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
       if (html !== this.lastChips) {
         this.lastChips = html;
         this.powersEl.innerHTML = renderCoins(html);

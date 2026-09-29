@@ -35,11 +35,13 @@ const EXIT_MS = 240;
 export class NotificationQueue {
   private readonly pending: PendingNotification[] = [];
   private readonly live: LiveNotification[] = [];
+  private disposed = false;
 
   constructor(private readonly container: HTMLElement) {}
 
   /** Enqueue an event notification; it renders immediately if a slot is free. */
   push(text: string, kind: NotificationKind = "event"): void {
+    if (this.disposed) return;
     this.pending.push({ text, kind });
     this.drain();
   }
@@ -74,19 +76,30 @@ export class NotificationQueue {
   private dismiss(el: HTMLElement): void {
     const idx = this.live.findIndex((v) => v.el === el);
     if (idx === -1) return;
-    window.clearTimeout(this.live[idx]!.timer);
-    this.live.splice(idx, 1);
+    const entry = this.live[idx]!;
+    window.clearTimeout(entry.timer);
     el.classList.remove("in");
     el.classList.add("out");
-    window.setTimeout(() => {
+    // The entry deliberately STAYS in `live` until the element is really out of
+    // the DOM. Releasing the slot here instead would let the next queued
+    // notification render while this one is still fading, so three could be on
+    // screen at once — the one thing MAX_VISIBLE exists to prevent. Being
+    // briefly one deep for 240ms is the correct trade against that.
+    entry.timer = window.setTimeout(() => {
       el.remove();
-      // A slot just freed up — let the next queued notification take it.
-      this.drain();
+      const i = this.live.findIndex((v) => v.el === el);
+      if (i !== -1) this.live.splice(i, 1);
+      if (!this.disposed) this.drain();
     }, EXIT_MS);
   }
 
   /** Clears every pending and live notification, and cancels their timers. */
   dispose(): void {
+    // `disposed` also covers the EXIT timers created in `dismiss`, which are
+    // stored on the entry and so ARE cancelled above — but a queue that had a
+    // notification mid-fade when dispose ran must not be resurrected by a later
+    // push either, which the flag makes explicit.
+    this.disposed = true;
     for (const v of this.live) window.clearTimeout(v.timer);
     for (const v of this.live) v.el.remove();
     this.live.length = 0;

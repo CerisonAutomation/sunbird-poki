@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Bird } from "../Bird";
-import { FLARE_DURATION, FLARE_MAX_RISE, GLIDE_LIFT_MAX, GRAVITY_GLIDE } from "../constants";
+import { FLARE_BUFFER, FLARE_DURATION, FLARE_MAX_RISE, GLIDE_LIFT_MAX, GRAVITY_GLIDE } from "../constants";
 import { glideLiftScale } from "../FlightPhysics";
 import { TerrainSystem } from "../TerrainSystem";
 
@@ -118,6 +118,71 @@ describe("release — the current behaviour, measured", () => {
     const shallow = dive(0.15);
     shallow.step(DT, GLIDE, terrain);
     expect(shallow.flareAmount).toBeCloseTo(deep.flareAmount, 5);
+  });
+
+  it("still fires when the release lands while the bird is GROUNDED", () => {
+    // The case a player hits constantly: skimming the ground, let go, keep
+    // flying. The old check lived inside the ballistic branch, so a release
+    // while grounded changed nothing at all and the pull-out simply did not
+    // happen. The release is now latched before the branch, so it survives.
+    const b = new Bird();
+    const gy = terrain.heightAt(200);
+    b.reset(200, gy + 0.9);
+    b.vx = 40;
+    b.vy = 0;
+    b.step(DT, DIVE, terrain);
+    expect(b.grounded, "probe should be resting on the ground").toBe(true);
+    b.step(DT, GLIDE, terrain); // release while grounded
+
+    // The brake cannot SPEND while grounded — there is no dive to arrest — so
+    // nothing is audible yet. What matters is that the release was LATCHED
+    // rather than dropped, which is only observable once the bird is airborne
+    // and falling: the flare must then fire on that first frame.
+    expect(b.flareAmount, "nothing to brake yet, on the ground").toBe(0);
+    b.vy = -50;
+    b.grounded = false;
+    b.step(DT, GLIDE, terrain);
+    expect(b.flareAmount, "a grounded release must survive into the air").toBeGreaterThan(0);
+  });
+
+  it("still fires when the release lands on a frame with vy >= 0", () => {
+    // The bottom of an arc. The old check required vy < 0 on the release frame
+    // itself, so letting go exactly there missed the edge forever — `wasDiving`
+    // was already consumed and the flare could never fire. That is the literal
+    // "sometimes the release does nothing".
+    const b = new Bird();
+    b.reset(0, 900);
+    b.vx = 40;
+    b.vy = -20;
+    b.step(DT, DIVE, terrain);
+    b.vy = 30; // climbing at the instant of release
+    b.step(DT, DIVE, terrain);
+    b.vy = 30;
+    b.step(DT, GLIDE, terrain); // release while climbing
+    // It may not have spent yet (nothing to arrest) — but the release must not
+    // have been lost. Force a fall and confirm the brake is still armed.
+    b.vy = -40;
+    b.step(DT, GLIDE, terrain);
+    expect(b.flareAmount, "a release during a climb must not be consumed").toBeGreaterThan(0);
+  });
+
+  it("does not re-fire on a release older than the buffer", () => {
+    // A release fires ONCE. Holding the button again and letting go is a new
+    // release and is allowed to fire — the buffer only stops a STALE one from
+    // being banked and cashed in later.
+    const b = dive(0.5);
+    b.step(DT, GLIDE, terrain); // release -> arms and fires
+    expect(b.flareAmount).toBeGreaterThan(0);
+    // Stay gliding. The brake runs its course and must simply end; no further
+    // flare can appear because no further release happened.
+    let sawFlareAfterEnd = 0;
+    for (let t = 0; t < FLARE_BUFFER * 4; t += DT) {
+      b.step(DT, GLIDE, terrain);
+      if (b.flareAmount > 0) sawFlareAfterEnd++;
+    }
+    expect(b.flareAmount, "the brake must end").toBe(0);
+    // It may still be running for FLARE_DURATION, but never past the buffer.
+    expect(sawFlareAfterEnd * DT, "brake outlived the buffer").toBeLessThan(FLARE_BUFFER + DT);
   });
 
   it("adds nothing when releasing from a climb", () => {

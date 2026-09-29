@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {
   AIR_DRAG_DIVE,
   FLARE_BRAKE,
+  FLARE_BUFFER,
   FLARE_DURATION,
   FLARE_MAX_RISE,
   AIR_DRAG_GLIDE,
@@ -156,6 +157,8 @@ export class Bird {
   private wasDiving = false;
   /** Seconds of pull-out brake remaining. See the flare in step(). */
   private flareTimer = 0;
+  /** Seconds during which a release is still "live" and can spend the flare. */
+  private releaseBuffer = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -408,10 +411,30 @@ export class Bird {
     this.justLaunched = false;
     this.impact = 0;
     this.flareAmount = 0;
+
+    // Record the release ONCE, here, before the grounded/ballistic branch —
+    // so it is latched whether the bird is flying or still on the ground.
+    //
+    // The flare used to require `wasDiving && !diving && vy < 0` on one
+    // frame, which failed in two ways players actually hit. Releasing while
+    // the bird sat on the ground changed nothing at all, because that whole
+    // check lived inside the ballistic branch. And releasing on the one frame
+    // where vy happened to be >= 0 — the bottom of an arc — missed the edge
+    // entirely and could never fire, because `wasDiving` had already been
+    // consumed. That is "sometimes the release does nothing", and no amount of
+    // tuning the brake fixes it, because the brake was never given the chance
+    // to run.
     const was = this.grounded;
     this.wasGrounded = was;
 
     const diving = opts.diving && !this.asleep;
+
+    // Latch the release here — after `diving` resolves, and crucially BEFORE
+    // the grounded/ballistic branch below, so a release while the bird is still
+    // on the ground is recorded rather than discarded.
+    if (this.wasDiving && !diving) this.releaseBuffer = FLARE_BUFFER;
+    this.wasDiving = diving;
+    this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
     const gMult = opts.gravityMult ?? 1;
     const cap =
       (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (opts.boost ? BOOST_EXTRA_SPEED : 0);
@@ -495,9 +518,12 @@ export class Bird {
       //
       // The fall is captured BEFORE any gravity runs, because by the time this
       // is reached the bird has already been accelerated downward this step.
-      const flareOpen = this.wasDiving && !diving && this.vy < 0;
-      if (flareOpen) this.flareTimer = FLARE_DURATION;
-      this.wasDiving = diving;
+      // A release inside the buffer window, waiting for a moment it can be
+      // spent. See `noteRelease` for why this is a latch and not an edge.
+      if (this.releaseBuffer > 0 && !diving && this.vy < 0) {
+        this.releaseBuffer = 0;
+        this.flareTimer = FLARE_DURATION;
+      }
 
       // The pull-out: a DECAYING BRAKE, not an impulse.
       //

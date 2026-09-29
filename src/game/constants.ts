@@ -91,6 +91,15 @@ export const FLARE_BRAKE = 300;
 export const FLARE_DURATION = 0.42;
 /** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
 export const FLARE_MAX_RISE = -14;
+/** How long a release stays live and can still spend the flare.
+ *
+ *  Without this the pull-out depended on the player letting go during one
+ *  specific frame, which is not a thing a person can do reliably. 180ms covers
+ *  a release that lands while the bird is briefly grounded, or on the frame
+ *  where vy crosses zero at the bottom of an arc, without being so long that a
+ *  player who lets go and immediately presses again gets a free brake.
+ */
+export const FLARE_BUFFER = 0.18;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;

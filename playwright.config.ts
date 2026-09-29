@@ -11,8 +11,15 @@ const browser = resolveChromium();
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 60000,
-  expect: { timeout: 20000 },
+  // Same reasoning as playwright.policy.config.ts, and for the same reason:
+  // these specs boot the real WebGL build under headless SwiftShader, which
+  // rasterises on the CPU, so runtime tracks machine load rather than test
+  // difficulty. 60s left the CI `orientation` and `mobile` jobs close enough to
+  // the edge that a busy runner turned them red for reasons that had nothing to
+  // do with the game. A gate that fails on ambient load is one people learn to
+  // re-run; generous, with `expect` still failing fast on a real regression.
+  timeout: 300_000,
+  expect: { timeout: 20_000 },
   workers: 1,
   fullyParallel: false,
   reporter: "list",

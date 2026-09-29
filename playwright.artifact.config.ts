@@ -19,7 +19,10 @@ const browser = resolveChromium();
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /poki-artifact\.spec\.ts/,
-  timeout: 90_000,
+  // Boots the ~2 MB single-file shipping build under SwiftShader, so the same
+  // CPU-bound caveat as the other configs applies — see the note in
+  // playwright.policy.config.ts.
+  timeout: 300_000,
   expect: { timeout: 30_000 },
   workers: 1,
   fullyParallel: false,

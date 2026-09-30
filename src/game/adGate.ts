@@ -43,3 +43,41 @@ export function adBreakAllowsAction(action: string, portalOwned: boolean): boole
 export function adBreakCanEnd(portalOwned: boolean, adTimer: number): boolean {
   return !portalOwned && adTimer <= 0;
 }
+
+/**
+ * Is the "return to flight" escape hatch armed yet?
+ *
+ * This is the third skip vector, and it was wide open. On a portal build both
+ * `ad-skip` and `ad-gold` are correctly false, so the panel fell through to an
+ * `ad-stuck` button — an escape hatch added so a break whose SDK promise never
+ * settles cannot trap the game forever. It was rendered **enabled from the
+ * first frame of every break**, and because `adTimer` is left at 0 on the
+ * portal path its label read a flat "Return to flight" rather than counting
+ * anything down. One click, at t = 0, on a real ad, tore down the game's ad
+ * state and returned the player to their run.
+ *
+ * That is a player-initiated ad skip, which is precisely what the rest of this
+ * module exists to make impossible — and tearing down the break while the
+ * portal's own ad is still on screen is the kind of thing an ad network treats
+ * as inventory fraud, not as a bug.
+ *
+ * The hatch is for a *broken* SDK, so it may only arm once the break has
+ * demonstrably failed: after the same wall-clock window the automatic safety
+ * valve uses. Before that it renders disabled with an honest countdown, and
+ * the action handler refuses it independently — the view is never the only
+ * thing standing between a player and a skip.
+ */
+export function adEscapeArmed(elapsedSeconds: number, safetySeconds: number): boolean {
+  if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(safetySeconds)) return false;
+  return elapsedSeconds >= safetySeconds;
+}
+
+/**
+ * Whole seconds still to wait before the escape hatch arms — for the button's
+ * own label, so the panel is never a dead control with no explanation.
+ * Returns 0 once armed.
+ */
+export function adEscapeCountdown(elapsedSeconds: number, safetySeconds: number): number {
+  if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(safetySeconds)) return 0;
+  return Math.max(0, Math.ceil(safetySeconds - elapsedSeconds));
+}

@@ -25,6 +25,42 @@
 
 ---
 
+## Finding 0 — ✅ You could skip a real ad in one click, at t = 0
+
+*Platform Compliance, with QA Lead. Raised by you; found, reproduced, fixed and re-verified.*
+
+**This is the most serious defect in either audit**, and it is not a visual one. It is the kind of thing that gets a game pulled rather than sent back with notes.
+
+**The bug.** `hud/run.ts` renders the ad panel's controls. On a portal build both `ad-skip` and `ad-gold` are correctly `false` — so the panel fell through to a third control, `ad-stuck`. That control exists as an *escape hatch*: if the SDK's promise never settles, the player must not be trapped forever. It was rendered **enabled from the first frame of every break**. And because `adTimer` is left at `0` on the portal path, its label did not even count anything down — it read a flat **"Return to flight"**.
+
+So on a real Poki ad, the game drew an enabled button saying "Return to flight", at t = 0, and clicking it tore down the game's ad state while the portal's ad was still on screen.
+
+Nothing was *granted* on that path, which is the one mercy — the rewarded payouts all correctly key off the SDK's `earned` flag. But an interstitial could be dismissed outright, and unwinding a break under a live ad is what an ad network calls inventory fraud, not a bug.
+
+**This is the third skip vector found in this codebase.** The other two are in the file history: `ad-gold` once ended breaks immediately and for free, and `ad-skip` once rendered enabled during portal ads for the *same* `adTimer === 0` reason. Three instances of one root cause — a control gated on a timer that the portal path never sets — is a pattern, not an accident.
+
+**The fix.**
+
+- `adGate.ts` gains `adEscapeArmed(elapsed, safetySeconds)` and `adEscapeCountdown(...)`. The hatch may only arm once the break has *demonstrably failed*, on the same wall-clock window the automatic safety valve already uses — deliberately the same number, because a hatch that armed later would be unreachable and one that armed earlier would be a skip.
+- `Game.handleAction` enforces it **independently of the view**. A disabled attribute is a rendering detail; an action handler is the contract. Anything dispatching the action directly is refused.
+- `Game.handleHotkeys` now swallows pause and restart during a break. Keyboard was a second path that never went past the ad gate at all: ESC/P and R had their own routes into `backScreen()` and `replayRun()`. Mute and fullscreen are still allowed on purpose — neither shortens a break, and a player must always be able to silence a game.
+- The escape hatch functions **fail closed** on junk input: a `NaN` elapsed time reads as "not armed", never as "open forever".
+- `design-polish.css` makes the disabled hatch honestly inert — no hover, no pointer, no active transform — while the progress bar keeps full contrast, so the player sees that something *is* happening rather than that the game is broken.
+
+**Guard.** `src/game/__tests__/ad-unskippable.test.ts` — **13 tests** that enumerate all three historical vectors rather than testing only the newest, and assert the invariant that catches a fourth: *on a portal-owned break, no value of any game-side input ends the break early.* Sixteen actions × every timer value including infinities, the full 0→60 s sweep of the hatch, monotonicity of its countdown, and fail-closed behaviour.
+
+**Verified in-browser against the real renderer**, driving `renderAd` with a portal-owned break:
+
+| Break age | Before | After |
+|---|---|---|
+| t = 0 | **enabled** · "Return to flight" | disabled · "Break in progress — return available in 60" |
+| t = 30 s | enabled | disabled · "…in 30" |
+| t = 59.2 s | enabled | disabled · "…in 1" |
+| t = 60 s | enabled | **enabled** · "Return to flight" |
+| placeholder, 7 s left | disabled · "Continues in 7" | unchanged |
+
+---
+
 ## The three findings that mattered
 
 ### 1 ✅ The world stopped being readable at dusk — Art Director, with Accessibility
@@ -115,6 +151,14 @@ Tabular numerals on every live counter so distance and coin readouts stop jitter
 
 The one thing added that moves is the scroll-driven mask. It is disabled under `prefers-reduced-motion: reduce` rather than assumed acceptable.
 
+### 11 ✅ The flight HUD had no visible focus ring — Accessibility
+
+`menu-polish.css` gives every `.overlay` control a 3 px focus ring. The flight HUD's own chrome — pause, mute, the emote wheel — had none, so a keyboard or switch-control player actually flying the game could not see what they were about to press. The same ring now covers HUD chrome. The colour was a magic number duplicated per sheet; it is now a `--focus-ring` token, which is also how the change stayed inside the colour ratchet rather than adding a third copy.
+
+### 12 ✅ Shrinking art must not shrink the target — Accessibility, Responsive
+
+Finding 8 caps illustration size at short viewports. An icon may shrink; a hit target may not. Icon buttons, back buttons and ad controls are pinned to 44 × 44 px minimum independently of their glyph size.
+
 ---
 
 ## Open, with reasons
@@ -126,6 +170,8 @@ The two-column layout and the affordance work cut the *symptom* (scroll depth ro
 ◻ **The pause card is a second main menu** — twelve controls (`shots/p-pause.png`). "Keep flying" is correctly dominant, but ten side-doors out of pause are ten paths that are not "back into gameplay", which is precisely the condition Poki attaches to `commercialBreak()`. Recommended set: Keep flying / Restart / Exit / Sound / Settings / Fullscreen. Same reason for not doing it unilaterally.
 
 ◻ **The menu backdrop is dead space** and the attract bird reads as an orange blob at 1280×720 (`shots/00-boot.png`). Either push it to a hero shot or honestly blur it. Art direction call.
+
+◻ **`ad-skip` on placeholder breaks is a real skip, by design.** With no portal the game runs its own countdown and the button unlocks at zero. That is correct — there is no ad to defraud — but it is worth stating explicitly so nobody "fixes" it into a portal-path guard or, worse, copies the placeholder pattern onto the portal path. That copy is how all three skip vectors were born.
 
 ◻ **Space does not resume from pause.** ESC and P both toggle correctly — verified `flying → pause-actions → flying → pause-actions`. Poki's wording mentions spacebar; since Space is the dive key, accepting it would need a short input lockout so the resume press does not also dive. Defensible as-is, flagged for a decision.
 
@@ -159,9 +205,9 @@ Full gate, after all changes:
 |---|---|
 | `lint --max-warnings 0` | ✅ |
 | `typecheck` | ✅ |
-| `test` | ✅ **2,777 passed / 9 skipped, 193 files** (+21 new legibility tests) |
+| `test` | ✅ **2,790 passed / 9 skipped, 194 files** (+21 legibility, +13 ad-unskippable) |
 | `circular:check` | ✅ no cycles |
-| `build` | ✅ 2,118 kB / 644 kB gzip |
+| `build` | ✅ 2,119 kB / 644 kB gzip |
 | `build:poki` | ✅ |
 | `i18n:audit` | ✅ ratchet held |
 | `poki:audit` | ✅ |
@@ -171,4 +217,6 @@ Plus the in-browser re-measurements quoted inline: overlay overflow 48 → 0 px 
 
 **Frames:** `shots/fix-*.png` are after; `shots/s-*.png`, `shots/v-*.png`, `shots/p-*.png`, `shots/g-*.png` are before.
 
-**Files changed:** `src/game/legibility.ts` (new), `src/game/__tests__/legibility.test.ts` (new), `src/game/design-polish.css` (new), `src/game/Sky.ts`, `src/game/MenuIcons.ts`, `src/game/HUD.ts`, `src/game/hud/kit.ts`, `src/game/FirstFlight.ts`, `src/main.tsx`, and the two CSS guard tests extended to cover the new sheet — so the colour ratchet and the "never hide the goal strip" rule police it too. The colour ratchet did in fact catch this work adding six one-off hex values; they were replaced with existing palette tokens rather than raising the baseline.
+**Files changed:** `src/game/legibility.ts` (new), `src/game/design-polish.css` (new), `src/game/__tests__/legibility.test.ts` (new), `src/game/__tests__/ad-unskippable.test.ts` (new), `src/game/adGate.ts`, `src/game/Game.ts`, `src/game/Sky.ts`, `src/game/MenuIcons.ts`, `src/game/HUD.ts`, `src/game/hud/run.ts`, `src/game/hud/kit.ts`, `src/game/hud/types.ts`, `src/game/FirstFlight.ts`, `src/game/menu-polish.css`, `src/index.css`, `src/main.tsx`, and the two CSS guard tests extended to cover the new sheet — so the colour ratchet and the "never hide the goal strip" rule police it too.
+
+**On the guards catching this work:** the colour ratchet caught six one-off hex values on the first pass and a seventh on the second. All were replaced with palette tokens — one of them promoted to a new `--focus-ring` token shared with `menu-polish.css`, which *removed* a duplicate — rather than raising the baseline. That is the ratchet doing exactly its job, on the author of the audit. It is quoted here because an audit that only reports other people's failures is not an audit.

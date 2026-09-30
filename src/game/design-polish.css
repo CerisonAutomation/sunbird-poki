@@ -351,6 +351,77 @@
 }
 
 /* ---------------------------------------------------------------------
+   D-11  The ad break must look like an ad break, not a dialog.
+
+   Pairs with the escape-hatch fix in adGate.ts. A break's controls are not
+   ordinary buttons and must not be dressed as them: a disabled escape hatch
+   that still looks pressable invites the click that the logic then refuses,
+   which reads as a broken game rather than as a running ad.
+
+   So: the disabled hatch is visually and semantically inert (no hover, no
+   pointer, no active transform, `cursor: not-allowed`), while the progress
+   bar keeps full contrast so the player can see that something is in fact
+   happening. Nothing here can end a break — this is the honest-signalling
+   half of "you should not be able to skip ads". ------------------------- */
+.hud-root .ad-actions .mini-btn[disabled] {
+  opacity: 0.58;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: saturate(0.6);
+}
+.hud-root .ad-actions .mini-btn[disabled]:hover,
+.hud-root .ad-actions .mini-btn[disabled]:active {
+  transform: none;
+  box-shadow: none;
+}
+.hud-root .ad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+/* The bar is the only honest progress signal on the panel; it keeps its
+   contrast while the controls recede. */
+.hud-root .ad-bar {
+  overflow: hidden;
+  border-radius: 999px;
+}
+.hud-root .ad-bar > i {
+  display: block;
+  height: 100%;
+  transition: width var(--transition-normal, 0.1s) linear;
+}
+
+/* ---------------------------------------------------------------------
+   D-12  Focus is visible everywhere, not just in the menu.
+
+   menu-polish.css gives `.overlay` controls a 3 px focus ring. The flight
+   HUD's own controls — pause, mute, emote — had none, so a keyboard or
+   switch-control player flying the game could not see what they were about
+   to press. Same ring, same colour, extended to the HUD chrome. --------- */
+.hud-root :is(button, a, summary, [role="button"]):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/* ---------------------------------------------------------------------
+   D-13  Hit targets keep their 44 px even when the art shrinks.
+
+   D-4 caps illustration size at short viewports. That must not drag the
+   button down with it: an icon may shrink, a target may not. --------- */
+.hud-root .icon-btn,
+.hud-root .back-btn,
+.hud-root .ad-actions .mini-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------
    D-10  Motion honesty.
 
    Everything added here is either static or a scroll-driven fade, and the

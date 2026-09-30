@@ -27,7 +27,7 @@ import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
-import { adBreakAllowsAction, adBreakCanEnd } from "./adGate";
+import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
 import { MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, makeRoomCode, type AnyRealtimeClient } from "./Realtime";
@@ -5709,10 +5709,19 @@ export class Game {
         if (this.state === "continue") this.finishRun();
         return true;
       case "ad-stuck":
-        // The ad screen could render with ZERO buttons on a portal build (both
-        // ad-skip and ad-gold are false there) and a frozen bar for the whole
-        // 60 s safety window. This returns the run. Deliberately not the same
-        // path as the automatic valve, so the skip is attributable.
+        // The ad screen would otherwise render with ZERO buttons on a portal
+        // build (both ad-skip and ad-gold are false there) and a frozen bar for
+        // the whole safety window. This returns the run — but ONLY once the
+        // break has demonstrably failed.
+        //
+        // It used to fire on the first frame of every break, which made it a
+        // one-click skip of a real portal ad: the game tore down its own ad
+        // state while the portal's ad was still on screen. The guard is
+        // duplicated here rather than trusted to the disabled attribute in the
+        // view, because a disabled button is a rendering detail and an action
+        // handler is the contract. Nothing is granted on this path either way.
+        if (!adEscapeArmed(this.adWallClock, AD_SAFETY_SECONDS)) return true;
+        this.telemetry.track("ad_escape_hatch", { reason: this.adReason, portal: this.platform?.name ?? "none" });
         this.endPortalAd();
         this.hud.toast("Returned to your flight", "info");
         return true;
@@ -5755,6 +5764,16 @@ export class Game {
   }
 
   private handleHotkeys(): void {
+    // A live break owns the screen. Keyboard is a separate path from
+    // handleAction, so adBreakAllowsAction never saw these: ESC/P and R had
+    // their own route into backScreen()/replayRun() that did not go past the
+    // ad gate. Mute and fullscreen are deliberately still allowed — neither
+    // shortens the break, and Poki expects a player to be able to silence a
+    // game at any time.
+    if (this.state === "ad") {
+      this.input.consumePause();
+      this.input.consumeRestart();
+    }
     if (this.input.consumePause()) {
       if (this.hud.dismissCopy()) return;
       if (this.mmOpts) { this.cancelMatchmaking(); return; }
@@ -7833,6 +7852,10 @@ export class Game {
     adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
     adTimer: this.adTimer,
     adSkippable: !this.portalEnabled(),
+    // Wall-clock age of the live break, so the escape hatch can render an
+    // honest countdown instead of an enabled button that skips a real ad.
+    adElapsed: this.adWallClock,
+    adSafetySeconds: AD_SAFETY_SECONDS,
     adTotal: this.ads.duration,
     adReason: this.adReason,
     seedLabel: this.seedLabel(),

@@ -31,7 +31,7 @@
 }
 .overlay .screen-head h2 { font-size: clamp(19px, 5vw, 25px); letter-spacing: -.025em; }
 .overlay .back-btn { width: 44px; height: 44px; border-radius: 14px; background: #f1e5d6; box-shadow: none; }
-.overlay :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid #176979; outline-offset: 3px; }
+.overlay :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 .overlay :is(h1,h2)[tabindex="-1"]:focus { outline: none; }
 .overlay :is(input,select,textarea) { font: inherit; font-size: 16px; min-width: 0; accent-color: #bd4d24; }
 .overlay :is(input,select,textarea):not([type="range"]) { border: 1px solid #bba896; border-radius: 10px; background: #fffdf8; color: #392b30; padding: 10px; }

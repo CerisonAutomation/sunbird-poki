@@ -6,6 +6,7 @@
  * is the widest reader in the HUD (60 of the snapshot's 227 fields), the one
  * screen that legitimately needs most of the state.
  */
+import { adEscapeArmed, adEscapeCountdown } from "../adGate";
 import { formatNumberLocalized, t } from "../../i18n";
 import { flightTakeaway } from "../FlightGuidance";
 import { growthLedger } from "../GrowthLedger";
@@ -347,7 +348,7 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   `;
 }
 
-export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
+export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafetySeconds" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
   const portal = s.portalName !== "none";
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
@@ -371,7 +372,19 @@ export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTi
           // false, so the panel was a frozen bar and "Your run is paused" for up
           // to 60 s with nothing to press. After the safety window the run is
           // returned to, and the button says so.
-          : `<button class="mini-btn" data-ui data-action="ad-stuck">${s.adTimer > 0 ? `Taking longer than usual — return (${Math.ceil(s.adTimer)})` : "Return to flight"}</button>`
+          // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
+          // so this used to render enabled with a flat "Return to flight" from
+          // the first frame of every break — one click skipped a real ad. It is
+          // now inert until the break has demonstrably failed, with an honest
+          // countdown so the control is never dead without saying why.
+          // `Game.handleAction` enforces the same window independently.
+          : (() => {
+              const armed = adEscapeArmed(s.adElapsed, s.adSafetySeconds);
+              const left = adEscapeCountdown(s.adElapsed, s.adSafetySeconds);
+              return `<button class="mini-btn" data-ui data-action="ad-stuck"${armed ? "" : " disabled"}>${
+                armed ? "Return to flight" : `Break in progress — return available in ${left}`
+              }</button>`;
+            })()
       }
       ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
     </div>

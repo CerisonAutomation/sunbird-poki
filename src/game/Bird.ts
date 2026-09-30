@@ -96,6 +96,55 @@ const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
   comet: { span: 1.05, tail: 1.85, beak: 0.66, beakWidth: 0.78, bulk: 0.88, crest: true },
 };
 
+/**
+ * Shared geometry for every bird in the world.
+ *
+ * A bird is ~20 meshes, and `new Bird()` used to allocate a fresh
+ * `SphereGeometry`/`ConeGeometry` for every one of them. `MassRace` builds up
+ * to **40 rivals**, so a busy race uploaded on the order of 800 buffer
+ * geometries to the GPU — every one of them a duplicate of a geometry already
+ * resident, differing only in the `mesh.scale` applied afterwards. That is
+ * pure cost: VRAM, upload stalls at the start of a race, and 800 objects for
+ * the renderer to sort and for three.js to track.
+ *
+ * The shapes are safe to share because nothing in this file ever mutates a
+ * geometry — every species proportion, every squash and stretch, is applied to
+ * `mesh.scale` or to a parent transform (see the "Scaling rather than
+ * rebuilding" note on `applyShape`). So the cache is keyed by the constructor
+ * arguments and handed out by reference.
+ *
+ * Poki's technical bar is "a solid 30 fps minimum, 60 fps target, on mid-range
+ * phones from the last three years". Forty birds' worth of redundant geometry
+ * is the kind of thing that is invisible on a desktop and decides whether a
+ * phone holds frame.
+ */
+const SHARED_GEOMETRY = new Map<string, THREE.BufferGeometry>();
+
+function sharedGeometry(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  let geo = SHARED_GEOMETRY.get(key);
+  if (!geo) {
+    geo = build();
+    SHARED_GEOMETRY.set(key, geo);
+  }
+  return geo;
+}
+
+const sharedSphere = (r: number, w: number, h: number): THREE.BufferGeometry =>
+  sharedGeometry(`s:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h));
+
+const sharedCone = (r: number, h: number, seg: number): THREE.BufferGeometry =>
+  sharedGeometry(`c:${r}:${h}:${seg}`, () => new THREE.ConeGeometry(r, h, seg));
+
+/**
+ * Release every shared bird geometry. Only for teardown of the whole scene —
+ * an individual `Bird.dispose()` must NOT touch these, because the other 39
+ * birds are still drawing them.
+ */
+export function disposeSharedBirdGeometry(): void {
+  for (const geo of SHARED_GEOMETRY.values()) geo.dispose();
+  SHARED_GEOMETRY.clear();
+}
+
 export class Bird {
   private readonly terrainNormal = { nx: 0, ny: 1, tx: 1, ty: 0 };
   x = 50;
@@ -200,27 +249,27 @@ export class Bird {
 
     this.squash.add(this.makeBody());
 
-    this.lidL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), this.lidMat);
-    this.lidR = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), this.lidMat);
+    this.lidL = new THREE.Mesh(sharedSphere(0.16, 8, 6), this.lidMat);
+    this.lidR = new THREE.Mesh(sharedSphere(0.16, 8, 6), this.lidMat);
     this.lidL.position.set(0.42, 0.42, 0.38);
     this.lidR.position.set(0.42, 0.42, -0.38);
     this.lidL.scale.set(1, 0.08, 1);
     this.lidR.scale.set(1, 0.08, 1);
     this.squash.add(this.lidL, this.lidR);
 
-    const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), eyeW);
-    const eyeWhiteR = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), eyeW);
+    const eyeWhiteL = new THREE.Mesh(sharedSphere(0.18, 10, 8), eyeW);
+    const eyeWhiteR = new THREE.Mesh(sharedSphere(0.18, 10, 8), eyeW);
     eyeWhiteL.position.set(0.42, 0.38, 0.38);
     eyeWhiteR.position.set(0.42, 0.38, -0.38);
-    this.pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeP);
-    this.pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeP);
+    this.pupilL = new THREE.Mesh(sharedSphere(0.09, 8, 8), eyeP);
+    this.pupilR = new THREE.Mesh(sharedSphere(0.09, 8, 8), eyeP);
     this.pupilL.position.set(0.12, 0.02, 0.04);
     this.pupilR.position.set(0.12, 0.02, -0.04);
     eyeWhiteL.add(this.pupilL);
     eyeWhiteR.add(this.pupilR);
     this.squash.add(eyeWhiteL, eyeWhiteR);
 
-    this.beak = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 6), this.beakMat);
+    this.beak = new THREE.Mesh(sharedCone(0.16, 0.42, 6), this.beakMat);
     this.beak.rotation.z = -Math.PI / 2;
     this.beak.position.set(0.78, 0.18, 0);
     this.squash.add(this.beak);
@@ -233,7 +282,7 @@ export class Bird {
     // Held on `this.crests` so `setShape` can take them off a species that does
     // not wear one — an owl with a sunbird crest is not an owl.
     for (let i = 0; i < 3; i++) {
-      const crest = new THREE.Mesh(new THREE.ConeGeometry(0.09 - i * 0.015, 0.42 - i * 0.06, 5), this.wingMat);
+      const crest = new THREE.Mesh(sharedCone(0.09 - i * 0.015, 0.42 - i * 0.06, 5), this.wingMat);
       crest.position.set(0.18 - i * 0.17, 0.62 + i * 0.03, 0);
       crest.rotation.z = 0.55 + i * 0.35;
       this.squash.add(crest);
@@ -241,12 +290,12 @@ export class Bird {
     }
 
     // Fanned three-feather tail reads far better in 3/4 view than one cone.
-    this.tail = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.62, 5), this.wingMat);
+    this.tail = new THREE.Mesh(sharedCone(0.2, 0.62, 5), this.wingMat);
     this.tail.rotation.z = Math.PI / 2.4;
     this.tail.position.set(-0.7, 0.05, 0);
     this.squash.add(this.tail);
     for (const side of [-1, 1]) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.5, 5), this.wingMat);
+      const f = new THREE.Mesh(sharedCone(0.15, 0.5, 5), this.wingMat);
       f.rotation.z = Math.PI / 2.55;
       f.rotation.y = 0.35 * side;
       f.position.set(-0.64, 0.02, 0.16 * side);
@@ -258,7 +307,7 @@ export class Bird {
     this.root.add(this.glow);
     this.root.scale.setScalar(BIRD_BASE_SCALE);
 
-    const shadowGeo = Bird.makeShadowGeometry();
+    const shadowGeo = sharedGeometry("bird-shadow", () => Bird.makeShadowGeometry());
     const shadowMat = new THREE.MeshBasicMaterial({
       color: 0x1a1020,
       transparent: true,
@@ -902,24 +951,55 @@ export class Bird {
     this.root.scale.setScalar(BIRD_BASE_SCALE * (1 + behind * 0.95));
   }
 
+  /**
+   * Whether this bird's meshes are drawn into the shadow map.
+   *
+   * Every mesh of every bird was an unconditional shadow caster AND receiver.
+   * A bird is ~20 meshes and `MassRace` fields up to 40 rivals, so on any
+   * device where `renderer.shadowMap.enabled` is true the depth pass was
+   * re-rendering ~800 extra meshes every frame — a second full scene draw,
+   * spent on rivals that are a few dozen pixels tall in a pack.
+   *
+   * Turning it off for rivals is close to invisible and not a loss of
+   * grounding, because each bird also carries its own blob shadow (the
+   * `shadow` ellipse below), which is what actually reads as "this bird is
+   * above that hill" at race distances. The player's own bird keeps real
+   * shadows — it is the one the camera is on.
+   */
+  setShadowCasting(enabled: boolean): void {
+    this.squash.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = enabled;
+        o.receiveShadow = enabled;
+      }
+    });
+  }
+
   dispose(): void {
+    // Materials are per-bird (they carry the skin's tint) and are disposed
+    // here. Geometries are NOT: every bird draws the same cached shapes, so
+    // disposing one bird's would blank the other thirty-nine mid-race. This
+    // used to call `obj.geometry.dispose()` on everything — harmless only
+    // because every bird also allocated its own copy, which was the actual
+    // problem. `disposeSharedBirdGeometry()` handles scene teardown.
+    const shared = new Set(SHARED_GEOMETRY.values());
     this.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.geometry.dispose();
+        if (!shared.has(obj.geometry)) obj.geometry.dispose();
         const mat = obj.material;
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
         else mat.dispose();
       }
     });
-    this.shadow.geometry.dispose();
+    if (!shared.has(this.shadow.geometry)) this.shadow.geometry.dispose();
     (this.shadow.material as THREE.Material).dispose();
   }
 
   private makeBody(): THREE.Mesh {
-    const geo = new THREE.SphereGeometry(0.62, 12, 10);
+    const geo = sharedSphere(0.62, 12, 10);
     const body = new THREE.Mesh(geo, this.bodyMat);
     body.scale.set(1.15, 0.92, 0.92);
-    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), this.bellyMat);
+    const belly = new THREE.Mesh(sharedSphere(0.42, 10, 8), this.bellyMat);
     belly.position.set(0.08, -0.18, 0);
     belly.scale.set(1.05, 0.8, 0.9);
     body.add(belly);
@@ -929,15 +1009,15 @@ export class Bird {
   private buildWing(group: THREE.Group, side: number): void {
     // Two-layer wing: broad primary + darker secondary layer underneath,
     // plus three feather tips so the flap reads with depth from any angle.
-    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.48, 10, 8), this.wingMat);
+    const wing = new THREE.Mesh(sharedSphere(0.48, 10, 8), this.wingMat);
     wing.scale.set(0.95, 0.18, 0.55);
     group.add(wing);
-    const under = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 6), this.bodyMat);
+    const under = new THREE.Mesh(sharedSphere(0.4, 8, 6), this.bodyMat);
     under.scale.set(0.85, 0.14, 0.48);
     under.position.set(-0.08, -0.05, 0.05 * side);
     group.add(under);
     for (let i = 0; i < 3; i++) {
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.38, 4), this.wingMat);
+      const tip = new THREE.Mesh(sharedCone(0.09, 0.38, 4), this.wingMat);
       tip.rotation.x = (Math.PI / 2) * side;
       tip.rotation.z = -0.25 - i * 0.18;
       tip.position.set(-0.28 - i * 0.14, -0.02, (0.34 + i * 0.05) * side);

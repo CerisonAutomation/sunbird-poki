@@ -254,6 +254,12 @@ export class MassRace {
 
     for (let i = 0; i < n; i++) {
       const bird = new Bird();
+      // Rivals do not draw into the shadow map. 40 rivals x ~20 meshes is
+      // ~800 extra meshes in the depth pass every frame — a second full scene
+      // draw for birds a few dozen pixels tall. Their blob shadows still land
+      // on the terrain, which is what actually reads at race distance. See
+      // `Bird.setShadowCasting`.
+      bird.setShadowCasting(false);
       bird.reset(startX, terrain.heightAt(startX) + BIRD_RADIUS);
       const tierRank = i / Math.max(1, n);
       // Three-tier skill distribution: top 15% are elites, next 25% are strong,

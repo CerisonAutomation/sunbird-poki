@@ -16,7 +16,6 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const GAME_DIR = path.join(ROOT, "src/game");
-const HUD = path.join(GAME_DIR, "HUD.ts");
 /** Every stylesheet the HUD can be styled from. */
 const CSS_FILES = [
   path.join(ROOT, "src/index.css"),
@@ -32,20 +31,50 @@ const read = (p) => fs.readFileSync(p, "utf8");
 const rel = (p) => path.relative(ROOT, p);
 
 // ---------------------------------------------------------------- sources ---
-const uiFiles = fs
-  .readdirSync(GAME_DIR)
-  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
-  .map((f) => path.join(GAME_DIR, f));
+/**
+ * Every app source under `dir`, recursively.
+ *
+ * This walk MUST recurse. The screen renderers live in `hud/`, the action
+ * tables in `actions/`, and a flat `readdirSync` saw neither — so the
+ * dead-button and null-ref checks quietly lost two thirds of the game's UI,
+ * and the `case "…":` handlers they compare against were invisible for the
+ * same reason. The result was a gate that stayed green while blind in one
+ * direction and alarming in the other: seven live buttons reported as dead,
+ * and nothing said about the other 62 actions.
+ */
+function sourceFiles(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Tests are consumers of the markup, never producers of it.
+      if (entry.name === "__tests__") continue;
+      out.push(...sourceFiles(p));
+    } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+const uiFiles = sourceFiles(GAME_DIR);
 const uiSources = uiFiles.filter((f) => read(f).includes("data-action=") || read(f).includes("data-ref="));
 /** Removes `${…}` template expressions, including nested braces and strings. */
 const stripInterpolations = (text) =>
   text.replace(/\$\{(?:[^{}"'`]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\{[^{}]*\})*\}/g, " ");
 
-const hudSrc = read(HUD);
 const css = CSS_FILES.map(read).join("\n");
 const gameSrc = uiFiles.filter((f) => path.basename(f) !== "HUD.ts").map(read).join("\n");
 
-const hudStripped = stripInterpolations(hudSrc);
+/**
+ * Every source that can EMIT HUD markup, for the scans below (buttons, refs,
+ * inline styles, classes, ids). `HUD.ts` alone was the whole world when the
+ * flight HUD was one file; now the menu screens are pure builders under
+ * `hud/`, so scanning only the controller skipped 138 of the 145 buttons in
+ * the game — every unlabelled-control and inline-nowrap check the audit
+ * advertises, skipped two thirds of the UI.
+ */
+const markupSrc = uiFiles.map(read).join("\n");
+const markupStripped = stripInterpolations(markupSrc);
 
 // ------------------------------------------------------- declared actions ---
 /** data-action="x" → where it is rendered. */
@@ -66,7 +95,7 @@ const handled = new Set();
 for (const m of gameSrc.matchAll(/case "([a-z0-9-]+)":/g)) handled.add(m[1]);
 // Actions the HUD handles internally (its own delegated listeners).
 const hudInternal = new Set();
-for (const m of hudSrc.matchAll(/dataset\.action === "([a-z0-9-]+)"/g)) hudInternal.add(m[1]);
+for (const m of markupSrc.matchAll(/dataset\.action === "([a-z0-9-]+)"/g)) hudInternal.add(m[1]);
 
 for (const [action, files] of declared) {
   if (!handled.has(action) && !hudInternal.has(action)) {
@@ -76,16 +105,16 @@ for (const [action, files] of declared) {
 
 // -------------------------------------------------------- element refs ------
 const refsDeclared = new Set();
-for (const m of hudStripped.matchAll(/data-ref="([A-Za-z0-9_-]+)"/g)) refsDeclared.add(m[1]);
+for (const m of markupStripped.matchAll(/data-ref="([A-Za-z0-9_-]+)"/g)) refsDeclared.add(m[1]);
 const refsGrabbed = new Set();
-for (const m of hudSrc.matchAll(/grab\("([A-Za-z0-9_-]+)"\)/g)) refsGrabbed.add(m[1]);
+for (const m of markupSrc.matchAll(/grab\("([A-Za-z0-9_-]+)"\)/g)) refsGrabbed.add(m[1]);
 // Refs read through helpers (querySelector by data-ref) are not "grabbed".
 const refsQueried = new Set();
-for (const m of hudSrc.matchAll(/readValue<[^>]*>\("([A-Za-z0-9_-]+)"\)|readValue\("([A-Za-z0-9_-]+)"\)/g)) {
+for (const m of markupSrc.matchAll(/readValue<[^>]*>\("([A-Za-z0-9_-]+)"\)|readValue\("([A-Za-z0-9_-]+)"\)/g)) {
   refsQueried.add(m[1] ?? m[2]);
 }
-for (const m of hudSrc.matchAll(/\[data-ref=\\?"([A-Za-z0-9_-]+)\\?"\]/g)) refsQueried.add(m[1]);
-for (const m of hudSrc.matchAll(/data-ref="\$\{([^}]+)\}"/g)) notes.push(`dynamic ref: ${m[0]}`);
+for (const m of markupSrc.matchAll(/\[data-ref=\\?"([A-Za-z0-9_-]+)\\?"\]/g)) refsQueried.add(m[1]);
+for (const m of markupSrc.matchAll(/data-ref="\$\{([^}]+)\}"/g)) notes.push(`dynamic ref: ${m[0]}`);
 
 for (const ref of refsGrabbed) {
   if (!refsDeclared.has(ref)) {
@@ -127,7 +156,7 @@ for (const ref of refsDeclared) {
 
 // ---------------------------------------------------- accessible buttons ----
 // Raw markup, so a runtime-computed label is recognised as such.
-const buttons = [...hudSrc.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)];
+const buttons = [...markupSrc.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)];
 let unlabelled = 0;
 for (const [full, inner] of buttons) {
   if (/\$\{/.test(inner)) continue; // label computed at runtime
@@ -140,7 +169,7 @@ for (const [full, inner] of buttons) {
 notes.push(`${buttons.length} buttons scanned, ${unlabelled} without an accessible name`);
 
 // ------------------------------------------------------------- inline CSS ---
-const inlineStyles = [...hudSrc.matchAll(/style="([^"]*)"/g)].map((m) => m[1]);
+const inlineStyles = [...markupSrc.matchAll(/style="([^"]*)"/g)].map((m) => m[1]);
 const nowrapInline = inlineStyles.filter((s) => /nowrap/.test(s));
 if (nowrapInline.length) {
   errors.push(`inline nowrap: ${nowrapInline.length} element(s) cannot wrap on a narrow screen (${nowrapInline[0].slice(0, 60)}…)`);
@@ -154,14 +183,14 @@ notes.push(`${inlineStyles.length} inline style attributes in HUD markup`);
 // ------------------------------------------------------------ stylesheet ----
 const cssClasses = new Set([...css.matchAll(/\.([a-z][a-z0-9_-]*)/gi)].map((m) => m[1]));
 const usedClasses = new Set();
-for (const m of hudStripped.matchAll(/class="([^"]*)"/g)) {
+for (const m of markupStripped.matchAll(/class="([^"]*)"/g)) {
   for (const part of m[1].split(/\s+/)) {
     // Names ending in "-" are the static half of a dynamic `r-${i}` class.
     if (/^[a-z][a-z0-9_-]*$/i.test(part) && !part.endsWith("-")) usedClasses.add(part);
   }
 }
 // Classes toggled from JS but not written in markup.
-for (const m of hudSrc.matchAll(/classList\.(?:toggle|add|remove)\("([a-z0-9_-]+)"/g)) usedClasses.add(m[1]);
+for (const m of markupSrc.matchAll(/classList\.(?:toggle|add|remove)\("([a-z0-9_-]+)"/g)) usedClasses.add(m[1]);
 const dynamicClasses = new Set(["on", "off", "hidden", "empty", "done", "live", "win", "podium", "dim", "mine", "gold", "rematch", "storm", "is-ready", "is-waiting", "is-claimed"]);
 // Classes styled through a parent rule (` .mm-actions button `) or as a
 // modifier of a styled base class — they are not unstyled, they are composed.
@@ -199,7 +228,7 @@ notes.push(`min-height floors in ui.css: ${[...new Set(minHeights)].sort((a, b) 
 if (!minHeights.some((h) => h >= 44)) warnings.push("no 44px tap-target floor declared in ui.css");
 
 // ------------------------------------------------------------- duplicate ids --
-const ids = [...hudSrc.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+const ids = [...markupSrc.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
 const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
 if (dupes.length) errors.push(`duplicate DOM ids: ${[...new Set(dupes)].join(", ")}`);
 

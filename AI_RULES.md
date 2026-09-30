@@ -80,6 +80,11 @@ down a layer, never to import sideways.
 | 2 | `race.ts` | Competitive: lobby, ranked, squad, practice, modes |
 | 3 | `../HUD.ts` | `class HUD` — the only module with DOM access. Wires the above and re-exports the public surface |
 
+- **Tooling that scans `src/game` must recurse.** Splitting the HUD into `hud/` and the
+  handlers into `actions/` silently broke `scripts/audit-ui.mjs`, which listed the directory
+  flat. It saw 32 of 94 actions and reported 7 live buttons as dead, while saying nothing
+  about the other 62. A refactor that moves code *out* of the top level has to update every
+  script and test that enumerates the directory — a green audit is not proof it looked.
 - `HudSnapshot` stays wide on purpose: it is the transport between `Game` and the renderer.
   **Every renderer narrows it in its own signature** — `Pick<HudSnapshot, "wallet" | "skins">`.
   No renderer in `src/game/hud/` may take a bare `HudSnapshot`; the declared contracts total 221

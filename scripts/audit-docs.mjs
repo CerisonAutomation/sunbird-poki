@@ -42,6 +42,8 @@ const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "dist-poki", "dist-cr
 /** Top-level markdown the repo root is allowed to keep. */
 const ROOT_ALLOWLIST = new Set([
   "README.md", // what the game is + where the docs live
+  "AI_RULES.md", // agent-facing rules for this codebase; deliberately at the root
+                 // so it is read before anyone touches flight or portals
   "ROADMAP.md", // what is real, what is written, what is fiction
   "DEPLOY.md", // hosting a build (Vercel/Netlify/static + env vars)
   "SUBMISSION_CHECKLIST.md", // the human walkthrough for a portal submission

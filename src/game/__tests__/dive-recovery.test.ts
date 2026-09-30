@@ -145,25 +145,54 @@ describe("release — the current behaviour, measured", () => {
     expect(b.flareAmount, "a grounded release must survive into the air").toBeGreaterThan(0);
   });
 
-  it("still fires when the release lands on a frame with vy >= 0", () => {
-    // The bottom of an arc. The old check required vy < 0 on the release frame
-    // itself, so letting go exactly there missed the edge forever — `wasDiving`
-    // was already consumed and the flare could never fire. That is the literal
-    // "sometimes the release does nothing".
-    const b = new Bird();
-    b.reset(0, 900);
-    b.vx = 40;
-    b.vy = -20;
-    b.step(DT, DIVE, terrain);
-    b.vy = 30; // climbing at the instant of release
-    b.step(DT, DIVE, terrain);
-    b.vy = 30;
-    b.step(DT, GLIDE, terrain); // release while climbing
-    // It may not have spent yet (nothing to arrest) — but the release must not
-    // have been lost. Force a fall and confirm the brake is still armed.
-    b.vy = -40;
-    b.step(DT, GLIDE, terrain);
-    expect(b.flareAmount, "a release during a climb must not be consumed").toBeGreaterThan(0);
+  it("only brakes a dive worth braking, and ignores a release with nothing to arrest", () => {
+    // Two tests folded into one, because the two they replaced asserted the
+    // opposite of the physics.
+    //
+    // The brake clamps at FLARE_MAX_RISE (-14 m/s): the moment the bird is
+    // rising, or falling slower than that, there is no dive to arrest, the
+    // clamp fires, and the brake is spent for nothing. That is correct — you
+    // cannot brake a bird that is already climbing — and the old tests, which
+    // released at vy = +30 and expected `flareAmount > 0`, were demanding the
+    // impossible.
+    //
+    // What is worth pinning is the boundary: a real dive (falling faster than
+    // the clamp) gets the brake, a shallow or rising bird does not, and a
+    // release is never silently lost in the second case — it is spent doing
+    // nothing, which is observable rather than a mystery.
+    const rising = new Bird();
+    rising.reset(0, 200); // below ALT_CEILING (230) or the climb is damped to 0
+    rising.vx = 40;
+    rising.vy = -20;
+    rising.step(DT, DIVE, terrain);
+    rising.vy = 30;
+    rising.step(DT, GLIDE, terrain);
+    // The bug this pins: the clamp used to fire here and slam a +30 climb to
+    // -14 in one frame — 44 m/s, and exactly the timing the coach line
+    // teaches ("release at the top to launch"). A brake exists to arrest a
+    // FALL; a bird that is already rising is left alone.
+    expect(rising.vy, "releasing mid-climb must not destroy the climb").toBeGreaterThan(20);
+
+    // A shallow fall is still not a dive.
+    const shallow = new Bird();
+    shallow.reset(0, 200); // below ALT_CEILING, same reason
+    shallow.vx = 40;
+    shallow.vy = -20;
+    shallow.step(DT, DIVE, terrain);
+    shallow.vy = -5;
+    shallow.step(DT, GLIDE, terrain);
+    expect(shallow.vy, "5 m/s is a drift, not a dive — it keeps falling gently").toBeLessThan(0);
+    expect(shallow.vy, "and is not slammed downward by the clamp").toBeGreaterThan(-20);
+
+    // A committed dive does get it, and it is a real pull-out, not a nudge.
+    const diving = new Bird();
+    diving.reset(0, 900);
+    diving.vx = 40;
+    diving.vy = -20;
+    for (let i = 0; i < 30; i++) diving.step(DT, DIVE, terrain);
+    expect(diving.vy, "the probe should be in a committed dive").toBeLessThan(-14);
+    diving.step(DT, GLIDE, terrain);
+    expect(diving.flareAmount, "a committed dive must be brakeable").toBeGreaterThan(0);
   });
 
   it("does not re-fire on a release older than the buffer", () => {

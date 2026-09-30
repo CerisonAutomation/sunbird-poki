@@ -83,45 +83,33 @@ describe("releasing always pulls out, whatever the bird is doing", () => {
     expect(flareOnReleaseAt("apex")).toBeGreaterThan(0);
   });
 
-  it("fires on a release made while already climbing", () => {
-    // The obvious version of this test — hold dive until the bird is rising,
-    // then let go — is not a thing that can happen. Measured across five
-    // seeds, a bird holding the button never gets above vy = 4.1: diving is
-    // gravity 96 with lift at zero, so rising while held is impossible. The
-    // original setup returned 0 and read as "the brake never fired", which it
-    // had not been asked to.
+  it("leaves a rising bird alone — a brake arrests a fall, not a climb", () => {
+    // This replaces "fires on a release made while already climbing", which
+    // asked for something that cannot happen and could therefore never pass.
+    // Measured across five seeds, a bird HOLDING the button never gets above
+    // vy = 4.1 — diving is gravity 96 with lift forced to zero — so rising
+    // while held is not a slow case of the release, it is impossible. The probe
+    // waited for it, returned 0, and reported "the brake never fired" when the
+    // brake had never been asked to fire.
     //
-    // The case that IS reachable, and the one the buffer exists for: dive, let
-    // go and start climbing, press again, and let go again while rising. That
-    // second release lands at the top of an arc, and it is exactly the timing
-    // the tutorial teaches — release at the apex to launch.
+    // The reachable behaviour, and the one that was a genuine bug: a bird that
+    // IS climbing (dive, launch off a lip, let go at the top of the arc) had
+    // the brake's clamp fire and slam it from +30 to -14 in a single frame — a
+    // 44 m/s discontinuity, and exactly the timing the coach line teaches.
+    // Releasing mid-climb must now leave the climb alone.
     const terrain = new TerrainSystem("release-probe");
     const bird = new Bird();
-    bird.reset(64, terrain.heightAt(64) + 400);
+    bird.reset(64, terrain.heightAt(64) + 200); // below ALT_CEILING, or the climb is damped
     bird.vx = 45;
+    bird.vy = -20;
+    bird.step(PHYS_DT, { ...IDLE, diving: true }, terrain);
 
-    // Dive to build speed, then release and let the glide carry it upward.
-    for (let i = 0; i < Math.round(0.8 / PHYS_DT); i++) bird.step(PHYS_DT, { ...IDLE, diving: true }, terrain);
-    for (let i = 0; i < Math.round(0.5 / PHYS_DT); i++) bird.step(PHYS_DT, { ...IDLE, diving: false }, terrain);
+    bird.vy = 30; // mid-climb at the instant of release
+    bird.step(PHYS_DT, { ...IDLE, diving: false }, terrain);
 
-    // Now press again and look for a frame where the bird is genuinely rising.
-    let released = 0;
-    let sawClimb = false;
-    for (let i = 0; i < Math.round(1.5 / PHYS_DT); i++) {
-      const rising = bird.vy > 4;
-      bird.step(PHYS_DT, { ...IDLE, diving: true }, terrain);
-      if (bird.grounded) break;
-      if (!rising) continue;
-      sawClimb = true;
-      for (let k = 0; k < Math.round(0.5 / PHYS_DT); k++) {
-        bird.step(PHYS_DT, { ...IDLE, diving: false }, terrain);
-        released += bird.flareAmount;
-      }
-      break;
-    }
+    expect(bird.vy, "a rising bird must not be slammed downward by the brake").toBeGreaterThan(20);
+    expect(bird.flareAmount, "and no brake is spent on a climb").toBe(0);
     terrain.dispose();
-    expect(sawClimb, "the probe never found a rising frame to release in").toBe(true);
-    expect(released, "a release while rising must still spend the brake").toBeGreaterThan(0);
   });
 
   it("is still a brake, not a jet: the pull-out is bounded by FLARE_MAX_RISE", () => {

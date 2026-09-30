@@ -31,10 +31,15 @@ import { messageHoldMs } from "./MessageTiming";
 
 /** How long a notification stays fully visible before it starts to exit.
  *
- *  This used to be a flat 3000 ms sitting next to HUD's 1200 + 28 ms/char —
- *  two layers, two different answers to the same question, and neither of them
- *  derived from anything. One formula now, shared. */
-const HOLD_MS = messageHoldMs("");
+ *  Was a flat 3000 ms sitting next to HUD's `1200 + 28 ms/char` — two layers,
+ *  two answers to the same question. One formula now, shared, and it is applied
+ *  to the text this queue actually holds rather than to an empty string.
+ *
+ *  The empty-string call that briefly replaced it was a real regression: a
+ *  zero-word notification took the FLOOR (1100 ms), so this layer went from a
+ *  3 s read to a 1.1 s glance and its test caught it. Derive per notification
+ *  instead, which is what the shared model is for. */
+const holdFor = (text: string): number => messageHoldMs(text);
 /** Fade/slide-out duration, kept in sync with the CSS transition below. */
 const EXIT_MS = 240;
 
@@ -75,7 +80,7 @@ export class NotificationQueue {
     el.textContent = n.text;
     this.container.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
-    const timer = window.setTimeout(() => this.dismiss(el), HOLD_MS);
+    const timer = window.setTimeout(() => this.dismiss(el), holdFor(n.text));
     this.live.push({ el, timer });
   }
 

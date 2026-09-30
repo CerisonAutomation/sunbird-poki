@@ -573,14 +573,24 @@ export class Bird {
       // BRAKE * (remaining/duration), applied over dt.
       this.flareAmount = 0;
       if (this.flareTimer > 0) {
-        const strength = FLARE_BRAKE * (this.flareTimer / FLARE_DURATION);
-        this.vy += strength * dt;
-        this.flareTimer = Math.max(0, this.flareTimer - dt);
-        if (this.vy > FLARE_MAX_RISE) {
-          this.vy = FLARE_MAX_RISE;
+        // The brake only ever ARRESTS A FALL. A bird that is already climbing
+        // has nothing to arrest, and the clamp below would have slammed a +30
+        // climb to -14 in a single frame — a 44 m/s discontinuity, invisible
+        // in the code and very obvious in the hand. That is reachable: dive,
+        // launch off a lip, and let go at the top of the arc, which is exactly
+        // the timing the coach line teaches.
+        if (this.vy >= 0) {
           this.flareTimer = 0;
+        } else {
+          const strength = FLARE_BRAKE * (this.flareTimer / FLARE_DURATION);
+          this.vy += strength * dt;
+          this.flareTimer = Math.max(0, this.flareTimer - dt);
+          if (this.vy > FLARE_MAX_RISE) {
+            this.vy = FLARE_MAX_RISE;
+            this.flareTimer = 0;
+          }
+          this.flareAmount = strength;
         }
-        this.flareAmount = strength;
       }
       const lift = diving
         ? 0

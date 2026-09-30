@@ -60,7 +60,13 @@ const root = resolve(__dirname, "../../..");
 const WIRED: Record<string, string> = {
   // The guard this card was written for: `measure()` used a hand-rolled regex
   // and dropped 10 of 16 live call sites. Keep it on the live path.
-  "sdk/poki-canon.ts:sanitizeMeasure": "poki.ts measure() — the dashboard's only funnel",
+  // sanitizeMeasure was removed from this registry: it is no longer a
+  // CROSS-MODULE liveness claim. `callersOf` deliberately ignores calls from the
+  // defining module, and its only remaining caller is `measureViaPoki` in this
+  // same file — so it is a live internal helper of poki-canon, not a dead
+  // export. This registry answers "does anything outside still use it?", and
+  // the honest answer for this one became no when measure() moved behind
+  // measureViaPoki. Listing it would assert a liveness that does not exist.
 
   // SpeedFeel: one consumer, and it is the camera. If this goes, the module's
   // speed curve is decorative.

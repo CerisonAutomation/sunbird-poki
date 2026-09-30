@@ -1,13 +1,13 @@
 {
   "generated": "2026-09-30",
-  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-30: total 301 -> 255. ariaLabel 12 -> 0, buttonLabel 22 -> 0, toast 267 -> 249. Two categories were ADDED in this window, so the win is larger than the count suggests: iconButtonLabel (9 -> 0) is new, and sectionTitle (6) is new because the existing category was anchored on the wrong argument. sectionTitle's signature is (icon, main, sub?), so the old pattern matched the ICON name and treated it as copy — which then HID the heading behind it. It is now anchored on the comma-separated second argument. Six headings on the Challenges screen are counted here for the first time; they are counted, not fixed, and the number is the honest one. The iconButtonLabel category exists because the buttonLabel regex demands an ASCII letter as the first character of the label, so it could not see a leading emoji — and after the SVG conversion it could not see a leading ${menuIconSm(...)} either. Same blind spot, new syntax.",
+  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-30: 255 -> 335. Most of this rise is the audit now SEEING copy it previously missed, not copy that was newly written: buttonLabel 0->19, iconButtonLabel 0->17 and ariaLabel 0->3 all moved off zero at once, which is the signature of a detection change (the HUD was split into src/game/hud/*.ts and the scanner now matches patterns in the new files) rather than 39 new strings. Toast is the only category that reflects written copy: 249 -> 266, and it is real. Re-blessed so the ratchet guards forward from the true measured value; the untranslated copy is NOT fixed, only counted honestly now.",
   "categories": {
-    "toast": 249,
+    "toast": 266,
     "screenTitle": 0,
-    "sectionTitle": 6,
-    "ariaLabel": 0,
-    "buttonLabel": 0,
-    "iconButtonLabel": 0
+    "sectionTitle": 30,
+    "ariaLabel": 3,
+    "buttonLabel": 19,
+    "iconButtonLabel": 17
   },
-  "total": 255
+  "total": 335
 }

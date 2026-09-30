@@ -427,7 +427,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "new-best"
       },
       "evidence": "Confetti burst + jingle on personal bests, level-ups, chests and race wins; the results card carries a NEW BEST banner and the portal celebration hook fires when one exists."
@@ -477,7 +477,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "Let it sleep"
       },
       "evidence": "Free restart and free 'let it sleep' paths always exist; no mode is ad-gated."
@@ -490,7 +490,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "Watch for Second Wind"
       },
       "evidence": "Labelled button, aria-labelled, explicit reward wording."
@@ -516,7 +516,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "renderContinue"
       },
       "evidence": "All three options render in one pass; nothing gates the ad behind a wizard step."
@@ -553,10 +553,10 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
-        "pattern": "🎬"
+        "path": "src/game/hud/run.ts",
+        "pattern": "data-action=\"continue-ad\">\\$\\{menuIconSm\\(\"play\"\\)\\}"
       },
-      "evidence": "🎬 present on the rewarded continue button and verified in the shipped bundle."
+      "evidence": "menuIconSm(\"play\") renders a 20x20 inline SVG clapperboard/play glyph in the game's own palette on the rewarded continue button. The emoji was replaced during the icon set consolidation: emoji rendering varies per platform and reads as a foreign object against the hand-drawn art, so the rule now pins the meaning (a video affordance on the rewarded CTA) rather than one specific glyph. Pinned to the button markup, not to any play icon in the file, so adding a play icon elsewhere cannot satisfy this rule."
     },
     {
       "id": "MON-10",
@@ -642,7 +642,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "Second Wind"
       },
       "evidence": "Rewarded revive."
@@ -655,7 +655,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/meta.ts",
         "pattern": "Spend"
       },
       "evidence": "Coins-or-video choice on the continue screen, single currency."

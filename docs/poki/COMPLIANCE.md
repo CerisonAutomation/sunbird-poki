@@ -68,7 +68,7 @@
 | `EN-02` | requirement | Standardise controls: WASD or arrow keys for movement, space or return for primary menu actions. | ✅ verified | src/game/__tests__/input-ui.test.ts (pinned: /ArrowDown\|KeyW/) |
 | `EN-03` | recommendation | Clear long-term goals in addition to short-term level goals. | ✅ verified | src/game/Mastery.ts |
 | `EN-04` | recommendation | Tune difficulty with an increasing scale from accessible starts to new mechanics. | ✅ verified | src/game/FlightProgression.ts |
-| `EN-05` | recommendation | Congratulate the player: celebrate milestones with visual and audio feedback. | ✅ verified | src/game/HUD.ts matches /new-best/ |
+| `EN-05` | recommendation | Congratulate the player: celebrate milestones with visual and audio feedback. | ✅ verified | src/game/hud/run.ts matches /new-best/ |
 | `EN-06` | recommendation | Test it: find drop-off points to distinguish difficulty frustration from lost interest. | ✅ verified | src/game/Telemetry.ts |
 
 ## MON — Monetization
@@ -79,21 +79,21 @@
 |---|---|---|---|---|
 | `MON-01` | recommendation | Integrate monetization early so rewarded video fits the natural game flow. | ✅ verified | src/game/Game.ts matches /rewardedBreak/ |
 | `MON-02` | recommendation | Engagement first: rewarded video performance follows engagement. | ✅ verified | src/game/SeasonPass.ts |
-| `MON-03` | requirement | Rewarded videos must be optional and never block core gameplay. | ✅ verified | src/game/HUD.ts matches /Let it sleep/ |
-| `MON-04` | requirement | Every video-triggering element must be clearly labelled, accessible and transparent about the reward. | ✅ verified | src/game/HUD.ts matches /Watch for Second Wind/ |
+| `MON-03` | requirement | Rewarded videos must be optional and never block core gameplay. | ✅ verified | src/game/hud/run.ts matches /Let it sleep/ |
+| `MON-04` | requirement | Every video-triggering element must be clearly labelled, accessible and transparent about the reward. | ✅ verified | src/game/hud/run.ts matches /Watch for Second Wind/ |
 | `MON-05` | requirement | Always provide a standard (non-ad) alternative to a rewarded option. | ✅ verified | e2e/results.spec.ts (pinned: /continue-sleep/) |
-| `MON-06` | requirement | Standard and rewarded options appear simultaneously. | ✅ verified | src/game/HUD.ts matches /renderContinue/ |
+| `MON-06` | requirement | Standard and rewarded options appear simultaneously. | ✅ verified | src/game/hud/run.ts matches /renderContinue/ |
 | `MON-07` | requirement | The standard button is at least as large as the rewarded button and sits above or beside it. | 🖐 attested (no machine check) | CSS audit: .primary-btn (18px type, 12px padding, full width) renders above .soft-btn.wide (14px, 10px padding); pinned by HUD test. |
 | `MON-08` | requirement | Rewarded buttons must not be green. | 🖐 attested (no machine check) | Rewarded CTA uses the warm-neutral .soft-btn surface; the game's action colour is orange and gold is reserved for the Gold pass. |
-| `MON-09` | requirement | Reward buttons carry a prominent clapperboard icon. | ✅ verified | src/game/HUD.ts matches /🎬/ |
+| `MON-09` | requirement | Reward buttons carry a prominent clapperboard icon. | ✅ verified | src/game/hud/run.ts matches /data-action="continue-ad">\$\{menuIconSm\("play"\)\}/ |
 | `MON-10` | requirement | One video per reward, maximum. | ✅ verified | src/game/Game.ts matches /rewardedBreak/ |
 | `MON-11` | requirement | Confirm rewards immediately (animation/sound) and apply them automatically. | ✅ verified | src/game/Game.ts matches /doContinue/ |
 | `MON-12` | requirement | No reward when the ad fails or is blocked; handle it silently. | ✅ verified | src/sdk/poki.ts matches /rewardedBreak/ |
 | `MON-13` | requirement | No ad-timer manipulation; the platform decides ad availability. | ✅ verified | src/game/Game.ts matches /portalEnabled\(\)/ |
 | `MON-14` | requirement | Never reward-wall core gameplay. | ✅ verified | src/game/__tests__/experience-loop.test.ts |
 | `MON-15` | requirement | No pushy prompts: non-ad options in primary positions, no invasive rewarded CTAs. | 🖐 attested (no machine check) | One rewarded placement in the whole game, shown only after crash; standard option is the primary-styled button. |
-| `MON-16` | recommendation | Helping hand: revives, skips, hints, boosts to reduce drop-off. | ✅ verified | src/game/HUD.ts matches /Second Wind/ |
-| `MON-17` | recommendation | In-game economy: let players spend earned currency or watch a video for the same reward. | ✅ verified | src/game/HUD.ts matches /Spend/ |
+| `MON-16` | recommendation | Helping hand: revives, skips, hints, boosts to reduce drop-off. | ✅ verified | src/game/hud/run.ts matches /Second Wind/ |
+| `MON-17` | recommendation | In-game economy: let players spend earned currency or watch a video for the same reward. | ✅ verified | src/game/hud/meta.ts matches /Spend/ |
 | `MON-18` | recommendation | Customization: rewarded video can unlock cosmetics and replayability. | ✅ verified | src/game/Economy.ts |
 | `MON-19` | recommendation | Prefer dynamic, context-specific rewarded opportunities over static always-on buttons. | ✅ verified | src/game/__tests__/continue-offer.test.ts |
 | `MON-20` | recommendation | Use temporary or seasonal content to lift long-term retention. | ✅ verified | src/game/Events.ts |
@@ -109,7 +109,7 @@
 | `LOC-01` | recommendation | Localization is essential for engagement outside English-speaking regions. | ✅ verified | src/i18n/translations.barrel.json |
 | `LOC-02` | requirement | Centralize all text into a single file format before translating. | ✅ verified | src/i18n/index.ts matches /export function t\(/ |
 | `LOC-03` | recommendation | Prioritise localization for text-carrying genres/mechanics. | ✅ verified | docs/poki/05-localization.md |
-| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 489 strings complete |
+| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 506 strings complete |
 | `LOC-05` | requirement | Detect the browser language and serve it; a manual selector should exist too. | ✅ verified | src/i18n/__tests__/locales.test.ts |
 
 ## THB — Game thumbnail
@@ -374,7 +374,7 @@
 | `MON-06` | All three options render in one pass; nothing gates the ad behind a wizard step. |
 | `MON-07` | src/game/HUD.ts renderContinue markup order. |
 | `MON-08` | src/index.css .soft-btn |
-| `MON-09` | 🎬 present on the rewarded continue button and verified in the shipped bundle. |
+| `MON-09` | menuIconSm("play") renders a 20x20 inline SVG clapperboard/play glyph in the game's own palette on the rewarded continue button. The emoji was replaced during the icon set consolidation: emoji rendering varies per platform and reads as a foreign object against the hand-drawn art, so the rule now pins the meaning (a video affordance on the rewarded CTA) rather than one specific glyph. Pinned to the button markup, not to any play icon in the file, so adding a play icon elsewhere cannot satisfy this rule. |
 | `MON-10` | A single grant site; the returned boolean is the only reward source. |
 | `MON-11` | Run resumes in place with a jingle, coin toast and slow-mo restore - no menu detour. |
 | `MON-12` | false/rejected break grants nothing, offers fallbacks, and never mentions ad blocking. |

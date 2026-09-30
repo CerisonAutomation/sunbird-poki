@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NotificationQueue } from "../NotificationQueue";
+import { messageHoldMs } from "../MessageTiming";
 
 /**
  * NotificationQueue is currently unreferenced — nothing constructs it and it is
@@ -79,17 +80,29 @@ describe("NotificationQueue — never exceeds two on screen", () => {
     // Staggered on purpose: a and b must expire at DIFFERENT instants for the
     // mid-fade window to exist. Pushed together they expire together and the
     // slot question never arises.
-    // Timeline. The mid-fade window is only EXIT_MS wide, so the sample has to
-    // land inside it rather than near it:
-    //   t=0     push a  -> a's hold expires t=3000, fade done t=3240
-    //   t=1000  push b  -> b's hold expires t=4000; push c (queued)
-    //   t=3100  a is MID-FADE: still in the DOM, but its slot must be gone
-    //   t=3260  a's fade finished and c has taken the freed slot
+    // Timeline, DERIVED from the model rather than hardcoded. This used to
+    // assume a flat 3000 ms hold, so pointing the queue at the shared
+    // word-based model (which gives a one-word notification the 1100 ms floor)
+    // silently moved every event and the assertion below was then measuring a
+    // window that no longer existed. A test whose schedule is written out long-
+    // hand is a test that breaks when the duration is fixed.
+    //
+    //   t=0     push a  -> a's hold expires at HOLD, fade done at HOLD+EXIT_MS
+    //   t=+1000 push b  -> b expires 1000ms later; push c (queued)
+    //   HOLD/2   a is MID-FADE: still in the DOM, but its slot must be gone
+    //   HOLD+EXIT a's fade finished and c has taken the freed slot
+    const HOLD = messageHoldMs("a");
     q.push("a");
     vi.advanceTimersByTime(1000);
     q.push("b");
     q.push("c");
-    vi.advanceTimersByTime(2100); // t=3100
+    // Land inside a's fade window: after its hold expires (HOLD) but before the
+    // fade completes (HOLD + EXIT_MS). `a` is still in the DOM, so `c` must
+    // still be waiting — that is the whole point. We are already 1000ms in, so
+    // only the remainder is advanced.
+    vi.advanceTimersByTime(Math.max(1, HOLD + EXIT_MS / 2 - 1000));
+    // b must still be on screen at this point or the sample is meaningless.
+    expect([...dom()].map((e) => e.textContent)).toContain("b");
 
     // "a" is still on screen, so "c" must still be waiting. This is the
     // assertion the old code failed: it released the slot at t=3000.
@@ -97,7 +110,9 @@ describe("NotificationQueue — never exceeds two on screen", () => {
     expect(q.visibleCount).toBe(MAX_VISIBLE);
     expect(q.pendingCount).toBe(1);
 
-    vi.advanceTimersByTime(160); // t=3260, a's fade is done
+    // Advance past a's fade completing (it is mid-fade at this point, so the
+    // remainder of the fade is what's left, not a magic number).
+    vi.advanceTimersByTime(EXIT_MS / 2 + 1);
     expect([...dom()].map((e) => e.textContent)).toEqual(["b", "c"]);
 
     // Now the real case: two leaving together, a third waiting. A fresh
@@ -109,7 +124,9 @@ describe("NotificationQueue — never exceeds two on screen", () => {
     q2.push("x");
     q2.push("y");
     q2.push("z");
-    vi.advanceTimersByTime(HOLD_MS);
+    // x and y were pushed together, so they expire together: land in the
+    // middle of their shared fade window.
+    vi.advanceTimersByTime(messageHoldMs("x") + EXIT_MS / 2);
     expect(dom2().length, "x and y are both mid-fade").toBe(2);
     expect(q2.visibleCount, "neither slot is free yet").toBe(MAX_VISIBLE);
     expect(q2.pendingCount).toBe(1);

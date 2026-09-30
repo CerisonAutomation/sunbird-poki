@@ -134,3 +134,70 @@ export async function putRow(row: BoardRow): Promise<void> {
   }
   mem.set(row.deviceId, row);
 }
+
+const QUOTA_PREFIX = "sunbird:quota:v1:";
+
+/**
+ * Global fixed-window write counter, shared by every edge isolate.
+ *
+ * The in-memory limiter this replaced could only ever cap abuse *per warm
+ * instance*: Vercel routes concurrent requests across isolates and regions,
+ * each with its own Map, so a client that got load-balanced could exceed the
+ * cap in aggregate by simply spreading its writes. This is the fix, and it is
+ * available because the board is already backed by Upstash — the same store
+ * `getRow`/`putRow` use, so a submission now costs two round trips for the
+ * row and one more for the counter, not a new dependency.
+ *
+ * `INCR` is the whole trick: Redis applies it atomically, so N concurrent
+ * writers to one key get N distinct, gap-free counts and exactly one of them
+ * observes `1`. That `1` is the only moment a TTL is attached, which makes the
+ * window self-healing — it cannot be extended by continued writes, so a
+ * single abusive client cannot pin a key into permanent existence.
+ *
+ * Returns the window's count, or `null` when there is no shared store (local
+ * / preview) or Redis hiccuped. `null` is deliberately distinct from `0`: the
+ * caller must be able to tell "you have used nothing" from "I could not
+ * check", and a store outage should degrade to the caller's own limiter rather
+ * than reject every legitimate write.
+ *
+ * @param rearmAbove A count this far beyond any legitimate usage is treated as
+ *   a poisoned, TTL-less key and the window is re-armed. See the reset below —
+ *   it is the difference between a self-healing limiter and one that can ban a
+ *   real pilot forever after a single failed round trip.
+ */
+export async function bumpWriteQuota(key: string, windowMs: number, rearmAbove: number): Promise<number | null> {
+  if (!kvConfigured) return null;
+  const counterKey = `${QUOTA_PREFIX}${key}`;
+  const ttlSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+  const raw = await kvCommand<unknown>(`incr/${encodeURIComponent(counterKey)}`);
+  // `INCR` answers with an integer, but this is a network response from a
+  // store we do not control, so its shape is not guaranteed: a proxy error
+  // page, a protocol change, or an `{"error":...}` that surfaced as a string
+  // all land here. Coercing that to a count is how a limiter silently starts
+  // rejecting every player (NaN fails the cap comparison) or, worse, silently
+  // admits everything.
+  //
+  // Note that a missing result must NOT be read as 0: `Number(null)` is `0`,
+  // which would mean "used none of the quota" and wave a write through
+  // uncounted exactly when the store is broken. Only a real non-negative
+  // integer counts as a count; anything else is "could not check", which the
+  // caller already knows how to handle without punishing a legitimate write.
+  if (raw === null || raw === undefined) return null;
+  const count = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(count) || !Number.isInteger(count) || count < 0) return null;
+
+  if (count > rearmAbove) {
+    // No legitimate caller is this far past the cap, so this is a counter that
+    // lost its TTL: the INCR landed but the EXPIRE below did not, so the key
+    // will never again report 1 and this pilot would stay throttled for the
+    // lifetime of the store. Re-arm it with one atomic `SET 1 EX ttl`.
+    await kvCommand<number>(`set/${encodeURIComponent(counterKey)}/1/ex/${ttlSeconds}`);
+    return 1;
+  }
+  if (count === 1) {
+    // First write in this window — give the key a lifetime so it expires on
+    // its own instead of accumulating one entry per distinct caller forever.
+    await kvCommand<number>(`expire/${encodeURIComponent(counterKey)}/${ttlSeconds}`);
+  }
+  return count;
+}

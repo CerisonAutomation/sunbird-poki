@@ -78,17 +78,43 @@ until proven otherwise. This file exists so the commit log can't overclaim.
 ## 🔴 Aspirational (do not claim in commit messages)
 - Server-side matchmaking is still aspirational; rooms are in-memory.
 - Anti-cheat is **partial, not finished**. Movement plausibility is enforced
-  (above), but identity, rate limiting and score-submission trust are not.
+  (above), but identity and score-submission trust are not.
   Measured in CI for the record: the same 40 bots produce **16,082 relayed
   cheats** against the unvalidated Node reference server and **0** against the
   Rust one. Canonicalisation also cut per-client bandwidth 34.5%
   (79.56 → 52.11 KB/s) at identical cadence.
+- **A valid score signature is not evidence of a real run.** The salt is a
+  Vite env var, so it is inlined into the shipped zip and readable by anyone
+  who unzips the game. Signing is tamper-*evidence* against casually edited
+  clients, nothing more; the code and `LEADERBOARD_API.md` now say so at the
+  point of use rather than letting the constant-time comparison imply
+  otherwise. What actually defends the board is the plausibility envelope
+  plus the write quota below — and neither stops a motivated cheater, because
+  neither re-derives the score.
+- **`api/` score writes are rate limited fleet-wide.** The quota was an
+  in-memory `Map`, which Vercel scopes to one warm isolate, so a load-balanced
+  client could exceed it in aggregate — the code's own comment called that
+  "good enough". It is now a shared Upstash `INCR` counter (the board is
+  already backed by Redis), TTL'd on first write so continued posting cannot
+  pin the window open, falling back to the per-isolate window when the store
+  is absent or unreachable. This closes the rate-limiting half of the old
+  queue item; the other two halves are re-listed below as they stand.
 
 ## Next (in order)
 1. Retire `scripts/mp-smoke.mjs` once this PR has been green a while — botsim
    supersedes it (40 clients vs 2, and it is actually wired into CI)
-2. Add score rate limiting, idempotency, and deterministic replay validation
-   before ranked seasons accept public submissions.
+2. **Idempotency on score submission.** `api/score.ts` does a read-then-write
+   (`getRow` → compare → `putRow`), which is not atomic: two concurrent posts
+   from one `deviceId` can interleave and leave the *worse* row stored. Needs
+   a single conditional write (a Redis `SET … GT` guard, or `EVAL`) rather
+   than a read followed by a blind write.
+3. **Deterministic replay validation** before ranked seasons accept public
+   submissions. Blocked on the 40-pilot mass race: `dragMult` folds in the
+   live field through `massRace.draftFor`, so a run cannot be reproduced from
+   a tape alone — it needs a server-side sim of the whole field. The 1P
+   flight replays cheaply today (`physics.test.ts` already re-flies seeded
+   terrain bit-exactly), so the 1P board can ship this first and the mass
+   race can follow.
 
 ## ✅ Shipped this pass (viral Poki loop, existing modules)
 - Clip-worthy ledger + viral score + recap CTA in `Moments.ts`

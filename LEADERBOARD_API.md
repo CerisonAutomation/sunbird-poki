@@ -155,12 +155,37 @@ sig = hex(HMAC-SHA256(salt, `${deviceId}|${distance}|${score}`))
   any environment — unsigned or badly-signed posts are rejected with `403`.
 
 Honest scope: the salt ships inside the client bundle, so signing deters
-casual curl-spoofing, not determined reverse-engineering. The server also
-enforces plausibility gates regardless of signature:
+casual curl-spoofing, not determined reverse-engineering. A valid signature
+means "the submitter has the game file", **not** "the run happened". The
+server also enforces plausibility gates regardless of signature:
 
 - `distance > 60,000 m` → `422 implausible distance`
 - `score > distance × 40 + 50,000` → `422 implausible score`
 
-True tamper-proofing requires replay validation (deterministic re-simulation
-of the run from its seed + input trace), plus production rate limiting and
-storage health checks — tracked in ROADMAP.md.
+## Write quota
+
+`POST /score` allows **30 writes per minute per IP+deviceId** and answers
+`429` beyond that. When Upstash is configured the quota is a shared `INCR`
+counter, so the cap holds **fleet-wide** rather than per warm edge isolate —
+the previous in-memory `Map` let a client that got load-balanced across
+isolates exceed it in aggregate. The counter's TTL is attached only on the
+first write of a window, so continued posting cannot pin the key open, and a
+missing or malformed counter response falls back to the per-isolate window
+instead of either rejecting legitimate writes or admitting them uncounted
+(`null` means "could not check", never "count zero").
+
+## What is still not tamper-proof
+
+Storage health checks and a fleet-wide write quota are in place. True
+tamper-proofing still requires **replay validation** — the server
+re-deriving the distance and score by re-simulating the run from its seed and
+input trace, instead of believing the submitted numbers. The fixed-step sim is
+already a pure function of `(seed, per-tick inputs)`, which is what makes this
+possible at all.
+
+It is not built. The obstacle is not the 1P flight: that replays cheaply. It is
+the 40-pilot mass race, where `dragMult` folds in the live field through
+`massRace.draftFor`, so reproducing a run needs a server-side sim of every
+bird in the race, not a tape. Until that exists, treat ranked seasons as
+unverified for anything above casual score-farming, and do not describe a
+signed score as evidence of a genuine flight. Tracked in ROADMAP.md.

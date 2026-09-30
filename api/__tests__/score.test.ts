@@ -226,6 +226,7 @@ describe("POST /api/score", () => {
           const url = String(input);
           if (url.includes("/ping")) return new Response(JSON.stringify({ result: "PONG" }), { status: 200 });
           if (url.includes("/get/")) return new Response(JSON.stringify({ result: null }), { status: 200 });
+          if (url.includes("/incr/")) return new Response(JSON.stringify({ result: 1 }), { status: 200 });
           return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
         }),
       );
@@ -233,6 +234,130 @@ describe("POST /api/score", () => {
       const row = validRow({ deviceId: "prod-pilot", distance: 1000, score: 5000 });
       const sig = await computeSig("prod-salt", row.deviceId as string, row.distance as number, row.score as number);
       const res = await handler(postScore({ ...row, sig }));
+      expect(res.status).toBe(200);
+    });
+  });
+
+  // The in-memory limiter could only ever bound abuse per warm edge instance.
+  // With Upstash configured the quota is a shared INCR counter, so these tests
+  // pin the property that was previously impossible to state: the cap holds
+  // across the whole fleet, because it no longer lives in one isolate's heap.
+  describe("fleet-wide write quota", () => {
+    function stubKv(handler: (url: string) => Response) {
+      process.env.KV_REST_API_URL = "https://example-upstash.test";
+      process.env.KV_REST_API_TOKEN = "token";
+      const seen: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          seen.push(url);
+          return handler(url);
+        }),
+      );
+      return seen;
+    }
+
+    it("counts writes in the shared store and rejects the 31st", async () => {
+      // A counter that behaves like Redis: atomic increment, shared by every
+      // caller no matter which isolate they landed on.
+      const counters = new Map<string, number>();
+      stubKv((url) => {
+        if (url.includes("/incr/")) {
+          const key = decodeURIComponent(url.split("/incr/")[1].split("/")[0]);
+          const next = (counters.get(key) ?? 0) + 1;
+          counters.set(key, next);
+          return new Response(JSON.stringify({ result: next }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+      });
+      const handler = await loadScore();
+      let last: Response | null = null;
+      for (let i = 0; i < 31; i++) {
+        last = await handler(postScore(validRow({ deviceId: "fleet-pilot" })));
+      }
+      expect(last!.status).toBe(429);
+      expect((await last!.json()).error).toMatch(/rate limit/i);
+    });
+
+    it("gives the counter a TTL on first write so the key cannot live forever", async () => {
+      const seen = stubKv((url) => {
+        if (url.includes("/incr/")) return new Response(JSON.stringify({ result: 1 }), { status: 200 });
+        return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+      });
+      const handler = await loadScore();
+      await handler(postScore(validRow({ deviceId: "ttl-pilot" })));
+      const expiry = seen.find((u) => u.includes("/expire/"));
+      expect(expiry, "first write must attach a lifetime to the counter").toBeTruthy();
+      expect(expiry).toMatch(/\/expire\/.+\/60$/); // WINDOW_MS of 60_000 → 60s
+    });
+
+    it("does not extend the window on later writes", async () => {
+      // A fixed window that re-issued its TTL on every write could be pinned
+      // open indefinitely by a client that keeps posting, so `EXPIRE` is
+      // attached only on the transition to 1.
+      const counters = new Map<string, number>();
+      const seen = stubKv((url) => {
+        if (url.includes("/incr/")) {
+          const key = decodeURIComponent(url.split("/incr/")[1].split("/")[0]);
+          const next = (counters.get(key) ?? 0) + 1;
+          counters.set(key, next);
+          return new Response(JSON.stringify({ result: next }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+      });
+      const handler = await loadScore();
+      for (let i = 0; i < 5; i++) {
+        await handler(postScore(validRow({ deviceId: "ttl-pilot-2" })));
+      }
+      expect(seen.filter((u) => u.includes("/expire/")).length).toBe(1);
+      expect(seen.filter((u) => u.includes("/incr/")).length).toBe(5);
+    });
+
+    it("falls back to the per-isolate limiter when the store is unreachable", async () => {
+      stubKv(() => new Response("upstream is down", { status: 500 }));
+      const handler = await loadScore();
+      const res = await handler(postScore(validRow({ deviceId: "redis-down-pilot" })));
+      // Redis being broken must not reject a legitimate first score: the
+      // per-isolate window still answers, which is why `allowed()` falls back
+      // rather than failing closed here.
+      expect(res.status).toBe(200);
+    });
+
+    it("does not read a missing counter as an unused quota", async () => {
+      // `{result: null}` is what a store failure looks like after `kvCommand`
+      // has already filtered errors. `Number(null)` is 0 — a limiter that
+      // treated that as "count zero" would admit writes uncounted forever.
+      const seen = stubKv((url) => {
+        if (url.includes("/incr/")) return new Response(JSON.stringify({ result: null }), { status: 200 });
+        return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+      });
+      const handler = await loadScore();
+      let last: Response | null = null;
+      for (let i = 0; i < 31; i++) {
+        last = await handler(postScore(validRow({ deviceId: "null-counter-pilot" })));
+      }
+      // Falls back to the local window, which still enforces 30.
+      expect(last!.status).toBe(429);
+      expect(seen.filter((u) => u.includes("/incr/")).length).toBe(31);
+    });
+
+    it("re-arms a counter that lost its TTL instead of throttling that pilot forever", async () => {
+      // The dangerous state: INCR succeeded but EXPIRE did not, so the key has
+      // no lifetime and will never again report 1. Without a re-arm that one
+      // pilot is capped at 30 writes/minute for as long as the store exists.
+      let stuck = 9_999;
+      const seen = stubKv((url) => {
+        if (url.includes("/incr/")) {
+          stuck += 1;
+          return new Response(JSON.stringify({ result: stuck }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
+      });
+      const handler = await loadScore();
+      const res = await handler(postScore(validRow({ deviceId: "ttl-less-pilot" })));
+      expect(seen.some((u) => u.includes("/set/") && u.includes("/1/ex/")), "window must be re-armed with a fresh TTL").toBe(true);
+      // Re-armed to a fresh window, so this honest pilot is not locked out.
       expect(res.status).toBe(200);
     });
   });

@@ -35,6 +35,32 @@ import { OfflineOutbox } from "./resilience/OfflineOutbox";
 // Root-namespace routes (`/board`, `/score`) — apiBase.ts owns the derivation
 // so the two callers cannot drift apart again.
 const API = backendBase("");
+/**
+ * NOT A SECURITY BOUNDARY — read this before trusting the signature.
+ *
+ * `VITE_LEADERBOARD_SALT` is a Vite env var, which means Vite **inlines its
+ * value into the client bundle at build time**. It is inside `dist/` and
+ * inside `sunbird-poki.zip` in plain text. Anyone can unzip the game, read
+ * this salt, and mint a valid HMAC for any distance or score they like, so
+ * the signature the server checks proves only that the submitter also has the
+ * game file. It is tamper-*evidence* against an accidentally or casually
+ * edited client — not an anti-cheat control.
+ *
+ * The symmetric design is the problem, not the key's length: a client-side
+ * signer has to hold the secret, and a secret the client holds is a public
+ * secret. Do not read a passing signature on a score as evidence the run
+ * happened.
+ *
+ * What actually makes a submitted score trustworthy is the server re-deriving
+ * it from something the client cannot fabricate. The fixed-step sim is
+ * already a pure function of (seed, per-tick inputs) — `physics.test.ts`
+ * re-flies seeded terrain bit-exactly with no renderer — so replay validation
+ * on the server is the real fix, and it is tracked as such in ROADMAP.md. It
+ * is not done, and a 40-pilot mass race cannot be replayed cheaply at all
+ * because `dragMult` folds in the live field via `massRace.draftFor`, so a
+ * replayable tape needs a server-side field sim before it can be enforced
+ * there.
+ */
 const SALT = import.meta.env.VITE_LEADERBOARD_SALT ?? "";
 const AUDS: PokiAuds | null =
   (import.meta.env.VITE_PORTAL_TARGET as string | undefined) === "poki"

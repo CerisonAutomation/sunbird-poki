@@ -3,7 +3,7 @@
 // Implements the `POST /score` half of LEADERBOARD_API.md: accepts a finished
 // run, keeps the best row per pilot (best by distance), and enforces the
 // documented plausibility gates + optional HMAC signing (v1.1).
-import { getRow, putRow, storageHealth } from "./_lib/store.js";
+import { bumpWriteQuota, getRow, isPersistent, putRow, storageHealth } from "./_lib/store.js";
 import { boundedNum, handleOptions, json, sanitize, todayStr } from "./_lib/http.js";
 
 export const config = { runtime: "edge" };
@@ -11,19 +11,29 @@ export const config = { runtime: "edge" };
 const SALT = process.env.LEADERBOARD_SALT ?? "";
 const WINDOW_MS = 60_000;
 const MAX_WRITES_PER_KEY = 30;
+/**
+ * How far past the cap a shared counter may climb before we assume its TTL was
+ * lost and re-arm the window. Nothing legitimate gets near it — a pilot
+ * posting at the full cap for an entire minute would reach 30, and the store
+ * only ever reports a count within the current window.
+ */
+const REARM_ABOVE = MAX_WRITES_PER_KEY * 10;
 const writes = new Map<string, { started: number; count: number }>();
 
 /**
  * `writes` is a plain module-level Map, so — like every in-memory limiter in
  * this directory — it is scoped to a single warm edge instance. Vercel can
  * (and does) route concurrent requests to several isolates across regions,
- * each with its own independent map, so this limiter caps abuse *per
- * instance*, not globally across the fleet: a client that gets load-balanced
- * across instances can exceed MAX_WRITES_PER_KEY in aggregate. A true global
- * limit would need shared storage (e.g. the same Upstash Redis the
- * leaderboard itself already uses) at the cost of a round trip on every
- * write; this in-memory version is deliberately cheap and "good enough"
- * against casual flooding from a single source.
+ * each with its own independent map, so this map can only bound abuse *per
+ * instance*.
+ *
+ * It is therefore no longer the primary limit. `allowed()` below consults the
+ * shared Upstash counter first, which is global across the whole fleet, and
+ * falls back to this map only when there is no shared store (local / preview)
+ * or Redis could not be reached. The old comment here described this as the
+ * limit and called the aggregate overshoot "good enough"; for a board that
+ * pays out a season prize, per-isolate is not a bound, so the shared counter
+ * is.
  *
  * Left unswept, `writes` would grow by one entry per distinct
  * IP+deviceId pair ever seen, for as long as the instance stays warm — a slow
@@ -55,7 +65,7 @@ function clientAddress(request: Request): string {
     request.headers.get("x-real-ip") || "unknown";
 }
 
-function allowed(key: string): boolean {
+function allowedLocally(key: string): boolean {
   const now = Date.now();
   const prior = writes.get(key);
   if (!prior || now - prior.started >= WINDOW_MS) {
@@ -65,6 +75,29 @@ function allowed(key: string): boolean {
   if (prior.count >= MAX_WRITES_PER_KEY) return false;
   prior.count += 1;
   return true;
+}
+
+/**
+ * The write quota, fleet-wide.
+ *
+ * The counter is keyed by IP + deviceId, so it caps one caller spreading its
+ * writes across the edge fleet, while still letting a shared-IP lobby (a
+ * school, a café wifi, a carrier NAT) submit as several pilots — the deviceId
+ * half of the key is what keeps those apart.
+ *
+ * `bumpWriteQuota` returning `null` means "no shared store" rather than "zero
+ * uses", so we fall back to the per-isolate window instead of rejecting a
+ * legitimate first-ever score because Redis blinked. Production already
+ * fails closed above when storage is unhealthy, so this path is the local and
+ * preview case plus transient Redis errors, not a way to bypass the limit in
+ * a healthy deployment.
+ */
+async function allowed(key: string): Promise<boolean> {
+  if (isPersistent()) {
+    const count = await bumpWriteQuota(key, WINDOW_MS, REARM_ABOVE);
+    if (count !== null) return count <= MAX_WRITES_PER_KEY;
+  }
+  return allowedLocally(key);
 }
 
 async function sign(deviceId: string, distance: number, score: number): Promise<string> {
@@ -163,7 +196,7 @@ export default async function handler(request: Request): Promise<Response> {
   };
 
   if (!row.deviceId) return json({ error: "missing deviceId" }, 400);
-  if (!allowed(`${clientAddress(request)}:${row.deviceId}`)) {
+  if (!(await allowed(`${clientAddress(request)}:${row.deviceId}`))) {
     return json({ error: "rate limit exceeded" }, 429);
   }
 
@@ -176,6 +209,18 @@ export default async function handler(request: Request): Promise<Response> {
   // every environment where a salt is configured, an unsigned/badly-signed
   // post is rejected. Previews without a salt stay lenient by design —
   // their boards are memory-only and never rank globally.
+  //
+  // What this does and does not buy you, stated plainly because the
+  // constant-time comparison below invites the opposite reading: the salt is a
+  // Vite env var, so it is inlined into the shipped client bundle and is
+  // readable in the portal zip. A motivated cheater can therefore produce a
+  // valid signature for an invented score, and this check will accept it.
+  // Treat a signature as tamper-evidence against accidental or casually
+  // edited clients, not as proof a run happened. Real enforcement is the
+  // server re-deriving the score from a replay it re-simulates; the sim is
+  // deterministic by construction, but that validator is not built yet (see
+  // ROADMAP.md). Until it is, the documented envelope above and the
+  // fleet-wide write quota are the actual defences.
   if (SALT) {
     const provided = sanitize(p.sig, 128);
     const expected = await sign(row.deviceId, row.distance, row.score);

@@ -117,10 +117,53 @@ const smArtwork = {
 export type SmIconName = keyof typeof smArtwork;
 
 /** Small inline SVG icon (20×20). Safe to insert as innerHTML — no user data. */
+/**
+ * Small inline icon for a named icon.
+ *
+ * It used to return "" for anything it did not recognise, which is how the
+ * UI ended up with bare words where an icon belongs. Two call patterns hit
+ * that path constantly:
+ *
+ *  · fields named `emoji` (`w.emoji`, `s.biomeEmoji`, `activeWorld.emoji`)
+ *    hold an actual character, not a name — so the lookup missed and the
+ *    icon silently vanished, leaving the label alone on the row;
+ *  · `s.wings.icon` is already a resolved GLYPH by the time it arrives (see
+ *    GrowthLedger), so the same thing happened on the wings pill.
+ *
+ * An icon slot that renders nothing is worse than one that renders a dot:
+ * the layout still reserves the gap, so the text sits adrift from where the
+ * grid expects it. That is most of the reported "text overlaps" too.
+ *
+ * Now it degrades in order: authored artwork, then the text glyph for a
+ * known name, then the value itself when it is already a short glyph, and
+ * only then a neutral marker. It never returns empty and never emits a
+ * bare identifier.
+ */
+/** Neutral stand-in for an unmapped icon name. A small filled dot reads as
+ *  "a marker" in every font that has Geometric Shapes, which is all of them. */
+const FALLBACK_GLYPH = "\u25aa";
+
 export function menuIconSm(name: string): string {
   const art = smArtwork[name as SmIconName];
-  if (!art) return "";
-  return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
+  if (art) {
+    return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
+  }
+  return `<span class="icon-sm icon-sm-glyph" aria-hidden="true">${iconMarkText(name)}</span>`;
+}
+
+/**
+ * The plain-text mark for a value that may be an icon name, an already
+ * resolved glyph, or junk. Shared by menuIconSm and the toast path so both
+ * degrade the same way.
+ */
+export function iconMarkText(value: string): string {
+  const v = (value ?? "").trim();
+  if (!v) return FALLBACK_GLYPH;
+  if (hasIconGlyph(v)) return smGlyph[v as SmIconName];
+  // Already a glyph (one or two code points, no ASCII letters) — pass it
+  // through rather than replacing a perfectly good symbol with a dot.
+  if (![...v].some((c) => /[A-Za-z0-9_]/.test(c)) && [...v].length <= 3) return v;
+  return FALLBACK_GLYPH;
 }
 
 /** One-character text glyph for a named icon — used in plain-text contexts
@@ -150,9 +193,6 @@ const smGlyph: Record<SmIconName, string> = {
   fullscreen: "⛶", fullscreen_exit: "⧉",
 };
 
-/** Neutral stand-in for an unmapped icon name. A small filled dot reads as
- *  "a marker" in every font that has Geometric Shapes, which is all of them. */
-const FALLBACK_GLYPH = "\u25aa";
 
 /**
  * Resolve an icon NAME to its glyph.

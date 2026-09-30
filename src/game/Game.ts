@@ -1440,7 +1440,17 @@ export class Game {
     }
     const simDt = raw * this.timeScale;
 
-    // Snapshot before any physics advances so the render can interpolate.
+    // Render interpolation needs the position before the LAST physics step,
+    // not before the whole frame. This snapshotted once per frame, but the
+    // loops below run as many 120 Hz substeps as the frame's delta allows —
+    // two per frame at 60 Hz display, more on a slow frame. So `prev` was up
+    // to N steps behind `current` while the alpha covers exactly one step,
+    // and lerp(prev, current, acc/PHYS_DT) drew the bird oscillating across a
+    // multi-step gap every frame. That is the judder: the interpolation that
+    // exists to smooth motion was the thing making it jagged.
+    //
+    // `stepBird`/`stepFixed` below re-snapshot immediately before each
+    // substep, so prev is always exactly one step behind current.
     this.prevBirdX = this.bird.x;
     this.prevBirdY = this.bird.y;
 
@@ -1474,6 +1484,8 @@ export class Game {
         // "catch up" would be far worse than a beat of slow motion.
         let steps = 0;
         while (this.acc >= PHYS_DT && this.state === "playing" && steps < MAX_CATCHUP_STEPS) {
+          this.prevBirdX = this.bird.x;
+          this.prevBirdY = this.bird.y;
           if (this.versus) this.versusTick(PHYS_DT);
           else this.fixedUpdate(PHYS_DT);
           this.acc -= PHYS_DT;
@@ -1494,6 +1506,8 @@ export class Game {
         {
           let steps = 0;
           while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.prevBirdX = this.bird.x;
+            this.prevBirdY = this.bird.y;
             this.bird.step(PHYS_DT, ASLEEP, this.terrain);
             this.acc -= PHYS_DT;
             steps += 1;
@@ -1548,6 +1562,8 @@ export class Game {
         {
           let steps = 0;
           while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.prevBirdX = this.bird.x;
+            this.prevBirdY = this.bird.y;
             this.bird.step(PHYS_DT, ASLEEP, this.terrain);
             this.acc -= PHYS_DT;
             steps += 1;

@@ -592,3 +592,93 @@
     scroll-behavior: auto;
   }
 }
+
+/* ---------------------------------------------------------------------
+   D-16  Stop text colliding with text.
+
+   Measured in the shop: eight pairs of leaf text nodes overlapping by more
+   than 6 px in both axes at 1280x800 — a bird's perk line sitting on top of
+   the next collection's title, a rarity tag over a name, an action button
+   over a blurb. The causes are all the same shape: absolutely positioned
+   tags that reserve no space, flex/grid children that refuse to shrink
+   (`min-width` defaults to auto, so a long name pushes a sibling out of the
+   box rather than wrapping), and cards clipped with `overflow: hidden` so
+   the collision is invisible to the author but not to the player.
+
+   This is a safety net, not a redesign: reserve the space a floating tag
+   occupies, let text actually wrap, and stop grid rows from collapsing into
+   one another. --------------------------------------------------------- */
+.hud-root :is(.skin-card, .trail-card, .boost-row, .pc, .collection) {
+  min-width: 0;
+}
+/* A flex/grid child defaults to min-width:auto and will not shrink below
+   its content — the single most common cause of two labels sharing pixels. */
+.hud-root :is(.skin-card, .trail-card, .boost-row, .pc) :is(b, em, small, span, div, p) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Floating rarity/deal tags: reserve their band so the name never runs
+   under them. */
+.hud-root .skin-card {
+  padding-top: 26px;
+  position: relative;
+}
+.hud-root .skin-card :is(.deal-tag, .tag, [class*="rarity"]) {
+  max-width: calc(100% - 12px);
+}
+/* Grids must lay rows out, not stack them. */
+.hud-root :is(.skin-grid, .trail-list) {
+  align-items: start;
+  align-content: start;
+}
+.hud-root :is(.skin-grid, .trail-list) > * {
+  align-self: start;
+}
+/* The shop hero's name sat inside a bordered box with no padding, so the
+   descenders touched the rule. */
+.hud-root .shop-hero-name {
+  padding: 2px 8px;
+  line-height: 1.25;
+}
+/* "Hold to dive" style cue rows: the icon and the words were laid on the
+   same line box with no gap, so a wide glyph overlapped the first word. */
+.hud-root :is(.hint, .cue, .coach-line, .shop-rules) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hud-root :is(.hint, .cue, .coach-line) > svg {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------------
+   D-17  Bird cards need room to be cards.
+
+   Measured at 1280x800: `.skin-grid` resolved to FIVE columns of 105 px.
+   Into 105 px the card puts a name, a perk line, a stats block, a price and
+   a Preview button, then clips the result with `overflow: hidden`. That is
+   the source of the overlapping text in the shop — not a stray absolute
+   position, just far too little width, with the clip hiding the damage from
+   whoever authored it.
+
+   The base rule asks for `repeat(3, minmax(0, 1fr))` and something later
+   widened it to five; rather than fight over the count, ask for a width.
+   `auto-fill` + a real minimum means the column count follows the space
+   available and a card is never narrower than its content needs, at any
+   viewport, including the two-column menu layout from D-3. ------------- */
+.hud-root .skin-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .hud-root .skin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  }
+}
+/* With room to breathe the card no longer needs to clip itself, which is
+   what made the collisions invisible during authoring. */
+.hud-root .skin-card {
+  overflow: visible;
+}

@@ -16,7 +16,7 @@
  *      in the page head, and it is the platform's own host, so it is not the
  *      "external asset" rule REQ-40 forbids. Every other remote reference
  *      fails the gate, and generic exposes no reachable SDK loader path.
- *   6. icons/ + fonts/ ship inside the zip (self-contained, offline-safe).
+ *   6. icons/ ships inside the zip; fonts/ must not (already base64-inlined).
  *   7. No third-party backend markers anywhere in the bundle: portals ship
  *      local/coin-only editions, so Stripe endpoints, live/test publishable
  *      keys, the Upstash-backed leaderboard Worker, and the social server
@@ -98,7 +98,10 @@ for (const portal of PORTALS) {
     failures.push(`${portal}: payment-processor marker in the staged bundle — ${hit} (portal builds are coin-only).`);
   }
   if (/(href|src)="\/[^"]*"/.test(html)) failures.push(`${portal}: absolute /asset reference (breaks CDN subpaths).`);
-  if (!/icons\//.test(list) || !/fonts\//.test(list)) failures.push(`${portal}: icons/ or fonts/ missing from zip.`);
+  if (!/icons\//.test(list)) failures.push(`${portal}: icons/ missing from zip.`);
+  // fonts/ must NOT be there: they are base64-inlined into the stylesheet, so
+  // a copy on disk is a download nobody reads. See audit-zips.mjs.
+  if (/fonts\//.test(list)) failures.push(`${portal}: fonts/ in zip — the fonts are already inlined.`);
   // SDK profile: the build must SHIP its own portal integration, and must not
   // STATICALLY load anything remote (a <script src="http…"> runs unconditionally
   // — portals block those). Which SDK URL flows into the dynamic loader is

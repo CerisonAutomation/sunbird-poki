@@ -15,8 +15,8 @@ the reason.
 - **Physics**: hand-rolled fixed-step deterministic simulation (`PHYS_HZ`/`PHYS_DT` in
   `src/game/constants.ts`, stepped in `src/game/Bird.ts`). No physics engine.
 - **UI**: React 19.2 for the shell only (`src/App.tsx`, `src/GameShell.tsx`). The entire game HUD,
-  menus and overlays are vanilla TS + direct DOM (`src/game/HUD.ts`, styled by
-  `src/game/ui.css`).
+  menus and overlays are vanilla TS + direct DOM, split across `src/game/hud/` (screens + view
+  model) and `src/game/HUD.ts` (the DOM controller), styled by `src/game/ui.css`.
 - **Styling**: Tailwind CSS v4 via `@tailwindcss/vite`, CSS-first config in `src/index.css` (no
   `tailwind.config.js`). Design tokens are CSS custom properties (`--ink`, `--coral`, `--display`…).
 - **Audio**: zero-asset procedural WebAudio — `src/game/Audio.ts`, `src/game/Music.ts`,
@@ -59,9 +59,33 @@ the reason.
 - React renders the page shell and nothing else (`App.tsx` mounts `GameShell` and dynamically imports
   `./game/Game`). The game code-split is load-bearing — keep the `import type { Game }` pattern so
   Three.js stays out of the first chunk.
-- Every in-game screen (HUD, menus, dialogs, leaderboard, shop, results) is built in
-  `src/game/HUD.ts`-style modules with `document.createElement` / `innerHTML` + `t()` strings. Adding
-  React components, portals or a reconciler inside the game layer is a regression.
+- Every in-game screen (HUD, menus, dialogs, leaderboard, shop, results) is a **pure string
+  builder** — `(snapshot) => html` — in its own module under `src/game/hud/`, composed with
+  `document.createElement` / `innerHTML` + `t()` strings. Adding React components, portals or a
+  reconciler inside the game layer is a regression.
+
+### `src/game/hud/` is a layered DAG, not a folder of equals
+Dependencies point one way only. A module may not import from a layer below it *and* be imported
+by one — `pnpm circular:check` fails the build on a cycle, and the fix is to move a shared piece
+down a layer, never to import sideways.
+
+| Layer | Module | Holds |
+|---|---|---|
+| 0 | `types.ts` | `HudSnapshot` (227 fields) and the view-model types. Leaf — `import type` only, erases at build |
+| 0 | `kit.ts` | Screen ids (`SCREEN`, `SCREEN_TITLES`) + chrome: `head`, `escapeHtml`, `sectionTitle`, `upsellStrip` |
+| 1 | `parts.ts` | Fragments shared by 2+ screens: `renderMissions`, `renderGoalList`, `distanceText`, `aiRivalSection` |
+| 2 | `shop.ts` | Commerce: hangar, coin store, checkout |
+| 2 | `run.ts` | In-run: results card, continue, ad break, versus |
+| 2 | `meta.ts` | Progression: high glides, pass, trophies, account, campaign, cups |
+| 2 | `race.ts` | Competitive: lobby, ranked, squad, practice, modes |
+| 3 | `../HUD.ts` | `class HUD` — the only module with DOM access. Wires the above and re-exports the public surface |
+
+- `HudSnapshot` stays wide on purpose: it is the transport between `Game` and the renderer.
+  **Narrow at the renderer**, not at the type — a screen declares the fields it reads
+  (`Pick<HudSnapshot, "wallet" | "skins">`). The median screen reads 4 of 227 fields.
+- `HUD.ts` re-exports what `Game.ts` and the test suite import from it. Keep that public face
+  stable: `wiring.test.ts` keys its dead-export registry by `module:Symbol`, and a re-export
+  preserves the module id (`export { X } from "./y"` counts as an export of the re-exporting file).
 - Style the shell with Tailwind utilities and tokens; style in-game surfaces with the semantic classes
   in `src/game/ui.css`. Do not inline layout that a media query must override (`audit:ui` fails it),
   and do not add inline styles to a control that needs a narrow-screen rule.
@@ -103,10 +127,39 @@ the reason.
 - Icons and the sunbird/bird art are generated inline SVG functions (`Sunbird.ts`, `MenuIcons.ts`).
   No sprite sheets, no icon font.
 
+### Styling: the design system is fenced on purpose
+`src/game/__tests__/css-tokens.test.ts` is a **ratchet with a ceiling, not a budget**. Measured
+2026-09-24, the headroom is essentially gone — do not plan a visual change around it:
+
+| Budget | Cap | Current |
+|---|---|---|
+| `!important` — `index.css` / `ui.css` / `menu-polish.css` | 11 / 13 / 1491 | **11 / 13** / 1472 |
+| Raw `color: #` literals — `index.css` / `ui.css` / `menu-polish.css` | 54 / 210 / 168 | 35 / **203** / 150 |
+| Unique hex colours across all three sheets | 915 | — |
+| Total hex declarations across all three sheets | 1500 | — |
+
+- **Never add a raw colour.** Paint with an existing token (`--coral`, `--ink`, `--text-on-sky`…).
+  A new hex is a test failure, and that is the mechanism that once shipped a distance readout at
+  0.8:1 against the dusk sky.
+- **Never add `!important` to `index.css` or `ui.css`** — both are at cap. `menu-polish.css` is
+  imported last, so it wins the cascade by default; that is the recorded debt.
+- Every `var(--x)` must be defined in a sheet, carry a fallback, or be in the test's runtime
+  allowlist. Each token is defined exactly once across all three sheets.
+- Motion already exists in depth (56 `@keyframes`, 71 `transition` declarations). Check before
+  adding more.
+- **Known gap:** `prefers-reduced-motion` is scoped to `.overlay *` and a few elements, so the
+  Settings "reduce motion" toggle (`sb-reduce-motion` on `documentElement`, set in `HUD.ts`) does
+  not reach the *flight* HUD — speed lines, particles, trail, impact popups. Fixing it needs
+  `!important` in the cascade-winning sheet; plan it as its own change with the ratchet in view,
+  not as a side effect of another one.
+
 ## Where code goes
 
 - `src/App.tsx`, `src/GameShell.tsx` — React shell only.
-- `src/game/*.ts` — engine, systems, HUD, tests in `src/game/__tests__/`.
+- `src/game/hud/` — the view model (`types.ts`), shared chrome (`kit.ts`), shared fragments
+  (`parts.ts`) and one module per screen group. Pure functions; no DOM.
+- `src/game/HUD.ts` — the DOM controller. The only HUD module that touches the DOM.
+- `src/game/*.ts` — engine, systems, tests in `src/game/__tests__/`.
 - `src/game/resilience/` — network, storage, crash, retry primitives.
 - `src/sdk/` — platform/portal adapters, no game logic.
 - `src/i18n/` — locale plumbing and the translation barrel.

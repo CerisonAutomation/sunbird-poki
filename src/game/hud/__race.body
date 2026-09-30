@@ -1,0 +1,28 @@
+/**
+ * The competitive screens: the race lobby, ranked, the squad, AI practice and
+ * the mode picker.
+ */
+
+import { formatNumberLocalized, t } from "../../i18n";
+import { menuIcon, menuIconSm } from "../MenuIcons";
+import { PVP_MODES } from "../Modes";
+import { paginate } from "../Pagination";
+import { type FriendChallenge } from "../SocialSystem";
+import { SQUAD_QUESTS } from "../Squad";
+import { rivalPalette, skinPalette, skinShape, sunbirdSVG } from "../Sunbird";
+import { SQUAD_CHAT } from "../edition";
+import { seenAgo } from "../pilots";
+import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
+import { renderCampaign, renderCups } from "./meta";
+import { aiRivalSection, boardSource } from "./parts";
+import { type FriendChallenge, type HudSnapshot } from "./types";
+
+
+
+
+
+
+
+
+
+

@@ -36,7 +36,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css"] as const;
+const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css", "game/design-polish.css"] as const;
 
 const read = (file: string): string =>
   readFileSync(join(process.cwd(), "src", ...file.split("/")), "utf8");

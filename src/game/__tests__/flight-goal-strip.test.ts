@@ -253,7 +253,7 @@ describe("the results card ends with one next action, not nine ladders", () => {
 
 /* ------------------------------------------------------------------ the sheet */
 
-const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css"];
+const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css", "game/design-polish.css"];
 
 
 describe("no viewport is allowed to delete the progress readout", () => {

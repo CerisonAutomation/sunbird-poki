@@ -1,0 +1,365 @@
+/* =====================================================================
+   Design polish — the layer that answers the in-browser visual QA.
+
+   Loaded last, deliberately additive, and scoped so nothing here can reach
+   into the flight renderer. Every block below is traceable to a numbered
+   finding in docs/audits/DESIGN_CRITIQUE_10_EXPERTS.md; the finding id is in
+   the heading so a future reader can tell intent from accident.
+
+   House rules for this file:
+     - 4 px spacing grid. No 5s, no 7s, no 13s.
+     - Nothing is sized in bare px where it has to survive 640x360 -> 1440p;
+       use clamp() against the viewport so the same rule is pixel-correct at
+       both ends instead of correct at one and approximate at the other.
+     - No new colours invented. Everything reuses the existing warm-paper
+       palette so the polish reads as the same game, better made.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   D-1  The 48 px unscrollable clip.
+
+   `.overlay.menu` measured scrollHeight 768 against clientHeight 720 at
+   1280x720 with `overflow: hidden` — 48 px of the overlay sheared off and
+   unreachable, because the menu's extra bottom padding was added on top of a
+   child already claiming the full height. Pinning box-sizing and letting the
+   card resolve against the padding box removes the overflow instead of
+   hiding it.
+   --------------------------------------------------------------------- */
+.hud-root .overlay,
+.hud-root .overlay > .paper-card {
+  box-sizing: border-box;
+}
+.hud-root .overlay.menu {
+  /* Was `padding-bottom: calc(68px + safe-area)` fighting a `max-height:100%`
+     child. min-height:0 lets the flex child actually shrink to fit. */
+  min-height: 0;
+}
+/* `max-height: 100%` was the bug, not the fix: on a flex row whose container
+   carries asymmetric padding the percentage did not resolve against the
+   content box, so the card measured 688 px inside a 640 px well and pushed
+   48 px past the overlay's `overflow: hidden` edge. Sizing against the
+   viewport minus the *known* reserve is unambiguous. The 80 px is the
+   overlay's own 12 px top + 68 px bottom reserve, and the bottom reserve
+   exists to keep the menu clear of the toast strip — so it is kept, just
+   honoured properly now.
+
+   The selector list is not redundant: menu-polish.css:381 sets
+   `max-height: calc(100vh - 32px)` on `.hud-root .overlay.menu > .menu-hero`,
+   which is four classes and therefore outranks the three-class generic rule.
+   Matching its specificity is how this is corrected without reaching for
+   `!important` — and keeping this sheet at zero `!important` is a hard house
+   rule (see AI_RULES.md; index.css and ui.css are both at their cap). */
+.hud-root .overlay > .paper-card,
+.hud-root .overlay.menu > .paper-card.menu-hero,
+.hud-root .overlay.menu.pause-submenu > .paper-card {
+  max-height: calc(100dvh - 80px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 0;
+}
+@supports not (height: 100dvh) {
+  .hud-root .overlay > .paper-card,
+  .hud-root .overlay.menu > .paper-card.menu-hero,
+  .hud-root .overlay.menu.pause-submenu > .paper-card {
+    max-height: calc(100vh - 80px);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-2  Scroll affordance.
+
+   The panels always did scroll — the inner `.paper-card` is the scroller and
+   the wheel works — but every capture at every viewport showed the card
+   simply shorn off mid-row with nothing indicating there was more. At
+   1280x720 that hid nine PvP circuits, AI PvP and split-screen below the
+   fold. Two cues, both cheap:
+
+     1. A gradient mask that fades the last 28 px of a scrollable card, so a
+        cut-off row reads as "continues" rather than "ends". `mask-image` is
+        used rather than an overlaid pseudo-element so it works over the
+        card's own gradient background without needing a matching opaque
+        colour, and it costs no extra layer.
+     2. A scrollbar that is actually visible. The existing 6 px thumb on a
+        transparent track is invisible against warm paper until you are
+        already scrolling — which is too late to tell you that you can.
+
+   `animation-timeline: scroll()` removes the fade once the player reaches
+   the bottom, in browsers that support it; elsewhere the fade is static,
+   which is the safe direction to fail. --------------------------------- */
+@supports (mask-image: linear-gradient(rgb(0 0 0), rgb(0 0 0))) {
+  .hud-root .overlay > .paper-card {
+    mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+  }
+  /* The fade is a lie on a card that does not scroll, and on a card scrolled
+     to its end. Both are switched off where the browser can tell. */
+  .hud-root .overlay > .paper-card:not(:has(> *)),
+  .hud-root .overlay > .paper-card.no-fade {
+    mask-image: none;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  @keyframes sb-scroll-fade {
+    from {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    }
+    99% {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    }
+    to {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) 100%, rgb(0 0 0) 100%);
+    }
+  }
+  .hud-root .overlay > .paper-card {
+    animation: sb-scroll-fade linear both;
+    animation-timeline: scroll(self block);
+  }
+}
+
+.hud-root .overlay > .paper-card {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 74, 46, 0.34) rgba(107, 74, 46, 0.08);
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar {
+  width: 8px;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-track {
+  background: rgba(107, 74, 46, 0.08);
+  border-radius: 999px;
+  margin: 8px 0;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-thumb {
+  background: rgba(107, 74, 46, 0.34);
+  border-radius: 999px;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 74, 46, 0.52);
+}
+
+/* ---------------------------------------------------------------------
+   D-3  Stop wasting two thirds of a landscape screen.
+
+   At 1280x720 a 440 px column floated over ~840 px of unused backdrop while
+   its own content needed 2.9 screens of scrolling. The content is short rows;
+   the screen is wide. Above 900 px of landscape the destination lists go two
+   columns, which roughly halves the scroll depth on exactly the viewports
+   where the scrolling was worst, and the card itself widens toward the
+   content rather than staying a strip.
+
+   Scoped to lists of tiles (`.destination`, `.home-board`, mode rows) —
+   never to prose, sliders or single primary actions, which must stay one
+   per line to keep their reading order obvious. -------------------------- */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .hud-root .overlay.menu > .paper-card.menu-hero {
+    width: min(760px, 62vw);
+  }
+  .hud-root .overlay > .paper-card .destination-grid,
+  .hud-root .overlay > .paper-card .home-board-grid,
+  .hud-root .overlay > .paper-card .mode-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+  /* A primary call to action never shares its row. */
+  .hud-root .overlay > .paper-card .primary-btn,
+  .hud-root .overlay > .paper-card .home-launch,
+  .hud-root .overlay > .paper-card .screen-head,
+  .hud-root .overlay > .paper-card .full-row {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-4  Hero art must not eat the panel.
+
+   At 640x360 — Poki's mandated floor — the AI PvP screen rendered as one
+   enormous bird overflowing its card with the actual content pushed off
+   screen. The illustration is authored for a desktop card and was never
+   constrained. Cap it against viewport height, and drop it entirely when
+   there is not enough room for art *and* content, because at that point the
+   art is not decoration, it is an obstruction. ------------------------- */
+.hud-root .overlay .menu-illustration,
+.hud-root .overlay .hero-art,
+.hud-root .overlay .screen-art {
+  max-height: min(30vh, 160px);
+  width: auto;
+  object-fit: contain;
+}
+@media (max-height: 460px) {
+  .hud-root .overlay .hero-art,
+  .hud-root .overlay .screen-art,
+  .hud-root .overlay .paper-card > .menu-illustration {
+    display: none;
+  }
+  /* Reclaim the space rather than leaving a gap where the art was. */
+  .hud-root .overlay > .paper-card {
+    padding: 12px 16px;
+  }
+  .hud-root .overlay .screen-head {
+    margin-bottom: 8px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-5  Clear the flight corridor.
+
+   During flight the lower-centre of the screen carried two stacked objective
+   cards, directly over the airspace the bird descends into, while a toast, a
+   pill and a progress bar competed elsewhere — five notification channels and
+   17 live text readouts, in a one-button game.
+
+   The persistent objectives move to the lower-left, above the altitude
+   ribbon, where nothing is ever flown. Lower-centre is left empty on purpose:
+   it is the only part of the screen the player is actually looking at.
+
+   The strip is *moved*, never hidden. flight-goal-strip.test.ts guards that
+   distinction by name and it is the right guard: a progress bar nobody can
+   see is not a bar. The complaint was never that the strip exists, it is
+   where it was parked. -------------------------------------------------- */
+.hud-root[data-flying="true"] .flight-footer {
+  left: clamp(12px, 2.5vw, 28px);
+  right: auto;
+  transform: none;
+  margin-left: 0;
+  margin-right: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: min(340px, 40vw);
+  max-width: 340px;
+  align-items: flex-start;
+  text-align: left;
+}
+.hud-root[data-flying="true"] .flight-footer .goal-strip,
+.hud-root[data-flying="true"] .flight-footer .gs {
+  width: 100%;
+  text-align: left;
+}
+
+/* Portrait phones have no lower-left to spare — the altitude ribbon and the
+   strip would collide — so there it tucks under the top bar instead, still
+   out of the descent line. */
+@media (max-aspect-ratio: 3/4) {
+  .hud-root[data-flying="true"] .flight-footer {
+    bottom: auto;
+    top: calc(104px + env(safe-area-inset-top));
+    left: clamp(8px, 3vw, 16px);
+    width: min(340px, 74vw);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-6  The daylight meter sits under the sun sprite.
+
+   The centre-top meter and its label were being overdrawn by the rendered sun
+   disc at 1280x720. The meter is the clock for the entire run; it outranks a
+   background sprite. Lifting it above the scene and giving it a legibility
+   plate fixes it without touching the renderer. ------------------------ */
+.hud-root .sun-meter {
+  position: relative;
+  z-index: 14;
+}
+.hud-root .sun-meter .sun-track {
+  box-shadow:
+    0 0 0 1px rgba(28, 20, 16, 0.18),
+    0 2px 12px rgba(16, 24, 32, 0.28);
+}
+.hud-root .sun-meter > .stat-label,
+.hud-root .sun-meter figcaption,
+.hud-root .sun-meter small {
+  text-shadow: 0 1px 3px rgba(12, 18, 24, 0.75);
+}
+
+/* ---------------------------------------------------------------------
+   D-7  Reward pills must not be green.
+
+   Poki's ads guidance is explicit that rewarded controls are not green, and
+   reviewers pattern-match on green reward-shaped pills in the top-right
+   regardless of whether an ad is behind them. "Goal complete +40" was exactly
+   that shape in exactly that corner. Recoloured to the game's own gold, which
+   is also the colour of every other reward in the economy — so it is more
+   consistent, not just more compliant. ---------------------------------- */
+.hud-root .goal-pill,
+.hud-root .reward-pill,
+.hud-root .objective-complete {
+  background: linear-gradient(180deg, var(--gold), var(--gold-muted));
+  color: var(--espresso);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 10px rgba(120, 70, 12, 0.32);
+}
+
+/* ---------------------------------------------------------------------
+   D-8  Chrome glyphs are vectors now.
+
+   Pairs with pauseSvg() / closeSvg() / backSvg() in MenuIcons.ts, which
+   replaced U+2759 and U+2715 after an in-browser capture caught the pause
+   button rendering as two empty boxes. The SVG inherits currentColor, so it
+   needs a size and an optical alignment and nothing else. ---------------- */
+.chrome-glyph {
+  width: 1.15em;
+  height: 1.15em;
+  display: block;
+  margin: auto;
+  flex: none;
+}
+.hud-root .icon-btn .chrome-glyph {
+  width: 20px;
+  height: 20px;
+}
+.hud-root .back-btn .chrome-glyph {
+  width: 22px;
+  height: 22px;
+  /* A chevron's optical centre is right of its bounding box centre. */
+  margin-right: 0.12em;
+}
+.hud-root .mini-btn.ghost .chrome-glyph {
+  width: 15px;
+  height: 15px;
+  opacity: 0.72;
+}
+.hud-root .mini-btn.ghost:hover .chrome-glyph {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------
+   D-9  Optical rhythm.
+
+   Small, cheap typographic corrections that make the panels read as designed
+   rather than assembled: tabular figures so live counters stop jittering
+   their own width, tightened tracking on large display type, and a consistent
+   optical size for the two-line tile labels that make up most of the menu.
+   --------------------------------------------------------------------- */
+.hud-root .stat-value,
+.hud-root .stat-sub,
+.hud-root .coin-count,
+.hud-root [data-ref="distance"],
+.hud-root [data-ref="coins"],
+.hud-root [data-ref="best"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.hud-root .overlay h1 {
+  letter-spacing: -0.03em;
+}
+.hud-root .overlay .destination,
+.hud-root .overlay .home-board {
+  line-height: 1.35;
+}
+/* Rows in a list should share a baseline grid; ad-hoc padding broke it. */
+.hud-root .overlay .destination,
+.hud-root .overlay .home-board {
+  padding: 12px;
+  border-radius: 16px;
+}
+
+/* ---------------------------------------------------------------------
+   D-10  Motion honesty.
+
+   Everything added here is either static or a scroll-driven fade, and the
+   scroll-driven fade is the one thing a motion-sensitive player could object
+   to. Honour the OS preference rather than assuming.
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .hud-root .overlay > .paper-card {
+    animation: none;
+    scroll-behavior: auto;
+  }
+}

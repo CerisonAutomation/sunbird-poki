@@ -131,13 +131,13 @@ const smGlyph: Record<SmIconName, string> = {
   sun: "☀︎", moon: "☽", star: "★", cloud: "◌", aurora: "≋", leaf: "✿",
   snowflake: "✻", half_day: "◑", fire: "◉",
   coin: "●", gem: "◆", crystal: "✦", crown: "♛", shield: "◈",
-  feather: "❧", rocket: "▲", comet: "☄︎", magnet: "⊕", badge: "⬟",
+  feather: "❧", rocket: "▲", comet: "☄︎", magnet: "⊕", badge: "⊛",
   dice: "⚄", trophy: "◎", rainbow: "〜",
   swords: "✕", flag: "⚑", lightning: "↯", infinity: "∞", target: "⊚", spiral: "◎",
   mountain: "△", volcano: "▲", island: "◬", dunes: "≈", buildings: "⊞", shell: "◐",
-  bird: "⬨", ghost: "◍", flock: "⬩", egg: "○", eagle: "⬦",
+  bird: "◇", ghost: "◍", flock: "◈", egg: "○", eagle: "◆",
   glide: "⟿", wing: "≫", weight: "▼", paper_wing: "△",
-  pause: "❙❙", check: "✓", question: "?", castle: "⛫︎", hourglass: "⧖", spin: "◷", piggy: "○",
+  pause: "‖", check: "✓", question: "?", castle: "⛫︎", hourglass: "⧖", spin: "◷", piggy: "○",
   wind: "⇝", thermal: "♨", storm: "☈", ash_storm: "☁", sparkle: "✳",
   gift: "❁", hammer: "⚒︎", calendar: "▦",
   medal: "✪", medal_1: "✫", medal_2: "✬", medal_3: "✭",
@@ -202,6 +202,29 @@ export function arrowUpRightSvg(): string {
 }
 export function arrowRightSvg(): string {
   return '<svg class="arrow-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h15"/><path d="m13 6 6 6-6 6"/></svg>';
+}
+
+/** Functional chrome controls — pause, dismiss, back.
+ *
+ * These were text glyphs (`❙❙` U+2759, `✕` U+2715, `‹` U+2039). The arrows
+ * above were already converted for exactly this reason and these are the same
+ * bug with higher stakes: U+2759 and U+2715 are absent from the base font set
+ * of lean Android WebViews, several Linux distributions and stripped
+ * Chromebook images, and an in-browser capture reproduced the **pause button
+ * rendering as two empty boxes**. A player who cannot find pause cannot stop
+ * playing, and Poki's quality bar calls out pause handling by name.
+ *
+ * Drawn as strokes on a 24-unit grid with `currentColor`, so they inherit the
+ * button's colour and hover state, scale without hinting artefacts, and are
+ * pixel-aligned at the 44 px control size the HUD uses. */
+export function pauseSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="7" y="5" width="3.6" height="14" rx="1.6"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.6"/></svg>';
+}
+export function closeSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+}
+export function backSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14.5 5-7 7 7 7"/></svg>';
 }
 
 /** A quiet illustrated horizon, not another animated particle layer. */

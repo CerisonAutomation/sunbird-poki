@@ -9,7 +9,7 @@
  */
 
 import { destinationByKey } from "../MenuCatalog";
-import { menuIcon, menuIconSm, type MenuIconName, type SmIconName } from "../MenuIcons";
+import { menuIcon, menuIconSm, backSvg, type MenuIconName, type SmIconName } from "../MenuIcons";
 import { SELL_AD_REMOVAL } from "../edition";
 import { t } from "../../i18n";
 
@@ -109,7 +109,7 @@ export function head(key: string, backAction = "back", right = ""): string {
     ? t(entry.key, undefined, entry.en)
     : t(`hud.screen.${key}.title`, undefined, SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key);
   const back = t("common.back", undefined, "Back");
-  return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
+  return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">${backSvg()}</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
 }
 
 /**

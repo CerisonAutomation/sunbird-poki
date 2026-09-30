@@ -96,7 +96,7 @@ export function renderRivalBanner(banner: string): string {
  * the lobby advertised formats the practice screen did not offer — and the only
  * thing that can stop that recurring is there being one of them.
  */
-export function aiRivalSection(s: HudSnapshot): string {
+export function aiRivalSection(s: Pick<HudSnapshot, "pvpModes" | "roomSize" | "roomSkill" | "selectedPvpMode">): string {
   const currentMode = s.pvpModes.find((m) => m.id === s.selectedPvpMode) ?? s.pvpModes[0] ?? { name: "Sprint GP" };
   return `<section class="race-section race-section-ai" aria-label="${t("hud.aiRivalSection.RAIFlockOffline", undefined, "Race the AI flock offline")}">
       <div class="race-section-head"><h3>${menuIcon("bird")} Race the AI flock</h3><span class="section-step">offline · starts instantly</span></div>
@@ -124,7 +124,7 @@ export function aiRivalSection(s: HudSnapshot): string {
  * configured. Naming the source honestly is the difference between a board the
  * player trusts and one that looks like a placeholder.
  */
-export function boardSource(_s: HudSnapshot): { chip: string; sentence: string } {
+export function boardSource(_s: Pick<HudSnapshot, never>): { chip: string; sentence: string } {
   const backend = leaderboardBackend();
   if (backend === "auds") {
     return { chip: LEADERBOARD_CLOUD_LABEL, sentence: `Scores sync to ${PORTAL_DISPLAY_NAME}'s worldwide board.` };

@@ -81,8 +81,10 @@ down a layer, never to import sideways.
 | 3 | `../HUD.ts` | `class HUD` — the only module with DOM access. Wires the above and re-exports the public surface |
 
 - `HudSnapshot` stays wide on purpose: it is the transport between `Game` and the renderer.
-  **Narrow at the renderer**, not at the type — a screen declares the fields it reads
-  (`Pick<HudSnapshot, "wallet" | "skins">`). The median screen reads 4 of 227 fields.
+  **Every renderer narrows it in its own signature** — `Pick<HudSnapshot, "wallet" | "skins">`.
+  No renderer in `src/game/hud/` may take a bare `HudSnapshot`; the declared contracts total 221
+  fields against the type's 227, and the median screen declares 3. A screen that reads a field it
+  did not declare is a compile error, which is the whole point.
 - `HUD.ts` re-exports what `Game.ts` and the test suite import from it. Keep that public face
   stable: `wiring.test.ts` keys its dead-export registry by `module:Symbol`, and a re-export
   preserves the module id (`export { X } from "./y"` counts as an export of the re-exporting file).

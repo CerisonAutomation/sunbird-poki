@@ -14,7 +14,7 @@ import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderRivalBanner } from "./parts";
 import { type HudSnapshot, type SeedMode } from "./types";
 
-export function renderProgress(s: HudSnapshot): string {
+export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" | "canFreeSpin" | "eventClearsWeek" | "gold" | "missions" | "monthlyTheme" | "nestLevel" | "nestMult" | "piggyCoins" | "portalName" | "prestigeLevel" | "prestigeMult" | "quests" | "rival" | "rivalBanner" | "seedLabel" | "seedMode" | "sessionGoals" | "skillLabel" | "streakDays" | "todayBest" | "vip" | "wallet" | "weeklyEvent" | "wings">): string {
   const portal = s.portalName !== "none";
   const modes: { id: SeedMode; label: string }[] = [
     { id: "today", label: "Today" },
@@ -98,7 +98,7 @@ export function renderProgress(s: HudSnapshot): string {
 `;
 }
 
-export function renderPass(s: HudSnapshot): string {
+export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
   const pct = Math.min(100, (s.season.have / s.season.need) * 100);
   return `
     ${head(SCREEN.nestPass, "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
@@ -124,7 +124,7 @@ export function renderPass(s: HudSnapshot): string {
   `;
 }
 
-export function renderTrophies(s: HudSnapshot): string {
+export function renderTrophies(s: Pick<HudSnapshot, "trophies" | "trophyCounts">): string {
   const groups: Record<string, AchievementView[]> = { bronze: [], silver: [], gold: [], platinum: [] };
   for (const v of s.trophies) groups[v.def.rarity]!.push(v);
   const order: (keyof typeof groups)[] = ["bronze", "silver", "gold", "platinum"];
@@ -152,7 +152,7 @@ export function renderTrophies(s: HudSnapshot): string {
   `;
 }
 
-export function renderAccount(s: HudSnapshot): string {
+export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" | "cloudMessage" | "gold" | "portalAccountName" | "portalName" | "referralCode" | "referralMessage" | "referralRedeemed" | "vip" | "vipDaysLeft">): string {
   // Portal account block: on Poki the player may be signed in, and the game is
   // required to be honest about who it thinks they are (their name is what
   // goes on the board). Sign-in is offered only behind a button — Poki's docs
@@ -220,7 +220,7 @@ export function renderAccount(s: HudSnapshot): string {
   `;
 }
 
-export function renderCampaign(s: HudSnapshot): string {
+export function renderCampaign(s: Pick<HudSnapshot, "campaign" | "campaignDone" | "campaignTotal">): string {
   const rows = s.campaign
     .map((ch) => {
       const goals = ch.goals
@@ -253,7 +253,7 @@ export function renderCampaign(s: HudSnapshot): string {
   `;
 }
 
-export function renderCups(s: HudSnapshot): string {
+export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" | "trails">): string {
   const hrs = (ms: number): string => {
     const h = Math.floor(ms / 3600000);
     return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h`;

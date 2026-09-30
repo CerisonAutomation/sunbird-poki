@@ -39,7 +39,7 @@ function skinStatBars(d: { speedMult: number; feverBonus: number; daylightBonus:
 }
 
 /** Group the 60+ bird wall into browsable collections with owned counters. */
-function renderSkinCollections(s: HudSnapshot, browse: ShopBrowse): string {
+function renderSkinCollections(s: Pick<HudSnapshot, "portalName" | "skins" | "wallet">, browse: ShopBrowse): string {
   const matches = browseSkins(s.skins, browse);
   const filtered = browse.query.trim() !== "" || browse.filter !== "all";
   if (!matches.length) return `<div class="shop-empty">${menuIcon("compass")}<b>${t("hud.renderSkinCollections.NBirdsView", undefined, "No birds in this view")}</b><p>${t("hud.renderSkinCollections.TBirdNamePerkDifferentFilter", undefined, "Try a bird name, a perk, or a different filter.")}</p><button class="soft-btn" data-ui data-action="shop-clear">${t("hud.renderSkinCollections.SAllBirds", undefined, "Show all birds")}</button></div>`;
@@ -139,7 +139,7 @@ function renderTrailCard(v: ShopTrailView, wallet: number): string {
     <div class="trail-body"><b>${d.label}</b><em>${d.desc}</em></div>${action}</div>`;
 }
 
-export function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
+export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dailyFlash" | "gold" | "nestLevel" | "nestMaxed" | "nestMult" | "nestPrice" | "portalName" | "shopTrails" | "skins" | "stipendClaimed" | "vip" | "wallet" | "wingmanBundle">, browse: ShopBrowse): string {
   const owned = s.skins.filter((v) => v.owned).length;
   const armedBoosts = s.boosts.filter((b) => b.armed);
   const equippedSkin = s.skins.find(v => v.def.id === browse.preview) ?? s.skins.find(v => v.equipped);
@@ -299,7 +299,7 @@ export function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
   `;
 }
 
-export function renderPaywall(s: HudSnapshot): string {
+export function renderPaywall(s: Pick<HudSnapshot, "gold" | "goldFeatures" | "restoreMessage" | "starterFeatures" | "starterOwned" | "vip" | "vipDaysLeft" | "vipFeatures" | "wallet">): string {
   const starter = !s.starterOwned
     ? `
     <div class="starter-card">
@@ -340,7 +340,7 @@ export function renderPaywall(s: HudSnapshot): string {
  * toast "not available on this build" when tapped, which is worse than saying
  * nothing at all.
  */
-function vipBlock(s: HudSnapshot): string {
+function vipBlock(s: Pick<HudSnapshot, "vip" | "vipDaysLeft" | "vipFeatures" | "wallet">): string {
   return `<div class="gold-hero vip"><div class="gold-badge vip">♛</div><div class="gold-price">${VIP.price}<small> 30 days</small></div></div>
     <ul class="feature-list">${s.vipFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
     ${
@@ -355,7 +355,7 @@ function vipBlock(s: HudSnapshot): string {
     }`;
 }
 
-export function renderCheckout(s: HudSnapshot): string {
+export function renderCheckout(s: Pick<HudSnapshot, "checkoutOk" | "checkoutSku" | "wallet">): string {
   if (s.checkoutOk) {
     const okLabel = s.checkoutSku === "sunbird_vip" ? "VIP" : s.checkoutSku === "sunbird_starter" ? "ready for takeoff" : "Gold";
     return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? "🎁" : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">${t("hud.renderCheckout.PAreActiveImmediately", undefined, "Your perks are active immediately")}</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;

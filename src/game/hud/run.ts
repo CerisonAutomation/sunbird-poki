@@ -18,7 +18,7 @@ import { escapeHtml, sectionTitle } from "./kit";
 import { type HudSnapshot } from "./types";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderScoreTable } from "./parts";
 
-export function renderGameOver(s: HudSnapshot): string {
+export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
   const deltaTxt =
@@ -178,7 +178,7 @@ export function renderGameOver(s: HudSnapshot): string {
  * announcement per line, and the decorative bar is `aria-hidden` because the
  * text beside it already says the same thing.
  */
-export function renderCelebration(s: HudSnapshot): string {
+export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery" | "modeId" | "wings">): string {
   const cel = s.celebration;
   const lines = growthLedger(s.wings, s.mastery.find((m) => m.modeId === s.modeId) ?? null);
   const ledger = lines
@@ -206,7 +206,7 @@ export function renderCelebration(s: HudSnapshot): string {
   return `<div class="celebration" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}">${stageBits}${beatRow}</div>${growth}`;
 }
 
-export function renderNextFlight(s: HudSnapshot): string {
+export function renderNextFlight(s: Pick<HudSnapshot, "bestDistance" | "distance" | "island" | "perfects" | "skins" | "wallet">): string {
   const lesson = flightTakeaway(s), bird = nextBird(s.skins);
   return `<section class="next-flight" aria-label="${t("hud.renderAd.NFlightPlan", undefined, "Next flight plan")}"><span class="next-flight-art">${menuIcon("compass")}</span><div><small>${t("hud.renderNextFlight.TINTONEXTFLIGHT", undefined, "TAKE THIS INTO YOUR NEXT FLIGHT")}</small><b>${lesson.title}</b><p>${lesson.tip}</p>${bird ? `<p class="next-unlock">${s.wallet >= bird.def.price ? `${bird.def.name} is within reach · ${bird.def.price} coins in the Shop` : `${bird.def.name} · ${bird.def.price - s.wallet} more coins to unlock`}</p>` : ""}</div></section>`;
 }
@@ -276,7 +276,7 @@ export function renderCoinMultiplierCard(coins: number, claimed: boolean, reward
     </div>`;
 }
 
-export function renderVersusResult(s: HudSnapshot): string {
+export function renderVersusResult(s: Pick<HudSnapshot, "p1Stats" | "p2Stats" | "versusWinner">): string {
   const a = s.p1Stats!;
   const b = s.p2Stats!;
   const row = (label: string, x: number, y: number, fmt: (n: number) => string): string => {
@@ -312,7 +312,7 @@ export function renderVersusResult(s: HudSnapshot): string {
   `;
 }
 
-export function renderContinue(s: HudSnapshot): string {
+export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordContinue" | "coins" | "continueCost" | "continueHighlight" | "continueReason" | "continueTimer" | "distance" | "gold" | "modeName" | "portalName" | "score" | "wallet">): string {
   const portal = s.portalName !== "none";
   // MON-19: the reason line is context-driven (record / near-best / streak /
   // momentum). It explains why this run is worth resuming — it never changes
@@ -346,7 +346,7 @@ export function renderContinue(s: HudSnapshot): string {
   `;
 }
 
-export function renderAd(s: HudSnapshot): string {
+export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
   const portal = s.portalName !== "none";
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
@@ -397,7 +397,7 @@ export function renderAd(s: HudSnapshot): string {
  * dead action was exposed.
  */
 export function resultsPrimaryAction(
-  s: Pick<HudSnapshot, "massRace" | "racePlace" | "duelWas">,
+  s: Pick<HudSnapshot, "duelWas" | "massRace" | "racePlace">,
 ): "rematch" | "retry" {
   return s.massRace && s.racePlace > 0 && !s.duelWas ? "rematch" : "retry";
 }

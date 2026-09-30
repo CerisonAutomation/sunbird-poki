@@ -16,7 +16,7 @@ import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
 import { aiRivalSection, boardSource } from "./parts";
 import { type HudSnapshot } from "./types";
 
-export function renderLive(s: HudSnapshot): string {
+export function renderLive(s: Pick<HudSnapshot, "lobbyRivals" | "multiplayerConfigured" | "netError" | "netState" | "pvpModes" | "pvpWorlds" | "roomAiFallback" | "roomCode" | "roomCount" | "roomReady" | "roomReadyCount" | "roomSize" | "roomSkill" | "selectedPvpMode" | "selectedPvpWorld" | "skins">): string {
   const connected = s.netState === "lobby" || s.netState === "racing";
   // The AI fallback seats four generated pilots in the same roster as real
   // ones, so "Connected" and "live" would both be claims about people who are
@@ -151,7 +151,7 @@ export function renderLive(s: HudSnapshot): string {
     <p class="fineprint">${t("hud.loadoutTip", undefined, "Hold downhill to build speed. Release uphill to launch. Slipstream behind rivals for slingshot surges!")}</p>`;
 }
 
-export function renderRank(s: HudSnapshot): string {
+export function renderRank(s: Pick<HudSnapshot, "duel" | "duelFoe" | "loadout" | "rival" | "skins">): string {
   const r = s.rival;
   const wl = r.wins + r.losses > 0 ? Math.round((r.wins / (r.wins + r.losses)) * 100) : 0;
   return `
@@ -214,7 +214,7 @@ export function renderRank(s: HudSnapshot): string {
 }
 
 /** Exported so the Pilot Lookup panel can be tested without a live game. */
-export function renderSquad(s: HudSnapshot): string {
+export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallenges" | "recentPilots" | "runsPlayed" | "squad" | "squadNotice" | "todayBest">): string {
   const sq = s.squad;
   const friendPage = paginate(sq.friends, sq.friendPage);
   const clubPage = paginate(sq.clubs, sq.clubPage);
@@ -419,7 +419,7 @@ export function renderSquad(s: HudSnapshot): string {
   `;
 }
 
-export function renderPractice(s: HudSnapshot): string {
+export function renderPractice(s: Pick<HudSnapshot, "pvpModes" | "roomSize" | "roomSkill" | "selectedPvpMode">): string {
   // The AI-only view. Still reachable from the lobby's "more ways to race" row
   // for a player who wants to skip the lobby chrome entirely, and it renders the
   // same `aiRivalSection` as the combined PvP screen, so the two cannot drift.
@@ -429,7 +429,7 @@ export function renderPractice(s: HudSnapshot): string {
     <button class="soft-btn wide" data-ui data-action="open-shop">${t("hud.renderPractice.CLoadout", undefined, "Change loadout")}</button>`;
 }
 
-export function renderModes(s: HudSnapshot): string {
+export function renderModes(s: Pick<HudSnapshot, "modeId" | "modes">): string {
   return `
     ${head(SCREEN.gameModes)}
     <p class="tagline">${t("hud.renderModes.SFlightsBelowAreAgainstCourse", undefined, "Solo flights below are you against the course. A ")}<b>${t("hud.renderModes.PCircuit", undefined, "PvP circuit")}</b> opens the PvP options — ranked and casual online racing, private rooms, or the AI flock. All modes share your unlocks.</p>

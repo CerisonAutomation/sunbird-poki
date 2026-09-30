@@ -236,3 +236,69 @@ verify against or a refactor large enough to deserve its own review — and
 in-browser verification is still impossible here (Playwright browsers cannot be
 installed in this sandbox), so everything above is verified by simulation, unit
 tests and real builds, never by a hand on a phone.
+
+---
+
+# Pass 3 — PvP and the AI field: fixed, never cut
+
+Explicit instruction: **do not cut PvP or the AI opponents — fix them.** So
+nothing was removed. Zero files deleted across the branch; `Modes.ts`,
+`Racer.ts`, `Realtime.ts`, `SharedRun.ts`, `Squad.ts`, `Ghost.ts`,
+`RoomBrowser.ts`, `Tournaments.ts` and `Leaderboard.ts` are byte-for-byte
+unchanged. All 8 PvP modes ship, `MAX_RIVALS` is still 40, and
+`pvp-and-ai-intact.test.ts` now fails the build if any of that changes.
+
+Three real defects in the rival AI, all found while proving nothing had been
+cut.
+
+## 15. A rival's rating and its flying could disagree — **fixed**
+
+`spawn()` derived `lead`, `wobbleAmp` and `reaction` from `skill` inline.
+Every other path that changed skill — `shuffle()`, `setFieldSkill()` — moved
+the number and left the behaviour behind. So a rival could be rated 0.95 on
+the standings and still fly with a tail-pack wobble and a tail-pack reaction
+time. In a race whose only feedback is *who is ahead of me*, an opponent that
+does not fly like its rating is indistinguishable from one that cheats.
+
+Skill is now one number that everything follows from: `tieredSkill`,
+`leadForSkill`, `wobbleForSkill`, `reactionForSkill`, funnelled through a
+single private `applySkill()`. Their envelopes are exported too
+(`leadRangeForSkill`, `reactionRangeForSkill`) so the coherence test asserts
+against the formula rather than against a hand-copied duplicate of it.
+
+## 16. The rival field was not reproducible from its seed — **fixed**
+
+```ts
+const rng = new SeededRandom(`${seed}:shuffle:${Date.now() % 100000}`);
+```
+
+A wall-clock term inside a seeded RNG. The same race seed produced a different
+field on every call, which defeats the point of seeding: two players given one
+seed met different opponents, a replay could not reproduce its own race, and a
+ghost recorded against one field was played back against another. Every other
+RNG in the file is seeded properly; this one quietly was not.
+
+Also `sort(() => rng.next() - 0.5)` is not a shuffle — it is the classic broken
+one, with an inconsistent comparator, and V8's TimSort leaves short arrays
+nearly in place, which is why the same names kept appearing at the front of the
+grid. Fisher–Yates now, off the same seeded stream.
+
+## 17. Reshuffling flattened the race — **fixed**
+
+`spawn()` builds a deliberate three-tier field: 15 % elites to chase, 25 %
+strong, 60 % approachable. `shuffle()` replaced it with `rng.next() * 0.9 + 0.1`
+— uniform noise. A reshuffled race had no top end and no tail: forty pilots of
+indistinguishable middling ability. The curve is now redrawn through
+`tieredSkill` and the *rungs* are shuffled, so the elites are not always the
+same grid slots, and `setFieldSkill()` moves the actual flying instead of only
+the ratings.
+
+Twelve new tests across `massrace-ai-coherence.test.ts` and
+`pvp-and-ai-intact.test.ts`.
+
+## Gate after pass 3
+
+`lint --max-warnings 0` · `typecheck` · `test` **2 756 passing / 194 files** ·
+`circular:check` · `build` · `build:poki` · `i18n:audit` · `poki:audit` ·
+`verify:upload` — all green.
+

@@ -101,10 +101,16 @@ describe("shop action table", () => {
 
   it("refuses the crate it cannot pay for and says what is missing", () => {
     const save = new SaveData();
+    // Set the precondition rather than trusting a clean slate: the table
+    // calls `persist()`, so an earlier test in this file can leave a wallet
+    // in storage and make "cannot afford" pass or fail for the wrong reason.
+    save.state.wallet = 0;
+    save.state.wingmanBundle = false;
     const rec = recorder();
     expect(shopAction(context(save, rec), "buy-bundle", "")).toBe(true);
-    expect(save.state.wingmanBundle).toBeFalsy();
+    expect(save.state.wingmanBundle).toBe(false);
     expect(rec.toasts.join(" ")).toContain("240");
+    expect(save.state.wallet).toBe(0);
   });
 
   it("keeps the free-coin ad inert when no ad surface is live", () => {
@@ -135,6 +141,10 @@ describe("shop action table", () => {
 
   it("telescopes the first-visit onboarding exactly once", () => {
     const save = new SaveData();
+    // Explicit, for the same reason as the crate test: a persisted `seenShop`
+    // would make the first-visit arm silently skip and the "fires once"
+    // assertion below would be vacuous.
+    save.state.seenShop = false;
     const rec = recorder();
     const ctx = context(save, rec);
 

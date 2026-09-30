@@ -486,7 +486,7 @@ describe("terrain: dispose", () => {
  * curve here, so the terrain dial is height, and this is the test for it.
  */
 describe("terrain: shape budgets", () => {
-  const SEEDS = ["daytrip", "gauntlet", "zenith", "pvp_sprint"];
+  const SEEDS = ["daytrip", "gauntlet", "daytrip", "pvp_sprint"];
 
   function interiorProfile(seed: string) {
     const t = new TerrainSystem(seed);

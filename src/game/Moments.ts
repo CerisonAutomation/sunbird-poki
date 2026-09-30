@@ -53,7 +53,7 @@ export const MOMENT_KINDS = [
 export type MomentKind = (typeof MOMENT_KINDS)[number];
 
 /** Popup visual styles the HUD already knows how to draw. */
-export type MomentPopup = "perfect" | "great" | "thud" | "bop" | "fever" | "zenith" | "splash" | "power";
+export type MomentPopup = "perfect" | "great" | "thud" | "bop" | "fever" | "apex" | "splash" | "power";
 
 export type MomentDef = {
   kind: MomentKind;
@@ -168,8 +168,8 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     label: "FRENZY",
     key: "moments.frenzy",
     cardKey: "moments.frenzy.card",
-    popup: "zenith",
-    tone: "zenith",
+    popup: "apex",
+    tone: "apex",
     haptic: [14, 10, 14, 10, 30],
     shout: "FRENZY!",
     cardLine: (n) => `${n} FRENZY \u{2014} four perfect launches, back to back, on pure nerve!`,
@@ -186,7 +186,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     key: "moments.perfect",
     cardKey: "moments.perfect.card",
     popup: "perfect",
-    tone: "zenith",
+    tone: "apex",
     haptic: [8, 6, 8],
     shout: "PERFECT!",
     cardLine: (n) => `${n} PERFECT \u2014 pure butter, chef's kiss, 11/10, would fly again!`,
@@ -202,7 +202,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     label: "PANIC",
     key: "moments.panic",
     cardKey: "moments.panic.card",
-    popup: "zenith",
+    popup: "apex",
     tone: "warn",
     haptic: [6, 4, 6, 4, 20],
     shout: "PANIC!",
@@ -259,7 +259,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     key: "moments.wee",
     cardKey: "moments.wee.card",
     popup: "fever",
-    tone: "zenith",
+    tone: "apex",
     haptic: [6, 4, 12],
     shout: "WEE!",
     cardLine: (n) => `${n} WEE \u2014 the sky was too slow`,

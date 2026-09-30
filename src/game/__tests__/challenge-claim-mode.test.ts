@@ -52,7 +52,7 @@ const stats = (over: Partial<RunStats> = {}): RunStats => ({
   perfects: 0,
   distance: 0,
   fever: 0,
-  zenith: 0,
+  apex: 0,
   pickups: 0,
   ...over,
 });

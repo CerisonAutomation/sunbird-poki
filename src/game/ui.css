@@ -1019,7 +1019,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   animation: pulse 0.6s ease-in-out infinite;
 }
 
-.toast.zenith {
+.toast.apex {
   background: var(--text-on-sky);
   color: var(--ink);
   font-size: 18px;
@@ -4798,7 +4798,7 @@ button:focus-visible, .toggle:focus-visible {
   color: #ffd66b;
   text-shadow: 0 0 26px #ff8800, 0 0 50px #ff4400, 0 3px 8px rgba(0,0,0,0.5);
 }
-.impact-popup--zenith {
+.impact-popup--apex {
   font-size: 32px;
   color: var(--pure-white);
   text-shadow: 0 0 22px #6af, 0 2px 6px rgba(0,0,0,0.5);

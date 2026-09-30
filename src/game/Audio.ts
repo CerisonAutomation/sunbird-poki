@@ -628,7 +628,7 @@ export class GameAudio {
     this.noiseBurst(0.08, 420, a);
   }
 
-  zenith(): void {
+  apex(): void {
     this.tone(880, 0.5, "sine", 0.09, 1760);
     this.tone(1320, 0.6, "triangle", 0.05, 1320);
     this.tone(660, 0.4, "sine", 0.06, 990);

@@ -6,7 +6,7 @@ describe("game modes", () => {
     const ids = MODES.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(MODES.map((m) => m.id).sort()).toEqual(
-      ["coinrush", "daytrip", "distance", "endless", "massrace", "perfect", "race", "zenith"].sort(),
+      ["coinrush", "daytrip", "distance", "endless", "massrace", "perfect", "race"].sort(),
     );
   });
 

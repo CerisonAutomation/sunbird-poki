@@ -51,13 +51,13 @@ export const SEASON_TIER_DEFS = buildTiers();
 
 
 
-/** XP is granted live from gameplay events (coins, clouds, perfects, islands, zeniths, distance). */
+/** XP is granted live from gameplay events (coins, clouds, perfects, islands, apexMoments, distance). */
 export const XP_RULES = {
   coin: 1,
   cloud: 4,
   perfect: 6,
   island: 25,
-  zenith: 15,
+  apex: 15,
   ghostBeat: 20,
   perMetre: 1 / 12,
 } as const;

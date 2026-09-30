@@ -32,7 +32,7 @@ const stats = (over: Partial<RunStats> = {}): RunStats => ({
   perfects: 0,
   distance: 0,
   fever: 0,
-  zenith: 0,
+  apex: 0,
   pickups: 0,
   ...over,
 });
@@ -195,7 +195,7 @@ describe("the daily quest set itself", () => {
     for (let i = 1; i <= 60; i++) {
       const next = missionRows(
         q,
-        stats({ coins: i, clouds: Math.floor(i / 8), perfects: Math.floor(i / 12), distance: i * 90, zenith: Math.floor(i / 20), pickups: Math.floor(i / 15), island: Math.floor(i / 10), fever: i > 40 ? 1 : 0 }),
+        stats({ coins: i, clouds: Math.floor(i / 8), perfects: Math.floor(i / 12), distance: i * 90, apex: Math.floor(i / 20), pickups: Math.floor(i / 15), island: Math.floor(i / 10), fever: i > 40 ? 1 : 0 }),
       );
       for (const [k, row] of next.entries()) {
         expect(row.progress).toBeGreaterThanOrEqual(prev[k]!.progress);

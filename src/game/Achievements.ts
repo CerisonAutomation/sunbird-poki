@@ -20,7 +20,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "flights_25", title: "Frequent Flyer", desc: "Complete 25 flights", rarity: "silver", target: 25, metric: (s) => s.state.runsPlayed },
   { id: "dist_25k", title: "Horizon Chaser", desc: "Fly 25,000 m lifetime", rarity: "silver", target: 25000, metric: (s) => s.state.lifetime.distance },
   { id: "coins_1500", title: "Treasure Nest", desc: "Earn 1,500 coins lifetime", rarity: "silver", target: 1500, metric: (s) => s.state.lifetime.coins },
-  { id: "zenith_20", title: "High Flyer", desc: "Hit 20 zenith moments lifetime", rarity: "silver", target: 20, metric: (s) => s.state.lifetime.zeniths },
+  { id: "zenith_20", title: "High Flyer", desc: "Hit 20 apex moments lifetime", rarity: "silver", target: 20, metric: (s) => s.state.lifetime.apexMoments },
   { id: "flights_100", title: "Sky Veteran", desc: "Complete 100 flights", rarity: "gold", target: 100, metric: (s) => s.state.runsPlayed },
   { id: "dist_100k", title: "World Wanderer", desc: "Fly 100,000 m lifetime", rarity: "gold", target: 100000, metric: (s) => s.state.lifetime.distance },
   { id: "coins_5000", title: "Golden Nest", desc: "Earn 5,000 coins lifetime", rarity: "gold", target: 5000, metric: (s) => s.state.lifetime.coins },
@@ -28,7 +28,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "biomes_all", title: "Cartographer", desc: "Visit every island biome", rarity: "silver", target: BIOMES.length, metric: (s) => s.state.biomesSeen.length },
   { id: "island_10", title: "Beyond the Map", desc: "Reach island 10 in one flight", rarity: "gold", target: 10, metric: (s) => s.state.farthestIsland + 1 },
   { id: "ghost_10", title: "Self Rival", desc: "Beat your own ghost 10 times", rarity: "platinum", target: 10, metric: (s) => s.state.lifetime.ghostBeats },
-  { id: "zenith_75", title: "Stratosphere", desc: "Hit 75 zenith moments lifetime", rarity: "platinum", target: 75, metric: (s) => s.state.lifetime.zeniths },
+  { id: "zenith_75", title: "Stratosphere", desc: "Hit 75 apex moments lifetime", rarity: "platinum", target: 75, metric: (s) => s.state.lifetime.apexMoments },
   // Was "Own Gold and VIP" - a platinum trophy PERMANENTLY locked on the
   // shipping build, where VIP has no purchase. It now asks for the half a
   // player can actually earn, so the tier is reachable and still rare.

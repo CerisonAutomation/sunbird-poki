@@ -56,7 +56,7 @@ import { NO_RUN_PROGRESS, runProgressEvents, type RunProgressFacts } from "../Ru
 
 import { cssRules, mountHud } from "./hudHarness";
 
-const RUN = { coins: 9, distance: 1200, clouds: 0, perfects: 2, island: 1, zenith: 0, fever: 0, pickups: 1 } as RunStats;
+const RUN = { coins: 9, distance: 1200, clouds: 0, perfects: 2, island: 1, apex: 0, fever: 0, pickups: 1 } as RunStats;
 
 const FOUR_LADDERS: ProgressEvent[] = [
   { kind: "quest", count: 1, coins: 60 },

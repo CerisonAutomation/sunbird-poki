@@ -19,7 +19,7 @@ describe("missions", () => {
 
   it("reports progress from run stats and completion on crossing the target", () => {
     const m = new Missions(save);
-    const view = m.view({ clouds: 3, island: 0, coins: 0, perfects: 0, distance: 0, fever: 0, zenith: 0, pickups: 0 });
+    const view = m.view({ clouds: 3, island: 0, coins: 0, perfects: 0, distance: 0, fever: 0, apex: 0, pickups: 0 });
     const clouds5 = view.find((v) => v.def.id === "clouds5")!;
     expect(clouds5.progress).toBe(3);
     expect(clouds5.done).toBe(false);
@@ -27,7 +27,7 @@ describe("missions", () => {
 
   it("applyRun completes missions and returns the new ids", () => {
     const m = new Missions(save);
-    const stats = { clouds: 5, island: 5, coins: 0, perfects: 0, distance: 5000, fever: 0, zenith: 0, pickups: 6 };
+    const stats = { clouds: 5, island: 5, coins: 0, perfects: 0, distance: 5000, fever: 0, apex: 0, pickups: 6 };
     const newly = m.applyRun(stats);
     expect(newly).toContain("clouds5");
     expect(newly).toContain("island5");
@@ -62,7 +62,7 @@ describe("missions", () => {
     const m = new Missions(save);
     const date = "2026-09-12";
     const before = save.state.wallet;
-    const stats = { clouds: 100, island: 100, coins: 100, perfects: 100, distance: 10000, fever: 100, zenith: 100, pickups: 100 };
+    const stats = { clouds: 100, island: 100, coins: 100, perfects: 100, distance: 10000, fever: 100, apex: 0, pickups: 100 };
     const rewards = m.claimQuests(date, stats);
     expect(rewards.length).toBeGreaterThan(0);
     expect(save.state.wallet).toBeGreaterThan(before);

@@ -103,7 +103,7 @@ describe("mastery progression", () => {
     expect(race.level).toBe(1);
     expect(race.progress).toBeGreaterThanOrEqual(0);
     expect(race.progress).toBeLessThanOrEqual(1);
-    const untouched = views.find((v) => v.modeId === "zenith")!;
+    const untouched = views.find((v) => v.modeId === "daytrip")!;
     expect(untouched.level).toBe(0);
     expect(untouched.progress).toBe(0);
   });

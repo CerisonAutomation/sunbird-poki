@@ -31,7 +31,7 @@ export type MasterySkill = {
 export const MASTERY_SKILLS: Record<string, MasterySkill> = {
   daytrip: { name: "Sunchaser", desc: "+6 s daylight · +10% coins", coinMult: 1.1, daylightBonus: 6, feverBonus: 0, liftMult: 1 },
   race: { name: "Slipstreamer", desc: "+3% glide lift · +10% coins", coinMult: 1.1, daylightBonus: 0, feverBonus: 0, liftMult: 1.03 },
-  zenith: { name: "Skybreaker", desc: "+2 s fever · +10% coins", coinMult: 1.1, daylightBonus: 0, feverBonus: 2, liftMult: 1 },
+  apex: { name: "Skybreaker", desc: "+2 s fever · +10% coins", coinMult: 1.1, daylightBonus: 0, feverBonus: 2, liftMult: 1 },
   distance: { name: "Marathoner", desc: "+2% glide lift · +4 s daylight", coinMult: 1.08, daylightBonus: 4, feverBonus: 0, liftMult: 1.02 },
   coinrush: { name: "Goldfeather", desc: "+18% coins", coinMult: 1.18, daylightBonus: 0, feverBonus: 0, liftMult: 1 },
   perfect: { name: "Purist", desc: "+3 s fever · +8% coins", coinMult: 1.08, daylightBonus: 0, feverBonus: 3, liftMult: 1 },

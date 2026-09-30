@@ -1649,7 +1649,7 @@ export class HUD {
   /** Floating impact text that rises from a screen position and fades out.
    *  x/y are screen fractions 0–1 (0,0 = top-left). kind controls the color.
    *  Use projectBirdToScreen() in Game.ts to get the position. */
-  popup(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "zenith" | "splash" | "power", sx: number, sy: number): void {
+  popup(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "apex" | "splash" | "power", sx: number, sy: number): void {
     const el = document.createElement("div");
     el.className = `impact-popup impact-popup--${kind}`;
     el.textContent = text;

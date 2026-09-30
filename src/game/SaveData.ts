@@ -93,7 +93,7 @@ export type Settings = {
 export type LifetimeStats = {
   distance: number;
   coins: number;
-  zeniths: number;
+  apexMoments: number;
   ghostBeats: number;
   sunflowers: number;
 };
@@ -310,7 +310,7 @@ function defaults(): SaveState {
     redeemedCodes: [],
     firstPlayed: "",
     runsPlayed: 0,
-    lifetime: { distance: 0, coins: 0, zeniths: 0, ghostBeats: 0, sunflowers: 0 },
+    lifetime: { distance: 0, coins: 0, apexMoments: 0, ghostBeats: 0, sunflowers: 0 },
     achievements: [],
     season: { id: seasonId(), xp: 0, claimedFree: [], claimedPremium: [] },
     deviceId,
@@ -610,7 +610,7 @@ export class SaveData {
         lifetime: {
           distance: num(p.lifetime?.distance),
           coins: num(p.lifetime?.coins),
-          zeniths: num(p.lifetime?.zeniths),
+          apexMoments: num(p.lifetime?.apexMoments ?? (p.lifetime as any)?.zeniths),
           ghostBeats: num(p.lifetime?.ghostBeats),
           sunflowers: num(p.lifetime?.sunflowers),
         },
@@ -855,8 +855,8 @@ export class SaveData {
     this.persist();
   }
 
-  addLifetimeZeniths(n: number): void {
-    this.state.lifetime.zeniths += n;
+  addLifetimeApexMoments(n: number): void {
+    this.state.lifetime.apexMoments += n;
     this.persist();
   }
 

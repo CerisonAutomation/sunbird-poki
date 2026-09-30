@@ -14,7 +14,6 @@ import * as THREE from "three";
 import { Achievements } from "./Achievements";
 import { GameAudio } from "./Audio";
 import { biomeForIsland } from "./Biomes";
-import { TRACK_NAMES } from "./Music";
 import { Bird, type BirdStepOpts } from "./Bird";
 import { AttractPilot } from "./pilot";
 import { CameraRig } from "./CameraRig";
@@ -2542,7 +2541,7 @@ export class Game {
       // a long chain does not re-fire it every step.
       if (isFrenzyMoment(this.perfectChain, this.frenzySeen)) {
         this.frenzySeen = true;
-        this.hud.toast(`${iconGlyph("lightning")} FRENZY — ${this.perfectChain} perfect launches in a row!`, "zenith");
+        this.hud.toast(`${iconGlyph("lightning")} FRENZY — ${this.perfectChain} perfect launches in a row!`, "apex");
         this.audio.fanfare();
         this.glow(1.4);
         this.flash("island");
@@ -2566,7 +2565,7 @@ export class Game {
       this.camera.tilt(-0.06 - Math.min(0.14, combo * 0.03));
       if (res.speed > 74) {
         this.particles.emitSonicBoom(this.bird.x, this.bird.y);
-        this.hud.toast(quip(BIG_LAUNCH_QUIPS, combo + Math.round(res.speed)), "zenith");
+        this.hud.toast(quip(BIG_LAUNCH_QUIPS, combo + Math.round(res.speed)), "apex");
       }
       if (this.perfectChain >= FEVER_NEED) this.enterFever();
     } else if (res.rating === "great") {
@@ -2728,7 +2727,7 @@ export class Game {
     this.bird.grounded = false;
     this.bird.inWater = false;
     this.bonus += 150;
-    this.awardXp(XP_RULES.zenith);
+    this.awardXp(XP_RULES.apex);
     this.audio.balloon();
     this.particles.emitConfetti(x, y + 1);
     this.particles.burstRing(x, y, 0xff6b6b);
@@ -2796,14 +2795,14 @@ export class Game {
           tier === 2 ? "ABOVE THE CLOUDS" : "SKY HIGH";
         const streakSuffix = this.zeniths >= 3 ? " ×2!" : this.zeniths === 2 ? " ×1.5!" : "!";
 
-        this.popupAtBird(`${tierLabel}${streakSuffix} +${pts}`, "zenith");
-        this.audio.zenith();
+        this.popupAtBird(`${tierLabel}${streakSuffix} +${pts}`, "apex");
+        this.audio.apex();
         this.audio.duckMusic(tier >= 3 ? 0.45 : 0.6, tier >= 3 ? 0.9 : 0.7);
-        this.hud.toast(`${tierLabel} +${pts}`, "zenith");
+        this.hud.toast(`${tierLabel} +${pts}`, "apex");
         this.flash("perfect");
         this.glow(glowStr);
         this.haptic(tier >= 3 ? [80, 40, 100, 40, 120] : [60, 40, 80]);
-        this.telemetry.track("zenith", { alt: Math.round(alt), tier, streakMult });
+        this.telemetry.track("apex", { alt: Math.round(alt), tier, streakMult });
       }
     }
     this.prevVy = vy;
@@ -2882,7 +2881,7 @@ export class Game {
         this.shake(0.55);
       }
       this.particles.burstRing(x, y, 0xffffff);
-      this.hud.toast(`${iconGlyph("lightning")} OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "zenith");
+      this.hud.toast(`${iconGlyph("lightning")} OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "apex");
       this.shake(0.3);
       return;
     }
@@ -4018,7 +4017,7 @@ export class Game {
       this.telemetry.track("wings_promo", { tier: promo.id });
       progress.wings = { tierId: promo.id, icon: promo.icon, name: promo.name };
     }
-    this.save.addLifetimeZeniths(stats.zenith);
+    this.save.addLifetimeApexMoments(stats.apex);
     this.save.addLifetimeSunflowers(this.runSunflowers);
     // distance XP is awarded at the end; everything else accrued live during the flight
     this.awardXp(Math.round(stats.distance * XP_RULES.perMetre));
@@ -4045,7 +4044,7 @@ export class Game {
       score: Math.round(score),
       coins: this.runCoins,
       islands: stats.island,
-      zeniths: stats.zenith,
+      apexMoments: stats.apex,
       xp,
       moments: JSON.stringify(this.moments.toJSON()),
     });
@@ -5229,12 +5228,6 @@ export class Game {
     }
   }
 
-  /**
-   * Settings + danger-zone actions (every `set-*` toggle, volume/track
-   * selectors, and the two-step progress reset). Returns true when consumed.
-   * Extracted from handleAction; same break-to-return-true transform as the
-   * shop/social sub-handlers.
-   */
   /** The port ./actions/settings runs on.
    *
    *  Only `resetArmed` and `resetTimer` are writable, and only for the
@@ -5266,8 +5259,10 @@ export class Game {
     };
   }
 
-  /** Settings + danger-zone actions. The table lives in ./actions/settings.
-   *  Returns true when the action was consumed. */
+  /** Settings + danger-zone actions (every `set-*` toggle, the volume/track
+   *  selectors, and the two-tap progress reset). Returns true when consumed;
+   *  the table itself lives in ./actions/settings behind a port, so the
+   *  toggles can be tested without a live Game. */
   private handleSettingsEvent(action: string, id: string): boolean {
     return settingsAction(this.settingsContext(), action, id);
   }
@@ -6527,7 +6522,7 @@ export class Game {
   }
 
   /** Fire a floating impact text popup near the bird's current screen position. */
-  private popupAtBird(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "zenith" | "splash" | "power"): void {
+  private popupAtBird(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "apex" | "splash" | "power"): void {
     if (this.save.state.settings.reduceMotion) return;
     const [sx, sy] = this.projectToScreen(this.bird.x, this.bird.y + 4);
     this.hud.popup(text, kind, sx, sy);
@@ -7104,7 +7099,7 @@ export class Game {
       this.audio.fanfare();
     };
     if (st.lifetime.ghostBeats >= 10) grant("ghost", "Ghost unlocked — 10 ghost wins!");
-    if (st.lifetime.zeniths >= 25) grant("shadow", "Shadow unlocked — 25 skyline moments banked!");
+    if (st.lifetime.apexMoments >= 25) grant("shadow", "Shadow unlocked — 25 skyline moments banked!");
     if (st.duel.bestStreak >= 10) grant("mythic", "Mythic unlocked — 10-duel win streak!");
     if (st.ownedSkins.length >= 16) grant("rainbow", "Rainbow unlocked — 15-skin collection!");
     const tiers = this.cups.claimedTiers();
@@ -7531,7 +7526,7 @@ export class Game {
       perfects: this.perfects,
       distance: Math.max(0, this.bird.x - this.startX),
       fever: this.feverReached ? 1 : 0,
-      zenith: this.zeniths,
+      apex: this.zeniths,
       pickups: this.pickups,
     };
   }

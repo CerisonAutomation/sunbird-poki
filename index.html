@@ -19,6 +19,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover"
     />
+    <!-- Poki SDK, loaded statically from the CDN in `<head>` exactly as the
+         HTML5 guide specifies. It used to be injected from `platform.ts` only
+         after a 2-second poll for an SDK somebody else might have installed,
+         which meant the SDK download did not even START until two seconds into
+         the boot on every cold load. A static tag begins fetching at byte 0,
+         in parallel with the bundle, so `init()` is usually already resolvable
+         by the time the game asks.
+
+         `async` so it never blocks the parser (the boot shell must paint
+         first); `data-sunbird-sdk="poki"` so `ensureSdk()` recognises this tag
+         as its own and attaches to it instead of injecting a second copy.
+         `verify-portal.mjs` allows this exact URL statically (STATIC_REMOTE_
+         ALLOW.poki) — it is the one remote reference a Poki build may have. -->
+    <script async data-sunbird-sdk="poki" src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
     <meta name="theme-color" content="#4aa0e8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />

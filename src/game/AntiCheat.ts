@@ -1,4 +1,6 @@
 import { BOOST_EXTRA_SPEED, MAX_SPEED_FEVER } from "./constants";
+import { SKINS } from "./Economy";
+import { endlessSpeedScale } from "./FlightProgression";
 import type { ScoreSubmission } from "./Leaderboard";
 
 export type VerificationResult = {
@@ -8,17 +10,51 @@ export type VerificationResult = {
 };
 
 /**
- * The fastest a run may legally average, derived from the physics rather than
- * typed in.
+ * The fastest a run may legally average, derived from the same expression
+ * `Bird.step()` uses for its own cap — every term of it, this time.
  *
- * It used to be a literal `120`, which is below the bird's own ceiling:
- * `MAX_SPEED_FEVER` is 128 and a boost adds 42, so a legal fever-and-boost run
- * tops out near 170 m/s. Every such run averaged out above 120 and was
- * quarantined as cheating — the gate was rejecting exactly the players the
- * leaderboard is for, and a literal can never be re-checked when the physics
- * moves. The floor is now the physics floor.
+ * History, because it has now been wrong twice in the same way. It was first a
+ * literal `120`, below the bird's own ceiling, so a fever-and-boost run was
+ * quarantined as cheating. That was "fixed" to `MAX_SPEED_FEVER +
+ * BOOST_EXTRA_SPEED` (170) with a comment claiming the number was now derived
+ * from the physics. It was not. `Bird.step()` computes:
+ *
+ *     cap = (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult
+ *           + (boost ? BOOST_EXTRA_SPEED : 0)
+ *
+ * and `Game.fixedUpdate()` passes
+ * `speedMult = skin.speedMult * challengeMods.speedMult * escalateMult()`.
+ * Two of those three factors were missing from the "derived" constant. Driving
+ * the shipped `Bird` with fever + boost + a 1.08 skin at island 8, t=600 s in
+ * an escalating mode measures **235.9 m/s** — 39% above the gate that was
+ * supposed to bound it, so a strong endless run was quarantined for being
+ * strong. Exactly the defect the previous comment said it had removed.
+ *
+ * So it is computed from the constants and the tables now, not transcribed
+ * from them:
+ *   · `MAX_SPEED_FEVER` — the fever branch, always the higher of the two;
+ *   · the largest `speedMult` any purchasable skin grants (read from SKINS,
+ *     so a new skin raises the ceiling automatically);
+ *   · the asymptote of `endlessSpeedScale()`, probed rather than re-derived,
+ *     so a change to the curve cannot silently desynchronise the two;
+ *   · `BOOST_EXTRA_SPEED`, which is additive and therefore applies last.
+ *
+ * `MAX_CHALLENGE_SPEED_MULT` is 1: every challenge modifier currently slows
+ * the bird (`heavy_wings` is 0.95) and none speeds it up. It is named rather
+ * than omitted so that adding a fast modifier is a visible edit here.
+ *
+ * `anticheat.test.ts` asserts this against a live simulation rather than
+ * against a number, which is the only way this stays true.
  */
-const MAX_SPEED_MPS = MAX_SPEED_FEVER + BOOST_EXTRA_SPEED;
+const MAX_SKIN_SPEED_MULT = SKINS.reduce((m, s) => Math.max(m, s.speedMult), 1);
+const MAX_CHALLENGE_SPEED_MULT = 1;
+/** The escalation curve's asymptote, probed from the function itself. */
+const MAX_ESCALATE_MULT = endlessSpeedScale(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+
+export const MAX_LEGAL_SPEED_MPS =
+  MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * MAX_CHALLENGE_SPEED_MULT * MAX_ESCALATE_MULT + BOOST_EXTRA_SPEED;
+
+const MAX_SPEED_MPS = MAX_LEGAL_SPEED_MPS;
 
 /**
  * The slowest a run may legally average, as ms per 100 m. Derived from the same

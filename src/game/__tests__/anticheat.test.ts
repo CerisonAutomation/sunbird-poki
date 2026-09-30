@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { defaultProfile, verifyRunSubmission } from "../AntiCheat";
+import { MAX_LEGAL_SPEED_MPS, defaultProfile, verifyRunSubmission } from "../AntiCheat";
+import { Bird } from "../Bird";
+import { SKINS } from "../Economy";
+import { endlessSpeedScale } from "../FlightProgression";
+import { TerrainSystem } from "../TerrainSystem";
 import { BOOST_EXTRA_SPEED, MAX_SPEED_FEVER } from "../constants";
 
 describe("AntiCheat & Profiles", () => {
@@ -141,5 +145,58 @@ describe("client ⇄ server anti-cheat limits agree", () => {
   it("shares the score-density gates", () => {
     expect(num("scoreDensityFactor")).toBe(1000);
     expect(num("scoreDensityBase")).toBe(100_000);
+  });
+});
+
+/**
+ * The speed gate must bound what the shipped physics can actually produce.
+ *
+ * It has been wrong twice: first as a literal 120, then as `MAX_SPEED_FEVER +
+ * BOOST_EXTRA_SPEED` (170) described in its own comment as "derived from the
+ * physics" while omitting two of the three multipliers `Game.fixedUpdate()`
+ * passes into `Bird.step()`. A fever + boost run in a 1.08 skin deep into an
+ * escalating mode reaches ~236 m/s and was quarantined as cheating.
+ *
+ * So this does not compare the constant to another constant — that is the
+ * mistake it exists to prevent. It drives the real `Bird` at the worst legal
+ * combination of inputs and asserts the gate is above what comes out, and not
+ * absurdly above it.
+ */
+describe("speed ceiling bounds the real physics", () => {
+  const worstCaseSpeedMult = () => {
+    const fastestSkin = SKINS.reduce((m, s) => Math.max(m, s.speedMult), 1);
+    // Far enough along the escalation curve to be at its asymptote.
+    return fastestSkin * endlessSpeedScale(500, 1e6);
+  };
+
+  const flatOut = (): number => {
+    const terrain = new TerrainSystem("anticheat-ceiling");
+    const bird = new Bird();
+    bird.x = 400;
+    bird.y = terrain.heightAt(400) + 200;
+    bird.grounded = false;
+    bird.vx = 400;
+    bird.vy = 0;
+    const opts = { diving: true, fever: true, speedMult: worstCaseSpeedMult(), boost: true };
+    // The cap is applied every step, so a handful of steps is enough to pin to it.
+    for (let i = 0; i < 20; i += 1) bird.step(1 / 120, opts, terrain);
+    return bird.speed();
+  };
+
+  it("a maximal legal run is not treated as cheating", () => {
+    const reached = flatOut();
+    expect(reached).toBeGreaterThan(200); // sanity: we really are at the ceiling
+    expect(reached).toBeLessThanOrEqual(MAX_LEGAL_SPEED_MPS);
+  });
+
+  it("the gate is not so loose that it stops being a gate", () => {
+    // Within 15% of what the physics can reach: high enough to clear every
+    // legal run, low enough that a fabricated score still fails.
+    expect(MAX_LEGAL_SPEED_MPS).toBeLessThan(flatOut() * 1.15);
+  });
+
+  it("tracks the skin table rather than a transcribed number", () => {
+    const fastestSkin = SKINS.reduce((m, s) => Math.max(m, s.speedMult), 1);
+    expect(MAX_LEGAL_SPEED_MPS).toBeGreaterThan(MAX_SPEED_FEVER * fastestSkin);
   });
 });

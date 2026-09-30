@@ -1222,23 +1222,31 @@ export class Game {
     bootStage("flight");
     this.bump();
     this.pushHud();
-    // First use: ask for a name only where the player can actually choose one.
-    // Portal editions roll a curated call sign instead of accepting typed text
-    // (edition CUSTOM_PILOT_NAMES), so a "confirm your name" screen there has
-    // nothing to confirm — it is one screen and one tap between the visitor and
-    // the first `gameplayStart()`, and that first gameplay event is exactly what
-    // Poki measures as conversion to play. The generated name is accepted
-    // silently instead; the dice button on the board page can still reroll it, and
-    // `pilotNameChosen` stays false so a signed-in player is still adopted by
-    // `adoptPortalIdentity()` when the portal identity resolves.
-    if (!this.save.state.pilotNameCustomized && this.state === "menu") {
-      if (CUSTOM_PILOT_NAMES) {
-        this.setScreen("nameEntry");
-        this.hud.setValue("pilotNameInput", this.pilotName);
-      } else {
-        this.save.state.pilotNameCustomized = true;
-        this.save.persist();
-      }
+    // NOTHING stands between a first-time visitor and the Play button.
+    //
+    // This used to open the `nameEntry` welcome screen on first boot, and the
+    // comment that lived here argued — correctly — that a portal must not do
+    // that: "it is one screen and one tap between the visitor and the first
+    // gameplayStart(), and that first gameplay event is exactly what Poki
+    // measures as conversion to play." The code then did it anyway, because
+    // the branch was gated on CUSTOM_PILOT_NAMES, which is `true` in this
+    // edition. The comment described the intent and the flag inverted it.
+    //
+    // A pilot name is generated, valid, unique and renameable from Settings
+    // and from the leaderboard page. There has never been anything for the
+    // player to confirm, so the screen is no longer shown unprompted — it is
+    // reachable on demand (Settings › Pilot) and nowhere else. Poki's own
+    // published post-mortems are blunt about this: "players were getting stuck
+    // in menus, so we disabled all extra screens and made sure they landed
+    // directly in gameplay."
+    //
+    // `pilotNameCustomized` is still set here so the prompt cannot come back
+    // through another path, while `pilotNameChosen` stays false so a signed-in
+    // player is still adopted by `adoptPortalIdentity()` when the portal
+    // identity resolves.
+    if (!this.save.state.pilotNameCustomized) {
+      this.save.state.pilotNameCustomized = true;
+      this.save.persist();
     }
   }
 
@@ -5808,9 +5816,13 @@ export class Game {
     this.demoTime = 0;
     this.demoStuck = 0;
     this.setState("menu");
-    // Show name entry on first use
-    const screen = !this.save.state.pilotNameCustomized ? "nameEntry" : "main";
-    this.setScreen(screen);
+    // Straight to the menu, always. Returning to the menu used to re-route a
+    // player who had never confirmed a name back onto the welcome screen — so
+    // a visitor who dismissed it once met it again after every run. The name
+    // is generated, valid and renameable from Settings; it has never needed a
+    // confirmation step, and a confirmation step in front of play is the one
+    // thing Poki measures against (conversion to play).
+    this.setScreen("main");
     this.camera.setIntro(1);
   }
 

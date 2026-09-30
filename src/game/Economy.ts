@@ -799,12 +799,30 @@ export const VIP = {
 
 export type Promo = { type: "gold" } | { type: "vip" } | { type: "coins"; amount: number };
 
+/**
+ * Redeemable codes. **Coins only, and small.**
+ *
+ * This table ships inside the bundle, in plaintext, inside the submission zip.
+ * There is no server to validate a code against, so every entry here is public
+ * the moment the game is live — one devtools search, or one forum post, and
+ * every player has every code.
+ *
+ * It used to grant entitlements: `ZENITH`/`SUNBIRD` → Gold (2x coins forever,
+ * premium pass track, locked skins) and `AURORA` → VIP. Those were not promo
+ * codes, they were a plaintext bypass of the entire 60k-coin economy, and the
+ * economy is the only progression this build has. They are gone.
+ *
+ * What remains is deliberately harmless: a handful of small, one-per-device
+ * coin grants worth roughly one good run each, of the kind that can be printed
+ * on a jam sticker without consequence. `SaveData.redeem()` still enforces
+ * one use per code per device.
+ *
+ * RULE: nothing in this table may grant an entitlement, a permanent
+ * multiplier, or a cosmetic. `economy.test.ts` enforces it.
+ */
 export const PROMO_CODES: Record<string, Promo> = {
-  ZENITH: { type: "gold" },
-  SUNBIRD: { type: "gold" },
   NEST250: { type: "coins", amount: 250 },
   FEATHER: { type: "coins", amount: 100 },
-  AURORA: { type: "vip" },
   KONAMI: { type: "coins", amount: 500 },
   EASTER: { type: "coins", amount: 100 },
 };

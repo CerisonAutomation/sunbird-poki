@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOOSTS, SHOP_TRAILS, SKINS, VIP, dailyDealBoost, skinById } from "../Economy";
+import { BOOSTS, PROMO_CODES, SHOP_TRAILS, SKINS, VIP, dailyDealBoost, skinById } from "../Economy";
 import { SEASON_TIER_DEFS } from "../SeasonPass";
 import { TRAILS } from "../Tournaments";
 import { MODES } from "../Modes";
@@ -224,5 +224,35 @@ describe("monetization tiers", () => {
   it("vip daily gift pays back the subscription in play terms", () => {
     // 100/day * 30 days = 3000 coins per month — must beat the 1200-coin starter pack.
     expect(100 * 30).toBeGreaterThan(1200 * 2);
+  });
+});
+
+/**
+ * Promo codes ship in plaintext inside the submission zip — there is no server
+ * to validate them against — so the only safe promo code is one that would not
+ * matter if it were printed on the front page of the game.
+ *
+ * Two of them used to grant Gold and one granted VIP: a permanent 2x coin
+ * multiplier, the premium pass track and otherwise-locked skins, handed to
+ * anyone who opened devtools. This pins the rule that replaced them.
+ */
+describe("promo codes cannot grant entitlements", () => {
+  it("every shipped code is a small, one-off coin grant", () => {
+    const codes = Object.entries(PROMO_CODES);
+    expect(codes.length).toBeGreaterThan(0);
+    for (const [name, promo] of codes) {
+      expect(promo.type, `${name} must not grant an entitlement`).toBe("coins");
+      // A code is worth about one good run, never a shortcut past the economy.
+      if (promo.type === "coins") {
+        expect(promo.amount, `${name} is too valuable for a public code`).toBeLessThanOrEqual(500);
+        expect(promo.amount).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("no code grants gold or vip", () => {
+    const kinds = Object.values(PROMO_CODES).map((p) => p.type);
+    expect(kinds).not.toContain("gold");
+    expect(kinds).not.toContain("vip");
   });
 });

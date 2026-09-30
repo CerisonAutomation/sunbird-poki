@@ -71,6 +71,57 @@ const BLOCKED = [
   "meth", "heroin", "cocaine", "cannabis", "marijuana", "fentanyl", "opioid",
   "mdma", "ecstasy", "ketamine", "xanax", "adderall", "weed", "crack",
   "terrorist", "jihad", "rapist", "incest", "bestiality", "necrophil",
+
+  // ——— NON-ENGLISH ———————————————————————————————————————————————
+  // Poki serves a global audience and localises the portal into ~30
+  // languages; this game ships 12 locales. A blocklist that only knows
+  // English is not a moderation filter, it is a filter against *English
+  // speakers* — a Polish or Brazilian player types the worst word they know
+  // and it lands, unfiltered, on a public leaderboard and on in-world name
+  // tags, which is precisely the failure mode that gets a build rejected.
+  //
+  // Selection rule, applied to every entry below: hard profanity, slurs and
+  // sexual terms only (not mild swears), and only strings that cannot appear
+  // inside the game's own aviation/nature vocabulary once the key is squashed
+  // to letters with no word boundaries. Entries were dropped rather than
+  // risked where they collided: French "pute" (inside "computer"), Dutch
+  // "lul" (inside "lullaby"), Italian "pic"/Turkish "piç" (inside "epic"),
+  // Spanish "pene" (inside "penelope"), "cono" and "culo" (too short and too
+  // mild to be worth the false positives). Cyrillic and Greek spellings are
+  // handled by the HOMOGLYPH fold plus the transliterations listed here.
+  // es / pt
+  "puta", "putas", "puto", "mierda", "joder", "pendejo", "cabron", "chingar",
+  "chinga", "maricon", "gilipollas", "hijueputa",
+  "caralho", "porra", "buceta", "viado", "foda", "fodase", "merda", "piroca",
+  "corno", "arrombado", "filhadaputa",
+  // fr
+  "putain", "salope", "connard", "conasse", "encule", "niquer",
+  "foutre", "branleur", "pedale",
+  // de / nl
+  "arschloch", "wichser", "fotze", "hurensohn", "schlampe", "nutte",
+  "scheisse", "schwuchtel", "judensau", "siegheil",
+  "kanker", "kutwijf", "kutje", "klootzak", "hoerenjong", "flikker",
+  // it
+  "cazzo", "stronzo", "vaffanculo", "coglione", "troia", "puttana", "minchia",
+  // pl / ru / uk (transliterated; Cyrillic input folds into these)
+  "kurwa", "chuj", "jebac", "jebany", "pierdol", "skurwysyn",
+  "suka", "blyat", "blyad", "pizda", "pizdec", "khuy", "khuj", "yebat",
+  "mudak", "gandon", "ebanko",
+  // tr
+  "orospu", "amcik", "sikeyim", "sikerim", "yarrak", "gavat", "pezevenk",
+  // el
+  "malaka", "malakas", "gamoto", "poutana",
+  // ar / fa (transliterated)
+  "sharmuta", "kusomak", "kusommak", "gahba", "koskesh", "kirimbik",
+  // id / ms / tl / vi
+  "kontol", "memek", "bangsat", "ngentot", "putangina", "tangina",
+  "gagoyou", "ditme", "dumemay",
+  // hi / ur (transliterated)
+  "chutiya", "chutiye", "madarchod", "behenchod", "bhosdike", "randi",
+  "gandu", "harami",
+  // ja / ko / zh (romanised)
+  "chinko", "manko", "omanko", "shibal", "sibal", "gaesaekki",
+  "caonima", "shabi", "biaozi",
 ];
 
 /**
@@ -115,6 +166,14 @@ const SAFE_WORDS = [
   "pakistan", "pakistani",
   // …contain "semen" / "rapist" / "milf" — the classic Scunthorpe traps
   "basement", "debasement", "therapist", "milford",
+  // …contain a non-English entry added above. "brandi"/"brandy" contain
+  // "randi", "amputate" contains "puta", "suka" hides in "tsukasa", and
+  // "cornoravioli" jokes aside, "corno" sits inside "cornoate"-style coinages
+  // — these are the real names a filter must not eat.
+  "brandi", "brandy", "amputate", "amputation", "computer", "tsukasa",
+  "reputation", "reputable", "disputation", "putative", "deputation",
+  "cornelia", "cornelius", "cornice", "cornfield", "cornflower", "unicorn",
+  "capricorn", "cornet", "cornerstone", "corner",
 ];
 
 const LEET: Record<string, string> = {

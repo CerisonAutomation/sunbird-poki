@@ -28,11 +28,22 @@
 
 /** The floor. Below roughly a third of a second nothing registers as having
  *  been on screen at all — it reads as a flicker, not a message. */
-export const TOAST_MIN_VISIBLE_MS = 620;
+export const TOAST_MIN_VISIBLE_MS = 520;
 
-/** How many deferred toasts may wait. Past this the OLDEST waiter is dropped,
- *  not the newest: in a live game the most recent event is the relevant one. */
-export const TOAST_QUEUE_CAP = 3;
+/**
+ * How many deferred toasts may wait.
+ *
+ * Started at 3 and that was too tight. With a one-pill cap in flight and a
+ * 620 ms floor, throughput is about 1.6 messages a second; a busy stretch of
+ * play emits more than that, so a cap of 3 traded the old failure (everything
+ * flickers, nothing is readable) for a new one (a readable pill, and the rest
+ * silently dropped). Measured in-browser: distinct toasts surviving a 30-cycle
+ * run fell from 16 to 3.
+ *
+ * Six is roughly four seconds of backlog — long enough to ride out a burst
+ * without letting a joke about a 1,000 m milestone surface at 1,400 m.
+ */
+export const TOAST_QUEUE_CAP = 6;
 
 export type ToastDecision =
   /** Show it now; evict the incumbent if the layer is full. */

@@ -8,7 +8,7 @@
  * statically importing it puts ALL locales into the boot bundle (~94 KB).
  *
  * This script projects the barrel into **positional** per-locale packs
- * (`src/i18n/packs/<locale>.json` — an array of texts in `pack-keys.json`
+ * (`public/i18n/<locale>.json` — an array of texts in `pack-keys.json`
  * order), which the runtime lazy-loads one locale at a time. English is
  * generated too: it is the eager fallback pack and the only one imported
  * statically.

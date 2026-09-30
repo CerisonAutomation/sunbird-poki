@@ -177,10 +177,13 @@ describe("journey action table", () => {
     expect(journeyAction(ctx, "claim-campaign", "not-a-chapter")).toBe(true);
     expect(rec.toasts).toHaveLength(0);
 
-    // The first chapter cannot be complete on a fresh save.
+    // The first chapter cannot be complete with no claim history, so the claim
+    // is refused. Assert the wallet is untouched rather than zero: a save may
+    // legitimately hold coins, and "unchanged" is the real invariant.
+    const wallet = save.state.wallet;
     expect(journeyAction(ctx, "claim-campaign", "ch1")).toBe(true);
     expect(rec.toasts.join(" ")).toMatch(/not ready/i);
-    expect(save.state.wallet).toBe(0);
+    expect(save.state.wallet).toBe(wallet);
   });
 
   it("opens the challenge and campaign screens without side effects", () => {

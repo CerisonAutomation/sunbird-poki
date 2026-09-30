@@ -22,7 +22,28 @@ export const MAX_CATCHUP_STEPS = 20;
 export const GRAVITY_GLIDE = 16;
 export const GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
-export const GROUND_G_GLIDE = 14;  // reduced: less deceleration on uphill slopes
+/**
+ * Along-slope gravity while GLIDING (stick released), UPHILL.
+ *
+ * Was 30 in the first build and lowered to 14 to soften uphill deceleration —
+ * see the original comment, "reduced: less deceleration on uphill slopes".
+ * The intent was right and the instrument was wrong: one constant governed
+ * both the uphill penalty AND the downhill acceleration, so halving it to fix
+ * climbing also halved how fast a released bird builds speed running DOWN a
+ * hill. That is the single input the player makes, and it lost more than half
+ * its effect as a side effect of an unrelated tuning pass.
+ *
+ * The two are now separate constants, so uphill stays forgiving at 14 and
+ * downhill gets its original response back.
+ */
+export const GROUND_G_GLIDE = 14;
+/**
+ * Along-slope gravity while GLIDING, DOWNHILL. Restored to the first build's
+ * 30: this is what "the bird was more responsive when released" was made of.
+ * Diving is still faster (GROUND_G_DIVE 88), so committing to a dive remains
+ * the stronger play and the skill ceiling from 457ff35 is untouched.
+ */
+export const GROUND_G_GLIDE_DOWN = 30;
 export const GROUND_G_DIVE = 88;
 
 /**
@@ -250,8 +271,25 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 230;
-export const ALT_CEILING_FADE = 20;
+export const ALT_CEILING = 260;
+/**
+ * Depth of the soft band below ALT_CEILING over which a climb is damped out.
+ *
+ * Was 50 in the first build against a 260 ceiling — a fade from 210 to 260.
+ * It became 20 against a 230 ceiling, i.e. 210 to 230: the same start, two
+ * and a half times sharper, and a hard stop 30 m lower. At 220 m a climb now
+ * lost 50% where it used to lose 20%, and at 230 it lost everything.
+ *
+ * That is a wall, and the player's own screenshot shows them pinned against
+ * it: "229 m peak" against a 230 m ceiling. A good launch did not feel like a
+ * good launch because the game deleted the top of it.
+ *
+ * Restored to the first build's pairing, 260 ceiling with a 50 fade: the two
+ * were tuned together and moving only one pushes the damp band's start down
+ * onto the Star Wish band, which flight-ceiling.test.ts correctly refuses
+ * (stars top out at 207; the band must start above them, at 210).
+ */
+export const ALT_CEILING_FADE = 50;
 /**
  * Upward speed the Zenith mode's ascent thermal may reach, in m/s.
  *

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { hasIconGlyph, iconGlyph, menuIconSm } from "../MenuIcons";
+import {
+  ALT_CEILING,
+  ALT_CEILING_FADE,
+  GROUND_G_DIVE,
+  GROUND_G_GLIDE,
+  GROUND_G_GLIDE_DOWN,
+} from "../constants";
+import { dampClimbAtCeiling } from "../FlightPhysics";
 import { TOAST_MIN_VISIBLE_MS, TOAST_QUEUE_CAP, decideToast } from "../toastFloor";
 import {
   LAUNCH_POP_COYOTE_S,
@@ -256,5 +264,57 @@ describe("the crest gate stopped vetoing real launches", () => {
     expect(shouldLeaveGround(Number.NaN, 100, true)).toBe(false);
     expect(shouldLeaveGround(100, Number.NaN, true)).toBe(false);
     expect(shouldLeaveGround(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, true)).toBe(false);
+  });
+});
+
+describe("the release response constants match the build the player remembers", () => {
+  /**
+   * "There used to be more of a response and the bird was more responsive."
+   * Diffing constants.ts against the first commit (1aea134) turned up three
+   * changes on the release path, none of them intended as a nerf:
+   *
+   *   GROUND_G_GLIDE   30 -> 14   with the comment "reduced: less
+   *                               deceleration on uphill slopes"
+   *   ALT_CEILING     260 -> 230
+   *   ALT_CEILING_FADE 50 -> 20
+   *
+   * The first is a coupled-constant bug. One constant governed BOTH the
+   * uphill penalty and the downhill acceleration, so softening uphill also
+   * halved how fast a RELEASED bird builds speed running down a hill — which
+   * is the single input the game has. Split in two: uphill stays forgiving,
+   * downhill gets its response back.
+   *
+   * The other two made the ceiling a wall — 30 m lower with a fade band two
+   * and a half times sharper, so a climb lost 50% at 220 m where it used to
+   * lose 20%. The player's own screenshot shows them pinned at "229 m peak"
+   * against a 230 m ceiling: the game was deleting the top of every good
+   * launch. Restored to the first build's pairing.
+   */
+  it("gives a released bird its original downhill acceleration back", () => {
+    expect(GROUND_G_GLIDE_DOWN).toBe(30);
+  });
+
+  it("keeps uphill forgiving — the tuning that lowered it was not wrong, just misapplied", () => {
+    expect(GROUND_G_GLIDE).toBe(14);
+    expect(GROUND_G_GLIDE_DOWN).toBeGreaterThan(GROUND_G_GLIDE);
+  });
+
+  it("still makes committing to a dive the stronger play", () => {
+    // The skill ceiling from 457ff35 must survive this: diving has to beat
+    // coasting downhill, or there is no reason to ever hold the button.
+    expect(GROUND_G_DIVE).toBeGreaterThan(GROUND_G_GLIDE_DOWN);
+  });
+
+  it("restores a soft ceiling instead of a wall", () => {
+    expect(ALT_CEILING).toBe(260);
+    expect(ALT_CEILING_FADE).toBe(50);
+    // At 220 m a climb keeps most of itself again (was 50% gone).
+    expect(dampClimbAtCeiling(40, 220)).toBeGreaterThan(40 * 0.7);
+    // And the screenshot's 229 m peak is no longer near the ceiling at all.
+    expect(dampClimbAtCeiling(40, 229)).toBeGreaterThan(40 * 0.6);
+  });
+
+  it("keeps the damp band above the Star Wish band, as flight-ceiling requires", () => {
+    expect(ALT_CEILING - ALT_CEILING_FADE).toBeGreaterThan(207);
   });
 });

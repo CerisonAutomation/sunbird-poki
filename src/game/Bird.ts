@@ -21,6 +21,7 @@ import {
   GROUND_FRICTION_DIVE,
   GROUND_G_DIVE,
   GROUND_G_GLIDE,
+  GROUND_G_GLIDE_DOWN,
   GROUND_STICK_DIVE,
   GROUND_STICK_FLAT_SLOPE,
   LAND_BAD_MIN_KEEP,
@@ -525,7 +526,15 @@ export class Bird {
       let vt = this.vx * n.tx + this.vy * n.ty;
 
       // Gravity along the slope: downhill (ty<0) accelerates, uphill decelerates.
-      const gGround = diving ? GROUND_G_DIVE : GROUND_G_GLIDE;
+      // Uphill and downhill are separate constants while gliding. They used
+      // to be one, so lowering it to soften uphill climbs also halved how
+      // fast a RELEASED bird accelerates down a hill — the exact "release is
+      // less responsive" the player reported. See GROUND_G_GLIDE_DOWN.
+      const gGround = diving
+        ? GROUND_G_DIVE
+        : n.ty < 0
+          ? GROUND_G_GLIDE_DOWN
+          : GROUND_G_GLIDE;
       // ...but downhill-only, with a floor when the stick is held, so that flat
       // ground is not a place where the input does nothing. See
       // GROUND_STICK_DIVE. Uphill keeps the full slope penalty in both states —

@@ -275,7 +275,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     <details class="shop-section" data-ref="shopBoosts"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
       <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
       <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
-      ${sectionTitle(t("hud.ui.SNest", undefined, "Nest"), t("hud.ui.SNestSub", undefined, "permanent score multiplier"))}
+      ${sectionTitle("Nest", "permanent score multiplier")}
       <div class="boost-list"><div class="boost-row nest-row">
         <span class="bi">${menuIcon("story")}</span>
         <div><div class="mt">${t("hud.renderShop.NUpgrade", undefined, "Nest upgrade ")}<span class="boost-once">forever</span></div>

@@ -106,11 +106,19 @@ down a layer, never to import sideways.
 - **The i18n ratchet only counts what its categories match, so a new *kind* of copy is invisible
   until a category exists for it.** It watched `hud.toast()`, `head()`, `aria-label` and `<button>`
   labels — and said nothing about `sectionTitle()`, which was 31 hardcoded English headings across
-  every menu sheet in a 36-locale build. Wrapping copy in `t()` with the English third argument is
-  safe and free (a missing key resolves `pack[key] ?? EN[key] ?? defaultText`, so the rendered text
-  cannot change), but adding the key to the barrel without all 36 translations *fails* the locale
-  test — so wrapping and translating are two separate commits. When you add a new way for the UI to
-  emit copy, add a category for it in the same change.
+  every menu sheet, nor about emoji-led buttons (`☀ FLY THE CHALLENGE`), which is this project's
+  house style for every primary action and which the `buttonLabel` regex could not see because it
+  demanded an ASCII letter first. When you add a new way for the UI to emit copy, add a category
+  for it in the same change.
+- **Wrapping copy in `t()` and adding the key to the barrel are ONE change, not two.** This is the
+  invariant most easily got wrong, because the runtime is forgiving and the test is not: `t()` falls
+  back through `pack[key] ?? EN[key] ?? defaultText`, so an unwrapped key renders its English
+  fallback and looks completely healthy. But `locales.test.ts` asserts that **every literal key
+  passed to `t()` exists in the barrel**, so a wrapper whose key was not added fails
+  `pnpm test` — and adding that key needs a translation in all 36 locales *plus*
+  `node scripts/gen-i18n-packs.mjs` (a second test regenerates the packs and compares them
+  byte-for-byte). There is no shippable half: either a string gets its key, its 36 translations and
+  regenerated packs in the same change, or it stays a literal. Do not add `t()` calls and defer.
 
 ### `Game.ts` is a god-object — extract it behind ports, one table at a time
 `src/game/Game.ts` is one class, 182 methods, ~4,850 `this` references. Handlers are being moved

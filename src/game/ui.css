@@ -5504,14 +5504,11 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .wings-near > i { display: block; height: 4px; border-radius: 2px; background: var(--gold-muted); transition: width 0.3s; max-width: 100%; }
 .wings-near > span { font: 600 11px/1 var(--display); color: rgba(255,255,255,0.8); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* The Reduce Motion switch lives in Settings, and the game is spent flying —
-   but the only broad rule was scoped to `.sb-reduce-motion .overlay *`, and
-   `.play-hud` is not inside an overlay. So the three infinite flight animations
-   (speedlines, the urgent sun meter, the expiring-powerup blink) and every
-   decorative pop kept running for a player who had explicitly turned them off. */
-html.sb-reduce-motion .play-hud *,
-html.sb-reduce-motion .play-hud *::before,
-html.sb-reduce-motion .play-hud *::after { animation: none; transition: none; }
+/* The Reduce Motion switch lives in Settings, and the game is spent flying — so
+   the flight HUD needs the same `animation: none` the overlay gets. That rule
+   now lives in menu-polish.css, with !important: a rule here without it was a
+   single three-class selector in the cascade-winning sheet away from silently
+   not applying. See the "Same promise for the flight HUD" note there. */
 
 /* Reduce motion overrides */
 .sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }

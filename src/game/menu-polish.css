@@ -193,6 +193,18 @@
 .a11y-bigtext .overlay :is(.setting-row > span,.setting-row > label,.settings-intro,.tagline,.fineprint,.md,.sk-perk,.trophy-desc) { font-size: 15px; }
 .a11y-bigtext .overlay :is(.mode-desc,.nav-btn span,.quick-action span) { font-size: 13px; }
 .sb-reduce-motion .overlay *, .sb-reduce-motion .overlay *::before, .sb-reduce-motion .overlay *::after { animation: none !important; transition: none !important; }
+
+/* Same promise for the flight HUD, which is not inside an overlay. The rule
+   already existed — in ui.css, without !important, one specificity notch above
+   a bare class — so it worked only until somebody styled a flight-HUD element
+   with a three-class selector in THIS file, which is imported last and wins the
+   cascade outright. Nothing about that failure is visible at the edit site: the
+   rule is right there in the stylesheet looking correct. It lives here for the
+   same reason the overlay rule above does: this is the sheet that decides, and
+   it is the only one of the three with !important headroom left. */
+html.sb-reduce-motion .play-hud *,
+html.sb-reduce-motion .play-hud *::before,
+html.sb-reduce-motion .play-hud *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .overlay *, .overlay *::before, .overlay *::after { animation: none !important; transition: none !important; }
 }

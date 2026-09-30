@@ -62,7 +62,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
 
     ${doNow.length ? `<div class="section-title progress-do-now"><span>${t("hud.renderProgress.DNow", undefined, "Do this now")}</span></div>${doNow.join("")}` : ""}
 
-    ${sectionTitle(t("hud.ui.SToday", undefined, "Today"), t("hud.ui.STodaySub", undefined, "QUESTS &amp; GOALS"))}
+    ${sectionTitle("Today", "QUESTS &amp; GOALS")}
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}
 
@@ -72,7 +72,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
 
-    ${sectionTitle(t("hud.ui.SCareer", undefined, "Career"), t("hud.ui.SCareerSub", undefined, "RANK &amp; WINGS"))}
+    ${sectionTitle("Career", "RANK &amp; WINGS")}
     <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
       <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
       <span class="rank-num">${s.rival.rating}</span>
@@ -172,7 +172,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
   return `
     ${head(SCREEN.account)}
     ${portalAccount}
-    ${sectionTitle(t("hud.ui.SMembership", undefined, "Membership"))}
+    ${sectionTitle("Membership")}
     ${!SELL_AD_REMOVAL ? "" : `
     <div class="sheet">
       <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
@@ -194,18 +194,18 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
     </div>
     `}
 
-    ${sectionTitle(t("hud.ui.SInviteFriends", undefined, "Invite friends"))}
+    ${sectionTitle("Invite friends")}
     <div class="sheet">
-      <p class="tagline">${t("hud.ui.InviteTagline", undefined, "Share your code — friends who redeem it get a welcome bonus on their device.")}</p>
-      <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">${t("hud.ui.Copy", undefined, "Copy")}</button></div>
+      <p class="tagline">Share your code — friends who redeem it get a welcome bonus on their device.</p>
+      <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>
       ${
         s.referralRedeemed
           ? `<p class="note">${t("hud.renderAccount.VAlreadyRedeemedFriendCodeThanksJoining", undefined, "You've already redeemed a friend code. Thanks for joining!")}</p>`
-          : `<div class="redeem"><input data-ui data-ref="friendcode" aria-label="${t("hud.renderCelebration.FReferralCode", undefined, "Friend referral code")}" placeholder="${t("hud.ui.FriendCodePlaceholder", undefined, "Friend's code (SUN-XXXXXX)")}" maxlength="10" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem-referral">${t("hud.ui.Apply", undefined, "Apply")}</button></div>`
+          : `<div class="redeem"><input data-ui data-ref="friendcode" aria-label="${t("hud.renderCelebration.FReferralCode", undefined, "Friend referral code")}" placeholder="Friend's code (SUN-XXXXXX)" maxlength="10" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem-referral">Apply</button></div>`
       }
       ${s.referralMessage ? `<p class="note">${s.referralMessage}</p>` : ""}
     </div>
-    ${sectionTitle(t("hud.ui.STransferSavedProgress", undefined, "Transfer saved progress"))}
+    ${sectionTitle("Transfer saved progress")}
     <div class="sheet">
       <p class="tagline">${t("hud.renderAccount.CCodeMoveProgressAnotherDevice", undefined, "Copy this code to move your progress to another device.")}</p>
       <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.ESaveCode", undefined, "Your exportable save code")}" readonly rows="3">${s.cloudCode}</textarea>
@@ -280,7 +280,7 @@ export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" 
     .join("");
 
   const trails = s.trails.length
-    ? `${sectionTitle(t("hud.ui.SPrizeTrails", undefined, "Prize trails"))}<div class="btn-row">${s.trails
+    ? `${sectionTitle("Prize trails")}<div class="btn-row">${s.trails
         .map((t) => `<button class="soft-btn ${t.equipped ? "gold" : ""}" data-ui data-action="equip-trail" data-id="${t.id}">${t.equipped ? "✓ " : ""}${t.label}</button>`)
         .join("")}</div>`
     : "";
@@ -289,7 +289,7 @@ export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" 
   // nowhere, so the hardest prize in the game vanished on claim. Shown here
   // beside the prize trails, which is where won cosmetics already live.
   const titles = s.titles.length
-    ? `${sectionTitle(t("hud.ui.SPrizeTitles", undefined, "Prize titles"))}<div class="btn-row">${s.titles
+    ? `${sectionTitle("Prize titles")}<div class="btn-row">${s.titles
         .map((title) => `<span class="soft-btn prize-title" title="${t("hud.renderCups.wornBesideName", undefined, "Worn beside your name")}">♛ ${escapeHtml(title.label)}</span>`)
         .join("")}</div>`
     : "";

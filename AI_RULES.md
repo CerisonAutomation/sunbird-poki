@@ -182,10 +182,10 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
 
 | Budget | Cap | Current |
 |---|---|---|
-| `!important` — `index.css` / `ui.css` / `menu-polish.css` | 11 / 13 / 1491 | **11 / 13** / 1472 |
+| `!important` — `index.css` / `ui.css` / `menu-polish.css` | 11 / 13 / 1491 | **11 / 13** / 1475 |
 | Raw `color: #` literals — `index.css` / `ui.css` / `menu-polish.css` | 54 / 210 / 168 | 35 / **203** / 150 |
-| Unique hex colours across all three sheets | 915 | — |
-| Total hex declarations across all three sheets | 1500 | — |
+| Unique hex colours across all three sheets | 915 | 913 |
+| Total hex declarations across all three sheets | 1500 | 1496 |
 
 - **Never add a raw colour.** Paint with an existing token (`--coral`, `--ink`, `--text-on-sky`…).
   A new hex is a test failure, and that is the mechanism that once shipped a distance readout at
@@ -208,11 +208,15 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
   340px rule through the middle of the screen until it became a chip in the altitude gauge's
   column. Check with painted width, not container width: a transparent full-width flex wrapper
   paints nothing.
-- **Known gap:** `prefers-reduced-motion` is scoped to `.overlay *` and a few elements, so the
-  Settings "reduce motion" toggle (`sb-reduce-motion` on `documentElement`, set in `HUD.ts`) does
-  not reach the *flight* HUD — speed lines, particles, trail, impact popups. Fixing it needs
-  `!important` in the cascade-winning sheet; plan it as its own change with the ratchet in view,
-  not as a side effect of another one.
+- **Reduce motion reaches the flight HUD in two layers, and they fail differently.** The Settings
+  toggle (`sb-reduce-motion` on `documentElement`, set in `HUD.ts`) is a *CSS* mechanism, so it
+  cannot touch anything Three.js draws. The DOM half is `html.sb-reduce-motion .play-hud *` in
+  `menu-polish.css` (impact popups, gauges); the WebGL half is a `settings.reduceMotion` check
+  in `Game.ts` (`emitTrail`, `updateTrailRibbon`) and `CameraRig.setReduceMotion` (shake, punch,
+  roll, speed lines). **A new FX system is reachable from neither until you add the check
+  yourself** — `CSS cannot stop a particle emitter` is the whole trap. Speed lines are the
+  deliberate exception: reduce-motion lowers their amplitude (18 → 4) rather than zeroing it, so
+  velocity stays legible without the motion.
 
 ## Where code goes
 

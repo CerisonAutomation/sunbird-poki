@@ -28,16 +28,16 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
   const duelStrip =
     s.duelWas !== ""
       ? `<div class="race-hero ${s.duelWas === "won" ? "win" : ""}">
-           <div class="race-medal">${s.duelWas === "won" ? "⚔🥇" : "⚔"}</div>
+           <div class="race-medal">${menuIconSm("swords")}${s.duelWas === "won" ? menuIconSm("medal_1") : ""}</div>
            <div class="race-place"><b>DUEL ${s.duelWas === "won" ? "WON" : "LOST"}</b><span>${s.duelWas === "won" ? "+" : ""}${s.duelDelta} rating → ${s.rival.rating}</span></div>
-           <div class="race-rating">Duel record ${s.duel.wins}–${s.duel.losses} · 🔥${s.duel.streak} streak<span class="race-rated-tag">ranked · local</span></div>
+           <div class="race-rating">Duel record ${s.duel.wins}–${s.duel.losses} · ${menuIconSm("fire")}${s.duel.streak} streak<span class="race-rated-tag">ranked · local</span></div>
          </div>`
       : "";
   const raceStrip =
     s.duelWas === "" && s.massRace
       ? s.racePlace > 0
         ? `<div class="race-hero ${s.racePlace === 1 ? "win" : s.racePlace <= 3 ? "podium" : ""}">
-           <div class="race-medal">${s.racePlace === 1 ? "🥇" : s.racePlace === 2 ? "🥈" : s.racePlace === 3 ? "🥉" : "🏁"}</div>
+           <div class="race-medal">${menuIconSm(s.racePlace === 1 ? "medal_1" : s.racePlace === 2 ? "medal_2" : s.racePlace === 3 ? "medal_3" : "flag")}</div>
            <div class="race-place"><b>P${s.racePlace}</b><span>of ${s.raceField} pilots · ${s.raceFinishTime.toFixed(1)}s</span></div>
            ${s.raceVerified ? `<div class="verified-tag">✓ placement refereed by the room server</div>` : ""}
            <div class="race-bar"><i style="width:${Math.round((1 - (s.racePlace - 1) / Math.max(1, s.raceField)) * 100)}%"></i></div>
@@ -48,14 +48,14 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
            }
            ${
              s.rival.streak >= 2
-               ? `<div class="race-streak">🔥 ${s.rival.streak}-race win streak${s.ratingBonus > 0 ? ` · +${s.ratingBonus}● streak bonus` : ""}</div>`
+               ? `<div class="race-streak">${menuIconSm("fire")} ${s.rival.streak}-race win streak${s.ratingBonus > 0 ? ` · +${s.ratingBonus}● streak bonus` : ""}</div>`
                : ""
            }
          </div>
-         ${s.photoFinish ? `<div class="reward-strip photo">📸 ${escapeHtml(s.photoFinish)}</div>` : ""}
+         ${s.photoFinish ? `<div class="reward-strip photo">${menuIconSm("photo")} ${escapeHtml(s.photoFinish)}</div>` : ""}
 `
         : `<div class="race-hero dnf">
-           <div class="race-medal">💥</div>
+           <div class="race-medal">${menuIconSm("boom")}</div>
            <div class="race-place"><b>${s.modeId === "pvp_knockout" ? "KNOCKED OUT" : "RACE INCOMPLETE"}</b><span>${s.modeId === "pvp_knockout" ? "Eliminated by the countdown timer" : `DNF · Reached ${Math.round(s.distance)}m of ${s.raceFinishM}m`}</span></div>
            ${
              s.raceRated
@@ -67,7 +67,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
   // Clipboard score fallback — always visible when AUDS isn't available so
   // players always have *some* share action on the results screen.
   const clipboardShare = !s.share.available && !s.share.loaded && !s.share.code
-    ? `<button class="soft-btn wide" data-ui data-action="copy-score">📋 Copy score to clipboard</button>`
+    ? `<button class="soft-btn wide" data-ui data-action="copy-score">${menuIconSm("clipboard")} Copy score to clipboard</button>`
     : "";
 
   // Async multiplayer by code. Only rendered when this build can actually
@@ -76,7 +76,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     s.share.available || s.share.loaded || s.share.code
       ? `
     <div class="share-run">
-      ${sectionTitle("🔗 Shared run", "friend's code · async race")}
+      ${sectionTitle("link", "Shared run", "friend's code · async race")}
       ${
         s.share.code
           ? `<div class="friend-row"><span class="fr-name">${t("hud.renderGameOver.RCode", undefined, "Run code")}</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">${t("hud.renderGameOver.CCode", undefined, "Copy code")}</button></div>`
@@ -102,15 +102,15 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
-    ${s.newBest ? `<div class="new-best">👑 ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
+    ${s.newBest ? `<div class="new-best">${menuIconSm("crown")} ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
     ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">${t("hud.gameover.leaderboardRank", undefined, "Leaderboard rank")} · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
     ${shareBlock}
     ${renderCelebration(s)}
     ${renderFlightRecap(s.flightPath)}
     <div class="over-stats meta-progress-strip">
-      <div><span>🐦 Migration</span><b>${s.campaignDone}/${s.campaignTotal} legs</b></div>
-      <div><span>🏆 Trophies</span><b>${s.trophyCounts.unlocked}/${s.trophyCounts.total}</b></div>
+      <div><span>${menuIconSm("bird")} Migration</span><b>${s.campaignDone}/${s.campaignTotal} legs</b></div>
+      <div><span>${menuIconSm("trophy")} Trophies</span><b>${s.trophyCounts.unlocked}/${s.trophyCounts.total}</b></div>
       <div><span>${menuIcon("pass")} Nest Pass</span><b>Lv.${s.season.tier}/${s.season.maxTier}</b></div>
     </div>
     <div class="over-stats result-summary">
@@ -138,7 +138,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <div><span>${t("hud.renderGameOver.SFlow", undefined, "Slope flow")}</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
       <div><span>Islands</span><b>${s.island + 1}</b></div>
     </div></details>
-    ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! 👻` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
+    ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! ${menuIconSm("ghost")}` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
     ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}
     ${s.newlyCompleted.length ? `<div class="reward-strip nest">Nest upgraded → Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score</div>` : ""}
     ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
@@ -247,8 +247,9 @@ export function renderFlightRecap(path: [number, number][]): string {
 /**
  * End-of-run 3× coin bonus card. Pure and exported so the claim contract is
  * unit-testable: the bonus claims ONCE per run (Game.multiplierClaimed).
- * On portal builds the button triggers a rewarded ad (🎬 icon); on direct
- * builds it is a free bonus (MON-09: clapperboard only on rewarded placements).
+ * On portal builds the button triggers a rewarded ad (clapperboard glyph); on
+ * direct builds it is a free bonus (MON-09: clapperboard only on rewarded
+ * placements).
  */
 export function renderCoinMultiplierCard(coins: number, claimed: boolean, rewarded = false): string {
   if (coins <= 0) return "";
@@ -264,7 +265,7 @@ export function renderCoinMultiplierCard(coins: number, claimed: boolean, reward
         <b>3× Flight Coin Bonus</b>
         <span>Watch a short ad · triple ● ${coins} → ● ${coins * 3}</span>
       </div>
-      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">🎬 Watch → 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
+      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">${menuIconSm("play")} Watch → 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
     </div>`;
   }
   return `<div class="multiplier-cta-card">
@@ -293,11 +294,11 @@ export function renderVersusResult(s: Pick<HudSnapshot, "p1Stats" | "p2Stats" | 
     a.finishedAt > 0 && b.finishedAt > 0 ? Math.abs(a.finishedAt - b.finishedAt).toFixed(1) + "s" : "by distance";
   return `
     <div class="vs-hero ${s.versusWinner === 1 ? "p1win" : "p2win"}">
-      <span class="vs-crown-big">🏆</span>
+      <span class="vs-crown-big">${menuIconSm("trophy")}</span>
       <div class="vs-winner">PLAYER ${s.versusWinner} WINS</div>
       <div class="vs-margin">by ${margin} · same device, same hills</div>
     </div>
-    <div class="vs-head"><span class="p1">🟠 P1 · SPACE / left half</span><span class="p2">P2 · ENTER / right half 🔵</span></div>
+    <div class="vs-head"><span class="p1">${menuIconSm("p1")} P1 · SPACE / left half</span><span class="p2">P2 · ENTER / right half ${menuIconSm("p2")}</span></div>
     <div class="vs-stats">
       <div class="vs-stat time"><span>${time(a)}</span><em>race time</em><span>${time(b)}</span></div>
       ${row("distance", a.distance, b.distance, (n) => `${Math.round(n)}m`)}
@@ -322,7 +323,7 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   // screen like any other, so it uses the same kicker / heading / stat strip /
   // action row as the results card instead of the old bespoke "zzz" panel.
   // MON-05…MON-08 still hold: the standard options sit above the rewarded one,
-  // the rewarded button keeps its 🎬 label, and "let it sleep" is a plain
+  // the rewarded button keeps its clapperboard label, and "let it sleep" is a plain
   // exit — never hidden, never the only way out.
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
@@ -335,7 +336,7 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">🎬 ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button></div>`
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button></div>`
       : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>

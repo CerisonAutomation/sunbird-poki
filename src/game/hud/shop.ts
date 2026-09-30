@@ -10,7 +10,7 @@ import { formatNumberLocalized, t } from "../../i18n";
 import { DAILY_STIPEND, SHOP_AD_COINS, SHOP_AD_SESSION_CAP } from "../constants";
 import { COLLECTIONS, dailyFlashBird, GOLD, skinById, STARTER_PACK, VIP, type BoostView, type ShopTrailView, type SkinView } from "../Economy";
 import { SELL_AD_REMOVAL } from "../edition";
-import { menuHorizon, menuIcon } from "../MenuIcons";
+import { menuHorizon, menuIcon, menuIconSm } from "../MenuIcons";
 import { browseSkins, type ShopBrowse } from "../ShopBrowse";
 import { skinPalette, skinShape, sunbirdSVG } from "../Sunbird";
 import { SCREEN, escapeHtml, head, sectionTitle, upsellStrip } from "./kit";
@@ -35,7 +35,7 @@ function skinStatBars(d: { speedMult: number; feverBonus: number; daylightBonus:
   ];
   return `<div class="sk-stats">${bars
     .map(([k, pct, val]) => `<span class="sk-stat"><em>${k}</em><i><b style="width:${pct}%"></b></i><u>${val}</u></span>`)
-    .join("")}${d.magnetAlways ? `<span class="sk-stat mag">🧲 always-on</span>` : ""}</div>`;
+    .join("")}${d.magnetAlways ? `<span class="sk-stat mag">${menuIconSm("magnet")} always-on</span>` : ""}</div>`;
 }
 
 /** Group the 60+ bird wall into browsable collections with owned counters. */
@@ -73,7 +73,7 @@ export function skinAction(v: SkinView, portal: boolean, wallet: number): string
   let action: string;
   if (v.equipped) action = `<span class="tag on">✓ In use</span>`;
   else if (v.owned) action = `<button class="mini-btn" data-ui data-action="equip-skin" data-id="${d.id}">Equip</button>`;
-  else if (d.prizeOnly) action = `<span class="tag prize" title="${d.prizeOnly}">🏆 ${d.prizeOnly}</span>`;
+  else if (d.prizeOnly) action = `<span class="tag prize" title="${d.prizeOnly}">${menuIconSm("trophy")} ${d.prizeOnly}</span>`;
   else if (v.locked && portal)
     // A Gold-locked variant must not become a paywall on the portal build.
     // Selling premium currency is forbidden there (Poki REQ-20) and the portal
@@ -158,9 +158,9 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     ["all", "All birds"],
     ["affordable", "Can unlock"],
     ["owned", "Owned"],
-    ["nature", "Nature 🌿"],
-    ["cosmic", "Cosmic 🌌"],
-    ["elements", "Elements 🌪"],
+    ["nature", `Nature ${menuIconSm("leaf")}`],
+    ["cosmic", `Cosmic ${menuIconSm("cosmos")}`],
+    ["elements", `Elements ${menuIconSm("tornado")}`],
     ["legendary", "Legendary ★"],
   ] as const;
 
@@ -169,7 +169,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     <p class="shop-intro">${t("hud.renderShop.H", undefined, "YOUR HANGAR ")}<span>${t("hud.renderShop.FWingsMakeThemYours", undefined, "Find your wings. Make them yours.")}</span></p>
 
     <div class="pc pc--gold pc-row">
-      <span class="pc-icon">🪙</span>
+      <span class="pc-icon">${menuIconSm("coin")}</span>
       <div class="pc-body">
         <b>${t("hud.renderShop.DFlightStipend", undefined, "Daily Flight Stipend")}</b>
         <span>Daily test &amp; hangar allowance</span>
@@ -181,7 +181,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     </div>
     ${s.adAvailable ? `
     <div class="pc pc--gold pc-row">
-      <span class="pc-icon">📺</span>
+      <span class="pc-icon">${menuIconSm("tv")}</span>
       <div class="pc-body">
         <b>${t("hud.renderShop.FCoins", undefined, "Free Coins")}</b>
         <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/hour)</span>
@@ -191,7 +191,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
 
     <div class="pc pc--red">
       <div class="pc-header">
-        <span class="pc-badge">🔥 DAILY FLASH SALE · 40% OFF</span>
+        <span class="pc-badge">${menuIconSm("fire")} DAILY FLASH SALE · 40% OFF</span>
         <span class="pc-label" style="color:#c62828;">${t("hud.renderShop.RMidnight", undefined, "Resets at Midnight")}</span>
       </div>
       <div class="pc-row">
@@ -230,11 +230,11 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
 
     <div class="pc pc--blue">
       <div class="pc-header">
-        <span class="pc-badge">📦 ACE PILOT CRATE · SAVE 73%</span>
+        <span class="pc-badge">${menuIconSm("crate")} ACE PILOT CRATE · SAVE 73%</span>
         <span class="pc-label">${t("hud.renderShop.VPack", undefined, "Value Pack")}</span>
       </div>
       <div class="pc-row" style="margin-bottom:10px;">
-        <span class="pc-icon">✈️</span>
+        <span class="pc-icon">${menuIconSm("takeoff")}</span>
         <div class="pc-body">
           <b>${t("hud.renderShop.AWingmanBundle", undefined, "Ace Wingman Bundle")}</b>
           <span>3 Boosts · Tideglass Trail · +${DAILY_STIPEND} Coins</span>
@@ -249,7 +249,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     </div>
 
     <div class="pc pc--vault pc-row">
-      <span class="pc-icon">🥚</span>
+      <span class="pc-icon">${menuIconSm("egg")}</span>
       <div class="pc-body">
         <b>${t("hud.renderShop.GMysteryVault", undefined, "Golden Mystery Vault")}</b>
         <span>35% Bird Skin · 35% Radiant Trail · 30% Coin Jackpot</span>
@@ -275,7 +275,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     <details class="shop-section" data-ref="shopBoosts"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
       <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
       <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
-      ${sectionTitle("Nest", "permanent score multiplier")}
+      ${sectionTitle(null, "Nest", "permanent score multiplier")}
       <div class="boost-list"><div class="boost-row nest-row">
         <span class="bi">${menuIcon("story")}</span>
         <div><div class="mt">${t("hud.renderShop.NUpgrade", undefined, "Nest upgrade ")}<span class="boost-once">forever</span></div>
@@ -304,7 +304,7 @@ export function renderPaywall(s: Pick<HudSnapshot, "gold" | "goldFeatures" | "re
     ? `
     <div class="starter-card">
       <div class="starter-flag">${t("hud.renderPaywall.OTIMEOFFER", undefined, "ONE-TIME OFFER")}</div>
-      <h3>🎁 First Flight Pack · ${STARTER_PACK.price}</h3>
+      <h3>${menuIconSm("gift")} First Flight Pack · ${STARTER_PACK.price}</h3>
       <ul class="feature-list tight">${s.starterFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
       ${
         s.wallet >= STARTER_PACK.coinPrice
@@ -358,7 +358,7 @@ function vipBlock(s: Pick<HudSnapshot, "vip" | "vipDaysLeft" | "vipFeatures" | "
 export function renderCheckout(s: Pick<HudSnapshot, "checkoutOk" | "checkoutSku" | "wallet">): string {
   if (s.checkoutOk) {
     const okLabel = s.checkoutSku === "sunbird_vip" ? "VIP" : s.checkoutSku === "sunbird_starter" ? "ready for takeoff" : "Gold";
-    return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? "🎁" : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">${t("hud.renderCheckout.PAreActiveImmediately", undefined, "Your perks are active immediately")}</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;
+    return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? menuIconSm("gift") : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">${t("hud.renderCheckout.PAreActiveImmediately", undefined, "Your perks are active immediately")}</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;
   }
   const item =
     s.checkoutSku === "sunbird_vip"

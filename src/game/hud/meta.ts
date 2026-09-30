@@ -36,22 +36,22 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
   // locale, a plain literal is the honest representation of its state.
   // --- Do This Now: time-sensitive actions ---
   const doNow: string[] = [];
-  if (!s.calendar.claimedToday) doNow.push(`<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>`);
-  if (s.canFreeSpin) doNow.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheel", undefined, "Daily Lucky Wheel")}</b><span>${t("hud.renderProgress.FSpinAvailableNow", undefined, "Free spin available now!")}</span></div><button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button></div>`);
-  if (s.piggyCoins >= PIGGY_BANK_MIN_SMASH) doNow.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>${t("hud.renderProgress.PBankReady", undefined, "Piggy Bank ready")}</b><span>● ${s.piggyCoins} coins saved — smash it!</span></div><button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button></div>`);
+  if (!s.calendar.claimedToday) doNow.push(`<button class="cal-strip" data-ui data-action="claim-calendar">${menuIconSm("calendar")} Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>`);
+  if (s.canFreeSpin) doNow.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">${menuIconSm("spin")}</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheel", undefined, "Daily Lucky Wheel")}</b><span>${t("hud.renderProgress.FSpinAvailableNow", undefined, "Free spin available now!")}</span></div><button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! ${menuIconSm("spin")}</button></div>`);
+  if (s.piggyCoins >= PIGGY_BANK_MIN_SMASH) doNow.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">${menuIconSm("piggy")}</span><div class="pc-body"><b>${t("hud.renderProgress.PBankReady", undefined, "Piggy Bank ready")}</b><span>● ${s.piggyCoins} coins saved — smash it!</span></div><button class="primary-btn gold" data-ui data-action="smash-piggy">Smash ${menuIconSm("hammer")}</button></div>`);
 
   // --- Collect section: non-urgent systems ---
   const collectSections: string[] = [];
-  if (!s.canFreeSpin) collectSections.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">🎡</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheelx", undefined, "Daily Lucky Wheel")}</b><span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys</span></div><button class="soft-btn" disabled>🎡 Tomorrow</button></div>`);
-  if (s.piggyCoins < PIGGY_BANK_MIN_SMASH) collectSections.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">🐷</span><div class="pc-body"><b>${t("hud.renderProgress.CPiggyBank", undefined, "Coin Piggy Bank")}</b><span>+20% flight bonus: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span></div><span class="tag need">${t("hud.renderProgress.FFill", undefined, "Fly to fill")}</span></div>`);
-  if (s.nestLevel >= 5 || s.prestigeLevel > 0) collectSections.push(`<div class="pc pc--purple pc-row"><span class="pc-icon">👑</span><div class="pc-body"><b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b><span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span></div><button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth 👑</button></div>`);
+  if (!s.canFreeSpin) collectSections.push(`<div class="pc pc--blue pc-row"><span class="pc-icon">${menuIconSm("spin")}</span><div class="pc-body"><b>${t("hud.renderProgress.DLuckyWheelx", undefined, "Daily Lucky Wheel")}</b><span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys</span></div><button class="soft-btn" disabled>${menuIconSm("spin")} Tomorrow</button></div>`);
+  if (s.piggyCoins < PIGGY_BANK_MIN_SMASH) collectSections.push(`<div class="pc pc--pink pc-row"><span class="pc-icon">${menuIconSm("piggy")}</span><div class="pc-body"><b>${t("hud.renderProgress.CPiggyBank", undefined, "Coin Piggy Bank")}</b><span>+20% flight bonus: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span></div><span class="tag need">${t("hud.renderProgress.FFill", undefined, "Fly to fill")}</span></div>`);
+  if (s.nestLevel >= 5 || s.prestigeLevel > 0) collectSections.push(`<div class="pc pc--purple pc-row"><span class="pc-icon">${menuIconSm("crown")}</span><div class="pc-body"><b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b><span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span></div><button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth ${menuIconSm("crown")}</button></div>`);
 
   return `${head(t("hud.progress.title", undefined, "Your progress"))}
     <div class="hero-meta">
       <span class="pill seed-pill">${s.seedLabel}</span>
       <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${menuIconSm(s.wings.icon)} ${s.wings.name}</span>
       <span class="pill">● ${formatNumberLocalized(s.wallet)}</span>
-      <span class="pill">🔥 ${s.streakDays}d</span>
+      <span class="pill">${menuIconSm("fire")} ${s.streakDays}d</span>
     </div>
     ${
       s.wings.nextNeeded > 0
@@ -62,7 +62,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
 
     ${doNow.length ? `<div class="section-title progress-do-now"><span>${t("hud.renderProgress.DNow", undefined, "Do this now")}</span></div>${doNow.join("")}` : ""}
 
-    ${sectionTitle("Today", "QUESTS &amp; GOALS")}
+    ${sectionTitle(null, "Today", "QUESTS &amp; GOALS")}
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}
 
@@ -72,7 +72,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
       <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
     </button>
 
-    ${sectionTitle("Career", "RANK &amp; WINGS")}
+    ${sectionTitle(null, "Career", "RANK &amp; WINGS")}
     <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
       <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
       <span class="rank-num">${s.rival.rating}</span>
@@ -81,7 +81,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
         s.rival.nextNeeded > 0
           ? `${formatNumberLocalized(s.rival.rating)} / ${formatNumberLocalized(Math.round(s.rival.rating + s.rival.nextNeeded))} to ${s.rival.nextName}`
           : "Top division — defend it"
-      } · 🔥${s.rival.streak} streak</span>
+      } · ${menuIconSm("fire")}${s.rival.streak} streak</span>
     </button>
     <div class="wallet-row">
       <span class="pill">Nest Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)}</span>
@@ -139,7 +139,7 @@ export function renderTrophies(s: Pick<HudSnapshot, "trophies" | "trophyCounts">
           .map((v) => {
             const pct = Math.min(100, (v.progress / v.def.target) * 100);
             return `<div class="trophy ${v.unlocked ? "unlocked" : ""} ${rarity}">
-              <div class="trophy-icon">${v.unlocked ? "🏆" : "🔒"}</div>
+              <div class="trophy-icon">${menuIconSm(v.unlocked ? "trophy" : "lock")}</div>
               <div class="trophy-name">${v.def.title}</div>
               <div class="trophy-desc">${v.def.desc}</div>
               ${v.unlocked ? "" : `<div class="qb"><i style="width:${pct}%"></i></div>`}
@@ -158,7 +158,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
   // goes on the board). Sign-in is offered only behind a button — Poki's docs
   // forbid prompting for an account on load.
   const portalAccount = s.portalName !== "none"
-    ? `${sectionTitle(`${PORTAL_DISPLAY_NAME} account`)}
+    ? `${sectionTitle(null, `${PORTAL_DISPLAY_NAME} account`)}
     <div class="sheet">
       ${
         s.portalAccountName
@@ -172,7 +172,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
   return `
     ${head(SCREEN.account)}
     ${portalAccount}
-    ${sectionTitle("Membership")}
+    ${sectionTitle(null, "Membership")}
     ${!SELL_AD_REMOVAL ? "" : `
     <div class="sheet">
       <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
@@ -194,7 +194,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
     </div>
     `}
 
-    ${sectionTitle("Invite friends")}
+    ${sectionTitle(null, "Invite friends")}
     <div class="sheet">
       <p class="tagline">Share your code — friends who redeem it get a welcome bonus on their device.</p>
       <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>
@@ -205,7 +205,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
       }
       ${s.referralMessage ? `<p class="note">${s.referralMessage}</p>` : ""}
     </div>
-    ${sectionTitle("Transfer saved progress")}
+    ${sectionTitle(null, "Transfer saved progress")}
     <div class="sheet">
       <p class="tagline">${t("hud.renderAccount.CCodeMoveProgressAnotherDevice", undefined, "Copy this code to move your progress to another device.")}</p>
       <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.ESaveCode", undefined, "Your exportable save code")}" readonly rows="3">${s.cloudCode}</textarea>
@@ -233,7 +233,7 @@ export function renderCampaign(s: Pick<HudSnapshot, "campaign" | "campaignDone" 
         )
         .join("");
       const cta = !ch.unlocked
-        ? `<span class="tag">🔒 Finish chapter ${ch.index} first</span>`
+        ? `<span class="tag">${menuIconSm("lock")} Finish chapter ${ch.index} first</span>`
         : ch.claimed
           ? `<span class="tag on">✓ ${formatNumberLocalized(ch.def.rewardCoins)} coins</span>`
           : ch.complete
@@ -280,7 +280,7 @@ export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" 
     .join("");
 
   const trails = s.trails.length
-    ? `${sectionTitle("Prize trails")}<div class="btn-row">${s.trails
+    ? `${sectionTitle(null, "Prize trails")}<div class="btn-row">${s.trails
         .map((t) => `<button class="soft-btn ${t.equipped ? "gold" : ""}" data-ui data-action="equip-trail" data-id="${t.id}">${t.equipped ? "✓ " : ""}${t.label}</button>`)
         .join("")}</div>`
     : "";
@@ -289,7 +289,7 @@ export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" 
   // nowhere, so the hardest prize in the game vanished on claim. Shown here
   // beside the prize trails, which is where won cosmetics already live.
   const titles = s.titles.length
-    ? `${sectionTitle("Prize titles")}<div class="btn-row">${s.titles
+    ? `${sectionTitle(null, "Prize titles")}<div class="btn-row">${s.titles
         .map((title) => `<span class="soft-btn prize-title" title="${t("hud.renderCups.wornBesideName", undefined, "Worn beside your name")}">♛ ${escapeHtml(title.label)}</span>`)
         .join("")}</div>`
     : "";
@@ -307,10 +307,10 @@ export function renderCups(s: Pick<HudSnapshot, "cups" | "lastPrize" | "titles" 
 
 export function rewardLabel(r: { kind: string; amount?: number; id?: string }): string {
   if (r.kind === "coins") return `● ${r.amount}`;
-  // Map through the catalogues. This printed the raw id — "🐦 paradise",
-  // "✨ star" — on a fifty-tier track, which is the game's own plumbing shown
-  // to the player as if it were a name.
-  if (r.kind === "skin") return `🐦 ${skinById(r.id ?? "").name}`;
-  if (r.kind === "trail") return `✨ ${TRAILS[r.id ?? ""]?.label ?? "Trail"}`;
-  return `🎁 ${r.id ?? "Reward"}`;
+  // Map through the catalogues. This printed the raw id — the skin's `paradise`,
+  // the trail's `star` — on a fifty-tier track, which is the game's own plumbing
+  // shown to the player as if it were a name.
+  if (r.kind === "skin") return `${menuIconSm("bird")} ${skinById(r.id ?? "").name}`;
+  if (r.kind === "trail") return `${menuIconSm("sparkle")} ${TRAILS[r.id ?? ""]?.label ?? "Trail"}`;
+  return `${menuIconSm("gift")} ${r.id ?? "Reward"}`;
 }

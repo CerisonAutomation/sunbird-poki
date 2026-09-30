@@ -3050,12 +3050,20 @@ export class Game {
     this.trail.setColor(c[0], c[1], c[2]);
     const show =
       this.state === "playing" &&
+      !this.save.state.settings.reduceMotion &&
       (this.feverOn || this.boostTimer > 0 || this.bird.speed() > 48 || ((this.gameplaySkin.magnetAlways || this.gameplaySkin.id === "aurora") && this.bird.speed() > 24));
     if (show) this.trail.push(this.bird.x, this.bird.y);
     this.trail.update(dt, show ? 1 : 0);
   }
 
   private emitTrail(dt: number): void {
+    // The ribbon and its sparkle/wing particles are WebGL, so the
+    // `sb-reduce-motion` CSS rule that covers the DOM flight HUD cannot reach
+    // them. Without this gate the Settings toggle silenced the camera and the
+    // popups but left both trails streaming behind the bird at full rate.
+    // The ribbon itself is gated in `updateTrailRibbon`, which owns its
+    // per-frame update — this only stops the particle emitters.
+    if (this.save.state.settings.reduceMotion) return;
     this.trailFxAcc -= dt;
     if (this.trailFxAcc > 0) return;
     this.trailFxAcc = this.bird.speed() > 82 ? 0.028 : 0.055;

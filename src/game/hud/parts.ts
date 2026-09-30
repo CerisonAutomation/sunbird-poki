@@ -83,7 +83,7 @@ export function renderScoreTable(rows: HighScore[]): string {
 
 export function renderRivalBanner(banner: string): string {
   const [name, dist] = banner.split("|");
-  return `<div class="rival-banner">🥊 <b>${escapeHtml(name)}</b> ${t("hud.rivalChallenge", undefined, "challenged you — beat")} <b>${escapeHtml(dist)} m</b> ${t("hud.rivalOnHills", undefined, "on their hills. Hold to fly.")}</div>`;
+  return `<div class="rival-banner">${menuIconSm("boxing")} <b>${escapeHtml(name)}</b> ${t("hud.rivalChallenge", undefined, "challenged you — beat")} <b>${escapeHtml(dist)} m</b> ${t("hud.rivalOnHills", undefined, "on their hills. Hold to fly.")}</div>`;
 }
 
 /** Compact top-wings leaderboard embedded on the main menu. */
@@ -105,13 +105,13 @@ export function aiRivalSection(s: Pick<HudSnapshot, "pvpModes" | "roomSize" | "r
         <div class="room-ctl"><span class="room-ctl-label">${t("hud.aiRivalSection.AOpponents", undefined, "AI opponents ")}<small>plus you</small></span><div class="seg" role="group" aria-label="${t("hud.aiRivalSection.AOpponentsx", undefined, "AI opponents")}">${[5, 10, 20, 40].map((n) => `<button data-ui data-action="room-size" data-id="${n}" aria-pressed="${s.roomSize === n}" class="${s.roomSize === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
         <div class="room-ctl"><span class="room-ctl-label">${t("hud.aiRivalSection.ASkill", undefined, "AI skill")}</span><div class="seg" role="group" aria-label="${t("hud.aiRivalSection.ASkillx", undefined, "AI skill")}">${(["chill", "sharp", "ace"] as const).map((k) => `<button data-ui data-action="room-skill" data-id="${k}" aria-pressed="${s.roomSkill === k}" class="${s.roomSkill === k ? "on" : ""}">${k === "chill" ? "Chill" : k === "sharp" ? "Sharp" : "Ace"}</button>`).join("")}</div></div>
       </div>
-      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${currentMode.name}</button>
+      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">${menuIconSm("robot")} Race the AI flock · ${currentMode.name}</button>
       <details class="practice-formats"><summary><h3>${t("hud.aiRivalSection.RFormats", undefined, "Race formats")}</h3></summary>
         <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
         ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${menuIconSm(m.icon)} ${m.name} · ${m.blurb}</button>`).join("")}
-        <button class="soft-btn wide" data-ui data-action="pvp-duel">⚔ 1v1 Seeded Rival Duel</button>
-        <button class="soft-btn wide" data-ui data-action="practice-storm">⛈ Stormfront Race · wild weather</button>
-        <button class="soft-btn wide" data-ui data-action="practice-ranked">🏆 40-Pilot Flock Grand Prix</button>
+        <button class="soft-btn wide" data-ui data-action="pvp-duel">${menuIconSm("swords")} 1v1 Seeded Rival Duel</button>
+        <button class="soft-btn wide" data-ui data-action="practice-storm">${menuIconSm("storm")} Stormfront Race · wild weather</button>
+        <button class="soft-btn wide" data-ui data-action="practice-ranked">${menuIconSm("trophy")} 40-Pilot Flock Grand Prix</button>
       </details>
     </section>`;
 }
@@ -130,7 +130,7 @@ export function boardSource(_s: Pick<HudSnapshot, never>): { chip: string; sente
     return { chip: LEADERBOARD_CLOUD_LABEL, sentence: `Scores sync to ${PORTAL_DISPLAY_NAME}'s worldwide board.` };
   }
   if (backend === "http") {
-    return { chip: "🌐 global", sentence: "Scores sync to the global leaderboard." };
+    return { chip: `${menuIconSm("globe")} global`, sentence: "Scores sync to the global leaderboard." };
   }
   // Portal builds name the portal: a Poki player reading "Local" on a Poki page
   // concludes the board is broken, when what is true is narrower — this build
@@ -141,5 +141,5 @@ export function boardSource(_s: Pick<HudSnapshot, never>): { chip: string; sente
   const offlineBench = "Rungs marked “Practice” are this device's benchmarks, not pilots.";
   return POKI_EDITION
     ? { chip: `${PORTAL_DISPLAY_NAME} · on-device`, sentence: `This build keeps scores on your device. ${offlineBench}` }
-    : { chip: "💾 local", sentence: `Rankings are stored on this device. Fly well to climb! ${offlineBench}` };
+    : { chip: `${menuIconSm("save")} local`, sentence: `Rankings are stored on this device. Fly well to climb! ${offlineBench}` };
 }

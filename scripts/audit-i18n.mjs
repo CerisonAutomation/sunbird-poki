@@ -22,9 +22,12 @@
  * heuristic):
  *   toast        — hud.toast(...) whose text is a literal, not a t() call
  *   screenTitle  — head("…") screen headings in the HUD render layer
+ *   sectionTitle — sectionTitle("…") mid-screen headings
  *   ariaLabel    — aria-label="…" written as a literal (screen-reader users are
  *                  players too, and they get English-only announcements)
  *   buttonLabel  — <button …>Plain words</button> with no interpolation and no t()
+ *   iconButtonLabel — <button …>icon + Plain words</button>, the same shape with a
+ *                  leading ${menuIconSm(…)} or a raw emoji before the words
  *
  * Run from the repo root. Exits 1 when any category is above its baseline.
  */
@@ -60,7 +63,16 @@ const CATEGORIES = [
     // account, squad, race and shop sheets, every screen's headings, with no
     // category to count them. The gate reported 301 debt and was silent about
     // all of it. `sectionTitle(t("k", …), …)` does not count.
-    re: /\bsectionTitle\(\s*"(?:[^"\\]|\\.)*"/g,
+    //
+    // The signature is `sectionTitle(icon, main, sub?)`, so the copy is the
+    // SECOND argument and the first one is an icon name — `sectionTitle("trophy",
+    // "Tournament Rank Prizes")` is untranslated even though it is full of
+    // quotes. Anchoring on the first argument (the earlier attempt here) counted
+    // the icon as copy and hid the heading behind it, which is the same blind
+    // spot wearing a different hat. So: first argument, then a comma, then a
+    // string. `[^,]+` is the icon slot — it never contains a comma — and the
+    // required `"` after the comma excludes an already-wrapped `t(…)` heading.
+    re: /\bsectionTitle\([^,]+,\s*"/g,
   },
   {
     id: "ariaLabel",
@@ -72,6 +84,19 @@ const CATEGORIES = [
     label: "<button>Plain words</button>",
     // Only buttons whose whole label is static words: no `${`, no tag inside.
     re: /<button\b[^>]*>[A-Za-z][A-Za-z0-9 ,'’&·.!?:-]{2,}<\/button>/g,
+  },
+  {
+    id: "iconButtonLabel",
+    label: "<button>icon + Plain words</button>",
+    // The house style for every primary action: artwork, then words
+    // (`☀ FLY THE CHALLENGE` was always this shape). `buttonLabel` above
+    // demands an ASCII letter as the FIRST character of the label, so it could
+    // not see a leading emoji — and after the SVG conversion it cannot see a
+    // leading `${menuIconSm(…)}` either. Same blind spot, new syntax: the icon
+    // moved from a glyph to a call and the button stayed just as invisible.
+    //
+    // Both forms are matched so a regression to a raw emoji is caught too.
+    re: /<button\b[^>]*>\s*(?:\$\{(?:menuIconSm|menuIcon)\("[a-z0-9_]+"\)\}|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}])\s*[A-Za-z][A-Za-z0-9 ,'’&·.!?:;×/→-]{2,}<\/button>/gu,
   },
 ];
 

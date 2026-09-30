@@ -1,11 +1,13 @@
 {
-  "generated": "2026-09-29",
-  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-29: the toast floor moved 220 -> 267 because Game.ts grew ~990 lines carrying 47 new hud.toast() literals in English. That is a real loss of translated coverage, recorded here rather than hidden; it does not block the Poki build because untranslated copy falls back to English through defaultText and the portal is English-language. The point of the re-bless is that the gate now catches the NEXT 47. In the same window aria-labels fell 45 -> 12 and button labels 48 -> 22, so total debt still dropped 313 -> 301.",
+  "generated": "2026-09-30",
+  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-30: total 301 -> 255. ariaLabel 12 -> 0, buttonLabel 22 -> 0, toast 267 -> 249. Two categories were ADDED in this window, so the win is larger than the count suggests: iconButtonLabel (9 -> 0) is new, and sectionTitle (6) is new because the existing category was anchored on the wrong argument. sectionTitle's signature is (icon, main, sub?), so the old pattern matched the ICON name and treated it as copy — which then HID the heading behind it. It is now anchored on the comma-separated second argument. Six headings on the Challenges screen are counted here for the first time; they are counted, not fixed, and the number is the honest one. The iconButtonLabel category exists because the buttonLabel regex demands an ASCII letter as the first character of the label, so it could not see a leading emoji — and after the SVG conversion it could not see a leading ${menuIconSm(...)} either. Same blind spot, new syntax.",
   "categories": {
-    "toast": 267,
+    "toast": 249,
     "screenTitle": 0,
-    "ariaLabel": 12,
-    "buttonLabel": 22
+    "sectionTitle": 6,
+    "ariaLabel": 0,
+    "buttonLabel": 0,
+    "iconButtonLabel": 0
   },
-  "total": 301
+  "total": 255
 }

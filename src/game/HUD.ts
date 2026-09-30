@@ -1,6 +1,6 @@
 import { newShopBrowse } from "./ShopBrowse";
 
-import { menuIcon, menuIconSm, menuHorizon, arrowUpRightSvg, arrowRightSvg } from "./MenuIcons";
+import { menuIcon, menuIconSm, menuHorizon, arrowUpRightSvg, arrowRightSvg, iconGlyph, type SmIconName } from "./MenuIcons";
 
 import { flockLoadingMark } from "./FlockLoading";
 // Only what the home menu actually renders. `renderMain` lays every section
@@ -99,6 +99,25 @@ type ActionHandler = (action: string, id: string) => void;
 export function emoteWheelVisible(s: Pick<HudSnapshot, "massRace">): boolean {
   return Boolean(s.massRace);
 }
+
+/**
+ * The emote picker's `[wire id, artwork, label]`.
+ *
+ * The FIRST entry is the wire value and is the emoji itself: it is what
+ * `data-id` carries, what `sendEmote` broadcasts and what the receiving pilot
+ * renders in their emote bubble. That payload is a multiplayer contract —
+ * changing it would silently break every client already on the network, so it
+ * stays exactly as it was. The SECOND entry is only the artwork drawn in the
+ * button, and that is an inline SVG now.
+ */
+const EMOTE_CHOICES: readonly (readonly [string, SmIconName, string])[] = [
+  ["👋", "wave", "Wave"],
+  ["🔥", "fire", "Fire"],
+  ["😂", "laugh", "Laugh"],
+  ["🙌", "bravo", "Bravo"],
+  ["👑", "crown", "Crown"],
+  ["🤝", "handshake", "GG"],
+];
 
 export class HUD {
   readonly root: HTMLDivElement;
@@ -322,8 +341,8 @@ export class HUD {
         <div class="finish-countdown hidden" data-ref="finishCd"></div>
         <div class="emote-bubble hidden" data-ref="emoteBubble" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="emote-wheel hidden" data-ref="emoteWheel">
-          <button class="emotes-toggle" data-ui data-action="toggle-emotes" aria-expanded="false" aria-controls="flight-emotes">💬 Emotes</button>
-          <div class="emote-options hidden" id="flight-emotes">${[["👋", "Wave"], ["🔥", "Fire"], ["😂", "Laugh"], ["🙌", "Bravo"], ["👑", "Crown"], ["🤝", "GG"]].map(([icon, label]) => `<button data-ui data-action="emote" data-id="${icon}" aria-label="Send ${label}" title="Send ${label}">${icon} ${label}</button>`).join("")}</div>
+          <button class="emotes-toggle" data-ui data-action="toggle-emotes" aria-expanded="false" aria-controls="flight-emotes">${menuIconSm("chat")} ${t("hud.emotes.label", undefined, "Emotes")}</button>
+          <div class="emote-options hidden" id="flight-emotes">${EMOTE_CHOICES.map(([id, icon, label]) => `<button data-ui data-action="emote" data-id="${id}" aria-label="Send ${label}" title="Send ${label}">${menuIconSm(icon)} ${label}</button>`).join("")}</div>
         </div>
         <div class="mid-meta">
           <div class="island-chip" data-ref="island">${t("hud.ui.I1", undefined, "Island 1")}</div>
@@ -338,16 +357,16 @@ export class HUD {
              until the first hoop of a chain, then it counts down the window so
              the player can see the next ring is still worth diving for. -->
         <div class="ring-chain hidden" data-ref="ringChain">
-          <span class="ring-chain-icon" aria-hidden="true">🔥</span>
+          <span class="ring-chain-icon" aria-hidden="true">${menuIconSm("fire")}</span>
           <b data-ref="ringChainCount">×2</b>
           <i><s data-ref="ringChainFill"></s></i>
         </div>
         <!-- Colorblind-friendly: the flow chain used to be identified only by a
-             coral-on-teal color and an ambiguous 〽 glyph — a shape cue (📐) plus
-             a fill bar mirror the ring chain's own icon + count + bar pattern so
-             color is never the only signal. -->
+             coral-on-teal color and an ambiguous 〽 glyph — a shape cue (a ruler)
+             plus a fill bar mirror the ring chain's own icon + count + bar
+             pattern so color is never the only signal. -->
         <div class="slope-chain hidden" data-ref="slopeChain">
-          <span class="slope-chain-icon" aria-hidden="true">📐</span>
+          <span class="slope-chain-icon" aria-hidden="true">${menuIconSm("ruler")}</span>
           <span data-ref="slopeChainText">FLOW ×1</span>
           <i><s data-ref="slopeChainFill"></s></i>
         </div>
@@ -356,16 +375,16 @@ export class HUD {
           <div class="fever-bar"><div class="fever-fill" data-ref="feverFill"></div></div>
         </div>
         <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
-        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="Pause">❙❙</button>
+        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">❙❙</button>
         <div class="combo" data-ref="combo"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="hand" data-ref="hand">☝<span class="hand-hint" data-ref="handHint"></span></div>
+        <div class="hand" data-ref="hand">${menuIconSm("hand")}<span class="hand-hint" data-ref="handHint"></span></div>
         <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
       </div>
 
       <div class="overlay menu hidden" data-ref="menu"><div class="paper-card" data-ref="menuCard"></div></div>
 
-      <div class="overlay pause hidden" data-ref="pause" role="dialog" aria-modal="true" aria-label="Paused">
+      <div class="overlay pause hidden" data-ref="pause" role="dialog" aria-modal="true" aria-label="${t("hud.aria.paused", undefined, "Paused")}">
         <div class="paper-card slim pause-card">
           <div class="pause-kicker">${t("hud.ui.FHOLD", undefined, "FLIGHT ON HOLD")}</div>
           <h2>${t("hud.ui.TBreath", undefined, "Take a breath")}</h2>
@@ -433,9 +452,9 @@ export class HUD {
         <div class="matchmaking-rooms hidden" data-ref="matchmakingRooms"></div>
         <div class="btn-row mm-actions">
           <button class="primary-btn mm-ready hidden" data-ui data-ref="matchmakingReady" data-action="mm-ready">Ready up ✓</button>
-          <button class="primary-btn gold mm-ai hidden" data-ui data-ref="matchmakingAi" data-action="mm-ai">🤖 Race the AI flock instead</button>
+          <button class="primary-btn gold mm-ai hidden" data-ui data-ref="matchmakingAi" data-action="mm-ai">${menuIconSm("robot")} ${t("hud.mm.aiInstead", undefined, "Race the AI flock instead")}</button>
           <button class="soft-btn mm-keep hidden" data-ui data-ref="matchmakingKeep" data-action="mm-keep-search">${t("hud.ui.KSearching", undefined, "Keep searching")}</button>
-          <button class="soft-btn mm-cancel" data-ui data-action="mm-cancel">Cancel</button>
+          <button class="soft-btn mm-cancel" data-ui data-action="mm-cancel">${t("common.cancel", undefined, "Cancel")}</button>
         </div>
       </div>
     `;
@@ -705,7 +724,7 @@ export class HUD {
     // Backticks, not single quotes. With `'…'` the ${t(...)} expressions were
     // emitted as literal text, so the dialog heading literally read
     // `${t("hud.ui.CManually", …)}` in every locale.
-    dialog.innerHTML = `<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>`;
+    dialog.innerHTML = `<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">${t("common.done", undefined, "Done")}</button></div>`;
     const field = dialog.querySelector("textarea")!;
     field.value = text; // never inject codes/URLs as markup
     this.root.appendChild(dialog);
@@ -955,7 +974,7 @@ export class HUD {
         const ahead = s.ghostDelta >= 0;
         // The arrow is a shape cue that survives colorblindness — the
         // ahead/behind background tint alone (green vs. coral) is not enough.
-        this.ghostChip.textContent = `👻 ${ahead ? "▲" : "▼"} ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
+        this.ghostChip.innerHTML = `${menuIconSm("ghost")} ${ahead ? "▲" : "▼"} ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
         this.ghostChip.classList.toggle("ahead", ahead);
         this.ghostChip.classList.toggle("behind", !ahead);
       }
@@ -995,17 +1014,17 @@ export class HUD {
 
       // Timed power-ups live ONLY in the power strip (countdown bars) — chips
       // here double-printed the same power-up (the old bug: pickup magnet fed
-      // both magnetTimer AND PowerUps, so "🧲" showed twice). Chips remain as
-      // a fallback for armed-boost timers the strip doesn't know about, plus
+      // both magnetTimer AND PowerUps, so the magnet showed twice). Chips remain
+      // as a fallback for armed-boost timers the strip doesn't know about, plus
       // shield stock and weather calls to action.
       const chips: string[] = [];
       if (s.boostTimer > 0 && !s.powers.some((p) => p.kind === "rocket"))
-        chips.push(`<span class="pchip boost">🚀 boost</span>`);
+        chips.push(`<span class="pchip boost">${menuIconSm("rocket")} boost</span>`);
       if (s.magnetTimer > 0 && !s.powers.some((p) => p.kind === "magnet"))
-        chips.push(`<span class="pchip magnet">🧲 ${Math.ceil(s.magnetTimer)}s</span>`);
-      if (s.shield > 0) chips.push(`<span class="pchip shield">🛡 ×${s.shield}</span>`);
-      if (s.gust > 0.3) chips.push(`<span class="pchip gust">🌬 headwind — dive!</span>`);
-      if (s.inThermal) chips.push(`<span class="pchip thermal">♨ thermal — release!</span>`);
+        chips.push(`<span class="pchip magnet">${menuIconSm("magnet")} ${Math.ceil(s.magnetTimer)}s</span>`);
+      if (s.shield > 0) chips.push(`<span class="pchip shield">${menuIconSm("shield")} ×${s.shield}</span>`);
+      if (s.gust > 0.3) chips.push(`<span class="pchip gust">${menuIconSm("wind")} headwind — dive!</span>`);
+      if (s.inThermal) chips.push(`<span class="pchip thermal">${menuIconSm("thermal")} thermal — release!</span>`);
       const html = chips.join("");
 
       if (s.combo !== this.lastCombo) {
@@ -1151,7 +1170,7 @@ export class HUD {
         // Trophy progress: lowest priority — only when a slot is still free.
         if (nt && rows.length < 2) {
           const tpct = Math.min(100, (nt.progress / nt.def.target) * 100);
-          rows.push(`<span class="gs gs-trophy"><em>🏆 ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs gs-trophy"><em>${menuIconSm("trophy")} ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
         }
 
         this.goalStrip.innerHTML = rows.join("");
@@ -1216,7 +1235,7 @@ export class HUD {
           const gapTxt = !you || you.finished ? "FINISHED" : you.place === 1 ? "LEADER" : `-${gapM}m`;
           this.rosterBar.innerHTML =
             `<div class="roster-top"><span class="rp-place ${you && you.place <= 3 ? "podium" : ""}">${placeTxt}</span>` +
-            `<span class="rm-lead">👑 ${escapeHtml(leader ? leader.name : "—")}</span>` +
+            `<span class="rm-lead">${menuIconSm("crown")} ${escapeHtml(leader ? leader.name : "—")}</span>` +
             `<span class="rm-gap">${gapTxt}</span>` +
             `<span class="rm-count">${s.roster.length} birds</span>` +
             `${s.roomCode ? `<span class="rm-room">ROOM ${escapeHtml(s.roomCode)}</span>` : ""}` +
@@ -1278,9 +1297,9 @@ export class HUD {
             `<div class="st-head"><span>LIVE</span><span>${s.standings.length} shown</span></div>` +
             s.standings
               .map((r) => {
-                const gap = top && r.place > top.place ? `-${Math.max(0, Math.round(top.distance - r.distance))}m` : r.finished ? "🏁" : "—";
+                const gap = top && r.place > top.place ? `-${Math.max(0, Math.round(top.distance - r.distance))}m` : r.finished ? menuIconSm("flag") : "—";
                 return `<div class="st-row ${r.you ? "you" : ""} ${r.kind === "remote" ? "remote" : ""} ${r.place <= 3 ? "p" + r.place : ""}">
-                <span class="st-p">${r.place <= 3 ? ["🥇", "🥈", "🥉"][r.place - 1] : r.place}</span>
+                <span class="st-p">${r.place <= 3 ? menuIconSm(["medal_1", "medal_2", "medal_3"][r.place - 1]) : r.place}</span>
                 <span class="st-n">${escapeHtml(r.name)}${r.kind === "remote" ? " ⇄" : ""}</span>
                 <span class="st-d">${r.you || r.place <= 3 ? `${Math.round(r.distance)}m` : gap}</span>
               </div>`;
@@ -1298,8 +1317,8 @@ export class HUD {
           this.lastVersusKey = vkey;
           const lead1 = s.p1Stats.distance >= s.p2Stats.distance;
           this.versusBar.innerHTML =
-            `<div class="vs-row p1 ${lead1 ? "lead" : ""}"><span>P1${lead1 ? " 👑" : ""}</span><i><b style="width:${pct(s.p1Stats.distance)}%"></b></i><em>${Math.round(s.p1Stats.distance)}m</em></div>` +
-            `<div class="vs-row p2 ${lead1 ? "" : "lead"}"><span>P2${lead1 ? "" : " 👑"}</span><i><b style="width:${pct(s.p2Stats.distance)}%"></b></i><em>${Math.round(s.p2Stats.distance)}m</em></div>` +
+            `<div class="vs-row p1 ${lead1 ? "lead" : ""}"><span>P1${lead1 ? ` ${menuIconSm("crown")}` : ""}</span><i><b style="width:${pct(s.p1Stats.distance)}%"></b></i><em>${Math.round(s.p1Stats.distance)}m</em></div>` +
+            `<div class="vs-row p2 ${lead1 ? "" : "lead"}"><span>P2${lead1 ? "" : ` ${menuIconSm("crown")}`}</span><i><b style="width:${pct(s.p2Stats.distance)}%"></b></i><em>${Math.round(s.p2Stats.distance)}m</em></div>` +
             `<div class="versus-guide"><span>P1: A / Space · ${s.splitLayout === "horizontal" ? "top" : "left"}</span><span>P2: L / Enter · ${s.splitLayout === "horizontal" ? "bottom" : "right"}</span></div>`;
         }
       }
@@ -1680,10 +1699,10 @@ export class HUD {
     const btns = this.root.querySelectorAll<HTMLButtonElement>('[data-action="toggle-fullscreen"]');
     for (const b of btns) {
       if (b.classList.contains("menu-fullscreen")) {
-        b.textContent = active ? "🗗" : "⛶";
+        b.textContent = active ? iconGlyph("fullscreen_exit") : iconGlyph("fullscreen");
         b.title = active ? "Exit Fullscreen" : "Full Screen";
       } else if (b.textContent?.includes("Fullscreen")) {
-        b.textContent = active ? "🗗 Exit Fullscreen" : "⛶ Fullscreen mode";
+        b.textContent = active ? `${iconGlyph("fullscreen_exit")} Exit Fullscreen` : `${iconGlyph("fullscreen")} Fullscreen mode`;
       }
     }
   }
@@ -1750,14 +1769,14 @@ function renderBoard(s: HudSnapshot): string {
       ? `<span class="board-badge warn">${t("hud.renderBoard.OShowingCached", undefined, "Offline — showing cached")}</span>`
       : `<span class="board-badge live">${source.chip}</span>`;
 
-  const medals = ["🥇", "🥈", "🥉"];
+  const medals = ["medal_1", "medal_2", "medal_3"] as const;
   const rows =
     page && page.entries.length
       ? `<div class="board-podium">${page.entries
           .slice(0, 3)
           .map(
             (e, i) => `<div class="pod p${i + 1} ${e.you ? "you" : ""}">
-              <span class="pod-medal">${medals[i]}</span>
+              <span class="pod-medal">${menuIconSm(medals[i])}</span>
               <span class="pod-name">${escapeHtml(e.name)}</span>
               <span class="pod-val">${fmt(e.value)}</span>
             </div>`,
@@ -1786,33 +1805,33 @@ function renderBoard(s: HudSnapshot): string {
     <div class="board-list">${rows}</div>
     ${page && page.yourRank > 0 ? `<div class="board-rank">${t("hud.renderBoard.R", undefined, "Your rank · ")}<b>#${page.yourRank}</b> of ${page.total}</div>` : ""}
     ${s.portalLeaderboard
-      ? `<button class="soft-btn wide" data-ui data-action="open-portal-leaderboard">🏆 ${PORTAL_DISPLAY_NAME} leaderboard</button>`
+      ? `<button class="soft-btn wide" data-ui data-action="open-portal-leaderboard">${menuIconSm("trophy")} ${PORTAL_DISPLAY_NAME} leaderboard</button>`
       : ""}
     ${
       CUSTOM_PILOT_NAMES
         ? `<div class="redeem pilot-name-row">
-      <input data-ui data-ref="pilotName" aria-label="Pilot name" maxlength="14" placeholder="Pilot name" value="${escapeHtml(s.pilotName)}" />
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.ARandomPilotName", undefined, "Autogenerate random pilot name")}">🎲 Random</button>
-      <button class="mini-btn primary" data-ui data-action="rename-pilot">Save</button>
+      <input data-ui data-ref="pilotName" aria-label="${t("hud.aria.pilotName", undefined, "Pilot name")}" maxlength="14" placeholder="${t("hud.aria.pilotName", undefined, "Pilot name")}" value="${escapeHtml(s.pilotName)}" />
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.ARandomPilotName", undefined, "Autogenerate random pilot name")}">${menuIconSm("dice")} ${t("common.random", undefined, "Random")}</button>
+      <button class="mini-btn primary" data-ui data-action="rename-pilot">${t("common.save", undefined, "Save")}</button>
     </div>`
         : /* Portal editions broadcast this name to real players, so it is a
            curated generated name rather than free text — read-only display
            plus the dice, no typing surface at all. */
           `<div class="redeem pilot-name-row">
       <span class="pilot-name-readonly" aria-label="${t("hud.renderBoard.PName", undefined, "Pilot name")}">${escapeHtml(s.pilotName)}</span>
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.RNewPilotName", undefined, "Roll a new pilot name")}">🎲 Random</button>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.RNewPilotName", undefined, "Roll a new pilot name")}">${menuIconSm("dice")} ${t("common.random", undefined, "Random")}</button>
     </div>`
     }
     <div class="prize-card">
-      ${sectionTitle("🏆 Tournament Rank Prizes")}
+      ${sectionTitle("trophy", "Tournament Rank Prizes")}
       <div class="prize-grid">
-        <div class="prize-tier gold"><span>🥇 ${t("hud.rank.peak", undefined, "Peak rating")}</span><b>${seasonReward(s.rival.rating).division.name} &middot; ${seasonReward(s.rival.rating).coins} coins</b></div>
-        <div class="prize-tier silver"><span>🥈 ${t("hud.rank.now", undefined, "You now")}</span><b>${escapeHtml(s.rival.division ?? seasonReward(s.rival.rating).division.name)}</b></div>
-        <div class="prize-tier bronze"><span>🥉 ${t("hud.rank.resets", undefined, "Resets")}</span><b>${t("hud.rank.resetsBody", undefined, "every month")}</b></div>
+        <div class="prize-tier gold"><span>${menuIconSm("medal_1")} ${t("hud.rank.peak", undefined, "Peak rating")}</span><b>${seasonReward(s.rival.rating).division.name} &middot; ${seasonReward(s.rival.rating).coins} coins</b></div>
+        <div class="prize-tier silver"><span>${menuIconSm("medal_2")} ${t("hud.rank.now", undefined, "You now")}</span><b>${escapeHtml(s.rival.division ?? seasonReward(s.rival.rating).division.name)}</b></div>
+        <div class="prize-tier bronze"><span>${menuIconSm("medal_3")} ${t("hud.rank.resets", undefined, "Resets")}</span><b>${t("hud.rank.resetsBody", undefined, "every month")}</b></div>
       </div>
       ${s.rankPrizeClaimed
         ? `<div class="pc-claimed" style="width:100%; justify-content:center; padding:8px;">✓ Claimed · next prize at the season rollover</div>`
-        : `<button class="primary-btn gold wide" data-ui data-action="claim-rank-prize">Claim Rank Prize 🏆</button>`}
+        : `<button class="primary-btn gold wide" data-ui data-action="claim-rank-prize">Claim Rank Prize ${menuIconSm("trophy")}</button>`}
     </div>
     <button class="soft-btn wide" data-ui data-action="board-refresh">${s.boardLoading ? "Refreshing…" : "↻ Refresh"}</button>
     <p class="fineprint">${source.sentence}</p>
@@ -1828,24 +1847,24 @@ function renderChallenges(s: HudSnapshot): string {
       <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched</span></div>
       <p class="fineprint">${t("hud.renderChallenges.WFormatAreMatchedWhoeverSAvailableJumpRace", undefined, "World and format are matched to whoever's available — jump in and race.")}</p>
       <div class="quick-match-btns challenge-actions">
-        <button class="primary-btn gold wide" data-ui data-action="quick-match-shuffle">⚡ Race Now · random match</button>
-        <button class="soft-btn wide" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">🤖 vs AI flock · instant</button>
+        <button class="primary-btn gold wide" data-ui data-action="quick-match-shuffle">${menuIconSm("lightning")} ${t("hud.quickMatch.randomRace", undefined, "Race Now · random match")}</button>
+        <button class="soft-btn wide" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">${menuIconSm("robot")} ${t("hud.pvp.vsAiInstant", undefined, "vs AI flock · instant")}</button>
       </div>
     </section>`;
   const daily = `
-    ${sectionTitle("Daily challenge", "resets at midnight")}
+    ${sectionTitle(null, "Daily challenge", "resets at midnight")}
     <div class="daily-card ${d.done ? "done" : ""}">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(d.modeIcon)}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
       <div class="daily-mod"><b>${menuIconSm(d.modifierIcon)} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
       ${
         d.done
           ? `<div class="reward-strip">✓ Complete · come back tomorrow (${d.dailiesDone} lifetime)</div>`
-          : `<button class="primary-btn" data-ui data-action="play-daily">☀ FLY THE CHALLENGE</button>`
+          : `<button class="primary-btn" data-ui data-action="play-daily">${menuIconSm("sun")} ${t("hud.daily.flyChallenge", undefined, "FLY THE CHALLENGE")}</button>`
       }
     </div>`;
 
   const gauntlet = `
-    ${sectionTitle("Weekly gauntlet", "3 stages · resets Monday")}
+    ${sectionTitle(null, "Weekly gauntlet", "3 stages · resets Monday")}
     <div class="gauntlet">
       ${g.stages
         .map(
@@ -1856,11 +1875,11 @@ function renderChallenges(s: HudSnapshot): string {
           </div>`,
         )
         .join("")}
-      <div class="g-bonus ${g.cleared ? "done" : ""}">${g.cleared ? `🏆 Gauntlet cleared this week · +${g.clearBonus} paid` : `Clear all 3 → +${g.clearBonus} coins`}${g.lifetimeClears > 0 ? ` · ${g.lifetimeClears} lifetime clears` : ""}</div>
+      <div class="g-bonus ${g.cleared ? "done" : ""}">${g.cleared ? `${menuIconSm("trophy")} Gauntlet cleared this week · +${g.clearBonus} paid` : `Clear all 3 → +${g.clearBonus} coins`}${g.lifetimeClears > 0 ? ` · ${g.lifetimeClears} lifetime clears` : ""}</div>
     </div>`;
 
   const calendar = `
-    ${sectionTitle("Login calendar", `day ${c.cycleDay || "—"} of 28`)}
+    ${sectionTitle(null, "Login calendar", `day ${c.cycleDay || "—"} of 28`)}
     <div class="cal-grid">
       ${c.days
         .map(
@@ -1871,12 +1890,12 @@ function renderChallenges(s: HudSnapshot): string {
     </div>
     ${
       c.claimedToday
-        ? `<div class="reward-strip">📅 Today's gift claimed — see you tomorrow</div>`
-        : `<button class="primary-btn" data-ui data-action="claim-calendar">📅 CLAIM TODAY'S GIFT</button>`
+        ? `<div class="reward-strip">${menuIconSm("calendar")} Today's gift claimed — see you tomorrow</div>`
+        : `<button class="primary-btn" data-ui data-action="claim-calendar">${menuIconSm("calendar")} ${t("hud.daily.claimGift", undefined, "CLAIM TODAY’S GIFT")}</button>`
     }`;
 
   const mastery = `
-    ${sectionTitle("Mode mastery", "fly every mode")}
+    ${sectionTitle(null, "Mode mastery", "fly every mode")}
     <div class="mastery-list">
       ${s.mastery
         .map(
@@ -1899,7 +1918,7 @@ function renderChallenges(s: HudSnapshot): string {
   const th = s.monthlyTheme;
   const trailDone = s.themeTrailClaimed;
   const event = `
-    ${sectionTitle("Live event", "new twist every week")}
+    ${sectionTitle(null, "Live event", "new twist every week")}
     <div class="event-card">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
       <div class="event-meta"><span>Fly ${formatNumberLocalized(ev.target)} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
@@ -1907,7 +1926,7 @@ function renderChallenges(s: HudSnapshot): string {
       <div class="theme-strip ${trailDone ? "done" : ""}">
         <span class="theme-icon">${menuIconSm(th.icon)}</span>
         <div class="theme-body"><b>${th.name}</b><em>${escapeHtml(th.tagline)}</em></div>
-        <span class="theme-prog">${trailDone ? "✨ trail claimed" : `${Math.min(s.eventClearsMonth, s.themeTrailNeed)}/${s.themeTrailNeed} clears → trail`}</span>
+        <span class="theme-prog">${trailDone ? `${menuIconSm("sparkle")} trail claimed` : `${Math.min(s.eventClearsMonth, s.themeTrailNeed)}/${s.themeTrailNeed} clears → trail`}</span>
       </div>
     </div>`;
 
@@ -1942,10 +1961,10 @@ function renderAtlas(s: HudSnapshot): string {
     </div>
     <div class="field-guide">
       <div class="mission-head">${t("hud.fieldGuide", undefined, "Field guide")}</div>
-      <div class="fg-row"><b>♨ Thermals</b> Shimmering columns. Release inside one to ride it up.</div>
-      <div class="fg-row"><b>🌬 Headwinds</b> Slow you in the air. Hold to tuck and punch through.</div>
-      <div class="fg-row"><b>🌩 Ash storms</b> Sap your speed. Fly beneath them, or dive early.</div>
-      <div class="fg-row"><b>❄ Snow caps</b> Just pretty — but the peaks are taller. Build speed before them.</div>
+      <div class="fg-row"><b>${menuIconSm("thermal")} Thermals</b> Shimmering columns. Release inside one to ride it up.</div>
+      <div class="fg-row"><b>${menuIconSm("wind")} Headwinds</b> Slow you in the air. Hold to tuck and punch through.</div>
+      <div class="fg-row"><b>${menuIconSm("ash_storm")} Ash storms</b> Sap your speed. Fly beneath them, or dive early.</div>
+      <div class="fg-row"><b>${menuIconSm("snowflake")} Snow caps</b> Just pretty — but the peaks are taller. Build speed before them.</div>
     </div>
   `;
 }
@@ -1991,12 +2010,12 @@ function renderNameEntry(s: HudSnapshot): string {
           />
           <div class="name-char-count"><span>${s.pilotName.length}</span>/14</div>
         </div>
-        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="${t("hud.homeBoardStrip.SName", undefined, "Suggest a name")}" aria-label="${t("hud.homeBoardStrip.RName", undefined, "Random name")}">🎲</button>
+        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="${t("hud.homeBoardStrip.SName", undefined, "Suggest a name")}" aria-label="${t("hud.homeBoardStrip.RName", undefined, "Random name")}">${menuIconSm("dice")}</button>
       </div>`
     : `<span class="name-entry-label">${t("hud.renderNameEntry.CSignx", undefined, "Your call sign")}</span>
       <div class="name-input-row">
-        <span class="pilot-name-readonly name-entry-plate" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Roll a new name" aria-label="Random name">🎲</button>
+        <span class="pilot-name-readonly name-entry-plate" aria-label="${t("hud.aria.pilotName", undefined, "Pilot name")}">${escapeHtml(s.pilotName)}</span>
+        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Roll a new name" aria-label="${t("hud.aria.randomName", undefined, "Random name")}">${menuIconSm("dice")}</button>
       </div>`;
 
   return `
@@ -2015,7 +2034,7 @@ function renderNameEntry(s: HudSnapshot): string {
 
       <label class="name-language" for="welcome-language-select">
         <span>${t("hud.renderNameEntry.LIdioma", undefined, "Language / Idioma")}</span>
-        <select id="welcome-language-select" data-ui data-action="set-language" aria-label="Choose language">
+        <select id="welcome-language-select" data-ui data-action="set-language" aria-label="${t("hud.aria.chooseLanguage", undefined, "Choose language")}">
           ${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}
         </select>
       </label>
@@ -2061,7 +2080,7 @@ function homeBoardStrip(s: HudSnapshot): string {
   return `
     <button class="home-board" data-ui data-action="open-board" aria-label="${t("hud.renderOnboardingRoute.OLeaderboards", undefined, "Open the leaderboards")}">
       <span class="hb-head">
-        <span class="hb-title">🏆 Top pilots</span>
+        <span class="hb-title">${menuIconSm("trophy")} Top pilots</span>
         <span class="hb-go">All boards ›</span>
       </span>
       ${rows.length
@@ -2091,10 +2110,10 @@ function renderDailyRitualBanner(s: HudSnapshot): string {
   // child control was a dismiss, which is a way to make the problem go away.
   return `<div class="pc pc--gold pc-row daily-ritual-banner">
     <button class="pc-open" data-ui data-action="open-challenges">
-    <span class="pc-icon">☀️</span>
+    <span class="pc-icon">${menuIconSm("sun")}</span>
     <div class="pc-body"><b>${t("hud.renderDailyRitualBanner.DChallengeReady", undefined, "Daily Challenge ready!")}</b><span>+${s.daily.reward} coins waiting — open ›</span></div>
     </button>
-    <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="Dismiss">✕</button>
+    <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="${t("hud.aria.dismiss", undefined, "Dismiss")}">✕</button>
   </div>`;
 }
 
@@ -2115,7 +2134,7 @@ function renderTournamentCountdown(s: HudSnapshot): string {
   // progress screen) rather than inventing unstyled markup — same visual
   // language for "a clock is running on this", different destination.
   return `<button class="event-strip" data-ui data-action="open-cups" aria-label="${t("hud.renderMain.VTournaments", undefined, "View tournaments")}">
-    <span class="ds-icon">🏆</span>
+    <span class="ds-icon">${menuIconSm("trophy")}</span>
     <span class="ds-body">${escapeHtml(card?.text ?? t("hud.tournaments.idle", undefined, "Weekly score challenges"))}</span>
     <span class="ds-go">›</span>
   </button>`;
@@ -2240,7 +2259,7 @@ function renderMain(s: HudSnapshot): string {
       aria-pressed="${s.settings.mute ? "true" : "false"}"
       aria-label="${s.settings.mute ? "Unmute sound" : "Mute sound"}"
       title="${s.settings.mute ? "Unmute sound" : "Mute sound"}"
-    >${s.settings.mute ? "\u{1F507}" : "\u{1F50A}"}</button>
+    >${menuIcon(s.settings.mute ? "soundOff" : "sound")}</button>
     <header class="hero">
       ${menuHorizon()}
       <!-- Sun and bird both come from Sunbird.ts, so the title screen, the
@@ -2266,10 +2285,10 @@ function renderMain(s: HudSnapshot): string {
          "how am I doing" is a different question from "what shall I play", and
          one bar at the end reads as the section's full stop. -->
     <div class="home-section-title"><span>${t("hud.renderMain.PNow", undefined, "Play now")}</span><small>${t("hud.renderMain.FRACEEXPLORE", undefined, "FLY · RACE · EXPLORE")}</small></div>
-    <nav class="destination-grid play-destinations home-hub-grid" aria-label="Play">${menuLinks(playDestinations)}</nav>
+    <nav class="destination-grid play-destinations home-hub-grid" aria-label="${t("hud.aria.play", undefined, "Play")}">${menuLinks(playDestinations)}</nav>
     ${homeBoardStrip(s)}
     <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
-    <nav class="destination-grid progress-destinations home-hub-grid" aria-label="Progress">${menuLinks(progressDestinations)}</nav>
+    <nav class="destination-grid progress-destinations home-hub-grid" aria-label="${t("hud.aria.progress", undefined, "Progress")}">${menuLinks(progressDestinations)}</nav>
     <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
   `;
 }
@@ -2286,7 +2305,7 @@ function renderSettings(s: HudSnapshot): string {
   return `
     ${head(t("hud.settings.title", undefined, "Settings"))}
     <p class="settings-intro">${t("hud.renderSettings.MFlightFeelRightChangesSaveAutomatically", undefined, "Make the flight feel right for you. Changes save automatically.")}</p>
-    ${sectionTitle(t("hud.settings.section.pilot", undefined, "Pilot"))}
+    ${sectionTitle(null, t("hud.settings.section.pilot", undefined, "Pilot"))}
     ${CUSTOM_PILOT_NAMES
       ? `<div class="redeem pilot-name-row">
       <input data-ui data-ref="pilotName" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}" maxlength="14" placeholder="${t("hud.pilot.name", undefined, "Pilot Name")}" value="${escapeHtml(s.pilotName)}" />
@@ -2298,7 +2317,7 @@ function renderSettings(s: HudSnapshot): string {
       <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
     </div>`
     }
-    ${sectionTitle(t("hud.settings.section.sound", undefined, "Sound"))}
+    ${sectionTitle(null, t("hud.settings.section.sound", undefined, "Sound"))}
     ${toggle(t("hud.settings.mute", undefined, "Mute all sound"), "mute", s.settings.mute)}
     ${volumeControl(t("hud.settings.effectsVolume", undefined, "Effects volume"), "sfx-vol", sPct)}
     ${toggle(t("hud.settings.musicToggle", undefined, "Music"), "music", s.settings.music)}
@@ -2306,7 +2325,7 @@ function renderSettings(s: HudSnapshot): string {
     <div class="setting-row setting-select"><label for="music-track">${t("hud.renderSettings.MTrack", undefined, "Music track")}</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>${t("hud.renderSettings.SAllTracks", undefined, "Shuffle all tracks")}</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
     <div class="setting-row setting-select"><label for="language-select">${t("hud.settings.language", undefined, "Language")} / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.distancesIn", undefined, "Show distances in")}</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
-    ${sectionTitle(t("hud.settings.section.comfort", undefined, "Comfort &amp; controls"))}
+    ${sectionTitle(null, t("hud.settings.section.comfort", undefined, "Comfort &amp; controls"))}
     ${toggle(t("hud.settings.haptics", undefined, "Haptics"), "haptics", s.settings.haptics)}
     ${s.boosts.some((b) => b.def.id === "doubletap" && b.armed) ? toggle("Double-tap boost", "doubletap", s.settings.doubleTapBoost) : ""}
     ${toggle(t("hud.settings.reduceMotion", undefined, "Reduce Motion"), "motion", s.settings.reduceMotion)}
@@ -2316,15 +2335,15 @@ function renderSettings(s: HudSnapshot): string {
     <p class="fineprint">${t("hud.settings.tapToggleDiveHint", undefined, "One tap starts the dive, the next tap ends it — nothing to hold down.")}</p>
     <div class="setting-row setting-select"><label for="render-quality">${t("hud.settings.renderQuality", undefined, "Render quality")}</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? t("hud.settings.quality.auto", undefined, "Auto · recommended") : q === "high" ? t("hud.settings.quality.high", undefined, "High · more detail") : t("hud.settings.quality.low", undefined, "Low · less GPU work")}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.flightsFlown", undefined, "Flights flown")}</span><b>${s.runsPlayed}</b></div>
-    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">⛶ ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>
+    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">${iconGlyph("fullscreen")} ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>
     <!-- Privacy policy, linked from inside the game. The platform guide asks
          for exactly this before it approves an external service (multiplayer,
          storage) for a game: a live policy page the player can reach from the
          build. The URL comes from ./legal.ts so each deploy points at its own
          hosted copy. Kept free of any portal name so this template renders
          identically in every edition. -->
-    <button class="soft-btn wide" data-ui data-action="open-privacy">🔒 ${t("hud.settings.privacy", undefined, "Privacy Policy")}</button>
-    ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">⬇ Install Sunbird</button>` : ""}
+    <button class="soft-btn wide" data-ui data-action="open-privacy">${menuIconSm("lock")} ${t("hud.settings.privacy", undefined, "Privacy Policy")}</button>
+    ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">${menuIconSm("download")} ${t("hud.install.app", undefined, "Install Sunbird")}</button>` : ""}
     <details class="danger-zone"><summary>${t("hud.renderSettings.MSavedProgress", undefined, "Manage saved progress")}</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
     <button class="ghost-btn danger" data-ui data-action="reset-progress">${s.resetArmed ? "Confirm: erase saved progress" : "Reset progress"}</button></details>
     <p class="fineprint">Sunbird 1.0 · ${s.seedLabel}</p>

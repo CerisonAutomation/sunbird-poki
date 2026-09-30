@@ -9,7 +9,7 @@
  */
 
 import { destinationByKey } from "../MenuCatalog";
-import { menuIcon, type MenuIconName } from "../MenuIcons";
+import { menuIcon, menuIconSm, type MenuIconName, type SmIconName } from "../MenuIcons";
 import { SELL_AD_REMOVAL } from "../edition";
 import { t } from "../../i18n";
 
@@ -112,8 +112,22 @@ export function head(key: string, backAction = "back", right = ""): string {
   return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
 }
 
-export function sectionTitle(main: string, sub?: string): string {
-  return `<div class="section-title">${main}${sub ? ` <small>${sub}</small>` : ""}</div>`;
+/**
+ * A screen section heading: optional inline-SVG artwork, the title, and an
+ * optional trailing note.
+ *
+ * The artwork used to be a leading emoji inside `main` (a trophy before
+ * "Tournament Rank Prizes"), which read as a different typographic register
+ * from the inline-SVG screen headings above it. It is now its own flex child of
+ * `.section-title`, so the existing `gap` gives it a real spacing unit instead
+ * of being glued into the text run — the same separation `head()` gets from
+ * `.heading-art`.
+ * `.heading-art` itself is NOT reused here: it is pinned to a 32×32 box by
+ * `!important` in menu-polish.css for the 64px screen illustrations, which
+ * would be three times the height of a 13px section title.
+ */
+export function sectionTitle(icon: SmIconName | null, main: string, sub?: string): string {
+  return `<div class="section-title">${icon ? menuIconSm(icon) : ""}${main}${sub ? ` <small>${sub}</small>` : ""}</div>`;
 }
 
 export function upsellStrip(): string {

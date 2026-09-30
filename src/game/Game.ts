@@ -108,6 +108,7 @@ ZENITH_SLOWMO,
 ZENITH_THERMAL_VY,
 SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
+FLARE_BRAKE,
 } from "./constants";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, normalizePerks, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
 import { nextWings, wingsFor, wingsPromotion } from "./Career";
@@ -176,7 +177,14 @@ const RING_CHAIN_WINDOW = 2.8;
 const ASLEEP: BirdStepOpts = { diving: false, fever: false, speedMult: 1, boost: false };
 
 /* Mode surge strengths, in m/s of extra cap headroom. These used to be velocity
- * injections with `Math.min(234, …)` guards; see `BirdStepOpts.speedBonus`. */
+ * injections with `Math.min(234, …)` guards; see `BirdStepOpts.speedBonus`.
+ *
+ * `modeSpeedBonus` takes a max, never a sum, so the largest of these is the
+ * most the cap can ever be raised by. `MAX_MODE_SPEED_BONUS` is what the
+ * anti-cheat ceiling adds, and it lives in constants.ts precisely so this list
+ * can be checked against it — a surge raised above it without the ceiling
+ * following would put legitimate runs back over the gate, which is the exact
+ * bug that put them there once already. */
 const SLINGSHOT_BONUS = 16;
 const TYPHOON_BONUS = 10;
 const SLALOM_WARP_BONUS = 18;
@@ -1651,6 +1659,22 @@ export class Game {
       this.audio.diveCue();
       this.haptic(10);
     }
+    // The release edge — the other half of the same gesture.
+    //
+    // The press fired a cue and the release fired nothing, so a pull-out was
+    // silent. That is the whole of "the release is broken" from the player's
+    // side: the brake was doing its job, but the one moment the game is asking
+    // you to feel most directly — you committed, the dive stopped, the bird
+    // came back up — had no sound, no touch, and nothing on screen confirming
+    // it. A gesture you can only verify by looking away from the bird and
+    // reading the speed number reads as dropped input.
+    //
+    // The feedback is fired AFTER `bird.step()` below, because `flareAmount`
+    // is written there: it is the brake acceleration actually applied on this
+    // tick, which is the honest measure of how hard the pull-out bit. Scaling
+    // off the dive speed instead would fire at full volume on a release from
+    // a near-hover, where nothing actually happened.
+    const released = !diving && this.wasDiving && !this.bird.grounded && this.state === "playing";
     this.wasDiving = diving;
     this.magnetTimer = Math.max(0, this.magnetTimer - dt);
     this.boostTimer = Math.max(0, this.boostTimer - dt);
@@ -1700,6 +1724,9 @@ export class Game {
       this.terrain,
     );
 
+    // Read after the step: `flareAmount` now holds the brake this tick applied.
+    if (released) this.releaseFeedback();
+
 
     this.stepLaunchAndGhosts(dt, diving);
     this.stepWeather(dt, diving);
@@ -1709,6 +1736,29 @@ export class Game {
     this.stepCollectAndPickups(dt);
     this.stepScoreAndFinish(dt);
     this.stepSettleAndGoals(dt, diving);
+  }
+
+  /**
+   * The release half of `diveCue()`.
+   *
+   * Scoped to audio + haptic on purpose. The obvious third channel — a
+   * `popupAtBird("SOAR!")` — is the wrong call here: perfect launches already
+   * fire a banner, a rating, a burst, a shake, a freeze and a slow-motion beat
+   * every 5-10 seconds, and releases happen far more often than that. Adding
+   * text to the most frequent event in the game is how the HUD ends up with
+   * four things to read at once.
+   *
+   * Returns early when `flareAmount` is 0, which is the case where the brake
+   * genuinely did not engage — releasing from a climb, per the `vy >= 0` rule
+   * in `Bird.step()`. Silence there is correct: nothing was arrested, so
+   * there is nothing to confirm.
+   */
+  private releaseFeedback(): void {
+    const strength = this.bird.flareAmount;
+    if (strength <= 0) return;
+    const intensity = Math.min(1, strength / FLARE_BRAKE);
+    this.audio.soarCue(intensity);
+    this.haptic(6 + Math.round(10 * intensity));
   }
 
   /** Flight cues, the launch/landing reactions, the first-flight coach and
@@ -3089,18 +3139,41 @@ export class Game {
     this.camera.recenter(this.renderOriginX);
     this.bird.setRenderOrigin(this.renderOriginX);
     this.collect.setRenderOrigin(this.renderOriginX);
+    // These two write true world x straight into their vertex buffers and
+    // carry no mesh transform, so they were the only render-space consumers
+    // still sitting at x≈4096 after a rebase — the wake and every impact ring
+    // simply disappeared off-screen for the rest of an Endless run.
+    this.trail.setRenderOrigin(this.renderOriginX);
+    this.particles.setRenderOrigin(this.renderOriginX);
   }
 
-  /** Streams the glowing ribbon behind the bird, matching the sparkle trail. */
-  private updateTrailRibbon(dt: number): void {
+  /**
+   * Streams the glowing ribbon behind the bird, matching the sparkle trail.
+   *
+   * @param visX,visY the position the bird MESH was just drawn at, not the raw
+   *   120 Hz physics position. At 170 m/s one `PHYS_DT` is 1.42 world units, so
+   *   sampling the raw position left the ribbon head visibly detached from the
+   *   sprite it is supposed to be attached to — and jittering against it by
+   *   that much, every frame, at exactly the speeds where the trail is most
+   *   visible.
+   */
+  private updateTrailRibbon(dt: number, visX: number, visY: number): void {
     this.advanceTrailHue(dt);
     const c = this.trailColor();
     this.trail.setColor(c[0], c[1], c[2]);
     const show =
       this.state === "playing" &&
       !this.save.state.settings.reduceMotion &&
+      // A bird carving terrain at 50 m/s is not leaving a wake, it is scraping
+      // along the ground — and the ribbon has `depthTest: false`, so it paints
+      // over any hill between the camera and the bird.
+      !this.bird.grounded &&
       (this.feverOn || this.boostTimer > 0 || this.bird.speed() > 48 || ((this.gameplaySkin.magnetAlways || this.gameplaySkin.id === "aurora") && this.bird.speed() > 24));
-    if (show) this.trail.push(this.bird.x, this.bird.y);
+    if (show) {
+      // Anchored at the tail tip, not the centroid — see `Bird.tailPoint`.
+      const t = this.bird.tailPoint(visX, visY);
+      this.trail.push(t.x, t.y);
+    }
     this.trail.update(dt, show ? 1 : 0);
   }
 
@@ -3178,7 +3251,7 @@ export class Game {
       this.hud.updateNameTags([], this.camera.camera, this.renderWidth, this.renderHeight);
     }
     this.finishRemaining = this.finishGate.update(visDt, this.bird.x);
-    this.updateTrailRibbon(visDt);
+    this.updateTrailRibbon(visDt, visX, visY);
     this.particles.update(visDt);
     // Attract framing in the menu only: the demo bird leads into the open
     // margin beside the card. Every other state keeps gameplay framing.

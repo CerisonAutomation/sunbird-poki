@@ -76,7 +76,13 @@ const LAUNCH_CTA = ".home-launch";
 function medalText(earned: Medal, toNext: number | null): string {
   if (toNext === null) return "◆ Maxed";
   if (earned === "none") return `${toNext} m to first medal`;
-  return `${toNext} m to next`;
+  // Name the tier. The line is tinted per medal (bronze / silver / gold /
+  // platinum, ui.css) and until now the string never said which one you had, so
+  // the colour was the only thing carrying it. Four colours and one string is a
+  // WCAG 1.4.1 failure: a player who reached gold and a player who reached
+  // platinum read identical words in different hues. The tint stays as
+  // decoration; the word is what carries it.
+  return `${earned} · ${toNext} m to next`;
 }
 /** In-flight quest strip: how close a quest must be before it earns screen
  *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one

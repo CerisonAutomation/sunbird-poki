@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   ANTICHEAT_MAX_SPEED_MPS,
   ANTICHEAT_MIN_MS_PER_100M,
@@ -8,7 +8,7 @@ import {
   verifyRunSubmission,
 } from "../AntiCheat";
 import { Bird } from "../Bird";
-import { BOOST_EXTRA_SPEED, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER, PHYS_DT } from "../constants";
+import { BOOST_EXTRA_SPEED, MAX_MODE_SPEED_BONUS, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER, PHYS_DT } from "../constants";
 import { SKINS } from "../Economy";
 import { ENDLESS_SPEED_SCALE_MAX } from "../FlightProgression";
 import { TerrainSystem } from "../TerrainSystem";
@@ -173,10 +173,20 @@ describe("client ⇄ server anti-cheat limits agree", () => {
  */
 describe("the anti-cheat ceiling is derived from the physics it gates", () => {
   const SPEED_OPTS = {
-    diving: false,
+    // DIVING, not gliding. This probe used to glide, and a gliding bird settles
+    // around 94 m/s because drag balances gravity long before the cap is
+    // reached — so the probe measured a number 2.7x below the gate and its
+    // "the gate is not absurdly generous" half could never be satisfied. The
+    // cap only means anything at the top of a dive, which is also the only way
+    // a player ever gets near it.
+    diving: true,
     fever: true,
     speedMult: MAX_SKIN_SPEED_MULT * ENDLESS_SPEED_SCALE_MAX,
     boost: true,
+    // The fourth term of the cap expression, and the one that was missing from
+    // the ceiling for a whole release. Without it this probe tops out ~14 m/s
+    // UNDER the gate and the quarantine bug stays invisible.
+    speedBonus: MAX_MODE_SPEED_BONUS,
   } as const;
 
   it("no faster than the ceiling, at the most generous settings the game can build", () => {
@@ -184,8 +194,15 @@ describe("the anti-cheat ceiling is derived from the physics it gates", () => {
     const bird = new Bird();
     bird.reset(64, terrain.heightAt(64) + 400);
     let fastest = 0;
-    for (let i = 0; i < Math.round(6 / PHYS_DT); i++) {
+    for (let i = 0; i < Math.round(20 / PHYS_DT); i++) {
       bird.step(PHYS_DT, SPEED_OPTS, terrain);
+      // A bird that touches down at speed launches off the lip, and the climb
+      // is not what this measures. Put it back in the air and keep the max of
+      // the dives themselves — which is the fastest a real run ever gets.
+      if (bird.grounded) {
+        bird.reset(64, terrain.heightAt(64) + 400);
+        continue;
+      }
       fastest = Math.max(fastest, bird.speed());
     }
     terrain.dispose();
@@ -193,8 +210,52 @@ describe("the anti-cheat ceiling is derived from the physics it gates", () => {
     // The cap is applied to total speed, so this is the number the gate must
     // clear. Allow a hair of float slack, nothing more.
     expect(fastest).toBeLessThanOrEqual(ANTICHEAT_MAX_SPEED_MPS + 0.001);
-    // And it must not be a ceiling so generous that it stops being a gate.
+    // And it must not be a ceiling so generous that it stops being a gate:
+    // a real max dive has to actually approach it, or the constant has drifted
+    // loose and would wave through anything.
     expect(fastest).toBeGreaterThan(ANTICHEAT_MAX_SPEED_MPS * 0.9);
+  });
+
+  it("the ceiling counts every term the cap expression has", () => {
+    // The failure this guards is arithmetic drift between two files that each
+    // believe they know the maximum. `Bird.step` clamps to
+    //   feverCap * speedMult + boost + speedBonus
+    // and the gate has to clear all three. Dropping the speedBonus term put
+    // the gate 18 m/s under real flight; a future edit that adds a fifth term
+    // to the cap would reintroduce the same quarantine silently, because the
+    // probe above only fails once the gap exceeds the bird's real top speed.
+    // Asserting the shape of the expression makes the coupling explicit.
+    const src = readFileSync(join(process.cwd(), "src/game/AntiCheat.ts"), "utf8");
+    const expr = src.match(/const MAX_SPEED_MPS =([\s\S]*?);/);
+    expect(expr).not.toBeNull();
+    const body = expr![1]!;
+    for (const [term, what] of [
+      ["MAX_SPEED_FEVER", "the fever cap"],
+      ["MAX_SKIN_SPEED_MULT", "the skin multiplier"],
+      ["ENDLESS_SPEED_SCALE_MAX", "the escalation multiplier"],
+      ["BOOST_EXTRA_SPEED", "the boost term"],
+      ["MAX_MODE_SPEED_BONUS", "the mode-surge term"],
+    ] as const) {
+      expect(body, `ceiling is missing ${what}`).toContain(term);
+    }
+  });
+
+  it("no mode surge can grant more headroom than the ceiling allows for", () => {
+    // `Game.ts` owns the four per-mode surge values and is the only place they
+    // are written. `modeSpeedBonus` takes a max rather than a sum, so the
+    // largest of the four is the most the cap can ever rise by. If someone
+    // tunes a surge up, the gate has to move with it on the same change.
+    const gameSrc = readFileSync(join(process.cwd(), "src/game/Game.ts"), "utf8");
+    const surges = [...gameSrc.matchAll(/^const (\w*BONUS) = (\d+);$/gm)].map((m) => ({
+      name: m[1]!,
+      value: Number(m[2]),
+    }));
+    expect(surges.length).toBeGreaterThan(0);
+    for (const s of surges) {
+      expect(s.value, `${s.name} exceeds MAX_MODE_SPEED_BONUS — the anti-cheat ceiling would no longer clear it`).toBeLessThanOrEqual(
+        MAX_MODE_SPEED_BONUS,
+      );
+    }
   });
 
   it("every shipped skin fits under the skin speed ceiling the gate assumes", () => {

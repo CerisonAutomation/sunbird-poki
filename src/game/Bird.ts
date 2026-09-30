@@ -99,7 +99,7 @@ type ShapeProportions = {
   crest: boolean;
 };
 
-const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
+export const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
   songbird: { span: 1, tail: 1, beak: 1, beakWidth: 1, bulk: 1, crest: true },
   raptor: { span: 1.34, tail: 1.5, beak: 0.72, beakWidth: 0.8, bulk: 0.92, crest: true },
   owl: { span: 0.84, tail: 0.72, beak: 0.6, beakWidth: 0.72, bulk: 1.16, crest: false },
@@ -154,8 +154,29 @@ export class Bird {
   private readonly bodyMat: THREE.MeshLambertMaterial;
   private readonly wingMat: THREE.MeshLambertMaterial;
   private readonly crests: THREE.Mesh[] = [];
+  /** The two tail feathers flanking the fan, scaled with it — see `setShape`. */
+  private readonly tailFeathers: THREE.Mesh[] = [];
+  /**
+   * Rearmost x of the tail assembly in `squash` local space, split by which
+   * part moves with the species scale. Measured from the geometry in the
+   * constructor; `tailPoint` combines them. Hand-deriving this is how the wake
+   * ended up anchored mid-body.
+   */
+  private readonly tailFanRear: number;
+  /** The fan's own origin x — what a species tail scale stretches away from. */
+  private readonly tailPivRear: number;
+  /** Rearmost x of the two flanking feathers, which never change length. */
+  private readonly tailFeatherRear: number;
   /** The species currently worn — see `setShape`. */
   private shape: BirdShape = "songbird";
+  /**
+   * Species beak scale, held separately because `syncVisual` rewrites
+   * `beak.scale` every frame to animate the call opening. Songbird values, so
+   * a bird that never calls `setShape` renders exactly as before.
+   */
+  private readonly beakMult = new THREE.Vector3(1, 1, 1);
+  /** Species body bulk, held for the same reason as `beakMult`. */
+  private bulk = 1;
   private readonly bellyMat: THREE.MeshLambertMaterial;
   private readonly lidMat: THREE.MeshLambertMaterial;
   private readonly beakMat: THREE.MeshLambertMaterial;
@@ -256,7 +277,30 @@ export class Bird {
       f.rotation.y = 0.35 * side;
       f.position.set(-0.64, 0.02, 0.16 * side);
       this.squash.add(f);
+      this.tailFeathers.push(f);
     }
+    // Measured, not derived by hand. The tail is a fan plus two feathers at
+    // different angles and offsets, and this is the number the wake is
+    // anchored on, so it is read off the real geometry rather than worked out
+    // on paper. Measured in `squash` local space — geometry bounds pushed
+    // through each mesh's own local matrix — so it does not depend on where
+    // the root happens to be scaled at construction time.
+    //
+    // The fan and the feathers are kept apart because only the fan is
+    // species-scaled, and a mesh scale is applied about that mesh's OWN origin
+    // rather than the bird's: scaling the feathers by `p.tail` would have left
+    // them floating away from the fan they are supposed to flank. The fan's
+    // rear therefore moves about the fan's pivot, which `tailPivRear` records.
+    const rearOf = (m: THREE.Mesh): number => {
+      m.geometry.computeBoundingBox();
+      // `Object3D.matrix` is only recomposed on demand — read it before
+      // asking, or every mesh measures as unrotated and untranslated.
+      m.updateMatrix();
+      return m.geometry.boundingBox!.clone().applyMatrix4(m.matrix).min.x;
+    };
+    this.tailFanRear = rearOf(this.tail);
+    this.tailPivRear = this.tail.position.x;
+    this.tailFeatherRear = Math.min(...this.tailFeathers.map(rearOf));
 
     this.glow = new THREE.PointLight(0xffe08a, 0, 18, 2);
     this.glow.position.set(0, 0.4, 1);
@@ -366,12 +410,49 @@ export class Bird {
     this.tail.scale.set(1, 1, 1);
     this.beak.scale.set(1, 1, 1);
     this.squash.scale.set(1, 1, 1);
+    this.beakMult.set(1, 1, 1);
+    this.bulk = 1;
     for (const crest of this.crests) crest.visible = true;
     this.shape = "songbird";
   }
 
   speed(): number {
     return Math.hypot(this.vx, this.vy);
+  }
+
+  /**
+   * World position of the tail tip — where a wake should be anchored.
+   *
+   * `x`/`y` are the BODY CENTROID (the body sphere's centre), which is the
+   * right anchor for physics and the wrong one for a trail. The tail tip sits
+   * 1.65 world units behind the centroid at base scale and up to 4.0 for the
+   * comet, so a ribbon anchored at the centroid starts inside the bird and
+   * paints over its body — the "trail is half way through the bird" report.
+   *
+   * The tail is scaled about its own pivot at x=-0.7, not about the bird, so
+   * the offset has to be interpolated between the pivot and the tip using the
+   * tail's own scale, then run through the same squash and readability scale
+   * the mesh is drawn with. Skipping either is how a species-specific trail
+   * would drift off its own bird.
+   *
+   * The whole point is that the anchor moves with the visual, so this must be
+   * read AFTER `syncVisual`, and called with the same interpolated x/y the
+   * mesh was drawn at — see `Game.updateTrailRibbon`.
+   */
+  tailPoint(x: number, y: number): { x: number; y: number } {
+    // The fan's species scale stretches it about the fan's own origin, so its
+    // rear is interpolated between the pivot and the measured tip; the feathers
+    // are fixed. Whichever reaches further back is the real rear of the bird.
+    const fan = this.tailPivRear + (this.tailFanRear - this.tailPivRear) * this.tail.scale.x;
+    const rear = Math.min(fan, this.tailFeatherRear);
+    // Then everything above `squash` scales about the bird's origin, so the
+    // measured extent just multiplies through — body bulk, speed stretch and
+    // the readability scale included, because the wake has to stay attached to
+    // the bird the player can actually see.
+    const back = rear * this.squash.scale.x * this.root.scale.x;
+    const c = Math.cos(this.rotation);
+    const s = Math.sin(this.rotation);
+    return { x: x + back * c, y: y + back * s };
   }
 
   applySkin(skin: BirdSkinColors): void {
@@ -405,7 +486,15 @@ export class Bird {
     this.wingL.scale.set(p.span, 1, p.span);
     this.wingR.scale.set(p.span, 1, p.span);
     this.tail.scale.set(p.tail, p.tail, 1);
-    this.beak.scale.set(p.beakWidth, p.beak, p.beakWidth);
+    // Beak and bulk are ALSO written every frame by `syncVisual` (beak opens
+    // with the call, the body stretches with speed), so the species factor has
+    // to be kept here and multiplied in at that point. Setting the scale here
+    // and letting `syncVisual` overwrite it next frame is what silently
+    // discarded the wader's 1.7x beak and the owl's 1.16 bulk — the shop drew
+    // them, the run did not have them.
+    this.beakMult.set(p.beakWidth, p.beak, p.beakWidth);
+    this.bulk = p.bulk;
+    this.beak.scale.copy(this.beakMult);
     this.squash.scale.set(p.bulk, p.bulk, 1);
     // An owl is a round bird with no crest to speak of; a phoenix is not.
     for (const child of this.crests) child.visible = p.crest;
@@ -771,7 +860,13 @@ export class Bird {
 
     // Beak opening on fast glides / high launches
     const beakOpen = clamp((sp - 35) / 55, 0, 0.35);
-    this.beak.scale.set(1 + beakOpen * 0.2, 1 + beakOpen * 0.35, 1);
+    // The call opening is an animation ON TOP of the species' beak, not a
+    // replacement for it — hence the multiply by `beakMult`.
+    this.beak.scale.set(
+      this.beakMult.x * (1 + beakOpen * 0.2),
+      this.beakMult.y * (1 + beakOpen * 0.35),
+      this.beakMult.z,
+    );
 
     // Tail wind flutter
     const tailFlutter = Math.sin(time * 24 + sp * 0.2) * 0.12 * clamp(sp / 40, 0.2, 1.2);
@@ -792,7 +887,9 @@ export class Bird {
     this.squashAmt = lerp(this.squashAmt, 1, 1 - Math.pow(0.002, dt));
     this.stretchAmt = lerp(this.stretchAmt, 1, 1 - Math.pow(0.002, dt));
     const speedStretch = 1 + clamp(this.speed() / 180, 0, 0.18);
-    this.squash.scale.set(this.stretchAmt * speedStretch, this.squashAmt, 1);
+    // Likewise: speed stretch and landing squash are animations on top of the
+    // species' bulk, so the owl stays a round bird while it stretches.
+    this.squash.scale.set(this.bulk * this.stretchAmt * speedStretch, this.bulk * this.squashAmt, 1);
     this.squash.rotation.x = Math.sin(time * 3.2) * 0.04;
 
     // `syncVisual` runs at DISPLAY rate, not the fixed 120 Hz physics rate, so

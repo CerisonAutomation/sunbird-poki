@@ -175,6 +175,39 @@ if (folderHtml) {
   else ok("ROOT-06", `all ${refs.size} local asset references resolve inside ${UPLOAD}/`);
 }
 
+/* ROOT-11 ------------------------------------------------------------ */
+// Dead payload guard. ROOT-06 proves everything the HTML *references* is
+// present; nothing proved the converse — that everything shipped is referenced.
+// That gap is how `fonts/` survived: vite-singlefile inlines all 6 woff2 as
+// base64 (112 KB the game loads) and staging also copied the same 6 files out
+// of `public/` (112 KB nothing loads), plus two icons the head never links.
+// ~152 KB of a size-budgeted portal upload.
+//
+// This is deliberately a check on the *shipped* folder rather than a build
+// flag, because the failure mode is silent: the game runs perfectly, every
+// other rule passes, and the upload is just quietly larger than it needs to be.
+// `i18n/` is exempt — its packs are fetched from a runtime-built path
+// (`./i18n/${locale}.json`) that never appears as a literal in the HTML, so
+// "absent from the markup" is normal and correct for it.
+if (existsSync(UPLOAD) && folderHtml) {
+  const html = folderHtml.toString("utf8");
+  const fontsInlined = html.includes("data:font/woff2") || html.includes("data:application/font-woff");
+  const shippedFonts = existsSync(path.join(UPLOAD, "fonts"))
+    ? readdirSync(path.join(UPLOAD, "fonts")).filter((f) => /\.woff2?$/.test(f))
+    : [];
+  const shippedIcons = existsSync(path.join(UPLOAD, "icons")) ? readdirSync(path.join(UPLOAD, "icons")) : [];
+
+  const dead = [];
+  if (fontsInlined) dead.push(...shippedFonts.map((f) => `fonts/${f} (already inlined as base64)`));
+  dead.push(...shippedIcons.filter((f) => !html.includes(f)).map((f) => `icons/${f} (never linked)`));
+
+  if (dead.length) {
+    bad("ROOT-11", `${dead.length} shipped file(s) the game cannot fetch: ${dead.slice(0, 6).join(", ")}${dead.length > 6 ? `, +${dead.length - 6} more` : ""}`);
+  } else {
+    ok("ROOT-11", `no dead payload — ${shippedIcons.length} icon(s) linked, ${shippedFonts.length} font file(s) needed`);
+  }
+}
+
 /* ROOT-07 ------------------------------------------------------------ */
 // Cross-portal isolation for the shipped artifact ("every version is its own
 // way"). The Inspector folder is the Poki edition: it carries Poki's SDK and

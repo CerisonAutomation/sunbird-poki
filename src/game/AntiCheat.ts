@@ -1,4 +1,4 @@
-import { BOOST_EXTRA_SPEED, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER } from "./constants";
+import { BOOST_EXTRA_SPEED, MAX_MODE_SPEED_BONUS, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER } from "./constants";
 import { ENDLESS_SPEED_SCALE_MAX } from "./FlightProgression";
 import type { ScoreSubmission } from "./Leaderboard";
 
@@ -30,10 +30,27 @@ export type VerificationResult = {
  * So the ceiling multiplies out the same three factors the physics does. The
  * challenge half is omitted deliberately: `CHALLENGE_MODS` only ever *lowers*
  * speed (`heavy_wings` is 0.95, everything else 1), so it cannot raise the cap.
- * `anticheat.test.ts` drives the real `Bird` at these settings and fails if this
- * ceiling is ever lower than what the bird actually reaches.
+ *
+ * There is a FOURTH term, and it was the one still missing. `Bird.step`'s cap
+ * is
+ *
+ *     (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult
+ *       + (boost ? BOOST_EXTRA_SPEED : 0)
+ *       + (opts.speedBonus ?? 0)
+ *
+ * and `opts.speedBonus` is `Game.modeSpeedBonus` — the mode-surge headroom
+ * (slalom warp's 18 m/s being the largest). A slalom run carries a real
+ * `modeSpeedBonus`, so the ceiling has to count it. Measured with the real
+ * `Bird` at fever + boost + max skin + full escalation + slalom: **270.69 m/s
+ * of legitimate flight against a 256.27 m/s gate.** The game was quarantining
+ * its own fastest, most legitimate runs — the exact failure this constant is
+ * supposed to make impossible, reintroduced one term down.
+ *
+ * `anticheat.test.ts` drives the real `Bird` at these settings and fails if
+ * this ceiling is ever lower than what the bird actually reaches.
  */
-const MAX_SPEED_MPS = MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * ENDLESS_SPEED_SCALE_MAX + BOOST_EXTRA_SPEED;
+const MAX_SPEED_MPS =
+  MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * ENDLESS_SPEED_SCALE_MAX + BOOST_EXTRA_SPEED + MAX_MODE_SPEED_BONUS;
 
 /**
  * The slowest a run may legally average, as ms per 100 m. Derived from the same

@@ -4,18 +4,20 @@
 // stricter drops them before they are ever sent.
 //
 // `maxAvgSpeedMps` is MAX_SPEED_FEVER (128) * MAX_SKIN_SPEED_MULT (1.08) *
-// ENDLESS_SPEED_SCALE_MAX (1.55) + BOOST_EXTRA_SPEED (42) = 256.272 — the
-// ceiling `Bird.step` can actually produce at fever, with the fastest skin in a
-// long escalating run, and a boost. `minMsPer100m` is its reciprocal.
+// ENDLESS_SPEED_SCALE_MAX (1.55) + BOOST_EXTRA_SPEED (42) +
+// MAX_MODE_SPEED_BONUS (18) = 274.272 — the ceiling `Bird.step` can actually
+// produce at fever, with the fastest skin in a long escalating run, a boost,
+// and a slalom-warp surge. `minMsPer100m` is its reciprocal.
 //
 // These sat at 120 / 500 while the game could legally fly at 170 and is now
-// legal to fly at 256, so the server was the binding constraint the whole time
+// legal to fly at 274, so the server was the binding constraint the whole time
 // and rejected runs the game had already accepted. `anticheat.test.ts` reads
 // this file and compares it against the client constants, so the pair cannot
-// drift apart again.
+// drift apart again — which is exactly how it caught the mode-surge term being
+// added to the client cap without being added here.
 export const LIMITS = {
-  maxAvgSpeedMps: 256.272,
-  minMsPer100m: 390.2,
+  maxAvgSpeedMps: 274.272,
+  minMsPer100m: 364.6,
   scoreDensityFactor: 1000,
   scoreDensityBase: 100_000,
 };

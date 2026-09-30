@@ -5756,7 +5756,14 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   font-variant-numeric: tabular-nums;
   transition: color 160ms ease;
 }
-.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.55)); opacity: 0.7; }
+/* No `opacity: 0.7` here. This is the medal line for every player who has not
+ * earned a medal yet — i.e. the entire first run, which on a portal is most of
+ * the session — and it is drawn straight onto the sky with no scrim. Measured
+ * against the four sky presets that is 2.43:1 on day, 2.11:1 on shader and
+ * 1.76:1 on golden, at 11px. WCAG AA wants 4.5:1. The 0.7 was there to make the
+ * line recede, and it did: it made it unreadable instead. The colour already
+ * carries the 0.55 alpha, which is the whole of the intended subtlety. */
+.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.72)); }
 .stat-medal[data-medal="bronze"] { color: var(--coral, #e8853f); }
 .stat-medal[data-medal="silver"] { color: var(--text-on-sky, #f6efe2); }
 .stat-medal[data-medal="gold"] { color: var(--gold, #ffc14a); }

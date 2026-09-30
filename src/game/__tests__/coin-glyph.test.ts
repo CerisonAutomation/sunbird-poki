@@ -89,3 +89,44 @@ describe("coin substitution leaves no raw bullet behind", () => {
     expect(hud).toMatch(/return html\.replace\(\/●/);
   });
 });
+
+describe("no stylesheet draws a SECOND coin beside the injected one", () => {
+  // Why this suite exists, and why every test above it was insufficient.
+  //
+  // The glyph above was "fixed" twice — a filled pupil, then a stroked rim
+  // ring — and both times the fix was verified by reading COIN_SVG in
+  // isolation. Meanwhile `.stat-value.coin::before` in index.css was still
+  // painting its own radial-gradient disc. Every assertion in this file
+  // passed, and the shipped build drew a gradient disc from the pseudo-element
+  // PLUS the SVG disc: two coins, which is precisely the complaint that
+  // survived all three "fixes".
+  //
+  // The defect was never inside COIN_SVG. It was that COIN_SVG was judged
+  // alone. So this suite now also reads the sheets the coin is painted into,
+  // and asserts the SVG is the only thing drawing one.
+  const SHEETS = ["src/index.css", "src/game/ui.css", "src/game/menu-polish.css"];
+
+  it("no sheet paints a ::before/::after coin glyph", () => {
+    // A pseudo-element with a painted background or a border-radius disc next
+    // to the inline SVG is a second coin by construction, no matter what the
+    // SVG looks like.
+    for (const sheet of SHEETS) {
+      const css = readFileSync(join(process.cwd(), sheet), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      const offenders = [...css.matchAll(/([^{}]*coin[^{}]*)::(before|after)\s*\{([^}]*)\}/g)].filter((m) =>
+        /(background|border-radius|content\s*:)/.test(m[3]!),
+      );
+      expect(
+        offenders.map((m) => `${sheet}: ${m[0]!.trim().slice(0, 90)}`),
+        "a stylesheet paints a second coin next to the inline SVG glyph",
+      ).toEqual([]);
+    }
+  });
+
+  it("the coin counter still keeps its nowrap, so the pair never breaks", () => {
+    // The rule that shared the block with the deleted ::before is the one
+    // thing in it worth keeping: without it a narrow HUD can wrap between the
+    // glyph and the amount. Its removal is a near-miss worth pinning.
+    const index = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
+    expect(index).toMatch(/\.stat-value\.coin\s*\{[^}]*white-space:\s*nowrap/);
+  });
+});

@@ -326,22 +326,23 @@ textarea {
 
 /* The coin counter's glyph is the SAME inline SVG the menus use, injected in
    HUD.ts. It used to be a ::before radial-gradient dot built here, which made
-   the flight counter the one coin in the game drawn with different art. No
-   ::before rule any more — see .coin-glyph above for its size and alignment. */
+   the flight counter the one coin in the game drawn with different art. */
 .stat-value.coin {
   /* Inline flow, not flex: .coin-glyph is aligned with vertical-align, and
      the pair must never break mid-number on a narrow screen. */
   white-space: nowrap;
 }
-.stat-value.coin::before {
-  content: "";
-  display: inline-block;
-  width: 0.9em; height: 0.9em;
-  vertical-align: -0.1em;
-  margin-right: 0.15em;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe89a, var(--coin-gold) 55%, #c88a00);
-}
+/* The ::before dot is gone — deleted, not overridden.
+
+   It survived three previous "fixes" because every one of them changed the SVG
+   and left this rule alone, so the SVG's own shape was judged in isolation and
+   never rendered beside it. The result in the shipped build was a gradient
+   disc from this pseudo-element PLUS the inline SVG disc, side by side: the
+   "two circles" players kept reporting, and the reason fixing COIN_SVG twice
+   (a filled pupil, then a stroked rim ring) never changed what they saw.
+
+   Do not re-add a ::before glyph here. If a coin needs to be drawn, change
+   renderCoins()/COIN_SVG so every coin in the game changes together. */
 @media (max-height: 500px) and (min-width: 641px) {
   .hud-root .rank-up, .hud-root .goal-pop { max-width: min(42vw, 360px); }
 }

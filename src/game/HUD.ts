@@ -1768,7 +1768,17 @@ export class HUD {
  *  The fix is to have only ONE closed curve in the glyph. The highlight is now
  *  an open arc (a path with two endpoints, no `Z`), which gives the metal its
  *  shine without adding a second circle anywhere inside the disc. The dark
- *  stroke on the outer circle is the edge, not an inner ring. */
+ *  stroke on the outer circle is the edge, not an inner ring.
+ *
+ *  v3 — the second disc is gone from the STYLESHEET, not from here. This
+ *  glyph was already correct: one filled disc plus one open highlight arc. The
+ *  other circle players kept seeing was a `.stat-value.coin::before`
+ *  radial-gradient painted BESIDE this SVG in index.css, so the counter showed
+ *  a gradient dot AND a gold disc side by side. That pseudo-element is deleted
+ *  (see index.css). Nothing about the colour was lost with it: this disc fills
+ *  with `currentColor`, and `.stat-value.coin .coin-glyph` sets that to
+ *  `var(--amber)`, so the single remaining disc is still gold — it just gets
+ *  its colour from the theme instead of from a second circle. */
 const COIN_SVG =
   '<svg class="coin-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
   '<circle cx="12" cy="12" r="8.7" fill="currentColor" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>' +

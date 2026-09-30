@@ -48,7 +48,6 @@ import {
   NO_MODS,
   stageVerdict,
   weeklyGauntlet,
-  calendarReward,
   type ChallengeMods,
   type DailyChallenge,
 } from "./Challenges";
@@ -58,7 +57,7 @@ import { bootStage, defer } from "./BootProgress";
 import { continueOffer, continuePlacementLabel, type ContinueOffer } from "./ContinueOffer";
 import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
 import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
-import { campaignProgress, campaignViews, CAMPAIGN } from "./Campaign";
+import { campaignProgress, campaignViews } from "./Campaign";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
 import { emptySquadState, SquadClient } from "./Squad";
 import { PowerUps } from "./PowerUps";
@@ -143,12 +142,14 @@ import { buildChallengeUrl, readChallengeFromUrl, type RivalChallenge, buildRoom
 import { flag } from "./Flags";
 import { variant } from "./Experiments";
 import { PORTAL_BANNER_ID, attachPortalErrorReporters, initPlatform, installPageScrollGuards, isCoarsePointer, isPortalBuild, portalTarget as getPortalTarget, type PlatformAdapter } from "../sdk/platform";
-import { CUSTOM_PILOT_NAMES, POKI_MULTIPLAYER, SELL_AD_REMOVAL, SIMULATED_BREAKS, SQUAD_CHAT } from "./edition";
+import { CUSTOM_PILOT_NAMES, POKI_MULTIPLAYER, SIMULATED_BREAKS, SQUAD_CHAT } from "./edition";
 import { PRIVACY_URL } from "./legal";
 import { GameplayEventSink } from "./GameplayEvents";
 import { LivingBackground } from "./LivingBackground";
 import { Sky } from "./Sky";
 import { Telemetry } from "./Telemetry";
+import { shopAction, type ShopActionContext } from "./actions/shop";
+import { journeyAction, type JourneyActionContext } from "./actions/journey";
 import { crashReporter } from "./resilience/CrashReporter";
 import { Watchdog } from "./resilience/Watchdog";
 import { TerrainSystem } from "./TerrainSystem";
@@ -4849,123 +4850,53 @@ export class Game {
   }
 
   /**
+   * The port ./actions/shop runs on.
+   *
+   * Spelled out rather than passing `this` because the class's members are
+   * private, and a port typed as the whole class would not be a port. This is
+   * the seam: every capability the shop's action table can reach is named
+   * exactly once, right here, so the table's blast radius is greppable.
+   */
+  private shopContext(): ShopActionContext {
+    return {
+      save: this.save,
+      hud: this.hud,
+      audio: this.audio,
+      particles: this.particles,
+      bird: this.bird,
+      telemetry: this.telemetry,
+      platform: this.platform,
+      shopAdClaimed: this.shopAdClaimed,
+      checkoutBusy: this.checkoutBusy,
+      adsLive: () => this.adsLive(),
+      multiplyCoinsFromShopAd: () => this.multiplyCoinsFromShopAd(),
+      setScreen: (screen) => this.setScreen(screen),
+      backScreen: () => this.backScreen(),
+      bump: () => this.bump(),
+      buySkin: (id) => this.buySkin(id),
+      buyBoost: (id) => this.buyBoost(id),
+      buyTrail: (id) => this.buyTrail(id),
+      buyCoinStarter: () => this.buyCoinStarter(),
+      buyCoinGold: () => this.buyCoinGold(),
+      buyPortalVip: () => this.buyPortalVip(),
+      buyMysteryVault: () => this.buyMysteryVault(),
+      applySkin: () => this.applySkin(),
+      restore: () => this.restore(),
+      redeem: () => this.redeem(),
+      redeemReferral: () => this.redeemReferral(),
+      importCloud: () => this.importCloud(),
+      copyWithFeedback: (text, copiedToast) => this.copyWithFeedback(text, copiedToast),
+    };
+  }
+
+  /**
    * Shop + store/account actions (open-shop, buy/equip flows, referral, cloud
-   * save). Returns true when the action was consumed. Extracted from
-   * handleAction so the main switch stays navigable; behavior is unchanged —
-   * every `break` in the moved cases became `return true` (no post-switch
-   * code exists in handleAction, so early return is identical).
+   * save). Returns true when the action was consumed. The table itself lives in
+   * ./actions/shop behind a port interface, so it can be exercised with a fake
+   * context instead of a live Game.
    */
   private handleShopEvent(action: string, id: string): boolean {
-    switch (action) {
-      case "open-shop":
-        if (!this.save.state.seenShop) {
-          this.save.state.seenShop = true;
-          this.save.persist();
-          this.telemetry.track("onboarding_shop_opened", { runs: this.save.state.runsPlayed });
-          this.hud.toast("Start with a bird — each one changes your flight", "gold");
-        }
-        this.setScreen("shop");
-        return true;
-      case "shop-free-coins": {
-        // Rewarded ad from the shop: capped per session to prevent ad farming.
-        // The card is hidden without a live ad surface (HUD: `adAvailable`), so
-        // this is the second half of the same gate.
-        if (!this.adsLive()) return true;
-        if (this.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
-          this.hud.toast("Free coin rewards capped for this hour", "info");
-          return true;
-        };
-        void this.multiplyCoinsFromShopAd();
-        return true;
-      }
-      case "buy-bundle": {
-        // One crate per save. It pays 250 coins for 240 — re-claimable it is
-        // an infinite +10/click coin faucet.
-        if (this.save.state.wingmanBundle) return true;
-        if (!this.save.spend(240)) {
-          this.hud.toast("Need ● 240 coins to claim Ace Wingman Crate", "warn");
-          return true;
-        }
-        this.save.state.wingmanBundle = true;
-        this.save.persist();
-        this.save.armBoost("shield");
-        this.save.armBoost("sunflask");
-        this.save.armBoost("magnet");
-        this.save.ownTrail("trail_tide");
-        this.save.equipTrail("trail_tide");
-        this.save.addCoins(DAILY_STIPEND);
-        this.audio.chapterFanfare();
-        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("badge")} Ace Wingman Crate Unlocked! 3 Boosts + Tideglass Trail + ${DAILY_STIPEND} Coins!`, "gold");
-        this.bump();
-        return true;
-      }
-      case "buy-nest": {
-        const price = this.save.nestUpgradePrice();
-        if (this.save.buyNestUpgrade()) {
-          this.audio.fanfare();
-          this.hud.toast(`Nest upgraded → ×${this.save.nestMultiplier().toFixed(2)} score forever`, "gold");
-        } else {
-          this.hud.toast(this.save.state.nestBought >= 10 ? "Nest is fully upgraded" : `Need ● ${price}`, "info");
-        }
-        this.bump();
-        return true;
-      }
-      case "buy-skin":
-        this.buySkin(id);
-        return true;
-      case "equip-skin":
-        this.save.equipSkin(id);
-        this.applySkin();
-        this.audio.ding();
-        this.platform?.measure("cosmetic", id ?? "skin", "interact");
-        this.bump();
-        return true;
-      case "buy-boost":
-        this.buyBoost(id);
-        return true;
-      case "buy-trail":
-        this.buyTrail(id);
-        return true;
-      case "starter-buy":
-        this.buyCoinStarter();
-        return true;
-      case "gold-buy":
-        this.buyCoinGold();
-        return true;
-      case "vip-buy":
-        // Never silently nothing. VIP has no purchase on a build that removes
-        // the ad break, so say so; the button used to re-render identically.
-        if (SELL_AD_REMOVAL) this.buyPortalVip();
-        else this.hud.toast("VIP is not available on this build", "warn");
-        return true;
-      case "buy-vault":
-        this.buyMysteryVault();
-        return true;
-      case "checkout-cancel":
-        if (!this.checkoutBusy) this.backScreen();
-        return true;
-      case "restore":
-        this.restore();
-        return true;
-      case "redeem":
-        this.redeem();
-        return true;
-      case "copy-referral":
-        void this.copyWithFeedback(this.save.state.referralCode, "Code copied");
-        return true;
-      case "redeem-referral":
-        this.redeemReferral();
-        return true;
-      case "copy-cloud":
-        void this.copyWithFeedback(this.save.exportCode(), "Save code copied");
-        return true;
-      case "import-cloud":
-        this.importCloud();
-        return true;
-      default:
-        return false;
-    }
+    return shopAction(this.shopContext(), action, id);
   }
 
   /**
@@ -5675,102 +5606,48 @@ export class Game {
    * consumed. Extracted from handleAction; same break-to-return-true
    * transform as the other sub-handlers.
    */
+  /** The port ./actions/journey runs on. Spelled out so the table's blast
+   *  radius stays greppable; see shopContext for the same reasoning.
+   *
+   *  `modeId` and `mode` are accessors, not copies. The table *selects* a
+   *  flight mode, so it has to write back through to the game — a plain
+   *  `modeId: this.modeId` would typecheck cleanly and then silently drop
+   *  every write onto the throwaway context object. The shop table gets away
+   *  with plain members only because it mutates through `ctx.save` and
+   *  everything else on that port is readonly. */
+  private journeyContext(): JourneyActionContext {
+    const self = this;
+    return {
+      save: self.save,
+      hud: self.hud,
+      audio: self.audio,
+      particles: self.particles,
+      bird: self.bird,
+      today: self.today,
+      get modeId() {
+        return self.modeId;
+      },
+      set modeId(value) {
+        self.modeId = value;
+      },
+      get mode() {
+        return self.mode;
+      },
+      set mode(value) {
+        self.mode = value;
+      },
+      todaysDaily: () => self.todaysDaily(),
+      exitVersus: () => self.exitVersus(),
+      startRun: (opts) => self.startRun(opts),
+      setScreen: (screen) => self.setScreen(screen),
+      bump: () => self.bump(),
+    };
+  }
+
+  /** Journey + challenge actions. The table lives in ./actions/journey.
+   *  Returns true when the action was consumed. */
   private handleJourneyEvent(action: string, id: string): boolean {
-    switch (action) {
-      case "play-daily": {
-        const c = this.todaysDaily();
-        if (this.save.isDailyDone(this.today)) {
-          this.hud.toast("Today's challenge is already complete — back tomorrow!", "info");
-          return true;
-        }
-        this.modeId = c.mode;
-        this.mode = modeById(c.mode);
-        this.exitVersus();
-        this.startRun({ challenge: "daily" });
-        return true;
-      }
-      case "play-gauntlet": {
-        const idx = Math.max(0, Math.min(2, parseInt(id || "0", 10) || 0));
-        const g = weeklyGauntlet(weekKey());
-        if (this.save.gauntletDone(g.week).includes(idx)) {
-          this.hud.toast("Stage already cleared this week", "info");
-          return true;
-        }
-        const st = g.stages[idx]!;
-        this.modeId = st.mode;
-        this.mode = modeById(st.mode);
-        this.exitVersus();
-        this.startRun({ challenge: `gauntlet${idx}` as `gauntlet${number}` });
-        return true;
-      }
-      case "claim-calendar": {
-        const day = this.save.claimCalendar(this.today);
-        if (day === 0) {
-          this.hud.toast("Today's gift is already claimed", "info");
-          return true;
-        }
-        const r = calendarReward(day);
-        if (r.kind === "coins") {
-          this.save.addCoins(r.amount);
-          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · +${r.amount} coins`, "gold");
-        } else if (r.kind === "boost") {
-          this.save.armBoost(r.id);
-          this.hud.toast(`${iconGlyph("star")} Day ${day} gift · boost armed for next flight`, "gold");
-        } else {
-          if (this.save.ownTrail(r.id)) this.hud.toast(`${iconGlyph("star")} Day ${day} gift · ${TRAILS[r.id]?.label ?? r.id} trail!`, "gold");
-          else {
-            this.save.addCoins(200);
-            this.hud.toast(`${iconGlyph("star")} Day ${day} · trail already owned, +200 coins instead`, "gold");
-          }
-        }
-        this.audio.purchase();
-        this.bump();
-        return true;
-      }
-      case "open-challenges":
-        this.setScreen("challenges");
-        return true;
-      case "play-event": {
-        this.modeId = "daytrip";
-        this.mode = modeById("daytrip");
-        this.exitVersus();
-        this.startRun({ event: true });
-        return true;
-      }
-      case "open-campaign":
-        this.setScreen("campaign");
-        return true;
-      case "claim-campaign": {
-        const ch = CAMPAIGN.find((c) => c.id === id);
-        if (!ch) return true;
-        const view = campaignViews(this.save, this.save.state.campaignClaimed).find((v) => v.def.id === id);
-        if (!view || !view.unlocked || !view.complete || !this.save.claimCampaign(id)) {
-          this.hud.toast("Chapter not ready yet", "info");
-          return true;
-        }
-        this.save.addCoins(ch.rewardCoins);
-        // No rewardLabel: the named banner/title/compass is granted by nothing
-        // in the game, and a toast is the worst place to invent one.
-        this.hud.toast(`${iconGlyph(ch.icon)} ${ch.title} · +${ch.rewardCoins} coins`, "gold");
-        this.audio.chapterFanfare();
-        this.bump();
-        return true;
-      }
-      case "claim-daily-stipend": {
-        // The card disables via the snapshot, but a double-tap can land before
-        // the re-render — the handler must be its own guard.
-        if (this.save.state.lastStipendClaimed === this.today) return true;
-        this.save.addCoins(DAILY_STIPEND);
-        this.save.state.lastStipendClaimed = this.today;
-        this.audio.chapterFanfare();
-        this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("coin")} Daily Flight Stipend Claimed! +● ${DAILY_STIPEND} coins!`, "gold");
-        this.bump();
-        return true;
-      }
-      default:
-        return false;
-    }
+    return journeyAction(this.journeyContext(), action, id);
   }
 
   /**

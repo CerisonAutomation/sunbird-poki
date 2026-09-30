@@ -99,6 +99,32 @@ down a layer, never to import sideways.
 - Add the key to the barrel, then regenerate packs (`node scripts/gen-i18n-packs.mjs`); the locale test
   fails on drift.
 
+### `Game.ts` is a god-object — extract it behind ports, one table at a time
+`src/game/Game.ts` is one class, 182 methods, ~4,850 `this` references. Handlers are being moved
+into `src/game/actions/*.ts` as **pure functions taking a port interface**, e.g.
+
+```ts
+export interface ShopActionContext { readonly save: SaveData; /* … */ }
+export function shopAction(ctx: ShopActionContext, action: string, id: string): boolean
+```
+
+- **Drop `this` to force the dependency list.** Extract the body and replace `this.` with `ctx.`; the
+  compiler then rejects anything the signature did not declare, so a forgotten field is a typecheck
+  failure instead of a runtime `undefined`. Never pass `this` itself — `Game`'s members are private
+  and a port typed as the whole class is not a port. `Game` builds the context in a `xContext()`
+  method, which is where the table's blast radius is auditable.
+- **Writable port members need accessors, not copies.** `modeId: this.modeId` typechecks perfectly
+  and silently discards every `ctx.modeId = …`: the write lands on a throwaway object. Use
+  `get`/`set` over `const self = this`. Plain members are safe **only** when the port member is
+  `readonly` or the table mutates through a shared reference (`ctx.save.state.x`).
+  This is the one hazard in this pattern the compiler will not catch — check the extracted body for
+  `ctx.<x> =` and confirm each one is a live accessor.
+- Members the table only *reads* are `readonly`; that is what keeps a table from quietly becoming a
+  second god-object. Keep the `return false` default — `handleAction` dispatches on it.
+- A port is only worth it if it is narrower than the thing it replaces. `journey.ts` is 14 members
+  because the rules already live in `SaveData`; if a port approaches the size of `Game`, the seam is
+  in the wrong place.
+
 ### Data & network → `src/game/resilience/`
 - Game data calls (leaderboard, ghosts, directory, entitlements) go through `fetchJson` with a
   `breakerKeyFor` key. Never a bare `fetch` for them.
@@ -161,6 +187,8 @@ down a layer, never to import sideways.
 - `src/game/hud/` — the view model (`types.ts`), shared chrome (`kit.ts`), shared fragments
   (`parts.ts`) and one module per screen group. Pure functions; no DOM.
 - `src/game/HUD.ts` — the DOM controller. The only HUD module that touches the DOM.
+- `src/game/actions/` — action tables extracted from `Game` behind port interfaces (`shop.ts`,
+  `journey.ts`). Pure functions; they mutate only through the port, never through a `Game`.
 - `src/game/*.ts` — engine, systems, tests in `src/game/__tests__/`.
 - `src/game/resilience/` — network, storage, crash, retry primitives.
 - `src/sdk/` — platform/portal adapters, no game logic.

@@ -1745,20 +1745,28 @@ export class HUD {
  *  Pack header. An inline SVG matches the current text size and color, sits
  *  cleanly on the baseline, and never needs a fallback font.
  *
- *  One disc, one rim, one highlight. The previous art carried a *second
- *  filled circle* (r=1.8) underneath a lens-shaped path on top of the body
- *  circle. At the 0.9em the HUD actually renders it, that inner blob read as
- *  a separate circle sitting next to the coin — players reported "two
- *  circles" by the coin counter. The inner dot was redundant anyway: at ~18px
- *  it landed on top of the lens it was meant to shine through and added a
- *  smudge rather than depth. The rim is now a stroked ring (`fill="none"`),
- *  so it can never be mistaken for a second disc, and the highlight is a
- *  path rather than a circle. */
+ *  One disc and one highlight arc. That is the whole rule, and it is worth
+ *  stating precisely because this glyph has now carried TWO different fixes for
+ *  the same "two circles" complaint and both were wrong:
+ *
+ *   - v1 added a small filled pupil (r=1.8) inside the body circle.
+ *   - v2 removed the pupil but replaced it with a stroked ring at r=6.3 —
+ *     reasoning that "fill=none can never be mistaken for a second disc".
+ *
+ *  v2 is why players still saw two circles. A 30%-white ring sitting inside a
+ *  filled disc is not a rim; at the ~18px the HUD renders it, it is a second
+ *  concentric circle, and it reads *more* like a separate disc than the pupil
+ *  did because it is a complete closed curve at high contrast. Changing how a
+ *  shape is filled does not change the silhouette the eye reads.
+ *
+ *  The fix is to have only ONE closed curve in the glyph. The highlight is now
+ *  an open arc (a path with two endpoints, no `Z`), which gives the metal its
+ *  shine without adding a second circle anywhere inside the disc. The dark
+ *  stroke on the outer circle is the edge, not an inner ring. */
 const COIN_SVG =
   '<svg class="coin-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
   '<circle cx="12" cy="12" r="8.7" fill="currentColor" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>' +
-  '<circle cx="12" cy="12" r="6.3" fill="none" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>' +
-  '<path d="M6.2 9.4A7 7 0 0 1 10.4 5.6" fill="none" stroke="rgba(255,255,255,0.62)" stroke-width="1.5" stroke-linecap="round"/>' +
+  '<path d="M6.4 9.6A7.4 7.4 0 0 1 10.6 5.5" fill="none" stroke="rgba(255,255,255,0.66)" stroke-width="1.7" stroke-linecap="round"/>' +
   "</svg>";
 
 /** Replace every leading bullet with the SVG coin glyph. Runs on the final

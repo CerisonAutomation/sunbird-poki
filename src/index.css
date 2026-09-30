@@ -2320,7 +2320,23 @@ fieldset.squad-fields {
 .hud-root .impact-popups {
   top:calc(var(--hud-header-height,110px) + 94px + env(safe-area-inset-top));
   bottom:calc(var(--hud-footer-height,65px) + 90px + env(safe-area-inset-bottom));
-  left:50px; right:50px; overflow:hidden; contain:paint;
+  /* The right inset is deliberately NOT the mirror of the left one, and that
+     asymmetry is the whole fix. `.toasts` is a top-RIGHT column while flying
+     (top: safe-area + 112px, width min(280px, 34vw)) while this lane ran to
+     `right: 50px` — so a popup whose bird was in the upper right of the
+     corridor landed directly underneath the toast pill, and the two read as
+     one overlapping smear. That is the "messages overlap" report: a "THUD!"
+     and a milestone line occupying the same pixels at the same moment.
+
+     Reserving the toast column's width keeps the two layers disjoint by
+     construction instead of by hoping they never coincide. `HUD.popup()`
+     clamps against lane.width, so a popup now cannot be positioned into the
+     reserved band at all. It keeps its foveal placement at the bird — the one
+     thing that made impact text readable — and simply loses the corner the
+     toast already owns. */
+  left:50px;
+  right:calc(min(280px, 34vw) + 28px + env(safe-area-inset-right, 0px));
+  overflow:hidden; contain:paint;
 }
 .hud-root .impact-popup { max-width:min(180px,100%); font-size:clamp(14px,2.5vw,22px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .hud-root:not([data-ui-state="playing"]) .impact-popups,
@@ -2332,6 +2348,23 @@ fieldset.squad-fields {
 @media(max-height:500px) {
   .hud-root .impact-popups { display:block; }
   .hud-root .impact-popup { font-size:clamp(13px,2.2vw,17px); max-width:min(150px,100%); }
+}
+/* The reservation above is only as good as its agreement with the toast
+   column's actual width. Both breakpoints below resize `.toasts`, so both have
+   to resize the reservation with it — otherwise the fix holds on a desktop
+   window and quietly stops holding on exactly the short, narrow embedded
+   frames Poki serves, which is where overlapping text was reported from.
+   Both numbers are the same `min()` used by the `.toasts` rules themselves, so
+   there is one value per breakpoint and the two cannot drift apart. */
+@media (max-width: 640px) {
+  .hud-root .impact-popups {
+    right:calc(min(240px, 48vw) + 28px + env(safe-area-inset-right, 0px));
+  }
+}
+@media (max-height: 500px) and (min-width: 641px) {
+  .hud-root .impact-popups {
+    right:calc(min(280px, 34vw) + 28px + env(safe-area-inset-right, 0px));
+  }
 }
 /* Keep optional social controls secondary and readable without emoji fonts. */
 .flight-footer .emote-wheel { justify-content:flex-end; }

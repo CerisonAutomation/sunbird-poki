@@ -3,19 +3,24 @@
 // repeated element in the entire game.
 //
 // The report was "the HUD coin has two circles next to it". There was only
-// ever one coin in the markup: `<div class="stat-value coin">${COIN_SVG}<span
-// data-ref="coins">0</span></div>`, a single `●` substitution, no stray
-// bullet anywhere in the play HUD, and `.pill.coin` paints no ::before dot.
-// The duplication was inside the artwork itself. COIN_SVG was built from a
-// body circle (r=8.7) *plus* a lens-shaped path *plus* a second filled circle
-// (r=1.8) sitting on top of the lens. At the 0.9em the HUD actually renders
-// it, that inner blob stopped reading as a highlight on a coin and started
-// reading as a second circle parked next to the first.
+// ever one coin in the markup: a single `●` substitution, no stray bullet
+// anywhere in the play HUD, and `.pill.coin` paints no ::before dot. The
+// duplication was inside the artwork itself.
 //
-// So the rule this file pins is not "the coin is drawn once" — it is that the
-// coin art contains exactly one *filled* disc. Every other shape must be a
-// ring (`fill="none"`) or a path, because a second filled circle is precisely
-// what the eye splits off as a separate object at small sizes.
+// This glyph has now been "fixed" twice, and both fixes were wrong:
+//
+//   v1  body circle + lens path + a second FILLED circle (r=1.8)
+//   v2  removed the pupil, added a stroked RING at r=6.3 instead, reasoning
+//       that `fill="none" can never be mistaken for a second disc`
+//   v3  (here) one disc + one open highlight arc. No second closed curve.
+//
+// v2 shipped *because of the test below*, which asserted "exactly one filled
+// circle" — so a `fill="none"` ring satisfied it by construction while players
+// kept reporting two circles. The lesson is encoded in the rule itself now: the
+// defect was never about how a shape is FILLED, it is about how many CLOSED
+// CURVES the eye can separate. A stroked ring inside a disc is two concentric
+// circles at 18px, and reads worse than the pupil did because it is
+// high-contrast and complete.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -29,34 +34,39 @@ function coinArt(): string {
   const at = hud.indexOf("const COIN_SVG =");
   expect(at, "COIN_SVG should still exist").toBeGreaterThan(-1);
   const end = hud.indexOf('"</svg>";', at);
-  expect(end, "COIN_SVG should still be a terminated literal").toBeGreaterThan(at);
+  expect(end, "COIN_SVG should be a terminated literal").toBeGreaterThan(at);
   return hud.slice(at, end);
 }
 
 describe("the coin glyph is one disc, not two", () => {
-  it("has exactly one filled circle — the coin body", () => {
+  it("contains exactly ONE closed curve — the coin body", () => {
+    // THE RULE, and the reason it changed. A second closed curve inside the
+    // disc is what the eye splits off as a separate object. Fill is
+    // irrelevant, so this counts every <circle> — stroked or filled. A
+    // fill-based version of this assertion is exactly what let v2 ship.
     const circles = coinArt().match(/<circle\b[^>]*>/g) ?? [];
-    const filled = circles.filter((c) => {
-      const fill = /fill="([^"]*)"/.exec(c)?.[1] ?? "black"; // SVG default fill
-      return fill !== "none";
-    });
     expect(
-      filled.map((c) => c.replace(/"/g, "'")),
-      "a second filled circle reads as a second coin at 0.9em — use fill=\"none\" for a rim",
+      circles.map((c) => c.replace(/"/g, "'")),
+      "one closed curve only — a rim ring reads as a second coin at 0.9em",
     ).toHaveLength(1);
   });
 
-  it("gives the one filled circle the current text colour, so it themes with the HUD", () => {
+  it("gives that one circle the current text colour, so it themes with the HUD", () => {
     // The body must inherit `color` (the sheets set .coin-glyph to --amber /
     // --coin-gold). A hard-coded fill here would silently ignore every token.
     expect(coinArt()).toMatch(/<circle\b[^>]*fill="currentColor"/);
   });
 
-  it("keeps its highlight as a path, not a dot", () => {
-    // The old art's r=1.8 filled circle was the actual offender; a regression
-    // back to "add a small dot in the middle" is the same bug wearing a hat.
-    expect(coinArt()).not.toMatch(/r="1\.8"/);
-    expect(coinArt()).toMatch(/<path\b/);
+  it("uses an OPEN highlight arc, not a dot or a closed lens", () => {
+    // Open means no `Z`. A closed path is a second closed curve by another
+    // name and would reintroduce the same defect through the back door — the
+    // parent build's art was exactly that, a lens path plus a pupil dot.
+    const paths = coinArt().match(/<path\b[^>]*>/g) ?? [];
+    expect(paths.length, "the highlight is a path").toBeGreaterThan(0);
+    for (const p of paths) {
+      expect(p, "an open arc must not close into a second disc").not.toMatch(/\sd="[^"]*Z/);
+    }
+    expect(coinArt(), "no small pupil dot — that was v1's defect").not.toMatch(/r="1\.8"/);
   });
 
   it("is hidden from assistive tech — the number beside it carries the meaning", () => {

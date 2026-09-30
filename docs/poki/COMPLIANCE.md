@@ -1,6 +1,6 @@
 # Poki compliance report
 
-**Generated:** 2026-09-29 by `pnpm poki:audit` — do not edit by hand.
+**Generated:** 2026-09-30 by `pnpm poki:audit` — do not edit by hand.
 **Result:** ✅ no machine-checked rule failed · **155/188 machine-verified** · **12 human-attested** · 131 hard requirements.
 **Read the difference.** _Machine-verified_ means a check ran and passed — that is a gate result. _Human-attested_ means nothing ran: a person signed the rule off, which is the right instrument for "is the art accurate?" and no evidence at all for "did a gate check it". _Wired but not run_ means a gate is attached that this invocation did not execute, so the rule has no evidence yet. Only the first number is a gate result.
 **Rule count overstates independent checking.** 26 machine-verified rules are produced by 10 distinct gate commands (several of which are pnpm aliases of the same script), so one failing takes down all of its rules at once.

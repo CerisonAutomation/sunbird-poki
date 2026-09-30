@@ -45,6 +45,27 @@ export const GROUND_G_DIVE = 88;
  * you. Only the dead flat ground gains anything.
  */
 export const GROUND_STICK_DIVE = 11;
+/**
+ * The slope below which ground counts as "dead flat" for the purposes of
+ * GROUND_STICK_DIVE above.
+ *
+ * This exists because the floor was applied *everywhere*, not only on flats.
+ * `Math.max(GROUND_G_DIVE * downhill, GROUND_STICK_DIVE)` on an uphill gives
+ * `max(negative, 11)` = **+11 m/s², i.e. a held stick accelerated the bird up
+ * the hill**, which is the exact opposite of the "uphill deceleration is
+ * untouched, the game is still built on climbs costing you" the comment above
+ * promises. The consequence was not subtle: it made HOLD THE BUTTON FOREVER
+ * the optimal strategy for the entire game. Measured over 60 s runs on three
+ * seeds before this fix — hold 2.23/2.49/2.17 km, versus 2.16/1.91/2.23 km for
+ * a policy that actually reads the terrain. Playing well was *worse* than
+ * playing with a brick on the button, and the skill ceiling of a one-button
+ * game is the whole game.
+ *
+ * 0.12 is the "flatter than about 1:10" the comment above already describes —
+ * so the floor now covers exactly the dead ground it was written for, and a
+ * climb costs speed again whether or not the stick is held.
+ */
+export const GROUND_STICK_FLAT_SLOPE = 0.12;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
@@ -100,6 +121,54 @@ export const FLARE_MAX_RISE = -14;
  *  player who lets go and immediately presses again gets a free brake.
  */
 export const FLARE_BUFFER = 0.18;
+
+/* ---------------- the pop: timing the release at a crest ----------------
+ *
+ * The one thing a one-button glider must have is a reason to let go, and this
+ * game did not have one. Releasing was pure cost: lighter gravity, more air
+ * drag, a braking flare. So "hold the button for the entire run" was not just
+ * viable, it was optimal — measured at 2.23 km against 2.16 km for a policy
+ * that read the terrain. A game whose optimal strategy is a brick on the
+ * button has no skill ceiling, and Poki's own quality bar is built on session
+ * length and return rate, both of which come from there being something to get
+ * better at.
+ *
+ * The pop is that reason. Release the stick just before the bird leaves a
+ * crest and the take-off converts speed into height: the same gesture Tiny
+ * Wings is built on, and the one FirstFlight already coaches with "RELEASE at
+ * the top to launch" — an instruction the physics previously ignored.
+ *
+ * It is bounded so it stays a skill expression and not a flight mode:
+ *   · it only fires on a genuine crest launch (curvature + prominence), which
+ *     is terrain the player has to find;
+ *   · quality decays linearly over LAUNCH_POP_WINDOW, so an early release is
+ *     worth a fraction and a held stick is worth nothing;
+ *   · it scales with the speed you brought into the lip, so it cannot rescue a
+ *     slow run — it multiplies good play instead of substituting for it;
+ *   · LAUNCH_POP_MAX caps the vertical gain at roughly a third of the launch
+ *     speed, so it is a hop with a long tail, not a jump jet.
+ */
+/** Seconds before the lip within which a release still counts. */
+export const LAUNCH_POP_WINDOW = 0.45;
+/**
+ * Peak upward velocity (m/s) added by a perfectly timed release.
+ *
+ * Deliberately in proportion with the rating layer rather than on top of it.
+ * `LaunchSystem` already pays a perfect lip `LAUNCH_BOOST_PERFECT` (1.145x)
+ * plus `vy + 7`; 26 at full timing and full speed is the *physics* half of the
+ * same gesture, and the two together read as one payoff rather than two. 44
+ * measured slightly better on the fitness harness (1.77x vs 1.73x against a
+ * masher) and was rejected for feel: a +38 m/s vertical kick next to a +7
+ * rating bonus stops being a glider.
+ *
+ * Note the two windows are intentionally different lengths. The rating window
+ * (LAUNCH_RELEASE_WINDOW, 1.35 s) is generous because it drives praise, and
+ * praise should be easy to earn. The pop window (0.45 s) is tight because it
+ * drives distance, and distance is what the leaderboard sorts on.
+ */
+export const LAUNCH_POP_MAX = 26;
+/** Launch speed at which the pop reaches full strength. */
+export const LAUNCH_POP_SPEED = 70;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;
@@ -128,6 +197,22 @@ export const LAND_GOOD = 0.94;
 export const LAND_PERFECT_GAIN = 1.03;
 export const LAND_GOOD_KEEP = 1.0;
 export const LAND_BAD_MIN_KEEP = 0.55;
+/**
+ * How much a tuck (stick held through touchdown) softens a bad landing.
+ *
+ * This used to be `if (diving) floor = Math.max(floor, 0.86)` — a *floor*, not
+ * a bonus. It meant that holding the button turned the worst possible landing
+ * in the game, a dead-vertical slam, into a 14% speed loss, versus 45% for the
+ * same slam with the stick released. Landing alignment is one of the two skill
+ * dimensions this game has, and holding the button deleted it: there was no
+ * touchdown bad enough to punish a player who simply never let go.
+ *
+ * A tuck is now worth a fixed, modest amount on top of the same floor everyone
+ * else gets. Absorbing an impact still rewards the player who commits to it,
+ * but a slam is still a slam, and a tangential kiss (LAND_PERFECT_GAIN) is
+ * still worth roughly half a run more than a crash.
+ */
+export const LAND_TUCK_BONUS = 0.08;
 export const LAND_FEATHER_FLOOR = 0.88;
 
 /* ---------------- launch rating ---------------- */

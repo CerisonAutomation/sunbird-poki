@@ -22,12 +22,17 @@ import {
   GROUND_G_DIVE,
   GROUND_G_GLIDE,
   GROUND_STICK_DIVE,
+  GROUND_STICK_FLAT_SLOPE,
   LAND_BAD_MIN_KEEP,
   LAND_FEATHER_FLOOR,
   LAND_GOOD,
   LAND_GOOD_KEEP,
   LAND_PERFECT,
   LAND_PERFECT_GAIN,
+  LAND_TUCK_BONUS,
+  LAUNCH_POP_MAX,
+  LAUNCH_POP_SPEED,
+  LAUNCH_POP_WINDOW,
   MAX_SPEED,
   MAX_SPEED_FEVER,
   MIN_KEEP_SPEED,
@@ -159,6 +164,13 @@ export class Bird {
   private flareTimer = 0;
   /** Seconds during which a release is still "live" and can spend the flare. */
   private releaseBuffer = 0;
+  /** Seconds since the stick was released; Infinity while it is held. Drives
+   * the crest pop (see LAUNCH_POP_WINDOW) — kept separate from
+   * `releaseBuffer`, which the flare consumes. */
+  private releaseAge = Number.POSITIVE_INFINITY;
+  /** 0..1 — how well the last crest launch was timed. Read by the Game for
+   * feedback (callout, sound, particles); 0 means the stick was held. */
+  popQuality = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -437,9 +449,13 @@ export class Bird {
     // Latch the release here — after `diving` resolves, and crucially BEFORE
     // the grounded/ballistic branch below, so a release while the bird is still
     // on the ground is recorded rather than discarded.
-    if (this.wasDiving && !diving) this.releaseBuffer = FLARE_BUFFER;
+    if (this.wasDiving && !diving) {
+      this.releaseBuffer = FLARE_BUFFER;
+      this.releaseAge = 0;
+    }
     this.wasDiving = diving;
     this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
+    this.releaseAge = diving ? Number.POSITIVE_INFINITY : this.releaseAge + dt;
     const gMult = opts.gravityMult ?? 1;
     const cap =
       (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (opts.boost ? BOOST_EXTRA_SPEED : 0);
@@ -456,7 +472,17 @@ export class Bird {
       // GROUND_STICK_DIVE. Uphill keeps the full slope penalty in both states —
       // the climb is still the thing the run is about.
       const downhill = -n.ty;
-      const accel = diving ? Math.max(gGround * downhill, GROUND_STICK_DIVE) : gGround * downhill;
+      const slopeAccel = gGround * downhill;
+      // The stick floor applies on DEAD FLAT GROUND ONLY. Applied everywhere,
+      // `Math.max(slopeAccel, GROUND_STICK_DIVE)` turns an uphill into a
+      // +11 m/s² accelerator and makes "hold forever" strictly optimal — see
+      // GROUND_STICK_FLAT_SLOPE. Uphill now costs speed in both states, and
+      // costs MORE while diving (GROUND_G_DIVE 88 vs GROUND_G_GLIDE 14), which
+      // is what makes releasing before a climb the correct read.
+      const accel =
+        diving && Math.abs(downhill) <= GROUND_STICK_FLAT_SLOPE
+          ? Math.max(slopeAccel, GROUND_STICK_DIVE)
+          : slopeAccel;
       vt += accel * dt;
 
       const fr = diving ? GROUND_FRICTION_DIVE : GROUND_FRICTION;
@@ -496,6 +522,24 @@ export class Bird {
         this.apexY = this.y;
         this.vx = vt * n2.tx;
         this.vy = vt * n2.ty;
+
+        // THE POP. Releasing the stick just before the lip converts speed into
+        // height. See LAUNCH_POP_WINDOW for why this exists at all: without it
+        // nothing in the game rewards letting go, and holding forever is the
+        // optimal strategy. Timing quality decays linearly across the window,
+        // so this is a skill the player can be measurably better at, and it
+        // scales with launch speed so it multiplies good flying rather than
+        // replacing it.
+        const timing = clamp(1 - this.releaseAge / LAUNCH_POP_WINDOW, 0, 1);
+        this.popQuality = timing;
+        if (timing > 0) {
+          const speedFactor = clamp(Math.abs(vt) / LAUNCH_POP_SPEED, 0, 1);
+          this.vy += LAUNCH_POP_MAX * timing * speedFactor;
+          // Spent: one pop per release, so a release cannot also flare into
+          // the same take-off and cannot pop twice off a double lip.
+          this.releaseAge = Number.POSITIVE_INFINITY;
+          this.releaseBuffer = 0;
+        }
       } else {
         this.grounded = true;
         this.vx = vt * n2.tx;
@@ -638,7 +682,10 @@ export class Bird {
         // Tucking absorbs the impact — holding through a landing is how you
         // keep momentum, which is exactly the technique we want to teach.
         let floor = opts.feather ? LAND_FEATHER_FLOOR : LAND_BAD_MIN_KEEP;
-        if (diving) floor = Math.max(floor, 0.86);
+        // A tuck is a bonus on the floor, never a floor of its own. See
+        // LAND_TUCK_BONUS: as a floor it made holding the button immune to
+        // bad landings and erased the alignment skill entirely.
+        if (diving) floor = Math.min(LAND_GOOD_KEEP, floor + LAND_TUCK_BONUS);
         let keep: number;
         if (align >= LAND_PERFECT) keep = LAND_PERFECT_GAIN;
         else if (align >= LAND_GOOD) keep = LAND_GOOD_KEEP;

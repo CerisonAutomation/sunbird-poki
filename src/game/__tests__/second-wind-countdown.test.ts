@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HUD_SOURCE } from "./hudSource";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,7 +18,7 @@ import { join } from "node:path";
  * all three legs: the markup exists, it is bound to the live counter, and no
  * stylesheet hides it.
  */
-const HUD = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+const HUD = HUD_SOURCE;
 const SHEETS = ["src/index.css", "src/game/ui.css", "src/game/menu-polish.css"].map((p) => [
   p,
   readFileSync(join(process.cwd(), p), "utf8"),

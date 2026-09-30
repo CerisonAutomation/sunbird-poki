@@ -5235,27 +5235,36 @@ export class Game {
    *  Everything else either is a shared object mutated by reference
    *  (`save.state.settings.*`) or is called. */
   private settingsContext(): SettingsActionContext {
-    const self = this;
+    // See journeyContext: arrow accessors stand in for a `this` alias so the
+    // object-literal getters can still read and write the live Game fields.
+    const readResetArmed = () => this.resetArmed;
+    const writeResetArmed = (value: boolean) => {
+      this.resetArmed = value;
+    };
+    const readResetTimer = () => this.resetTimer;
+    const writeResetTimer = (value: number) => {
+      this.resetTimer = value;
+    };
     return {
-      save: self.save,
-      hud: self.hud,
-      audio: self.audio,
-      telemetry: self.telemetry,
+      save: this.save,
+      hud: this.hud,
+      audio: this.audio,
+      telemetry: this.telemetry,
       get resetArmed() {
-        return self.resetArmed;
+        return readResetArmed();
       },
       set resetArmed(value) {
-        self.resetArmed = value;
+        writeResetArmed(value);
       },
       get resetTimer() {
-        return self.resetTimer;
+        return readResetTimer();
       },
       set resetTimer(value) {
-        self.resetTimer = value;
+        writeResetTimer(value);
       },
-      applySettings: () => self.applySettings(),
-      applySkin: () => self.applySkin(),
-      bump: () => self.bump(),
+      applySettings: () => this.applySettings(),
+      applySkin: () => this.applySkin(),
+      bump: () => this.bump(),
     };
   }
 
@@ -5556,31 +5565,42 @@ export class Game {
    *  with plain members only because it mutates through `ctx.save` and
    *  everything else on that port is readonly. */
   private journeyContext(): JourneyActionContext {
-    const self = this;
+    // Arrow accessors, not a `const self = this` alias: an object-literal getter
+    // has its own `this`, so the accessors below cannot reach the Game through
+    // it. Each arrow closes over the enclosing `this` and the getter calls
+    // through, which keeps the write-through semantics without the alias.
+    const readModeId = () => this.modeId;
+    const writeModeId = (value: JourneyActionContext["modeId"]) => {
+      this.modeId = value;
+    };
+    const readMode = () => this.mode;
+    const writeMode = (value: JourneyActionContext["mode"]) => {
+      this.mode = value;
+    };
     return {
-      save: self.save,
-      hud: self.hud,
-      audio: self.audio,
-      particles: self.particles,
-      bird: self.bird,
-      today: self.today,
+      save: this.save,
+      hud: this.hud,
+      audio: this.audio,
+      particles: this.particles,
+      bird: this.bird,
+      today: this.today,
       get modeId() {
-        return self.modeId;
+        return readModeId();
       },
       set modeId(value) {
-        self.modeId = value;
+        writeModeId(value);
       },
       get mode() {
-        return self.mode;
+        return readMode();
       },
       set mode(value) {
-        self.mode = value;
+        writeMode(value);
       },
-      todaysDaily: () => self.todaysDaily(),
-      exitVersus: () => self.exitVersus(),
-      startRun: (opts) => self.startRun(opts),
-      setScreen: (screen) => self.setScreen(screen),
-      bump: () => self.bump(),
+      todaysDaily: () => this.todaysDaily(),
+      exitVersus: () => this.exitVersus(),
+      startRun: (opts) => this.startRun(opts),
+      setScreen: (screen) => this.setScreen(screen),
+      bump: () => this.bump(),
     };
   }
 

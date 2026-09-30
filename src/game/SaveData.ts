@@ -610,7 +610,10 @@ export class SaveData {
         lifetime: {
           distance: num(p.lifetime?.distance),
           coins: num(p.lifetime?.coins),
-          apexMoments: num(p.lifetime?.apexMoments ?? (p.lifetime as any)?.zeniths),
+          // Migration: saves written before the zenith→apex rename stored the
+          // counter under `zeniths`. Typed as a narrow structural shape rather
+          // than `any` so the one legacy key stays visible and reviewable.
+          apexMoments: num(p.lifetime?.apexMoments ?? (p.lifetime as { zeniths?: unknown })?.zeniths),
           ghostBeats: num(p.lifetime?.ghostBeats),
           sunflowers: num(p.lifetime?.sunflowers),
         },

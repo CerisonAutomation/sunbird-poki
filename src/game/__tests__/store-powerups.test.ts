@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { BOOSTS, SHOP_TRAILS, SKINS, WHEEL_SECTORS } from "../Economy";
 import { PICKUP_STYLE } from "../Collectibles";
+import { HUD_SOURCE } from "./hudSource";
 
 /**
  * The store has to be a place a player can actually spend.
@@ -76,7 +77,7 @@ describe("store: the section jump row opens the sections", () => {
     // handler resolved its target from a `data-ref` that no element carried, so
     // every click was a no-op that looked like a scroll. Anchors and targets
     // have to agree, which is only checkable together.
-    const hud = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+    const hud = HUD_SOURCE;
     // The row is built from a table, so the ids live in the table rather than
     // in the markup — read them from where they are actually written.
     const row = /\[\[\s*"(shopBirds)"[\s\S]*?\]\]\.map/.exec(hud);

@@ -8,6 +8,7 @@ import {
   QUICK_ACTIONS,
   SECONDARY_DESTINATIONS,
 } from "../MenuCatalog";
+import { HUD_SOURCE } from "./hudSource";
 
 /**
  * Rivals are one question, and the rail is one row.
@@ -76,8 +77,11 @@ describe("the home menu: rivals lead the rail, side by side", () => {
     // The lobby and the AI-only view used to carry separate copies of the AI
     // controls, and they drifted — the lobby advertised formats the practice
     // screen did not offer. One helper is what stops that recurring.
-    const hud = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
-    const helper = /function aiRivalSection\(s: HudSnapshot\): string \{/.test(hud);
+    const hud = HUD_SOURCE;
+    // Match the declaration, not its parameter type: the signature was narrowed
+    // to a `Pick<HudSnapshot, ...>` when the HUD was split up, and pinning the
+    // old type would fail a refactor that made the helper stricter.
+    const helper = /function aiRivalSection\(s: [\s\S]*?\): string \{/.test(hud);
     expect(helper, "the shared AI section helper is gone").toBe(true);
     const uses = [...hud.matchAll(/\$\{aiRivalSection\(s\)\}/g)].length;
     expect(uses, "only one screen renders the AI section, so they can drift again").toBe(2);
@@ -88,7 +92,7 @@ describe("the home menu: rivals lead the rail, side by side", () => {
     // right. A renderer that quietly stopped calling renderQuickRail() would
     // pass every other test here while the menu silently lost its most-used
     // four controls. Pin the call site and its position.
-    const hud = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+    const hud = HUD_SOURCE;
     const main = hud.slice(hud.indexOf("function renderMain"));
     const launch = main.indexOf('class="primary-btn home-launch"');
     const rail = main.indexOf("${renderQuickRail()}");
@@ -107,7 +111,7 @@ describe("the home menu: rivals lead the rail, side by side", () => {
     // grids because they are already reachable from this same screen. That is
     // only safe while the second route actually exists — so pin it, rather than
     // trusting the comment that justifies their absence.
-    const hud = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+    const hud = HUD_SOURCE;
     for (const dest of SECONDARY_DESTINATIONS) {
       const inGrid = [...PLAY_DESTINATIONS, ...PROGRESS_DESTINATIONS].some(
         (d) => d.action === dest.action,
@@ -125,7 +129,7 @@ describe("the home menu: rivals lead the rail, side by side", () => {
   it("still offers the AI-only shortcut from inside the lobby", () => {
     // `open-practice` is not a home tile any more, but a player already in the
     // race screen who wants only the flock should not have to scroll back.
-    const hud = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+    const hud = HUD_SOURCE;
     expect(hud, "the in-lobby AI shortcut disappeared").toContain('data-action="open-practice"');
     const game = readFileSync(join(process.cwd(), "src", "game", "Game.ts"), "utf8");
     expect(game, "open-practice no longer resolves").toContain('case "open-practice"');

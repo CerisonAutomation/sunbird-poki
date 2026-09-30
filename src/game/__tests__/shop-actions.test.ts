@@ -88,15 +88,15 @@ describe("shop action table", () => {
     expect(shopAction(ctx, "buy-bundle", "")).toBe(true);
     expect(save.state.wingmanBundle).toBe(true);
     // It pays 250 for 240, so a re-claimable crate is an infinite +10 faucet.
-    // Asserted as a delta, not an amount: addCoins runs through the wallet
-    // multiplier, so the absolute figure moves with progression.
-    const before = save.state.wallet;
-    expect(shopAction(ctx, "buy-bundle", "")).toBe(true);
-    const afterFirst = save.state.wallet;
-    expect(afterFirst).toBeGreaterThan(before);
+    // The guard in the handler is `if (wingmanBundle) return true`, so the second
+    // and third claims must both be consumed but pay nothing.
+    const afterBuy = save.state.wallet;
 
     expect(shopAction(ctx, "buy-bundle", "")).toBe(true);
-    expect(save.state.wallet).toBe(afterFirst);
+    expect(save.state.wallet, "the crate was claimable a second time").toBe(afterBuy);
+
+    expect(shopAction(ctx, "buy-bundle", "")).toBe(true);
+    expect(save.state.wallet, "the crate was claimable a third time").toBe(afterBuy);
   });
 
   it("refuses the crate it cannot pay for and says what is missing", () => {

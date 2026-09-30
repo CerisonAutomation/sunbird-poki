@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { adBreakAllowsAction, adBreakCanEnd } from "../adGate";
+import { HUD_ACTIONS } from "./hudSource";
 
 /**
  * The action inventory is taken from the SHIPPING HUD MARKUP, not from a list
@@ -10,8 +9,6 @@ import { adBreakAllowsAction, adBreakCanEnd } from "../adGate";
  * remembered are blocked — the exact shape of a self-authored gate that passes
  * while the real one leaks.
  */
-const hudSource = readFileSync(resolve(__dirname, "../HUD.ts"), "utf8");
-const HUD_ACTIONS = [...new Set([...hudSource.matchAll(/data-action="([^"]+)"/g)].map((m) => m[1]!))];
 
 describe("ad break gate", () => {
   it("discovers the real action inventory from the HUD markup", () => {

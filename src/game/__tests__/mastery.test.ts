@@ -98,7 +98,11 @@ describe("mastery progression", () => {
   it("masteryViews covers every mode with sane progress", () => {
     save.state.mastery.race = 3;
     const views = masteryViews(save);
-    expect(views).toHaveLength(8);
+    // Asserted against MODES rather than a literal: the contract is "one view per
+    // mode", and a hardcoded count breaks every time a mode is added or retired.
+    // It read 8 while MODES held 7, after the zenith solo mode was removed.
+    expect(views).toHaveLength(MODES.length);
+    expect(views.map((v) => v.modeId).sort()).toEqual(MODES.map((m) => m.id).sort());
     const race = views.find((v) => v.modeId === "race")!;
     expect(race.level).toBe(1);
     expect(race.progress).toBeGreaterThanOrEqual(0);

@@ -20,6 +20,7 @@
  * frequency (MON-13), so they must never simulate one.
  */
 import { readFileSync } from "node:fs";
+import { HUD_SOURCE } from "./hudSource";
 import { join } from "node:path";
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -77,7 +78,7 @@ describe("the shipped direct build never fakes a sponsored break", () => {
   });
 
   it("never promises a daily break cap the build does not enforce", () => {
-    const hud = src("game", "HUD.ts");
+    const hud = HUD_SOURCE;
     const at = hud.indexOf("Sponsored breaks respect a hard cap");
 
     expect(at).toBeGreaterThanOrEqual(0);

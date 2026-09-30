@@ -71,6 +71,15 @@ export { renderSquad } from "./hud/race";
  * restored view: whatever the player last scrolled, landing on the home menu
  * must never park the one button that starts a run above the fold. */
 const LAUNCH_CTA = ".home-launch";
+/* --- transient message timing -------------------------------------------------
+ * See `HUD.scheduleToastOut` for the reasoning and the sources. In short: the
+ * old 28 ms/char model gave a median six-word quip 1.73 s, which is exactly how
+ * long six words take to read and leaves no time to acquire the target. The
+ * message was arriving unread. */
+const TOAST_ACQUIRE_MS = 450;   // peripheral novel target, moving background
+const TOAST_MS_PER_WORD = 415;  // 238 wpm, derated for peripheral + divided attention
+const TOAST_FLOOR_MS = 1100;    // a one-word toast still has to be seen
+const TOAST_CEIL_MS = 6000;     // the layer can be occupied; do not deadlock it
 
 function medalText(earned: Medal, toNext: number | null): string {
   if (toNext === null) return "◆ Maxed";
@@ -1451,9 +1460,36 @@ export class HUD {
     this.liveToasts.set(text, { el, count: 1, timer });
   }
 
-  /** Long lines earn longer reads: 1.2 s base + 28 ms/char, capped at 4 s. */
+  /**
+   * How long a message must stay up to actually be read.
+   *
+   * The old model was 1.2 s + 28 ms per character. Measured against the real
+   * corpus — 211 quips, median 35 characters, about six words — that gave a
+   * median quip 1.73 s. Which is how long six words TAKE to read, with nothing
+   * left for finding the text. The message was arriving unread.
+   *
+   * The fix is a word-based model, because the reading literature is:
+   *
+   *   need = ACQUIRE + words x MS_PER_WORD
+   *
+   * ACQUIRE_MS is the cost of a PERIPHERAL novel target on a moving
+   * background — a one-button game pins gaze to the bird, and the fovea is
+   * only 1.5-2 degrees, so anything off the bird is read at a discount.
+   * MS_PER_WORD is 415 ms: 238 wpm (Brysbaert 2019, meta-analysis of 190
+   * studies) reduced for peripheral placement, for divided attention, and for
+   * reading an isolated phrase rather than connected prose.
+   *
+   * Words, not characters, because a character is the wrong unit: a two-letter
+   * word costs more per character than a seven-letter one, so a char model
+   * misprices both ends.
+   *
+   * Floor and ceiling both earn their keep. The floor is because a one-word
+   * toast still has to be SEEN. The ceiling is because the layer can be
+   * occupied, and an unbounded hold deadlocks it.
+   */
   private scheduleToastOut(el: HTMLElement, key: string): number {
-    const hold = Math.min(4000, 1200 + Math.max(0, el.textContent!.length - 16) * 28);
+    const words = (el.textContent ?? "").trim().split(/\s+/).filter(Boolean).length;
+    const hold = Math.min(TOAST_CEIL_MS, Math.max(TOAST_FLOOR_MS, TOAST_ACQUIRE_MS + words * TOAST_MS_PER_WORD));
     return this.after(() => {
       // Once exit starts, a repeat is a new toast rather than refreshing a
       // node that already has a pending removal callback.

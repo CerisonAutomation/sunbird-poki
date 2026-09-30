@@ -516,16 +516,41 @@ export class Bird {
       // Three properties keep it a flare and not a jet:
       //  - it only fires on the DIVE -> GLIDE transition, so holding still
       //    produces one impulse rather than one per step;
-      //  - it is scaled by dive speed, so a gentle tap out of a shallow dip is
-      //    almost nothing and a committed plunge is worth real recovery;
-      //  - it can only ever reduce downward speed. `fall < 0` guards the sign,
-      //    so releasing while already climbing adds nothing at all.
+      //  - it decays linearly to nothing over FLARE_DURATION, so the pull-out
+      //    has an end and a player cannot chain releases into a sustained climb;
+      //  - FLARE_MAX_RISE clamps it, so it can arrest a dive and can never
+      //    convert one into a launch.
+      //
+      // (This list previously claimed the flare was "scaled by dive speed" and
+      // that a `vy < 0` guard meant "releasing while already climbing adds
+      // nothing". Neither matched the code: the strength was never speed-scaled,
+      // and the `vy < 0` guard is what silently dropped most releases. Corrected
+      // here so the comment describes the flare that actually runs.)
       //
       // The fall is captured BEFORE any gravity runs, because by the time this
       // is reached the bird has already been accelerated downward this step.
       // A release inside the buffer window, waiting for a moment it can be
       // spent. See `noteRelease` for why this is a latch and not an edge.
-      if (this.releaseBuffer > 0 && !diving && this.vy < 0) {
+      // Armed by the latch, not by a condition on this frame's motion.
+      //
+      // This used to require `this.vy < 0`, so the flare only fired when the
+      // bird happened to still be falling inside the 180ms buffer. Every other
+      // release silently expired the buffer and did *nothing*: releasing at the
+      // top of a dive, or while climbing, or the instant after the pull-out —
+      // i.e. precisely the moment FirstFlight coaches with "RELEASE at the top
+      // to launch". The instruction and the physics disagreed, so the game
+      // taught the one input timing that was guaranteed to be dropped.
+      //
+      // Arming on the transition alone is safe, and the safety properties are
+      // unchanged:
+      //  - still one-shot, because the latch (`wasDiving && !diving`) fires once
+      //    per press and the buffer is cleared here;
+      //  - still a brake, not a jet, because `flareTimer` decays linearly to
+      //    zero over FLARE_DURATION, so releases cannot be chained;
+      //  - still bounded, because FLARE_MAX_RISE clamps the result, so a
+      //    release made while level gives the same capped pull-out a release
+      //    out of a committed dive does — never more.
+      if (this.releaseBuffer > 0 && !diving) {
         this.releaseBuffer = 0;
         this.flareTimer = FLARE_DURATION;
       }

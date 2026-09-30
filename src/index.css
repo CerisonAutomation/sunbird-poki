@@ -2252,9 +2252,25 @@ fieldset.squad-fields {
   .flight-messages > .hint, .flight-messages > .launch-banner { font-size: 18px; }
 }
 @media (max-height: 600px) {
-  /* Rewards still have sound and the goal/launch slot. A second transient pill
-     is not worth covering the landing corridor on short embedded players. */
-  .hud-root[data-flying="true"] .toasts { display: none; }
+  /* These used to be HIDDEN here outright, on the reasoning that a second
+     transient pill is not worth covering the landing corridor. That reasoning
+     is sound for a cramped screen and wrong about the consequence: `display:none`
+     does not degrade the pill, it deletes the game's entire voice on short
+     embedded players — which is where Poki actually shows the game. Every quip,
+     every joke, every milestone line simply did not exist for them.
+
+     So: keep one visible, make it smaller, and move it clear of the corridor
+     rather than removing it. The landing corridor is the thing the player
+     reads, and this keeps it clear by position instead of by deletion. */
+  .hud-root[data-flying="true"] .toasts {
+    width: min(210px, 42vw);
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+  }
+  .hud-root[data-flying="true"] .toast {
+    font-size: clamp(11px, 1.5vw, 13px);
+    padding: 4px 8px;
+    border-radius: 10px;
+  }
 }
   /* Short windows, and small portrait phones that are also short. The width
      clause carries a height cap on purpose: a 360x740 phone is narrow but has
@@ -2309,7 +2325,14 @@ fieldset.squad-fields {
 .hud-root .impact-popup { max-width:min(180px,100%); font-size:clamp(14px,2.5vw,22px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .hud-root:not([data-ui-state="playing"]) .impact-popups,
 .hud-root:not([data-feedback="hint"]) .impact-popups { display:none; }
-@media(max-height:500px) { .hud-root .impact-popups { display:none; } }
+/* Impact popups render AT the bird, so they are the one foveal message in the
+   build — the player is already looking there. Hiding them on short screens
+   removed the only thing a player reads without hunting for it. Compress the
+   type instead; the words are 1-3 syllables ("THUD!") and stay legible. */
+@media(max-height:500px) {
+  .hud-root .impact-popups { display:block; }
+  .hud-root .impact-popup { font-size:clamp(13px,2.2vw,17px); max-width:min(150px,100%); }
+}
 /* Keep optional social controls secondary and readable without emoji fonts. */
 .flight-footer .emote-wheel { justify-content:flex-end; }
 .flight-footer .emote-wheel button {

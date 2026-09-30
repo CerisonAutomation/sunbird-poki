@@ -2115,9 +2115,15 @@ export class Game {
           break;
       }
       if (surprise.coins > 0) {
-        this.runCoins += surprise.coins;
-        this.save.addCoins(surprise.coins);
-      }
+              // `runCoins` is the run's tally and is paid ONCE, by recordRun() at
+              // finishRun(). Calling addCoins() here as well paid the same coins a
+              // second time — the player watched the wallet jump mid-flight and then
+              // watched the results card pay the identical amount again. Every other
+              // in-flight coin gain (coin sprites, ridge-skim tips, cloud pips) only
+              // touches `runCoins`, so this was the lone outlier double-crediting
+              // the surprise payout. Pinned by `run-coins-single-payout.test.ts`.
+              this.runCoins += surprise.coins;
+            }
       this.telemetry.track("surprise", { kind: surprise.kind });
     }
 

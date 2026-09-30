@@ -281,8 +281,29 @@ export class Input {
   }
 
   private onPointerDown(e: PointerEvent): void {
-    if (!this.enabled) return;
-    if (this.isInteractive(e.target)) return;
+      if (!this.enabled) return;
+      if (this.isInteractive(e.target)) {
+        // A *pointer* press on a flight-HUD control (mute, pause, emotes,
+        // fullscreen) must not leave that control holding DOM focus. Desktop
+        // browsers focus a button on mousedown and nothing in this game ever
+        // blurred it, so the focus ring outlived the press — and the guard in
+        // onKeyDown ("Enter/Space must activate a focused control") then
+        // swallowed every dive key afterwards. The reported symptom was the
+        // player tapping Mute, returning to the sky, holding Space, and
+        // nothing happening.
+        //
+        // Scoped to the play HUD deliberately:
+        //  • Overlays keep their focus, because OverlayNavigation moves focus
+        //    between menu controls and relies on Space/Enter to operate them.
+        //  • A keyboard player who Tabs to a HUD control keeps focus, so
+        //    Space/Enter still operates it — this only clears focus that a
+        //    pointer press created, which no assistive tech depends on.
+        const target = e.target;
+        if (target instanceof Element && target.closest(".play-hud")) {
+          (document.activeElement as HTMLElement | null)?.blur();
+        }
+        return;
+      }
     // A menu covering the flight surface owns the finger: no dive, no armed
     // double-tap boost, no gameplay ripple splashed over the menu — and no
     // preventDefault, which would also swallow the tap that dismisses it.

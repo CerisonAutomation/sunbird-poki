@@ -53,17 +53,6 @@ const MAX_COINS_BASE = 512; // base for high tier
 const MAX_GEMS = 96;
 const MAX_RINGS_BASE = 120; // base for high tier
 const MAX_BALLOONS_BASE = 24; // base for high tier
-// Legacy constants kept for tests that import them — actual pools use instance fields maxCoins/maxRings/maxBalloons
-const _MAX_COINS = MAX_COINS_BASE;
-const _MAX_RINGS = MAX_RINGS_BASE;
-const _MAX_BALLOONS = MAX_BALLOONS_BASE;
-const MAX_COINS = _MAX_COINS;
-const MAX_RINGS = _MAX_RINGS;
-const MAX_BALLOONS = _MAX_BALLOONS;
-// Keep TS happy — these legacy names are imported by tests
-void MAX_COINS;
-void MAX_RINGS;
-void MAX_BALLOONS;
 const BALLOON_COLORS = [0xff6b6b, 0xffc14a, 0x6ad8ff, 0xb18cff, 0x7fe8a0];
 const coinDummy = new THREE.Object3D();
 

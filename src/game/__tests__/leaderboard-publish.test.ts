@@ -79,16 +79,32 @@ describe("metricsToPublish", () => {
   });
 });
 
+/**
+ * Removes comments so a lexical ordering check can only ever match real code.
+ *
+ * This is load-bearing, not a nicety. `submit()` carries a doc comment that
+ * explains why the order matters and names both calls by name while doing so.
+ * Against the raw text, `indexOf("localBestByDevice()")` and
+ * `indexOf("writeLocal(rows)")` both resolve to the *prose* — so the guard
+ * reported success while describing the broken arrangement it exists to
+ * prevent, and would have kept doing so after the code regressed.
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+}
+
 describe("submit() samples personal bests before it persists the run", () => {
   // A behavioural test cannot reach this: `submit()` only publishes when AUDS
   // is configured, which needs `VITE_POKI_GAME_ID` and so never holds under
   // `pnpm test`. The invariant is purely lexical, and lexical is what broke.
   const source = readFileSync(join(process.cwd(), "src/game/Leaderboard.ts"), "utf8");
-  const submitBody = source.slice(source.indexOf("  submit(sub: ScoreSubmission): void {"));
+  const submitBody = stripComments(
+    source.slice(source.indexOf("  submit(sub: ScoreSubmission): void {")),
+  );
 
   it("reads the bests before the write that would fold this run into them", () => {
-    const sample = submitBody.indexOf("localBestByDevice()");
-    const write = submitBody.indexOf("writeLocal(rows)");
+    const sample = submitBody.search(/\blocalBestByDevice\s*\(/);
+    const write = submitBody.search(/\bwriteLocal\s*\(\s*rows\s*\)/);
     expect(sample, "submit() no longer samples personal bests").toBeGreaterThan(-1);
     expect(write, "submit() no longer persists the run").toBeGreaterThan(-1);
     expect(

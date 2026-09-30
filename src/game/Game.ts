@@ -36,7 +36,7 @@ import { photoFinishMessage } from "./Racer";
 import { SlopeChain } from "./SlopeChain";
 import { RoomWatcher, ROOM_POLL_MS, roomSummaryLine, summarizeRooms, type LiveRoom } from "./RoomBrowser";
 import { Leaderboard, loadPilotName, savePilotName, isLeaderboardOnline, type BoardMetric, type BoardPage, type BoardScope } from "./Leaderboard";
-import { generatePilotName, isPilotNameClean, moderatePilotName, pilotNameRejection } from "./pilotNameGenerator";
+import { generatePilotName, moderatePilotName, pilotNameRejection } from "./pilotNameGenerator";
 import { adoptPortalLocale, setLocale, t, whenLocaleReady, type SupportedLocale } from "../i18n";
 import { CUP_TITLES, Tournaments, TRAILS, weekKey, type PrizeGrant } from "./Tournaments";
 import {
@@ -4739,9 +4739,13 @@ export class Game {
           this.hud.toast("Please enter a pilot name", "warn");
           break;
         }
-        if (!isPilotNameClean(nameInput.trim())) {
-          const verdict = moderatePilotName(nameInput.trim());
-          this.hud.toast(verdict.ok ? "That call sign isn't allowed — try a different one" : pilotNameRejection(verdict.reason), "warn");
+        // One moderation pass, and the union narrows naturally. This used to
+        // call `isPilotNameClean` and then `moderatePilotName` on the same
+        // input and pick a copy with `verdict.ok ? … : …` — an arm that could
+        // never be taken, since `isPilotNameClean` IS `moderatePilotName().ok`.
+        const verdict = moderatePilotName(nameInput.trim());
+        if (!verdict.ok) {
+          this.hud.toast(pilotNameRejection(verdict.reason), "warn");
           break;
         }
         const next = savePilotName(nameInput);

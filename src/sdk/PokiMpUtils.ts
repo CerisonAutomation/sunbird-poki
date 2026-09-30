@@ -51,12 +51,6 @@ export const POKI_NETLIB_GAME_ID: string = IS_POKI
   : "";
 
 /**
- * Canonical Poki Netlib game id — see `POKI_NETLIB_GAME_ID`.
- * @deprecated use POKI_NETLIB_GAME_ID
- */
-export const NETLIB_GAME_ID = POKI_NETLIB_GAME_ID;
-
-/**
  * Can we actually offer Poki Netlib multiplayer on this browser?
  * Returns false outright in non-Poki builds (the entire body is DCE'd);
  * on Poki builds, requires WebRTC datachannel support — RTCPeerConnection

@@ -117,11 +117,6 @@ type NetMsg =
   | { type: "start"; at: number; seed: string }
   | { type: "place"; id: string; place: number };
 
-// `isPokiMultiplayerAvailable`, `makeRoomCode`) were re-exported here
-// but all callers now import directly from ./PokiMpUtils. Kept as a
-// historical note; the module itself is not dead — `POKI_NETLIB_GAME_ID`
-// is consumed here (NETLIB_GAME_ID is its alias).
-
 export class PokiNetlibClient implements NetTransport {
   state: PresenceState = "offline";
   roomCode = "";

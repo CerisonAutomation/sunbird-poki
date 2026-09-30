@@ -35,6 +35,7 @@ import { streakOpacity } from "./SpeedFeel";
 import { messageHoldMs } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
+import { TOAST_MIN_VISIBLE_MS, decideToast } from "./toastFloor";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
 import { renderCheckout, renderPaywall, renderShop } from "./hud/shop";
 import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
@@ -173,6 +174,13 @@ export class HUD {
   private overEl!: HTMLElement;
   private overCard!: HTMLElement;
   private toastLayer!: HTMLElement;
+  /** Pills that have now been on screen long enough to be replaced. Driven
+   *  by a timer rather than a wall clock so it behaves identically under
+   *  fake timers, and so there is one source of truth for "has been seen". */
+  private readonly toastSeen = new WeakSet<HTMLElement>();
+  /** Toasts waiting for the incumbent to finish being readable. */
+  private readonly toastQueue: { text: string; kind: string }[] = [];
+  private toastDrainTimer: number | null = null;
   private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number }>();
   private flashEl!: HTMLElement;
   private comboEl!: HTMLElement;
@@ -1454,6 +1462,30 @@ export class HUD {
     }
     // One readable pill in flight, at most two on menu screens.
     const cap = this.root.dataset.flying === "true" ? 1 : 2;
+
+    // Eviction used to be unconditional and immediate: a new toast killed the
+    // incumbent no matter how long it had been up. In flight, where the game
+    // emits a near-continuous stream of system messages, that meant a pill
+    // could be born and destroyed inside the same 100 ms — which is why the
+    // flavour lines never appeared. They were all firing; almost none of them
+    // survived to be read. See toastFloor.ts.
+    const decision = decideToast(
+      this.toastLayer.children.length,
+      cap,
+      this.oldestToastAgeMs(),
+      this.toastQueue.length,
+    );
+    if (decision.action === "drop") return;
+    if (decision.action === "defer") {
+      this.toastQueue.push({ text, kind });
+      if (this.toastDrainTimer === null) {
+        this.toastDrainTimer = this.after(() => {
+          this.toastDrainTimer = null;
+          this.drainToastQueue();
+        }, decision.waitMs);
+      }
+      return;
+    }
     while (this.toastLayer.children.length >= cap) {
       const oldest = this.toastLayer.firstElementChild;
       if (!oldest) break;
@@ -1469,8 +1501,34 @@ export class HUD {
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
     const timer = this.scheduleToastOut(el, text);
+    this.after(() => this.toastSeen.add(el), TOAST_MIN_VISIBLE_MS);
     this.liveToasts.set(text, { el, count: 1, timer });
   }
+
+  /** Effective age of the longest-standing pill, as the floor policy sees
+   *  it: either "has been readable" or "has not". */
+  private oldestToastAgeMs(): number {
+    const oldest = this.toastLayer.firstElementChild as HTMLElement | null;
+    if (!oldest) return Number.POSITIVE_INFINITY;
+    return this.toastSeen.has(oldest) ? Number.POSITIVE_INFINITY : 0;
+  }
+
+  /** Replay the deferred backlog once the incumbent has had its look. */
+  private drainToastQueue(): void {
+    const next = this.toastQueue.shift();
+    if (!next) return;
+    this.toast(next.text, next.kind);
+    // `toast` re-queues if the floor still is not met, so this terminates:
+    // each pass either shows one or re-defers with a strictly shorter wait.
+    if (this.toastQueue.length > 0 && this.toastDrainTimer === null) {
+      this.toastDrainTimer = this.after(() => {
+        this.toastDrainTimer = null;
+        this.drainToastQueue();
+      }, TOAST_MIN_VISIBLE_MS);
+    }
+  }
+
+
 
   /**
    * How long a message must stay up to actually be read.

@@ -32,7 +32,6 @@ import {
   LAND_TUCK_BONUS,
   LAUNCH_POP_MAX,
   LAUNCH_POP_SPEED,
-  LAUNCH_POP_WINDOW,
   MAX_SPEED,
   MAX_SPEED_FEVER,
   MIN_KEEP_SPEED,
@@ -43,6 +42,12 @@ import {
   SUNFLOWER_VY,
   WATER_Y,
 } from "./constants";
+import {
+  LAUNCH_POP_COYOTE_S,
+  LAUNCH_POP_FLOOR,
+  launchPopQuality,
+  withinPopCoyote,
+} from "./launchPop";
 import { clamp, lerp, lerpAngle } from "./math";
 import type { TerrainSystem } from "./TerrainSystem";
 
@@ -220,6 +225,10 @@ export class Bird {
   /** 0..1 — how well the last crest launch was timed. Read by the Game for
    * feedback (callout, sound, particles); 0 means the stick was held. */
   popQuality = 0;
+  /** Seconds of coyote grace remaining in which a release still pops. */
+  private popArmedFor = 0;
+  /** Launch speed captured when the grace was armed, for the pop's scaling. */
+  private popArmedSpeed = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -579,7 +588,13 @@ export class Bird {
         // so this is a skill the player can be measurably better at, and it
         // scales with launch speed so it multiplies good flying rather than
         // replacing it.
-        const timing = clamp(1 - this.releaseAge / LAUNCH_POP_WINDOW, 0, 1);
+        // The window used to be measured from the wrong end: 0.45 s, evaluated
+        // when the bird leaves the ground, means "the lip must arrive within
+        // 0.45 s of your release" — so on any ramp longer than half a second
+        // of travel the correct input scored exactly zero and the release did
+        // nothing at all. See launchPop.ts. The curve now has a floor, so a
+        // release is never worth nothing, and precision is still worth ~2.5x.
+        const timing = launchPopQuality(this.releaseAge);
         this.popQuality = timing;
         if (timing > 0) {
           const speedFactor = clamp(Math.abs(vt) / LAUNCH_POP_SPEED, 0, 1);
@@ -588,6 +603,16 @@ export class Bird {
           // the same take-off and cannot pop twice off a double lip.
           this.releaseAge = Number.POSITIVE_INFINITY;
           this.releaseBuffer = 0;
+          this.popArmedFor = 0;
+        } else {
+          // Left the lip still holding. Arm the coyote grace: releasing just
+          // AFTER the top is what the coach line teaches and what the hand
+          // wants to do, because a lip is easier to see than to anticipate.
+          // Without this the pop was gone the instant the wheels left, and
+          // all that remained was the flare, which is deliberately clamped so
+          // it can arrest a fall and never climb.
+          this.popArmedFor = LAUNCH_POP_COYOTE_S;
+          this.popArmedSpeed = Math.abs(vt);
         }
       } else {
         this.grounded = true;
@@ -646,7 +671,18 @@ export class Bird {
       if (this.releaseBuffer > 0 && !diving) {
         this.releaseBuffer = 0;
         this.flareTimer = FLARE_DURATION;
+        // Coyote pop: the player left the lip holding and let go a moment
+        // later. That is the gesture the tutorial asks for, so pay it — at
+        // the floor rate, because it is the forgiving version of the input,
+        // not the precise one. Consumed here so it cannot also fire again.
+        if (withinPopCoyote(LAUNCH_POP_COYOTE_S - this.popArmedFor)) {
+          const speedFactor = clamp(this.popArmedSpeed / LAUNCH_POP_SPEED, 0, 1);
+          this.vy += LAUNCH_POP_MAX * LAUNCH_POP_FLOOR * speedFactor;
+          this.popQuality = Math.max(this.popQuality, LAUNCH_POP_FLOOR);
+        }
+        this.popArmedFor = 0;
       }
+      this.popArmedFor = Math.max(0, this.popArmedFor - dt);
 
       // The pull-out: a DECAYING BRAKE, not an impulse.
       //

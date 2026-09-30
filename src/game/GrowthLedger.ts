@@ -84,7 +84,7 @@ export function growthLedger(wings: WingsGrowth | null, mastery: MasteryGrowth |
       // renders this field as text, so printing the key verbatim put the string
       // "paper_wing" in front of the player. Resolve it through the same
       // glyph table the rest of the UI uses, and keep the bird as the fallback.
-      icon: iconGlyph(wings.icon || "") || "\u{1FAB6}",
+      icon: wings.icon || iconGlyph("feather"),
       label: wings.name,
       detail: done
         ? `Max rank · ${metres(wings.lifetime)} m flown`
@@ -97,7 +97,7 @@ export function growthLedger(wings: WingsGrowth | null, mastery: MasteryGrowth |
     const level = Number.isFinite(mastery.level) ? Math.max(0, Math.round(mastery.level)) : 0;
     lines.push({
       kind: "mastery",
-      icon: iconGlyph(mastery.icon || "") || "\u{1F396}",
+      icon: mastery.icon || iconGlyph("medal"),
       label: `${mastery.name} · Lv.${level}`,
       detail:
         mastery.maxed || mastery.nextAt === null

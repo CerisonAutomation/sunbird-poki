@@ -150,8 +150,28 @@ const smGlyph: Record<SmIconName, string> = {
   fullscreen: "⛶", fullscreen_exit: "⧉",
 };
 
+/** Neutral stand-in for an unmapped icon name. A small filled dot reads as
+ *  "a marker" in every font that has Geometric Shapes, which is all of them. */
+const FALLBACK_GLYPH = "\u25aa";
+
+/**
+ * Resolve an icon NAME to its glyph.
+ *
+ * This used to `?? name`, returning the key itself when the lookup missed.
+ * That is indistinguishable from a successful lookup at the call site, and it
+ * is exactly how the results card shipped reading "egg Nest upgraded!" and
+ * "trophy Trophy: Cloud Nine" — `beatIcon` hands back names by design, the
+ * renderer forgot to resolve them, and the fallback made the mistake look
+ * like content. An unknown name now yields a neutral marker, so a miss
+ * degrades to a dot instead of leaking an internal identifier into the UI.
+ */
 export function iconGlyph(name: string): string {
-  return smGlyph[name as SmIconName] ?? name;
+  return smGlyph[name as SmIconName] ?? FALLBACK_GLYPH;
+}
+
+/** Does this name resolve to a real glyph? For guards and tests. */
+export function hasIconGlyph(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(smGlyph, name);
 }
 
 /** Original Sunbird miniature illustrations. Local SVG, no icon font, remote

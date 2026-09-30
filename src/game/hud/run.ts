@@ -10,7 +10,7 @@ import { adEscapeArmed, adEscapeCountdown } from "../adGate";
 import { formatNumberLocalized, t } from "../../i18n";
 import { flightTakeaway } from "../FlightGuidance";
 import { growthLedger } from "../GrowthLedger";
-import { clockSvg, menuIcon, menuIconSm } from "../MenuIcons";
+import { clockSvg, iconGlyph, menuIcon, menuIconSm } from "../MenuIcons";
 import { type CelebrationView } from "../ProgressBeats";
 import { type RacerStats } from "../Racer";
 import { nextBird } from "../ShopBrowse";
@@ -198,7 +198,13 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
     const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
     const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
     const text = t(b.key, b.params, b.fallback);
-    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${escapeHtml(b.icon)}</i>${escapeHtml(text)}</div>`;
+    // `beatIcon` returns an icon *NAME* ("egg", "badge", "trophy") — its own
+    // doc comment says so and says to render it through menuIconSm or
+    // iconGlyph. This printed the raw name, so every celebration row on the
+    // results card read "egg Nest upgraded!" and "trophy Trophy: Cloud Nine".
+    // It survived because iconGlyph used to fall back to the name it was
+    // given, which is indistinguishable from a working lookup.
+    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${escapeHtml(iconGlyph(b.icon))}</i>${escapeHtml(text)}</div>`;
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");

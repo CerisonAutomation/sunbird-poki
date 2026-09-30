@@ -394,6 +394,90 @@
 }
 
 /* ---------------------------------------------------------------------
+   D-15  The results card, from the player's screenshot.
+
+   Four separate defects in one frame, all visible without measuring:
+
+   a) The celebration rows read "egg Nest upgraded!", "badge Nest Pass Lv.2",
+      "trophy Trophy: Cloud Nine" — the icon NAME printed as italic text
+      (fixed in hud/run.ts; this is the layout half). The <i> is an icon
+      slot, so give it a fixed square and centre it instead of letting it
+      sit in the text flow at whatever width its content happens to be.
+
+   b) The MIGRATION and TROPHIES tiles were two-thirds empty: a label, a
+      number, and then several hundred pixels of nothing, because the row
+      stretches every tile to match the tallest — and the tallest is the
+      Nest Pass tile with its ticket illustration. Tiles now size to their
+      own content and align to the top of the row.
+
+   c) "WHAT THIS FLIGHT GREW" sat on a flat grey panel that belongs to no
+      other surface in the game, at a contrast that made its own heading
+      the least legible text on the card. It takes the card's paper.
+
+   d) The header clipped: "just flew" was sheared by the card's top edge
+      because the scroll container began above it.
+   --------------------------------------------------------------------- */
+.hud-root .beat > i,
+.hud-root .gl-row dt > i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  min-width: 1.5em;
+  font-style: normal;
+  line-height: 1;
+  opacity: 0.95;
+}
+
+/* Tiles size to their content; the row aligns them, it does not stretch
+   them. Stretch is what produced two tiles of mostly air. */
+.hud-root .result-tiles,
+.hud-root .summary-tiles {
+  align-items: start;
+}
+.hud-root :is(.result-tiles, .summary-tiles) > * {
+  align-self: start;
+  min-height: 0;
+}
+
+/* The growth panel joins the card instead of interrupting it. */
+.hud-root .growth-ledger {
+  background: rgb(255 255 255 / 55%);
+  border: 1px solid rgb(0 0 0 / 7%);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.hud-root .growth-ledger .gl-title {
+  color: var(--ink);
+  opacity: 0.72;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+.hud-root .growth-ledger .gl-row dt {
+  color: var(--ink);
+}
+/* Progress bars were 3 px of pastel on grey — under the 3:1 floor a
+   non-text indicator needs to carry meaning at all. */
+.hud-root .growth-ledger .gl-bar {
+  background: rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.hud-root .growth-ledger .gl-bar > b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* Nothing may be sheared by the top edge of a scrolling card. */
+.hud-root .overlay > .paper-card {
+  scroll-padding-top: 12px;
+}
+.hud-root .overlay > .paper-card > :first-child {
+  margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------
    D-14  Every timer wears a clock.
 
    Countdowns were bare text ("Continues in 7", "Second wind closes in 9s")

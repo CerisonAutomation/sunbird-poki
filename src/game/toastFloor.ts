@@ -1,0 +1,71 @@
+/**
+ * Why a toast is allowed to survive its successor.
+ *
+ * The flight HUD caps itself to ONE visible pill (`MAX_VISIBLE` is 2, but the
+ * in-flight cap is 1), which is correct — the audit's whole complaint about
+ * the flight corridor was that five notification channels were competing for
+ * the one part of the screen the player is looking at.
+ *
+ * The bug was in how the cap was enforced. A new toast evicted the oldest
+ * *unconditionally and immediately*, with no minimum on-screen time. In flight
+ * the game emits a near-continuous stream of system messages — wind, thermals,
+ * goals, coins, rival events — so any message could be born and destroyed
+ * inside the same 100 ms. That is why the flavour lines never appeared: 211
+ * quips, all of them firing correctly, almost none of them ever surviving long
+ * enough to be read. The player's report was "the funny messages don't even
+ * show up", and they were right; the toast call was not the thing that was
+ * broken.
+ *
+ * So eviction is now conditional on the incumbent having had a fair look. A
+ * toast that has not yet had `TOAST_MIN_VISIBLE_MS` on screen is not evicted;
+ * the newcomer waits instead. The queue is bounded, because an unbounded one
+ * would just move the problem into a backlog that plays out after the moment
+ * has passed — a joke about a 1,000 m milestone is worthless at 1,400 m.
+ *
+ * Pure so the policy can be enumerated by a test rather than inferred from
+ * a DOM race.
+ */
+
+/** The floor. Below roughly a third of a second nothing registers as having
+ *  been on screen at all — it reads as a flicker, not a message. */
+export const TOAST_MIN_VISIBLE_MS = 620;
+
+/** How many deferred toasts may wait. Past this the OLDEST waiter is dropped,
+ *  not the newest: in a live game the most recent event is the relevant one. */
+export const TOAST_QUEUE_CAP = 3;
+
+export type ToastDecision =
+  /** Show it now; evict the incumbent if the layer is full. */
+  | { action: "show" }
+  /** The layer is full and the incumbent has not been readable yet. */
+  | { action: "defer"; waitMs: number }
+  /** The backlog is saturated; this message is not worth a queue slot. */
+  | { action: "drop" };
+
+/**
+ * Should this toast display now, wait, or be abandoned?
+ *
+ * @param visibleCount how many pills are on screen
+ * @param cap          how many are allowed (1 in flight, 2 on menus)
+ * @param oldestAgeMs  age of the oldest visible pill; `Infinity` when none
+ * @param queueLength  how many toasts are already deferred
+ */
+export function decideToast(
+  visibleCount: number,
+  cap: number,
+  oldestAgeMs: number,
+  queueLength: number,
+): ToastDecision {
+  // Room to spare: nothing to arbitrate.
+  if (visibleCount < cap) return { action: "show" };
+  // A cap of zero or less means the surface is suppressed entirely.
+  if (cap <= 0) return { action: "drop" };
+  // The incumbent has had its look — the newcomer is more current, so it wins.
+  const age = Number.isFinite(oldestAgeMs) ? oldestAgeMs : Number.POSITIVE_INFINITY;
+  if (age >= TOAST_MIN_VISIBLE_MS) return { action: "show" };
+  if (queueLength >= TOAST_QUEUE_CAP) return { action: "drop" };
+  // Wait exactly as long as the incumbent still needs, never longer: the
+  // backlog must drain as fast as the floor allows or it stops being a queue
+  // and starts being a delay.
+  return { action: "defer", waitMs: Math.max(1, Math.ceil(TOAST_MIN_VISIBLE_MS - age)) };
+}

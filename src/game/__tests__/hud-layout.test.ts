@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HUD } from "../HUD";
+import { TOAST_MIN_VISIBLE_MS } from "../toastFloor";
 import { feedbackSlot } from "../HudFeedback";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = ""; });
@@ -92,9 +93,22 @@ describe("readable HUD feedback", () => {
     hud.toast("Butter landing", "cloud");
     hud.toast("Butter landing", "cloud");
     expect(root.querySelector(".toast")?.textContent).toBe("Butter landing ×2");
+    // The in-flight cap is one pill, and it used to be enforced by evicting
+    // the incumbent instantly — so in a stream of system messages a toast
+    // could be born and destroyed inside the same 100 ms, which is why the
+    // flavour lines never appeared. A pill now gets TOAST_MIN_VISIBLE_MS
+    // before anything may replace it; the newcomer waits its turn.
     hud.toast("Through the ring", "gold");
     expect(root.querySelectorAll(".toast")).toHaveLength(1);
-    expect(root.querySelector(".toast")?.textContent).toBe("Through the ring");
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "the incumbent keeps the slot until it has actually been readable",
+    ).toBe("Butter landing ×2");
+    vi.advanceTimersByTime(TOAST_MIN_VISIBLE_MS + 40);
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "and the deferred message still arrives — it is delayed, not dropped",
+    ).toBe("Through the ring");
     root.dataset.flying = "false";
     hud.toast("Menu reward");
     expect(root.querySelectorAll(".toast")).toHaveLength(2);

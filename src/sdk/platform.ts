@@ -452,8 +452,10 @@ function ensureSdk(): Promise<PlatformName> {
     // the published typings) ended up typed twice by hand.
     const getPoki = pokiSdk;
     loadPromise = new Promise((resolve) => {
-      // index.html now carries the SDK tag itself (Poki's HTML5 guide step 1),
-      // so the usual path is: the tag is already in flight, this poll sees
+      // The packaged portal build carries the SDK tag in its own <head>
+      // (Poki's HTML5 guide step 1 — `scripts/package-portal.mjs` injects it,
+      // and only for the Poki target, because no other edition may load it).
+      // So the usual path is: the tag is already in flight, this poll sees
       // `window.PokiSDK` the moment it lands, and `loadCdn()` never runs.
       //
       // The poll still exists because a host (the Inspector, an embedder) may

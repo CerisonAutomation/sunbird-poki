@@ -102,12 +102,17 @@ function stageHtml() {
   if (portal === "poki") {
     // Match the TAG, not the hostname: the bundled adapter also contains the
     // CDN URL as a string (it is the fallback loader).
-    const SDK_TAG = '<script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
+    //
+    // `data-sunbird-sdk="poki"` is not decoration. `loadCdn()` in
+    // `src/sdk/platform.ts` looks for exactly that attribute before it injects
+    // a tag of its own; without it, a cold load where `ensureSdk()`'s poll
+    // expires before this script finishes downloading ends with TWO
+    // `poki-sdk.js` script tags in the document. The attribute makes the
+    // adapter adopt this tag instead.
+    const SDK_TAG =
+      '<script data-sunbird-sdk="poki" src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
     if (html.includes(SDK_TAG)) throw new Error("Poki SDK tag already staged");
-    html = html.replace(
-      /<head>/i,
-      '<head>\n    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>',
-    );
+    html = html.replace(/<head>/i, `<head>\n    ${SDK_TAG}`);
     if (!html.includes(SDK_TAG)) {
       throw new Error("Poki SDK tag injection failed — the head tag shape changed");
     }

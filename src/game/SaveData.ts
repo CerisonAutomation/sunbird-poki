@@ -249,6 +249,32 @@ export type ChallengeState = {
   dailyChallengeFailures: number;
 };
 
+/**
+ * Does the player's OS ask for reduced motion?
+ *
+ * Read once, defensively: this module is imported by tests and by tooling that
+ * has no `window`, and a throwing default would take the whole save with it.
+ *
+ * This is the seed for `reduceMotion`, which used to default to a flat
+ * `false`. A player who has switched reduced motion ON at the operating-system
+ * level — the group for whom screen shake, hit-stop and full-screen flashes
+ * range from unpleasant to genuinely unsafe — got the full effects package on
+ * their first run and had to find a settings screen to turn it off, having
+ * already been hit by everything it disables. The OS preference is a stated
+ * accessibility need; honouring it by default costs nothing, and the toggle
+ * still overrides it in both directions because the resolved value is what
+ * gets persisted.
+ */
+export function prefersReducedMotion(): boolean {
+  try {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULT_SETTINGS: Settings = {
   mute: false,
   doubleTapBoost: true,
@@ -258,7 +284,7 @@ const DEFAULT_SETTINGS: Settings = {
   musicTrack: "shuffle",
   musicStyle: "songbook",
   haptics: true,
-  reduceMotion: false,
+  reduceMotion: prefersReducedMotion(),
   colorAssist: false,
   softCamera: false,
   bigText: false,
@@ -582,7 +608,12 @@ export class SaveData {
                 : "shuffle",
           musicStyle: p.settings?.musicStyle === "procedural" ? "procedural" : "songbook",
           haptics: p.settings?.haptics === undefined ? true : Boolean(p.settings.haptics),
-          reduceMotion: Boolean(p.settings?.reduceMotion),
+          // A save written before this setting existed has no opinion, so the
+          // OS preference decides; an explicit stored value always wins.
+          reduceMotion:
+            p.settings?.reduceMotion === undefined
+              ? prefersReducedMotion()
+              : Boolean(p.settings.reduceMotion),
           colorAssist: Boolean(p.settings?.colorAssist),
           softCamera: Boolean(p.settings?.softCamera),
           bigText: Boolean(p.settings?.bigText),

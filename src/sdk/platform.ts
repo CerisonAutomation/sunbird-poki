@@ -205,9 +205,19 @@ export interface PlatformAdapter {
    * Gameplay event measurement. `action` is a stable string: `start`/
    * `complete`/`fail` form progress funnels (one outcome per attempt);
    * `visible`/`interact` measure placement exposure vs. engagement; any
-   * other value is a custom event (Poki reserves `/` and `^` — never use them).
+   * other value is a custom event.
+   *
+   * Returns whether the event was actually delivered. The adapter validates
+   * before sending and the live loader discards anything it rejects, so
+   * "called" and "arrived" are not the same thing — a caller that budgets must
+   * budget on this, not on the fact that it called. (This comment previously
+   * said Poki reserves `/` and `^`; that was wrong. It came from an early
+   * hand-rolled guard, and the CDN loader contains no such reservation — the
+   * real rules are a character allowlist plus a cap of two numeric runs
+   * across the three arguments, both enforced by `sanitizeMeasure`. See
+   * `./poki-canon.ts`.)
    */
-  measure(category: string, label: string, action: string): void;
+  measure(category: string, label: string, action: string): boolean;
 /** Share via the portal (best-effort). True on success.
  *
  * `params` is portal share data (Poki appends it to a signed shareable URL,

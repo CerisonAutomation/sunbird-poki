@@ -62,7 +62,7 @@ class StubAdapter implements PlatformAdapter {
   async inviteFriends(_params: InviteParams): Promise<string | null> { return null; }
   updateRoom(_opts: { roomId?: string; isJoinable?: boolean; inviteParams?: InviteParams }): void {}
   leftRoom(): void {}
-  measure(_category: string, _label: string, _action: string): void {}
+  measure(_category: string, _label: string, _action: string): boolean { return false; }
   async share(_message: string, _params?: InviteParams): Promise<boolean> { return false; }
   syncSettings(): void {}
   isMuted(): boolean { return false; }

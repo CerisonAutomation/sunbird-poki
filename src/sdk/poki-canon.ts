@@ -182,6 +182,29 @@ export function clearPokiAuthToken(): void {
 }
 
 /**
+ * Symbols that reach the Poki SDK global, and may therefore be imported only
+ * from inside `src/sdk/`.
+ *
+ * `pokiSdk()` is the single door to `window.PokiSDK`. Its whole value is that a
+ * member Poki does not publish becomes a compile error at the one place that
+ * holds the type — but that guarantee evaporates the moment a module outside
+ * `src/sdk/` reaches in, either through this accessor or through its own
+ * `window as { PokiSDK?: … }` cast.
+ *
+ * It did. `src/game/Telemetry.ts` imported `pokiSdk` and called
+ * `sdk.measure(...)` itself, and because the canon suite only scanned
+ * `src/sdk/poki.ts` and `src/sdk/platform.ts`, an invented member touched
+ * there would have compiled clean and then no-opped in production. Everything
+ * that needs Poki should call a function in this directory instead —
+ * `measureViaPoki` below is the pattern.
+ *
+ * Pinned by `src/sdk/__tests__/poki-canon.test.ts`, which walks `src/` and
+ * fails on any importer outside `src/sdk/` (tests excepted: a suite has to be
+ * able to stub the global to prove anything about it).
+ */
+export const POKI_SDK_ACCESS_CONFINE = ["pokiSdk"] as const;
+
+/**
  * Names that were invented in this repo and must never come back. Pinned by
  * `src/sdk/__tests__/poki-canon.test.ts`, which greps the adapter for them.
  */
@@ -348,4 +371,43 @@ export function sanitizeMeasure(
 export function clampHappyIntensity(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Validate and forward one game event to Poki. Returns whether it was
+ * actually delivered.
+ *
+ * This is the ONLY place in the app that touches a Poki SDK member for
+ * measurement, and it is here rather than in the adapter so that every caller
+ * shares it: `PokiAdapter.measure()` (the general portal path, used by
+ * `Game.ts`) and `Telemetry.emitPokiMeasure` (the curated engagement set).
+ *
+ * `src/game/Telemetry.ts` used to import `pokiSdk` from this module and call
+ * `sdk.measure(...)` itself, which made it a third, unguarded route into the
+ * SDK — `src/sdk/__tests__/poki-canon.test.ts` only scanned `poki.ts` and
+ * `platform.ts`, so an invented member touched there would have compiled
+ * clean and then no-opped in production. That is precisely the failure this
+ * module was written to prevent, and the test's blind spot is now closed by
+ * `POKI_SDK_ACCESS_CONFINE` there.
+ *
+ * `false` means the event did not leave: the SDK was absent, the member was
+ * missing, the loader's validation rejected the arguments, or the call threw.
+ * Callers that budget must spend on that answer — "we called it" is not
+ * "Poki received it", and a caller that assumes otherwise burns a session's
+ * whole allowance on a channel that is not there.
+ */
+export function measureViaPoki(category: string, what: string, action: string): boolean {
+  const clean = sanitizeMeasure(category, what, action);
+  if (!clean) return false;
+  const sdk = pokiSdk();
+  // The live loader's `measure` is what the stub list installs; an older CDN
+  // build without it must not be treated as delivered.
+  if (typeof sdk?.measure !== "function") return false;
+  try {
+    sdk.measure(clean.category, clean.what, clean.action);
+    return true;
+  } catch {
+    /* measurement must never break gameplay */
+    return false;
+  }
 }

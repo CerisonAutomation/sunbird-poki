@@ -1,5 +1,5 @@
 import { isPortalBuild } from "../sdk/platform";
-import { pokiSdk, sanitizeMeasure } from "../sdk/poki-canon";
+import { measureViaPoki } from "../sdk/poki-canon";
 
 /**
  * True only on a Poki build, where measure() is the sanctioned egress.
@@ -194,16 +194,18 @@ export class Telemetry {
     // No discriminator means the event carries nothing Poki can group on.
     if (!what) return;
     const action = typeof mapping.action === "function" ? mapping.action(props) : mapping.action;
-    const clean = sanitizeMeasure(mapping.category, what, action);
-    if (!clean) return;
-    try {
-      const sdk = pokiSdk();
-      if (typeof sdk?.measure !== "function") return; // don't drain on a dead SDK
-      sdk.measure(clean.category, clean.what, clean.action);
-      this.pokiMeasureBudget -= 1;
-    } catch {
-      /* measurement must never break gameplay */
-    }
+    // Through `measureViaPoki` — the one function in the app that touches a
+    // Poki SDK member for measurement, shared with `PokiAdapter.measure()`.
+    // This method used to import `pokiSdk` itself and call `sdk.measure(...)`,
+    // which made it a third route into the SDK: one the canon test cannot see,
+    // since it only scanned `src/sdk/poki.ts` and `src/sdk/platform.ts`. An
+    // invented member touched here would have compiled clean and then no-opped
+    // in production — the exact failure `poki-canon.ts` exists to prevent.
+    //
+    // The budget spends on the delivery answer, not on having called. That is
+    // what stops a dead SDK from quietly consuming a session's whole allowance
+    // while delivering nothing.
+    if (measureViaPoki(mapping.category, what, action)) this.pokiMeasureBudget -= 1;
   }
 
   recent(): readonly Entry[] {

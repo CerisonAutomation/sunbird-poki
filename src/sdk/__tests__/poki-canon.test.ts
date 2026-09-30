@@ -22,8 +22,8 @@
  *
  * Provenance for the canonical surface lives in `src/sdk/poki-canon.ts`.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -32,9 +32,11 @@ import {
   MEASURE_CATEGORIES,
   MEASURE_INTERACTION_ACTIONS,
   MEASURE_PROGRESS_ACTIONS,
+  POKI_SDK_ACCESS_CONFINE,
   POKI_SDK_NON_CANONICAL,
   POKI_SDK_RUNTIME_ONLY,
   clampHappyIntensity,
+  measureViaPoki,
   sanitizeMeasure,
   pokiAuthToken,
   clearPokiAuthToken,
@@ -262,6 +264,97 @@ describe("Poki SDK canonical surface", () => {
     // working submission path.
     expect(typings()).toMatch(/submitScore\?: \(fn: \(leaderboard: string, score: number\) => void\) => void/);
     expect(read("src/sdk/poki.ts")).toMatch(/submitScore/);
+  });
+});
+
+/**
+ * The canonical surface is only worth anything while `pokiSdk()` is the sole
+ * door to `window.PokiSDK`. The suite above checks WHICH members the adapter
+ * and the boot path call — and it could only ever check those two files,
+ * because those were the only two that had a regex for them.
+ *
+ * `src/game/Telemetry.ts` imported `pokiSdk` and called `sdk.measure(...)`
+ * itself, so it was a third route into the SDK in a file no regex here looked
+ * at. An invented member used there would have compiled clean and then no-opped
+ * in production: the exact failure `poki-canon.ts` was written to prevent, in
+ * the one place the guard could not see.
+ *
+ * So the guard is widened from "these two files are canonical" to "nothing
+ * outside `src/sdk/` may reach the global at all" — which is a property of the
+ * tree, not of a file list, and therefore cannot go stale when a file moves.
+ */
+describe("SDK access is confined to src/sdk/", () => {
+  function walk(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (entry === "node_modules") continue;
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (/\.tsx?$/.test(full)) out.push(full);
+    }
+    return out;
+  }
+
+  /** Every shipped source file outside the adapter directory. */
+  function filesOutsideSdk(): { path: string; code: string }[] {
+    return walk(resolve(root, "src"))
+      .filter((f) => !f.startsWith(resolve(root, "src/sdk")))
+      // A suite has to be able to stub the global to prove anything about it.
+      .filter((f) => !f.includes("__tests__"))
+      .map((f) => ({ path: relative(root, f), code: stripNonCode(readFileSync(f, "utf8")) }));
+  }
+
+  it("has files to check — the walk is not silently empty", () => {
+    // A guard that finds nothing to scan passes forever. The count is the
+    // floor the tree is expected to stay above.
+    expect(filesOutsideSdk().length).toBeGreaterThan(50);
+  });
+
+  it("is not imported from outside src/sdk/", () => {
+    const offenders: string[] = [];
+    for (const { path, code } of filesOutsideSdk()) {
+      for (const symbol of POKI_SDK_ACCESS_CONFINE) {
+        // An import clause, or any other reference to the symbol itself.
+        const used = new RegExp(`\\b${symbol}\\b`).test(code);
+        if (used) offenders.push(`${path} — imports/calls ${symbol}()`);
+      }
+    }
+    expect(
+      offenders,
+      `only src/sdk/ may reach the Poki SDK global. Offenders:\n  ${offenders.join("\n  ")}\n` +
+        "Call a function in src/sdk/ instead — see measureViaPoki().",
+    ).toEqual([]);
+  });
+
+  it("is not reached through a hand-rolled window cast", () => {
+    // The other half of the same escape: even without importing `pokiSdk`, a
+    // module can declare its own surface with
+    // `(window as unknown as { PokiSDK?: … })`. That is precisely the cast
+    // `poki-canon.ts` exists to make unnecessary — and it throws away the
+    // canonical type, which is the whole guarantee.
+    const offenders = filesOutsideSdk()
+      .filter(({ code }) => /PokiSDK\s*\??\s*:/.test(code))
+      .map(({ path }) => path);
+    expect(
+      offenders,
+      `these modules declare their own PokiSDK shape instead of using src/sdk/poki-canon: ${offenders.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("routes measurement through one shared function that reports delivery", () => {
+    // Both callers exist, and both must go through the same door.
+    expect(read("src/sdk/poki.ts")).toMatch(/measureViaPoki\(category, label, action\)/);
+    expect(read("src/game/Telemetry.ts")).toMatch(/measureViaPoki\(/);
+
+    // Delivery is a fact about the call, not about having called.
+    expect(measureViaPoki("round", "daytrip", "start")).toBe(false); // no SDK present
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    expect(measureViaPoki("round", "daytrip", "start")).toBe(true);
+    // Rejected by the loader's own rules → not delivered, and not called.
+    expect(measureViaPoki("quest", "2026-38", "clear-1")).toBe(false);
+    expect(calls).toEqual(["round|daytrip|start"]);
   });
 });
 

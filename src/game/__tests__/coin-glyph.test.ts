@@ -1,43 +1,81 @@
-import { describe, expect, it } from "vitest";
+// The coin glyph is the one piece of art that appears next to every single
+// number the player earns, so a defect in it is not cosmetic — it is the most
+// repeated element in the entire game.
+//
+// The report was "the HUD coin has two circles next to it". There was only
+// ever one coin in the markup: `<div class="stat-value coin">${COIN_SVG}<span
+// data-ref="coins">0</span></div>`, a single `●` substitution, no stray
+// bullet anywhere in the play HUD, and `.pill.coin` paints no ::before dot.
+// The duplication was inside the artwork itself. COIN_SVG was built from a
+// body circle (r=8.7) *plus* a lens-shaped path *plus* a second filled circle
+// (r=1.8) sitting on top of the lens. At the 0.9em the HUD actually renders
+// it, that inner blob stopped reading as a highlight on a coin and started
+// reading as a second circle parked next to the first.
+//
+// So the rule this file pins is not "the coin is drawn once" — it is that the
+// coin art contains exactly one *filled* disc. Every other shape must be a
+// ring (`fill="none"`) or a path, because a second filled circle is precisely
+// what the eye splits off as a separate object at small sizes.
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-/**
- * Coins are stored as the unicode bullet U+25CF in the DATA (Economy prices,
- * challenge rewards, the Gold upsell) and normalised to an inline SVG at
- * render time, because neither display font draws the bullet consistently.
- *
- * That is a fragile shape — a regex over finished HTML — so the properties that
- * keep it correct are pinned here rather than left to inspection.
- */
-const hud = readFileSync("src/game/HUD.ts", "utf8");
-const COIN_SVG = hud.match(/const COIN_SVG =([\s\S]*?);\n/)?.[1] ?? "";
+import { describe, expect, it } from "vitest";
 
-describe("coin glyph rendering", () => {
-  it("has exactly one COIN_SVG definition", () => {
-    // A second copy is how a screen ends up drawing two coins for one price.
-    expect(hud.match(/const COIN_SVG\s*=/g)?.length ?? 0).toBe(1);
+const HUD = join(process.cwd(), "src/game/HUD.ts");
+const hud = readFileSync(HUD, "utf8");
+
+/** The COIN_SVG literal, which is module-private by design. */
+function coinArt(): string {
+  const at = hud.indexOf("const COIN_SVG =");
+  expect(at, "COIN_SVG should still exist").toBeGreaterThan(-1);
+  const end = hud.indexOf('"</svg>";', at);
+  expect(end, "COIN_SVG should still be a terminated literal").toBeGreaterThan(at);
+  return hud.slice(at, end);
+}
+
+describe("the coin glyph is one disc, not two", () => {
+  it("has exactly one filled circle — the coin body", () => {
+    const circles = coinArt().match(/<circle\b[^>]*>/g) ?? [];
+    const filled = circles.filter((c) => {
+      const fill = /fill="([^"]*)"/.exec(c)?.[1] ?? "black"; // SVG default fill
+      return fill !== "none";
+    });
+    expect(
+      filled.map((c) => c.replace(/"/g, "'")),
+      "a second filled circle reads as a second coin at 0.9em — use fill=\"none\" for a rim",
+    ).toHaveLength(1);
   });
 
-  it("renderCoins is idempotent — it never re-processes an already-converted string", () => {
-    // The SVG body must contain no bullet, or a second pass would nest a coin
-    // inside a coin. This is the whole reason it is safe to call on a string
-    // that some other layer already touched.
-    expect(COIN_SVG).not.toContain("●");
+  it("gives the one filled circle the current text colour, so it themes with the HUD", () => {
+    // The body must inherit `color` (the sheets set .coin-glyph to --amber /
+    // --coin-gold). A hard-coded fill here would silently ignore every token.
+    expect(coinArt()).toMatch(/<circle\b[^>]*fill="currentColor"/);
   });
 
-  it("the replacement consumes at most one space, so a price does not gain a gap", () => {
-    // `/●\s?/` not `/●\s*/` — "● 500" must become glyph+"500" with the existing
-    // single space intact, not glyph+" 500".
-    expect(hud).toContain("/●\\s?/g");
+  it("keeps its highlight as a path, not a dot", () => {
+    // The old art's r=1.8 filled circle was the actual offender; a regression
+    // back to "add a small dot in the middle" is the same bug wearing a hat.
+    expect(coinArt()).not.toMatch(/r="1\.8"/);
+    expect(coinArt()).toMatch(/<path\b/);
   });
 
-  it("data carries the bullet, never a pre-baked SVG", () => {
-    // If a price string started carrying raw SVG, renderCoins would leave it
-    // alone and a caller that also emitted COIN_SVG would double it.
-    for (const f of ["src/game/Economy.ts", "src/game/Challenges.ts"]) {
-      const src = readFileSync(f, "utf8");
-      expect(src, f).not.toContain("coin-glyph");
-      expect(src, f).not.toContain("<svg");
-    }
+  it("is hidden from assistive tech — the number beside it carries the meaning", () => {
+    // A decorative glyph announced next to "250" would be read as a stray
+    // character, so the SVG is aria-hidden and the visible number is the
+    // accessible content.
+    expect(coinArt()).toMatch(/aria-hidden="true"/);
+  });
+});
+
+describe("coin substitution leaves no raw bullet behind", () => {
+  it("replaces every bullet with the glyph, so no stray ● survives", () => {
+    // renderCoins is the only thing standing between the old "● 250" blob and
+    // the SVG, and it only runs on the paths that call it. If a render path
+    // ever stops calling it, a raw bullet reappears next to a real coin —
+    // which is literally the "two circles" report.
+    const calls = hud.match(/renderCoins\(/g) ?? [];
+    // The definition itself, plus one per render path.
+    expect(calls.length, "every render path should run through renderCoins").toBeGreaterThan(4);
+    expect(hud).toMatch(/return html\.replace\(\/●/);
   });
 });

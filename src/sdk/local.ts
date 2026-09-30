@@ -189,8 +189,9 @@ export class LocalAdapter implements PlatformAdapter {
   }
   updateRoom(_opts: { roomId?: string; isJoinable?: boolean; inviteParams?: InviteParams }): void {}
   leftRoom(): void {}
-  /** No portal analytics behind a direct build — measurement is a no-op. */
-  measure(_category: string, _label: string, _action: string): void {}
+  /** No portal analytics behind a direct build — measurement is a no-op, and
+   *  reports `false` so a budgeting caller does not spend on a dead channel. */
+  measure(_category: string, _label: string, _action: string): boolean { return false; }
   async share(message: string, _params?: InviteParams): Promise<boolean> {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {

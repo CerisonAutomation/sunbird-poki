@@ -83,6 +83,18 @@ const NAME_KEY = "sunbird.pilotname";
 export type BoardScope = "global" | "daily" | "week" | "friends";
 export type BoardMetric = "distance" | "altitude" | "perfects" | "coins" | "score";
 
+/**
+ * Every `BoardMetric`, in board order — the single canonical list.
+ *
+ * Three places needed this and each used to keep its own copy:
+ * `localBestByDevice()` (all five), the board screen's metric tabs (all
+ * five), and `submit()`'s publish loop (FOUR — `score` was missing, so the
+ * Score tab rendered a surface nothing ever wrote to). A restated list is
+ * how that happened, so this is now derived from the union and the union is
+ * the only thing to edit.
+ */
+export const BOARD_METRICS: readonly BoardMetric[] = ["distance", "altitude", "perfects", "coins", "score"];
+
 export type BoardEntry = {
   id: string;
   name: string;
@@ -199,12 +211,30 @@ function metricOf(row: { distance: number; altitude: number; perfects: number; c
 
 const valueForMetric = metricOf;
 
+/**
+ * The metrics this run is worth publishing: every `BoardMetric` the run beat
+ * the device's PREVIOUS personal best on.
+ *
+ * `previousBest` must be sampled before the row is persisted. Handed a map
+ * that already contains the row being judged, every metric compares equal or
+ * worse and this returns `[]` — which is exactly how the Poki edition's
+ * global board ended up empty on every metric. The sampling site in `submit()`
+ * is the thing that has to stay correct, so it is a one-liner call and this
+ * is where the rule lives.
+ */
+export function metricsToPublish(
+  row: Parameters<typeof valueForMetric>[0],
+  previousBest: ReadonlyMap<BoardMetric, number>,
+): BoardMetric[] {
+  return BOARD_METRICS.filter((m) => valueForMetric(row, m) > (previousBest.get(m) ?? 0));
+}
+
 /** The device's current personal-best for each metric (from the local store),
  *  used to avoid spamming AUDS with runs that didn't beat anything. */
 function localBestByDevice(): Map<BoardMetric, number> {
   const out = new Map<BoardMetric, number>();
   for (const r of readLocal()) {
-    for (const m of ["distance", "altitude", "perfects", "coins", "score"] as BoardMetric[]) {
+    for (const m of BOARD_METRICS) {
       const v = valueForMetric(r, m);
       if (v > (out.get(m) ?? 0)) out.set(m, v);
     }
@@ -455,6 +485,18 @@ export class Leaderboard {
     const verdict = verifyRunSubmission(sub);
     if (!verdict.valid) return;
     const row: StoredRow = { ...sub, date: dateSeed() };
+
+    // Read the device's personal bests BEFORE this run is persisted.
+    //
+    // This ordering is load-bearing. `localBestByDevice()` scans the local
+    // store, so reading it after `writeLocal(rows)` means `bestLocal` already
+    // contains the very row being judged: `prev >= valueForMetric(row, m) === v`,
+    // which makes `if (v <= prev) continue` true for EVERY metric. The AUDS
+    // publish loop below was therefore a guaranteed no-op — the Poki edition's
+    // global board stayed empty on all five metrics, not just on whichever
+    // ones this array happened to list. Read first, write second.
+    const bestLocal = localBestByDevice();
+
     const rows = readLocal().filter((r) => r.deviceId !== sub.deviceId || r.date !== row.date);
     rows.push(row);
     rows.sort((a, b) => b.distance - a.distance);
@@ -464,8 +506,7 @@ export class Leaderboard {
     // Only submit when this run beat the device's existing best for the
     // metric — otherwise we'd spam AUDS / the HTTP backend with a flood of
     // mediocre runs and pollute the public board.
-    const metrics: BoardMetric[] = ["distance", "altitude", "perfects", "coins"];
-    const bestLocal = localBestByDevice();
+    const metrics = metricsToPublish(row, bestLocal);
 
     if (API) {
       void signScore(row.deviceId, row.distance, row.score)

@@ -73,7 +73,11 @@ describe("quips are actually visible on short embedded viewports", () => {
     // it, it deleted the game's voice for the audience it ships to.
     const css = readFileSync("src/index.css", "utf8");
     expect(css).not.toMatch(/\[data-flying="true"\]\s*\.toasts\s*\{\s*display:\s*none/);
-    expect(css).not.toMatch(/\.impact-popups\s*\{\s*display:none/);
+    // Narrow: the `:not([data-feedback])` guard that hides impact popups OUTSIDE
+    // the hint beat is correct and stays. It is only the short-viewport
+    // media query that was deleting them mid-run.
+    const shortViewportHides = /@media\s*\([^)]*max-height:\s*500px[^)]*\)\s*\{[^{}]*\{[^{}]*\.impact-popups\s*\{\s*display:\s*none/;
+    expect(css, "impact popups are still hidden by a short-viewport query").not.toMatch(shortViewportHides);
   });
 
   it("still keeps the landing corridor clear, by position rather than deletion", () => {

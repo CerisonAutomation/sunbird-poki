@@ -24,7 +24,7 @@ import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Mom
 import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
 import type { Fx } from "./Fx";
-import { DPR_COOLDOWN_SECONDS, EFFECT_UP_FRAME_SECONDS, nextBloomBudget, nextDpr, QUALITY_WINDOW_SECONDS } from "./quality";
+import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
 import { adBreakAllowsAction, adBreakCanEnd } from "./adGate";
@@ -335,6 +335,12 @@ export class Game {
   private renderDpr = 0;
   private dustCooldown = 0;
   private particleBudget = 1;
+  /** Soft-shadow + particle state for the two-way adaptive policy. Mirrors
+   * `renderer.shadowMap.enabled` and `particleBudget`; see `nextEffectBudget`. */
+  private effectBudget: EffectBudget = { shadows: true, particles: 1, goodWindows: 0 };
+  /** True when the WebGL context fell back to a software rasteriser: shadows
+   * are never affordable there, so they must not be "restored" either. */
+  private softwareMode = false;
   private deferredInstall: BeforeInstallPromptEvent | null = null;
   private readonly onBeforeInstall: (e: Event) => void;
   private readonly onInstalled: () => void;
@@ -819,7 +825,9 @@ export class Game {
     // Software renderer: disable shadows and cap pixel ratio to keep it usable.
     // The device baseline does the same for measured-lite hardware (≤2 cores,
     // ≤2 GB, no WebGL) — DEV-03 is "pick tiers from the probe", not from taste.
+    this.softwareMode = softwareMode;
     this.renderer.shadowMap.enabled = !softwareMode && this.deviceProfile.tier !== "lite";
+    this.effectBudget = { shadows: this.renderer.shadowMap.enabled, particles: this.particleBudget, goodWindows: 0 };
     // PCFSoftShadowMap was removed in three r165+ — PCF with a slightly larger
     // shadow map is the soft look without the console warning every load.
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -6395,6 +6403,9 @@ export class Game {
     const wantShadows =
       this.deviceProfile.tier !== "lite" && !this.isMobile && (s.quality === "high" || (s.quality === "auto" && this.frameEma < 1 / 30));
     if (this.renderer.shadowMap.enabled !== wantShadows) this.renderer.shadowMap.enabled = wantShadows;
+    // Settings are an explicit instruction, so they reset the adaptive state
+    // rather than fighting it: the ladder starts again from what was chosen.
+    this.effectBudget = { shadows: wantShadows, particles: this.particleBudget, goodWindows: 0 };
     this.resize();
     this.bump();
   }
@@ -6461,25 +6472,20 @@ export class Game {
       });
     }
 
-    if (this.frameEma > 1 / 40) {
-      // At the floor resolution already? Kill soft shadows for the frame budget.
-      if (this.renderer.shadowMap.enabled) {
-        this.renderer.shadowMap.enabled = false;
-        this.telemetry.track("shadows_disabled", {});
-      }
-      if (this.particleBudget > 0.3) {
-        this.particleBudget = Math.max(0.3, this.particleBudget - 0.2);
-        this.particles.setBudget(this.particleBudget);
-      }
-    } else if (
-      this.frameEma < EFFECT_UP_FRAME_SECONDS &&
-      !this.isMobile &&
-      this.deviceProfile.tier !== "lite" &&
-      this.renderer.shadowMap.enabled === false
-    ) {
-      // Headroom is back — restore soft shadows (they were only shed under load).
-      this.renderer.shadowMap.enabled = true;
-      this.particleBudget = Math.min(1, this.particleBudget + 0.2);
+    // Soft shadows and particle density, through the same two-way policy the
+    // resolution uses. This used to be an inline one-way ratchet whose
+    // recovery branch was gated on `!this.isMobile` — so on a phone, one slow
+    // window shed the shadows and 20% of the particles for the rest of the
+    // session. See `nextEffectBudget`.
+    const shadowsAllowed = !this.softwareMode && this.deviceProfile.tier !== "lite";
+    const beforeEffects = this.effectBudget;
+    this.effectBudget = nextEffectBudget(beforeEffects, this.frameEma, { shadowsAllowed });
+    if (this.effectBudget.shadows !== beforeEffects.shadows) {
+      this.renderer.shadowMap.enabled = this.effectBudget.shadows;
+      this.telemetry.track(this.effectBudget.shadows ? "shadows_restored" : "shadows_disabled", {});
+    }
+    if (this.effectBudget.particles !== beforeEffects.particles) {
+      this.particleBudget = this.effectBudget.particles;
       this.particles.setBudget(this.particleBudget);
     }
   }

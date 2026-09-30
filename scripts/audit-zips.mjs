@@ -119,9 +119,18 @@ for (const portal of PORTALS) {
   if (badFile) fail(portal, `unexpected zip entry "${badFile}" (portals want ONLY index.html + icons/ + fonts/ + i18n/).`);
   const icons = files.filter((f) => f.startsWith("icons/")).length;
   const fonts = files.filter((f) => f.startsWith("fonts/")).length;
+  // Type is inlined by `vite-plugin-singlefile` as base64 woff2 data URIs, so
+  // the faces are inside the zip without being files under fonts/. Counting
+  // only real files reported "0 font files" on a bundle that demonstrably
+  // ships six inlined faces — the same stale assumption verify-portal.mjs had.
+  // What matters is that the bytes travel with the game, not their container.
+  const fontsInlined = (html.match(/data:(?:font\/woff2|application\/font-woff)/g) ?? []).length;
   if (!files.includes("index.html")) fail(portal, "index.html missing from zip.");
   if (icons < 3) fail(portal, `only ${icons} icon files in zip.`);
-  if (fonts < 2) fail(portal, `only ${fonts} font files in zip.`);
+  if (fonts < 2 && fontsInlined < 2) {
+    fail(portal, `only ${fonts} font files in zip and ${fontsInlined} inlined face(s) — the type did not ship.`);
+  }
+  if (fontsInlined) note(`${portal}: ${fontsInlined} font face(s) inlined into index.html (no fonts/ directory needed).`);
 
   /* ---------------------------------------------------------------- size */
   if (bytes > MAX_ZIP_BYTES) fail(portal, `${(bytes / 1e6).toFixed(2)} MB exceeds the 8 MB portal bar.`);

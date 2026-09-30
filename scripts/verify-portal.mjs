@@ -98,7 +98,19 @@ for (const portal of PORTALS) {
     failures.push(`${portal}: payment-processor marker in the staged bundle — ${hit} (portal builds are coin-only).`);
   }
   if (/(href|src)="\/[^"]*"/.test(html)) failures.push(`${portal}: absolute /asset reference (breaks CDN subpaths).`);
-  if (!/icons\//.test(list) || !/fonts\//.test(list)) failures.push(`${portal}: icons/ or fonts/ missing from zip.`);
+  // Self-containment, not a literal directory listing. `vite-plugin-singlefile`
+  // inlines the woff2 faces into index.html as base64 data URIs, so the fonts
+  // genuinely are in the zip — just not as files under fonts/. This check used
+  // to demand that directory, and started failing the moment the dead-payload
+  // trim stopped shipping files that were already inlined — which is the trim
+  // working correctly, not a regression. Icons still ship as real files (a
+  // <link rel=icon> href cannot be inlined), so those stay mandatory; the
+  // requirement is that the bytes are present, however they got there.
+  const fontsInlined = html.includes("data:font/woff2") || html.includes("data:application/font-woff");
+  if (!/icons\//.test(list)) failures.push(`${portal}: icons/ missing from zip.`);
+  if (!/fonts\//.test(list) && !fontsInlined) {
+    failures.push(`${portal}: fonts are neither shipped under fonts/ nor inlined into index.html.`);
+  }
   // SDK profile: the build must SHIP its own portal integration, and must not
   // STATICALLY load anything remote (a <script src="http…"> runs unconditionally
   // — portals block those). Which SDK URL flows into the dynamic loader is

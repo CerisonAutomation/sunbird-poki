@@ -32,6 +32,7 @@ import { MissionRow } from "./Missions";
 import { TRACK_NAMES } from "./Music";
 
 import { streakOpacity } from "./SpeedFeel";
+import { messageHoldMs, TOAST_ACQUIRE_MS, TOAST_MS_PER_WORD, TOAST_FLOOR_MS, TOAST_CEIL_MS } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
@@ -71,15 +72,6 @@ export { renderSquad } from "./hud/race";
  * restored view: whatever the player last scrolled, landing on the home menu
  * must never park the one button that starts a run above the fold. */
 const LAUNCH_CTA = ".home-launch";
-/* --- transient message timing -------------------------------------------------
- * See `HUD.scheduleToastOut` for the reasoning and the sources. In short: the
- * old 28 ms/char model gave a median six-word quip 1.73 s, which is exactly how
- * long six words take to read and leaves no time to acquire the target. The
- * message was arriving unread. */
-const TOAST_ACQUIRE_MS = 450;   // peripheral novel target, moving background
-const TOAST_MS_PER_WORD = 415;  // 238 wpm, derated for peripheral + divided attention
-const TOAST_FLOOR_MS = 1100;    // a one-word toast still has to be seen
-const TOAST_CEIL_MS = 6000;     // the layer can be occupied; do not deadlock it
 
 function medalText(earned: Medal, toNext: number | null): string {
   if (toNext === null) return "◆ Maxed";

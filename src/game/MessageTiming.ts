@@ -1,0 +1,39 @@
+/**
+ * How long a transient message must stay up to actually be read.
+ *
+ * This lived as a private formula inside `HUD.scheduleToastOut`, and a second,
+ * different, flat 3000 ms lived in `NotificationQueue` beside it. Two layers,
+ * two answers to the same question, neither derived from anything — which is
+ * how a median six-word quip ended up on screen for 1.73 s, roughly how long six
+ * words take to read with nothing left for finding the text first.
+ *
+ * So: one model, exported, used by both.
+ *
+ *   need = ACQUIRE + words x MS_PER_WORD
+ *
+ * ACQUIRE_MS is the cost of a PERIPHERAL novel target on a moving background.
+ * The fovea — the only region with reading acuity — is 1.5-2 degrees of visual
+ * field, and a one-button game pins gaze to the bird, so anything off the bird
+ * is read at a discount. MS_PER_WORD is 415 ms: 238 wpm from Brysbaert's 2019
+ * meta-analysis of 190 studies, reduced for peripheral placement, for divided
+ * attention, and for reading an isolated phrase rather than connected prose.
+ *
+ * WORDS, not characters, because a character is the wrong unit — a two-letter
+ * word costs more per character than a seven-letter one, so a character model
+ * misprices both ends.
+ */
+export const TOAST_ACQUIRE_MS = 450;
+export const TOAST_MS_PER_WORD = 415;
+export const TOAST_FLOOR_MS = 1100;
+/** The layer can be occupied; an unbounded hold deadlocks it. */
+export const TOAST_CEIL_MS = 6000;
+
+/** Word count that skips leading/trailing/collapsed whitespace. */
+export function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** Milliseconds a message needs on screen to be read, bounded at both ends. */
+export function messageHoldMs(text: string): number {
+  return Math.min(TOAST_CEIL_MS, Math.max(TOAST_FLOOR_MS, TOAST_ACQUIRE_MS + wordCount(text) * TOAST_MS_PER_WORD));
+}

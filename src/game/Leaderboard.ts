@@ -493,8 +493,8 @@ export class Leaderboard {
     // contains the very row being judged: `prev >= valueForMetric(row, m) === v`,
     // which makes `if (v <= prev) continue` true for EVERY metric. The AUDS
     // publish loop below was therefore a guaranteed no-op — the Poki edition's
-    // global board stayed empty on all five metrics, not just on whichever
-    // ones this array happened to list. Read first, write second.
+    // global board stayed empty on all five metrics, not merely on whichever
+    // ones the publish list happened to name. Read first, write second.
     const bestLocal = localBestByDevice();
 
     const rows = readLocal().filter((r) => r.deviceId !== sub.deviceId || r.date !== row.date);

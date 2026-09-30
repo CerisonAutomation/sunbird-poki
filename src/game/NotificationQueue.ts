@@ -27,8 +27,14 @@ interface LiveNotification {
 
 /** At most this many notifications render at once; the rest wait their turn. */
 const MAX_VISIBLE = 2;
-/** How long a notification stays fully visible before it starts to exit. */
-const HOLD_MS = 3000;
+import { messageHoldMs } from "./MessageTiming";
+
+/** How long a notification stays fully visible before it starts to exit.
+ *
+ *  This used to be a flat 3000 ms sitting next to HUD's 1200 + 28 ms/char —
+ *  two layers, two different answers to the same question, and neither of them
+ *  derived from anything. One formula now, shared. */
+const HOLD_MS = messageHoldMs("");
 /** Fade/slide-out duration, kept in sync with the CSS transition below. */
 const EXIT_MS = 240;
 

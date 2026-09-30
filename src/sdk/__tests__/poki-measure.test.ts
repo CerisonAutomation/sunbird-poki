@@ -207,12 +207,18 @@ const literal = (arg: string | undefined): string | null =>
 const DYNAMIC_ACTION_DOMAINS: Record<string, string[]> = {
   // `Game.ts`: `private runOutcome: "complete" | "fail" = "fail"`.
   "this.runOutcome": ["complete", "fail"],
-  // `Telemetry.ts`: the whole triple comes out of `sanitizeMeasure` a few lines
-  // above, so category/what/action are loader-legal by construction. Replaying
-  // probe values through the REAL adapter here still proves the call reaches
-  // the SDK; the guard itself is pinned separately by `telemetry.test.ts`
-  // ("never emits a value the live loader would reject"), which runs every
-  // emitted triple through the loader's own validator.
+  // `poki-canon.ts`, in `measureViaPoki`: the whole triple comes out of
+  // `sanitizeMeasure` a few lines above, so category/what/action are
+  // loader-legal by construction. Replaying probe values through the REAL
+  // adapter here still proves the call reaches the SDK; the guard itself is
+  // pinned separately by `telemetry.test.ts` ("never emits a value the live
+  // loader would reject"), which runs every emitted triple through the
+  // loader's own validator.
+  //
+  // This used to be `Telemetry.ts`, which called `sdk.measure(clean.*)`
+  // directly. Telemetry now goes through `measureViaPoki`, so the one
+  // remaining `clean.*` call site is the shared function itself — which is
+  // where it belongs, and why the key is unchanged.
   "clean.action": ["reached", "complete", "fail", "interact", "visible", "granted"],
 };
 

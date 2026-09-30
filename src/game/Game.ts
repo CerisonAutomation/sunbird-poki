@@ -2230,8 +2230,17 @@ export class Game {
           this.particles.burstRing(x, y, 0x9ae8ff);
           this.particles.emitSonicBoom(x, y);
           this.glow(0.8);
-          this.hud.toast(`Sky gem +${value}`, "gold");
-          if (this.runGems % 2 === 1) this.hud.toast(quip(GEM_QUIPS, this.runGems), "gold");
+          // ONE toast, not two. The flight cap is a single pill, so two calls on
+          // the same tick meant the second evicted the first within the same
+          // frame — the "Sky gem +5" readout was created and destroyed before
+          // it could ever be drawn. Merged so the number and the joke arrive
+          // together, and the joke now gets the full read window.
+          this.hud.toast(
+            this.runGems % 2 === 1
+              ? `Sky gem +${value} · ${quip(GEM_QUIPS, this.runGems)}`
+              : `Sky gem +${value}`,
+            "gold",
+          );
         }
         this.haptic(8);
       },

@@ -155,9 +155,9 @@
 | `TOOL-01` | informational | The Inspector evaluates a web build against the platform's success factors. | ℹ️ info | Submission-time tool run. |
 | `TOOL-02` | requirement | The build must survive the Inspector's mobile and technical-optimisation passes (no external resources, no console errors, sane image weights). | ✅ verified (executed) | executed: node scripts/audit-zips.mjs |
 | `TOOL-03` | requirement | Uploadable as a folder with index.html at the root, working from any sub-path. | ✅ verified (executed) | executed: node scripts/verify-upload.mjs |
-| `TOOL-04` | informational | Netlib is a WebRTC-datachannel P2P library for web games. | ℹ️ info | src/game/PokiNetlib.ts |
+| `TOOL-04` | informational | Netlib is a WebRTC-datachannel P2P library for web games. | ℹ️ info | src/sdk/PokiNetlib.ts |
 | `TOOL-05` | informational | Netlib is usable whether or not the game is hosted on Poki. | ℹ️ info | Availability note. |
-| `TOOL-06` | requirement | Feature-detect WebRTC and keep a non-P2P path when using Netlib. | ✅ verified | src/game/PokiMpUtils.ts matches /RTCPeerConnection/ |
+| `TOOL-06` | requirement | Feature-detect WebRTC and keep a non-P2P path when using Netlib. | ✅ verified | src/sdk/PokiMpUtils.ts matches /RTCPeerConnection/ |
 | `TOOL-07` | informational | AUDS stores user-generated content and returns shareable codes, enabling non-real-time multiplayer. | ℹ️ info | src/sdk/auds.ts |
 | `TOOL-08` | requirement | AUDS is exclusive to Poki-hosted games and needs a live game id, so it cannot be a dependency of portable builds. | ✅ verified (executed) | executed: node scripts/verify-upload.mjs |
 
@@ -264,14 +264,14 @@
 
 | Rule | Kind | Requirement | Status | Verification |
 |---|---|---|---|---|
-| `NL-02` | requirement | new Network(<game-id>) then create() a lobby or join(code) it. | ✅ verified | src/game/PokiNetlib.ts matches /new Network\(NETLIB_GAME_ID\)/ |
-| `NL-03` | requirement | Real-time state on the unreliable channel; critical events on reliable. | ✅ verified | src/game/PokiNetlib.ts matches /unreliable/ |
-| `NL-05` | requirement | WebRTC is feature-detected and a non-WebRTC path exists. | ✅ verified | src/game/PokiMpUtils.ts matches /RTCPeerConnection/ |
+| `NL-02` | requirement | new Network(<game-id>) then create() a lobby or join(code) it. | ✅ verified | src/sdk/PokiNetlib.ts matches /new Network\(NETLIB_GAME_ID\)/ |
+| `NL-03` | requirement | Real-time state on the unreliable channel; critical events on reliable. | ✅ verified | src/sdk/PokiNetlib.ts matches /unreliable/ |
+| `NL-05` | requirement | WebRTC is feature-detected and a non-WebRTC path exists. | ✅ verified | src/sdk/PokiMpUtils.ts matches /RTCPeerConnection/ |
 | `NL-06` | requirement | The UI says whether the player is in a live room or a local/AI fallback. | ✅ verified | src/game/Game.ts matches /multiplayerLive/ |
-| `NL-07` | requirement | A dropped connection must not end the session; degrade to the local flock. | ✅ verified | src/game/PokiNetlib.ts matches /closedByUs/ |
-| `NL-08` | requirement | Netlib is loaded lazily so it never lands in the boot path. | ✅ verified | src/game/net-transport.poki.ts matches /import\("\./PokiNetlib"\)/ |
+| `NL-07` | requirement | A dropped connection must not end the session; degrade to the local flock. | ✅ verified | src/sdk/PokiNetlib.ts matches /closedByUs/ |
+| `NL-08` | requirement | Netlib is loaded lazily so it never lands in the boot path. | ✅ verified | src/game/net-transport.poki.ts matches /import\("\.\./sdk/PokiNetlib"\)/ |
 | `NL-09` | requirement | A Netlib build must not contain another platform's transport names or endpoints. | ✅ verified (executed) | executed: pnpm isolation:check |
-| `NL-10` | requirement | Lobby codes are short and unambiguous to read aloud. | ✅ verified | src/game/PokiMpUtils.ts matches /ABCDEFGHJKLMNPQRSTUVWXYZ/ |
+| `NL-10` | requirement | Lobby codes are short and unambiguous to read aloud. | ✅ verified | src/sdk/PokiMpUtils.ts matches /ABCDEFGHJKLMNPQRSTUVWXYZ/ |
 
 ## AU — AUDS: Arbitrary User Data Store
 

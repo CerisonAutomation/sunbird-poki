@@ -28,6 +28,27 @@ export const TOAST_FLOOR_MS = 1100;
 /** The layer can be occupied; an unbounded hold deadlocks it. */
 export const TOAST_CEIL_MS = 6000;
 
+/**
+ * Extra wall-clock a message may be WAITED while its lane is closed, on top of
+ * the read window it has already earned.
+ *
+ * `messageHoldMs` prices reading. It says nothing about the lane being visible,
+ * and in this HUD the two are independent: the countdown, the launch banner and
+ * the finish counter each set `visibility:hidden` on the toast lane, so a quip
+ * fired in those windows is unreadable for the whole of its nominal hold.
+ *
+ * Without a wait budget the message is removed having been seen for zero
+ * milliseconds, which is the "the funny messages don't show up" report. With an
+ * unbounded wait the lane could deadlock — a message raised at the tail of a long
+ * countdown would still be pending minutes later — so the wait is itself
+ * bounded, and bounded generously enough to cover the longest real occlusion
+ * (a 3 s start countdown) with room to spare.
+ */
+export const TOAST_OBSCURE_WAIT_MS = 3000;
+
+/** How often a waiting toast re-checks whether its lane has opened. */
+export const TOAST_OBSCURE_POLL_MS = 100;
+
 /** Word count that skips leading/trailing/collapsed whitespace. */
 export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;

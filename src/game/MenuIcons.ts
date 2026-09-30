@@ -141,10 +141,83 @@ const smArtwork = {
 
 export type SmIconName = keyof typeof smArtwork;
 
+/**
+ * Every name an icon renderer will accept, as a runtime Set.
+ *
+ * Exported so the coverage test can enumerate the map instead of re-typing it:
+ * a list of 95 strings maintained next to the artwork is a second thing to keep
+ * in sync, and a test written against the copy would stay green the day the
+ * copy rotted.
+ */
+export const SM_ICON_NAMES: ReadonlySet<string> = new Set(Object.keys(smArtwork));
+
+/**
+ * One loud place for "this icon name does not exist".
+ *
+ * Icon names reach these renderers from *data* — `ev.icon`, `m.icon`,
+ * `mode.icon`, a wing tier, a chapter head — so nothing but a runtime map lookup
+ * can tell a typo from a real name. Three separate renderers each handled the
+ * miss differently and all three were visible on the results card:
+ *
+ *   - `iconGlyph` returned the raw name, so a miss printed the word "trophy"
+ *     into a results row in place of the picture.
+ *   - `menuIconSm` returned `""`, so a miss made the icon vanish silently.
+ *   - `menuIcon` interpolated `undefined`, printing the word "undefined".
+ *
+ * The fix is not three `if`s — it is that a miss can never become text again.
+ * Every renderer now routes through here, and the answer is always *drawn
+ * something or nothing*. Never a word.
+ *
+ * Loud in development, silent in production: `import.meta.env.DEV` folds to
+ * `false` at build time, so the shipped bundle carries the quiet branch. The
+ * regression guard that actually holds the line is `icon-coverage.test.ts`,
+ * which fails the build if any name in use is absent from any map — a console
+ * message nobody reads is not a guard.
+ *
+ * `console.debug`, not `console.warn`: `verify:prod` bans `log`/`warn`/`info`
+ * anywhere under `src/`, and admits `console.error` (observability) and
+ * `console.debug` (gated telemetry) as the two deliberate levels. A dev-only
+ * diagnostic is exactly that second category, so it uses the level the gate
+ * already allows rather than an exemption written for this one call.
+ */
+function unknownIcon(where: string, name: string): void {
+  if (import.meta.env.DEV) {
+    console.debug(`[MenuIcons] ${where}: no icon named "${name}" — rendering nothing. Add it to the map or fix the caller's data.`);
+  }
+}
+
+/** True when `name` is a real small-icon key. Used by callers that supply names. */
+export function isSmIconName(name: string): name is SmIconName {
+  return SM_ICON_NAMES.has(name);
+}
+
+/**
+ * Narrow an untrusted name to a real one, or fall back.
+ *
+ * The beat/chapter/mode icon fields are plain `string`s all the way up from
+ * save data, so the renderer is the first place that can know. Normalising here
+ * means the *name* stops being a thing renderers have to trust.
+ */
+export function smIconNameOr(name: string | undefined | null, fallback: SmIconName): SmIconName {
+  return name && SM_ICON_NAMES.has(name) ? (name as SmIconName) : fallback;
+}
+
 /** Small inline SVG icon (20×20). Safe to insert as innerHTML — no user data. */
 export function menuIconSm(name: string): string {
-  const art = smArtwork[name as SmIconName];
-  if (!art) return "";
+  if (!name) return "";
+  // Own-property check, NOT truthiness. `smArtwork` is an object literal, so
+  // `smArtwork["constructor"]` resolves up the prototype chain to
+  // `Object.prototype.constructor` — a *function*, which is truthy. An
+  // `if (!art)` guard waves it straight through and the markup becomes
+  // `<svg …>function Object() { [native code] }</svg>`: the same
+  // lookup-failure-becomes-a-word defect this function was fixed for, reached
+  // through `"constructor"` / `"toString"` / `"valueOf"` / `"__proto__"` instead
+  // of through a typo. `Set.has` is an own-key test and cannot be inherited.
+  const art = SM_ICON_NAMES.has(name) ? smArtwork[name as SmIconName] : undefined;
+  if (!art) {
+    unknownIcon("menuIconSm", name);
+    return "";
+  }
   return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
 }
 
@@ -175,8 +248,32 @@ const smGlyph: Record<SmIconName, string> = {
   fullscreen: "⛶", fullscreen_exit: "⧉",
 };
 
+/**
+ * One-character text glyph for a named icon — used in plain-text contexts
+ * (toasts rendered via textContent, aria-label fragments). Glyphs are chosen
+ * from text-presentation code points only (★ ● ◆ ▲ ↯); emoji-presentation
+ * characters are never used here so toasts read identically on every device.
+ *
+ * An unknown name returns `""`, and *that is load-bearing, not a shrug*.
+ * Callers already wrote the right thing against it —
+ * `GrowthLedger.ts` renders `iconGlyph(wings.icon || "") || "🪶"`, i.e. it
+ * supplies its own fallback for an icon it cannot draw. Under the old
+ * `?? name` that fallback could never fire, because a typo returned the
+ * non-empty typo, so the `||` was dead code and the ledger printed the raw
+ * icon key. Falsy is the contract; keep it.
+ *
+ * An *empty* name is "no icon", not "unknown icon", and is not reported —
+ * `x || ""` is the ordinary way to say an optional field was absent.
+ */
 export function iconGlyph(name: string): string {
-  return smGlyph[name as SmIconName] ?? name;
+  if (!name) return "";
+  // Own-key lookup — see `menuIconSm` for why `smGlyph[name]` is not safe here.
+  const glyph = SM_ICON_NAMES.has(name) ? smGlyph[name as SmIconName] : undefined;
+  if (glyph === undefined) {
+    unknownIcon("iconGlyph", name);
+    return "";
+  }
+  return glyph;
 }
 
 /** Original Sunbird miniature illustrations. Local SVG, no icon font, remote
@@ -212,8 +309,32 @@ const artwork = {
 } as const;
 
 export type MenuIconName = keyof typeof artwork;
+
+/** Every 64×64 illustration name, as a runtime Set. See `SM_ICON_NAMES`. */
+export const MENU_ICON_NAMES: ReadonlySet<string> = new Set<string>(Object.keys(artwork));
+
+/**
+ * The 64×64 menu illustration.
+ *
+ * The signature is `MenuIconName` so a literal typo is a compile error — but the
+ * name is not always a literal. `hud/kit.ts` hands over whatever a screen
+ * registry and a destination table agreed on, and those are plain `string`s, so
+ * this still has to survive a runtime miss.
+ *
+ * It did not: the body interpolated `artwork[name]` unguarded, and the template
+ * string turned a miss into the literal text "undefined" inside an `<svg>`,
+ * which renders as the word "undefined" on screen. The same class of bug as
+ * `iconGlyph` returning the name — a lookup failure leaking into the DOM as
+ * prose — one file over. Guarded, and reported, and never a word again.
+ */
 export function menuIcon(name: MenuIconName): string {
-  return `<svg class="menu-illustration" viewBox="0 0 64 64" fill="none" stroke="#695541" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${artwork[name]}</svg>`;
+  // Own-key lookup — see `menuIconSm` for why `artwork[name]` is not safe here.
+  const art = MENU_ICON_NAMES.has(name as string) ? artwork[name] : undefined;
+  if (!art) {
+    unknownIcon("menuIcon", String(name));
+    return "";
+  }
+  return `<svg class="menu-illustration" viewBox="0 0 64 64" fill="none" stroke="#695541" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${art}</svg>`;
 }
 
 /** Crisp vector arrows for menu chrome.

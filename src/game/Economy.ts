@@ -842,6 +842,14 @@ export type BoostView = {
   affordable: boolean;
   /** Present when this boost is today's half-price deal. */
   dealPrice?: number;
+  /** Copies owned in storage. Always 0 for a permanent upgrade. */
+  stocked: number;
+  /** Copies staged for the next flight. */
+  armedCount: number;
+  /** Copies owned but not staged — what the loadout screen can still add. */
+  spare: number;
+  /** Unlocked outright; the store offers no "buy" for these. */
+  permanent: boolean;
 };
 
 export type ShopTrailView = {

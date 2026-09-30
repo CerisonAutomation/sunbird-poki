@@ -1619,6 +1619,7 @@ fieldset.squad-fields {
   display: flex;
   flex-direction: row;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1644,9 +1645,17 @@ fieldset.squad-fields {
   line-height: 1;
 }
 
+/* `min-width: 140px` is load-bearing, not decoration. `.pc-preview` has
+ * `min-width: auto` so the bird SVG floors it near 104px, and `.pc-action` is
+ * `flex-shrink: 0` around a `white-space: nowrap` price button near 138px. That
+ * leaves the body column — the only one carrying readable text — as the sole
+ * shrinkable child. With `min-width: 0` it absorbed the whole deficit and the
+ * flash-sale perk rendered in a 34px sliver, one word per line. A floor at 140px
+ * means the row runs out of room instead, and `flex-wrap` on `.pc-row` sends the
+ * action column to its own line. */
 .pc-body {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 140px;
+  min-width: 140px;
 }
 
 .pc-body b {
@@ -1703,10 +1712,15 @@ fieldset.squad-fields {
   text-align: center;
 }
 
-/* Action column */
+/* Action column. Sits side-by-side rather than stacked: once `.pc-row` wraps,
+ * a stacked pair would leave a tall, mostly-empty second line under a wide row.
+ * `margin-left: auto` keeps the buttons right-aligned on that wrapped line. */
 .pc-action {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
   gap: 6px;
   flex-shrink: 0;
 }

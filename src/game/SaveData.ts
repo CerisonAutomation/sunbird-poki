@@ -125,6 +125,13 @@ export type SaveState = {
   ads: { day: string; count: number; lastRun: number };
   ownedSkins: string[];
   activeSkin: string;
+  /** Boost id -> how many are OWNED and sitting in storage. Buying adds here;
+   *  the loadout screen moves copies from here into `armedBoosts`; flying
+   *  spends whatever was armed. Stock persists across flights, so a booster
+   *  bought for the wrong moment is not lost. */
+  boostStock: Record<string, number>;
+  /** Boost ids staged for the next flight. May repeat — two Shields is a
+   *  legal loadout, and the count is the point. */
   armedBoosts: string[];
   /** Permanent gameplay upgrades purchased with coins. */
   ownedUpgrades: string[];
@@ -157,6 +164,10 @@ export type SaveState = {
   onboardingSeen: string[];
   /** Flags for contextual onboarding — when player actually opened these */
   seenShop: boolean;
+  /** First visit to the pre-flight Loadout. Separate from `seenShop` because
+   *  the two screens do different jobs: Loadout is where a pilot stages the
+   *  bird/trail/boosters they are about to fly, Shop is where they spend. */
+  seenLoadout: boolean;
   seenPvp: boolean;
   seenPve: boolean;
   seenLeaderboards: boolean;
@@ -322,6 +333,7 @@ function defaults(): SaveState {
     ownedSkins: ["sunbird"],
     activeSkin: "sunbird",
     armedBoosts: [],
+    boostStock: {},
     ownedUpgrades: [],
     settings: { ...DEFAULT_SETTINGS },
     quests: { date: "", claimed: [] },
@@ -344,6 +356,7 @@ function defaults(): SaveState {
     firstFlightDone: false,
     onboardingSeen: [],
     seenShop: false,
+    seenLoadout: false,
     seenPvp: false,
     seenPve: false,
     seenLeaderboards: false,
@@ -385,6 +398,18 @@ function num(v: unknown): number {
 
 function strArr(v: unknown): string[] {
   return Array.isArray(v) ? v.map(String) : [];
+}
+
+/** id -> whole positive count. Floors, drops NaN/negative/zero, and refuses
+ *  a non-object so a hostile blob cannot smuggle in `__proto__` members. */
+function countRec(v: unknown): Record<string, number> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n > 0) out[k] = n;
+  }
+  return out;
 }
 
 function numArr(v: unknown): number[] {
@@ -583,6 +608,11 @@ export class SaveData {
         ownedSkins: owned,
         activeSkin: typeof p.activeSkin === "string" ? p.activeSkin : "sunbird",
         armedBoosts: strArr(p.armedBoosts),
+        // Migration: a pre-stock save had no `boostStock`, so every armed
+        // boost was owned and unrecorded. Seed stock from the armed list
+        // rather than dropping them on the floor — otherwise loading an old
+        // save and then arming more would oversell what the player owns.
+        boostStock: countRec(p.boostStock),
         ownedUpgrades: strArr(p.ownedUpgrades),
         settings: {
           mute: Boolean(p.settings?.mute),
@@ -659,6 +689,7 @@ export class SaveData {
         firstFlightDone: Boolean(p.firstFlightDone),
         onboardingSeen: strArr(p.onboardingSeen),
         seenShop: Boolean(p.seenShop),
+        seenLoadout: Boolean(p.seenLoadout),
         seenPvp: Boolean(p.seenPvp),
         seenPve: Boolean(p.seenPve),
         seenSettings: Boolean(p.seenSettings),
@@ -751,6 +782,15 @@ export class SaveData {
         rankPrizeSeason: String(p.rankPrizeSeason ?? ""),
         wingmanBundle: Boolean(p.wingmanBundle),
       };
+      // Migration: pre-stock saves recorded nothing but `armedBoosts`, so a
+      // boost that was armed is a boost the player owns. Seed stock to cover
+      // the armed copies, and never below what is already recorded. Without
+      // this, loading an old save would let the player arm more copies than
+      // they ever bought.
+      for (const id of new Set(parsedState.armedBoosts)) {
+        const held = parsedState.armedBoosts.filter((b) => b === id).length;
+        if ((parsedState.boostStock[id] ?? 0) < held) parsedState.boostStock[id] = held;
+      }
       return parsedState;
     } catch {
       // Corruption recovery: never destroy a player's data. If we actually read
@@ -1349,9 +1389,70 @@ export class SaveData {
     this.persist();
   }
 
-  armBoost(id: string): void {
-    if (!this.state.armedBoosts.includes(id)) this.state.armedBoosts.push(id);
+  /** How many of a boost the player owns in storage. */
+  boostStocked(id: string): number {
+    return Math.max(0, Math.floor(this.state.boostStock[id] ?? 0));
+  }
+
+  /** How many of a boost are staged for the next flight. */
+  boostArmed(id: string): number {
+    let n = 0;
+    for (const b of this.state.armedBoosts) if (b === id) n++;
+    return n;
+  }
+
+  /** Copies of `id` that are owned but not staged. */
+  boostStaged(id: string): number {
+    return Math.max(0, this.boostStocked(id) - this.boostArmed(id));
+  }
+
+  /** Buy one copy into storage. Permanent boosts are not stock — they are
+   *  unlocked outright — so this refuses them rather than banking a thing
+   *  that can never be spent. */
+  stockBoost(id: string): boolean {
+    if (this.boostStocked(id) < 0) return false;
+    this.state.boostStock[id] = this.boostStocked(id) + 1;
     this.persist();
+    return true;
+  }
+
+  /** Award a free copy: it goes into storage AND straight into the loadout.
+   *  This is the wheel, the starter pack and the tournament prize path — wins
+   *  the player never paid for. They must stock first, because `armBoost`
+   *  deliberately refuses to arm more than is owned; a grant that only armed
+   *  would silently award nothing. */
+  grantBoost(id: string, n = 1): void {
+    const count = Math.max(0, Math.floor(n));
+    if (count <= 0) return;
+    this.state.boostStock[id] = this.boostStocked(id) + count;
+    this.armBoost(id, count);
+  }
+
+  /** Move up to `n` copies from storage into the next-flight loadout. Never
+   *  arms more than are owned, so the loadout cannot promise boosters the
+   *  player has not bought. Returns how many actually moved. */
+  armBoost(id: string, n = 1): number {
+    const available = this.boostStaged(id);
+    const take = Math.min(Math.max(0, Math.floor(n)), available);
+    if (take <= 0) return 0;
+    this.state.armedBoosts.push(...Array<string>(take).fill(id));
+    this.persist();
+    return take;
+  }
+
+  /** Move staged copies back into storage — the "I armed too many" undo. */
+  unarmBoost(id: string, n = 1): number {
+    const have = this.boostArmed(id);
+    const drop = Math.min(Math.max(0, Math.floor(n)), have);
+    if (drop <= 0) return 0;
+    for (let i = 0, left = drop; left > 0; i++) {
+      const at = this.state.armedBoosts.indexOf(id, i);
+      if (at === -1) break;
+      this.state.armedBoosts.splice(at, 1);
+      left--;
+    }
+    this.persist();
+    return drop;
   }
 
   hasUpgrade(id: string): boolean {
@@ -1365,9 +1466,18 @@ export class SaveData {
     return true;
   }
 
+  /** Spend the loadout at the start of a flight: returns the staged boost ids
+   *  and debits the same number of copies from storage, so flying with two
+   *  Shields leaves the player with zero, not with two free ones. */
   consumeArmedBoosts(): string[] {
     const list = [...this.state.armedBoosts];
     this.state.armedBoosts = [];
+    for (const id of new Set(list)) {
+      const used = list.filter((b) => b === id).length;
+      const left = this.boostStocked(id) - used;
+      if (left > 0) this.state.boostStock[id] = left;
+      else delete this.state.boostStock[id];
+    }
     this.persist();
     return list;
   }

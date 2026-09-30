@@ -1,4 +1,4 @@
-import { dampClimbAtCeiling, glideLiftScale } from "./FlightPhysics";
+import { applyReleaseKick, dampClimbAtCeiling, glideLiftScale, releaseKick, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
 import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
@@ -190,6 +190,20 @@ export class Bird {
   /** m/s of upward impulse applied by the most recent flare, 0 if none this
    *  step. Public so a sound or a particle can react to the pull-out. */
   flareAmount = 0;
+  /**
+   * m/s of upward impulse bought by the RELEASE itself this step, 0 if none.
+   *
+   * Deliberately separate from `flareAmount`. `flareAmount` is the sustained
+   * brake, measured in m/s^2 and bounded by FLARE_BRAKE; this is the one-shot
+   * kick, measured in m/s. They fire in disjoint situations — the brake on a
+   * dive worth arresting, the kick from a drift or a launch — so a single
+   * number cannot honestly describe both, and the audio/haptic cue scales off
+   * whichever actually engaged.
+   */
+  releaseKickAmount = 0;
+  /** Seconds left before another release can buy a kick. See
+   *  `RELEASE_KICK_COOLDOWN` — without it the kick is farmable. */
+  private kickCooldown = 0;
   /** Whether the previous physics step was a dive. The flare fires on the
    *  falling edge, so a held dive does not re-apply it every step. */
   private wasDiving = false;
@@ -197,6 +211,33 @@ export class Bird {
   private flareTimer = 0;
   /** Seconds during which a release is still "live" and can spend the flare. */
   private releaseBuffer = 0;
+  /**
+   * Render interpolation: the state as of the PREVIOUS physics step.
+   *
+   * `step()` is fixed at 120 Hz and `syncVisual` runs at display rate, so
+   * reading `vx`/`vy`/`rotation` straight into the mesh drew a 120 Hz
+   * staircase — the wing roll, the pupils, the beak and the tail flutter all
+   * stepped with the physics rather than with the screen. On a 144 Hz display
+   * that is a visible tick on every visual channel at once, which is what
+   * "the bird's movement is jaggery" is.
+   *
+   * Recorded here, inside `step`, rather than once per frame: `step` may run
+   * any number of times in a frame, so this is always exactly one `PHYS_DT`
+   * behind, which is the interval the render alpha is expressed in.
+   */
+  private prevVx = 0;
+  private prevVy = 0;
+  private prevRotation = 0;
+  /** X one physics step ago. `Game` keeps the mirror of this for the mesh
+   *  position; both must be sampled inside `step` for the same reason. */
+  private prevX = 0;
+  /** The velocity and position actually used for the last draw, exposed so the
+   *  interpolation can be asserted directly — see flight-smoothness.test.ts. */
+  private drawnVx = 0;
+  private drawnVy = 0;
+  /** The heading the mesh was last DRAWN at, so the wake stays attached to the
+   *  sprite the player can see rather than to the raw physics angle. */
+  private drawRotation = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -394,6 +435,14 @@ export class Bird {
     this.bounceCd = 0;
     this.wasGrounded = false;
     this.rotation = 0;
+    this.prevRotation = 0;
+    this.drawRotation = 0;
+    this.prevX = this.x;
+    this.drawnVx = this.vx;
+    this.drawnVy = this.vy;
+    this.kickCooldown = 0;
+    this.flareAmount = 0;
+    this.releaseKickAmount = 0;
     this.squashAmt = 1;
     this.stretchAmt = 1;
     this.wingTuck = 0;
@@ -439,6 +488,42 @@ export class Bird {
    * read AFTER `syncVisual`, and called with the same interpolated x/y the
    * mesh was drawn at — see `Game.updateTrailRibbon`.
    */
+  /**
+   * The velocity the mesh was last DRAWN at, i.e. the interpolated value rather
+   * than the raw physics one. Read-only, and exposed so the render
+   * interpolation can be asserted directly instead of inferred from a picture —
+   * see `flight-smoothness.test.ts`.
+   */
+  get interpolatedVyForTest(): number {
+    return this.drawnVy;
+  }
+
+  /** The same, horizontally. */
+  get interpolatedVxForTest(): number {
+    return this.drawnVx;
+  }
+
+  /** `vy` as of the previous physics step — the other end of the blend. */
+  get prevVyForTest(): number {
+    return this.prevVy;
+  }
+
+  /** `x` as of the previous physics step. */
+  get prevXForTest(): number {
+    return this.prevX;
+  }
+
+  /**
+   * Force the render-interpolation pair, for testing the draw at a heading the
+   * simulation has not happened to produce. Exposed rather than poked at
+   * through a cast, because the +/-pi seam is unreachable by driving the bird
+   * there honestly — it depends on the terrain facing at the right x.
+   */
+  setHeadingPairForTest(prev: number, cur: number): void {
+    this.prevRotation = prev;
+    this.rotation = cur;
+  }
+
   tailPoint(x: number, y: number): { x: number; y: number } {
     // The fan's species scale stretches it about the fan's own origin, so its
     // rear is interpolated between the pivot and the measured tip; the feathers
@@ -450,8 +535,15 @@ export class Bird {
     // the readability scale included, because the wake has to stay attached to
     // the bird the player can actually see.
     const back = rear * this.squash.scale.x * this.root.scale.x;
-    const c = Math.cos(this.rotation);
-    const s = Math.sin(this.rotation);
+    // The angle the MESH was drawn at, not the raw physics heading. The caller
+    // already passes the interpolated x/y (see `Game.updateTrailRibbon`); using
+    // the un-interpolated angle here instead would leave the wake attached to a
+    // heading the sprite is no longer at, which is the same detachment the
+    // interpolated position argument exists to prevent. `drawRotation` equals
+    // `rotation` whenever the render is not interpolating, so this is exactly
+    // the old behaviour on any caller that passes no alpha.
+    const c = Math.cos(this.drawRotation);
+    const s = Math.sin(this.drawRotation);
     return { x: x + back * c, y: y + back * s };
   }
 
@@ -517,6 +609,15 @@ export class Bird {
     this.justLaunched = false;
     this.impact = 0;
     this.flareAmount = 0;
+    this.releaseKickAmount = 0;
+    this.kickCooldown = Math.max(0, this.kickCooldown - dt);
+
+    // One PHYS_DT of render history, recorded per STEP so it is exactly one
+    // step behind however many steps this frame runs. See `prevVx`.
+    this.prevVx = this.vx;
+    this.prevVy = this.vy;
+    this.prevRotation = this.rotation;
+    this.prevX = this.x;
 
     // Record the release ONCE, here, before the grounded/ballistic branch —
     // so it is latched whether the bird is flying or still on the ground.
@@ -658,9 +759,35 @@ export class Bird {
       //  - still bounded, because FLARE_MAX_RISE clamps the result, so a
       //    release made while level gives the same capped pull-out a release
       //    out of a committed dive does — never more.
+      //
+      // THE RELEASE IMPULSE, and the bug it fixes.
+      //
+      // Arming the brake was never the whole release. The brake is a *brake*:
+      // it arrests a fall, and by design it is spent without effect whenever
+      // there is no fall to arrest (`vy >= FLARE_MAX_RISE` below). So every
+      // release made from level or climbing flight produced EXACTLY NOTHING.
+      //
+      // Releasing at the crest of a ramp is precisely such a release — it is a
+      // release from climbing flight. Measured over 57 real ramp launches, 95%
+      // leave the bird at `vy >= 0`, so "release at the end of a ramp" landed
+      // in the dead branch almost every time and the bird did not jump. That is
+      // the whole "the release doesn't work on the last ramp" report: not a weak
+      // impulse, a literally absent one.
+      //
+      // So the release is now two things, chosen by what the bird is doing:
+      //  - a real dive (below FLARE_MAX_RISE) is still the brake's job, and the
+      //    brake is untouched;
+      //  - anything from a drift up to a launch gets `applyReleaseKick`, a
+      //    bounded upward impulse. See FlightPhysics for the numbers, the
+      //    cooldown that stops it being chained, and why the ceiling is applied
+      //    as a `Math.min` that can only RAISE vy — the previous clamp could
+      //    slam a +30 climb to -14 in one frame, and that must not come back.
       if (this.releaseBuffer > 0 && !diving) {
         this.releaseBuffer = 0;
         this.flareTimer = FLARE_DURATION;
+        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown);
+        this.vy = applyReleaseKick(this.vy, this.kickCooldown);
+        this.kickCooldown = RELEASE_KICK_COOLDOWN;
       }
 
       // The pull-out: a DECAYING BRAKE, not an impulse.
@@ -837,24 +964,39 @@ export class Bird {
     this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.00008 : 0.003, dt));
   }
 
-  syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number): void {
-    const sp = this.speed();
+  syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number, interp = 1): void {
+    // Render interpolation. `ox`/`oy` arrive already interpolated by the game;
+    // the velocity and heading the visuals are built from are interpolated
+    // here, from the per-step history `step()` records. Before this, every one
+    // of these channels read the raw 120 Hz physics value, so on a display
+    // faster than 120 Hz the roll, the heading, the pupil dart, the beak and
+    // the tail flutter all advanced in visible steps — the sprite juddering
+    // while its position, which WAS interpolated, glided smoothly past it.
+    // Interpolating the whole visual state together is what makes the bird
+    // move as one object.
+    const rvx = lerp(this.prevVx, this.vx, interp);
+    const rvy = lerp(this.prevVy, this.vy, interp);
+    const rrot = lerpAngle(this.prevRotation, this.rotation, interp);
+    this.drawnVx = rvx;
+    this.drawnVy = rvy;
+    this.drawRotation = rrot;
+    const sp = Math.hypot(rvx, rvy);
     // Render interpolation: the mesh draws at a smoothed position between two
     // fixed physics steps (ox/oy), so a >60 Hz display never sees the bird
     // step. The sim state (this.x/y) stays untouched.
     const px = ox ?? this.x;
     const py = oy ?? this.y;
     // 3D dynamic banking: subtle roll and pitch that gives true depth
-    const bankX = Math.sin(time * 3.2) * 0.04 + clamp(this.vy * 0.012, -0.22, 0.22);
-    const bankY = clamp(this.vx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
+    const bankX = Math.sin(time * 3.2) * 0.04 + clamp(rvy * 0.012, -0.22, 0.22);
+    const bankY = clamp(rvx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
     this.root.position.set(px - this.originX, py, 0);
-    this.root.rotation.z = this.rotation; // visual matches physics — no lag factor
+    this.root.rotation.z = rrot;
     this.root.rotation.x = bankX;
     this.root.rotation.y = bankY;
 
     // Pupil directional lookahead
-    const pDx = clamp(this.vx * 0.0012, -0.01, 0.04);
-    const pDy = clamp(this.vy * 0.002, -0.03, 0.03);
+    const pDx = clamp(rvx * 0.0012, -0.01, 0.04);
+    const pDy = clamp(rvy * 0.002, -0.03, 0.03);
     this.pupilL.position.set(0.12 + pDx, 0.02 + pDy, 0.04);
     this.pupilR.position.set(0.12 + pDx, 0.02 + pDy, -0.04);
 

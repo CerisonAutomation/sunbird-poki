@@ -43,6 +43,12 @@ export interface ShopActionContext {
   buySkin(id: string): void;
   buyBoost(id: string): void;
   buyTrail(id: string): void;
+  /** Stage copies into the next flight's loadout. Returns how many moved.
+   *  The host owns the slot cap, so the rule lives in one place and the UI
+   *  merely reflects it. */
+  armBoost(id: string, n: number): number;
+  /** Move staged copies back into storage. Returns how many moved. */
+  unarmBoost(id: string, n: number): number;
   buyCoinStarter(): void;
   buyCoinGold(): void;
   buyPortalVip(): void;
@@ -119,12 +125,76 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
       case "buy-skin":
         ctx.buySkin(id);
         return true;
+      // `select-skin` is the whole CARD and `equip-skin` is its little button:
+      // one intent, so they share a body. They stay separate strings because
+      // `MenuContinuity` keys focus restore on (data-action, data-id) — a
+      // duplicate pair on the same card would make the wrapper match first and
+      // swallow the focus a keyboard user had on the button.
       case "equip-skin":
+      case "select-skin":
+        // Re-check ownership here rather than trusting the button. `equipSkin`
+        // already refuses an unowned id, but the table then went on to apply the
+        // skin, ding and repaint — announcing a selection the save did not
+        // make. Same rule as `loadout-trail` and `select-trail` below.
+        if (!ctx.save.state.ownedSkins.includes(id)) return true;
         ctx.save.equipSkin(id);
         ctx.applySkin();
         ctx.audio.ding();
         ctx.platform?.measure("cosmetic", id ?? "skin", "interact");
         ctx.bump();
+        return true;
+      // The shop's owned-trail CTA reads "Equip", so it must equip. It used to
+      // fire `buy-trail`, which TOGGLES for an already-owned trail (Game.buyTrail
+      // treats it as a re-buy): the second tap turned the ribbon off while the
+      // button still said "Equip", so a trail looked like it refused to stick.
+      // Distinct from `equip-trail`, which is Game's toggle on the prize-trails
+      // screen and must keep toggling.
+      case "select-trail":
+        if (!ctx.save.state.tournaments.trails.includes(id)) return true;
+        ctx.save.equipTrail(id);
+        ctx.audio.ding();
+        ctx.bump();
+        return true;
+      // ---- pre-flight loadout -------------------------------------------
+      // Staging is a MOVEMENT between storage and the next flight's loadout,
+      // never a purchase. Both directions are re-checked here rather than
+      // trusting the button, for the same reason the squad quest payout is:
+      // the UI is a view, not the guard.
+      case "open-loadout":
+        if (!ctx.save.state.seenLoadout) {
+          ctx.save.state.seenLoadout = true;
+          ctx.save.persist();
+        }
+        ctx.setScreen("loadout");
+        return true;
+      case "loadout-bird":
+        if (!ctx.save.state.ownedSkins.includes(id)) return true;
+        ctx.save.equipSkin(id);
+        ctx.applySkin();
+        ctx.audio.ding();
+        ctx.platform?.measure("cosmetic", id ?? "bird", "interact");
+        ctx.bump();
+        return true;
+      case "loadout-trail":
+        if (!ctx.save.state.tournaments.trails.includes(id)) return true;
+        ctx.save.equipTrail(id);
+        ctx.audio.ding();
+        ctx.bump();
+        return true;
+      case "loadout-buy-trail":
+        ctx.buyTrail(id);
+        return true;
+      case "loadout-boost-add":
+        if (ctx.armBoost(id, 1) > 0) {
+          ctx.audio.ding();
+          ctx.bump();
+        }
+        return true;
+      case "loadout-boost-drop":
+        if (ctx.unarmBoost(id, 1) > 0) {
+          ctx.audio.ding();
+          ctx.bump();
+        }
         return true;
       case "buy-boost":
         ctx.buyBoost(id);

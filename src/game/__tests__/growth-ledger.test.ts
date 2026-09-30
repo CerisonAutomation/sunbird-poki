@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { growthLedger, type MasteryGrowth, type WingsGrowth } from "../GrowthLedger";
 
+/**
+ * `icon` is an ICON KEY, not art and not a glyph — see the comment on
+ * `growthLedger`. These fixtures used an EMOJI here, which no icon map can
+ * draw, and the assertion below then pinned the consequence: it expected the
+ * undrawable name to survive verbatim into the card. That is precisely the
+ * "paper_wing printed in front of the player" leak the function was written to
+ * close, so the test was guarding the bug.
+ *
+ * The fixtures now carry real keys, as `Career.WINGS` does in production, and
+ * the emoji case is asserted explicitly below as the fallback it always was
+ * meant to be.
+ */
 const wings = (over: Partial<WingsGrowth> = {}): WingsGrowth => ({
-  icon: "🪽",
+  icon: "paper_wing",
   name: "Swift",
   progress: 0.42,
   nextName: "Gale",
@@ -13,7 +25,7 @@ const wings = (over: Partial<WingsGrowth> = {}): WingsGrowth => ({
 
 const mastery = (over: Partial<MasteryGrowth> = {}): MasteryGrowth => ({
   name: "Day Trip",
-  icon: "🌅",
+  icon: "sun",
   runs: 7,
   level: 2,
   nextAt: 10,
@@ -40,7 +52,29 @@ describe("growthLedger", () => {
     expect(row.label).toBe("Swift");
     expect(row.detail).toBe("1,850 m to Gale");
     expect(row.progress).toBeCloseTo(0.42, 5);
-    expect(row.icon).toBe("🪽");
+    // An icon KEY resolves to its text glyph — the card renders this field as
+    // text, so a raw key would print "paper_wing" on screen.
+    expect(row.icon).toBe("△");
+  });
+
+  /**
+   * The `|| "🪶"` in `growthLedger` was dead code until `iconGlyph` stopped
+   * returning the name it could not draw: the old `smGlyph[name] ?? name` gave
+   * back a non-empty typo, so the `||` could never fire and an undrawable icon
+   * reached the card verbatim. `iconGlyph` now returns "" for a miss, which is
+   * what makes the author's own fallback reachable.
+   */
+  it("falls back to the bird when the ladder carries something no icon can draw", () => {
+    const [row] = growthLedger(wings({ icon: "🪽" }), null);
+    expect(row.icon).toBe("🪶");
+    // And never the word that went in.
+    expect(row.icon).not.toBe("🪽");
+  });
+
+  it("falls back to the medal when the flown mode carries something undrawable", () => {
+    const [, row] = growthLedger(wings(), mastery({ icon: "🌅" }));
+    expect(row.icon).toBe("\u{1F396}");
+    expect(row.icon).not.toBe("🌅");
   });
 
   it("reads as finished at max rank instead of promising a next tier", () => {

@@ -32,11 +32,12 @@ import { MissionRow } from "./Missions";
 import { TRACK_NAMES } from "./Music";
 
 import { streakOpacity } from "./SpeedFeel";
-import { messageHoldMs } from "./MessageTiming";
+import { TOAST_OBSCURE_POLL_MS, TOAST_OBSCURE_WAIT_MS, messageHoldMs } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
 import { renderCheckout, renderPaywall, renderShop } from "./hud/shop";
+import { renderLoadout } from "./hud/loadout";
 import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
 import { renderAd, renderContinue, renderGameOver } from "./hud/run";
 import { renderProgress, renderPass, renderTrophies, renderAccount, renderCampaign, renderCups } from "./hud/meta";
@@ -101,6 +102,11 @@ const GOAL_STRIP_MAX_ROWS = 3;
  *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
  *  it mid-flight is showing a bar that cannot move. */
 const RUN_REACHABLE_M = 3000;
+/** How many bird-position quips may be alive at once. The lane is a stack, not
+ *  a slot: `impact-rise` runs for 1.1s, so a cap of 3 covers a fast burst
+ *  (thud → bop → thud) without letting a sustained scrape pile the play area
+ *  up with words. Mirrors the toast lane's bound. */
+const IMPACT_POPUP_CAP = 3;
 
 type ActionHandler = (action: string, id: string) => void;
 
@@ -1468,6 +1474,11 @@ export class HUD {
   }
 
   toast(text: string, kind = "info"): void {
+    // An empty pill is worse than no pill: it occupies the one flight slot,
+    // so it evicts a real message and then renders as nothing. Translation can
+    // resolve a key to "" (a blank string is a legitimate translation), and
+    // several call sites interpolate values that can stringify empty.
+    if (!text || !text.trim()) return;
     // Dedup: firing the same line while it is still on screen bumps a ×n
     // counter instead of stacking identical pills (ash storms, repeat
     // pickups). Never show the same words twice at once.
@@ -1477,7 +1488,7 @@ export class HUD {
       live.el.textContent = `${text} ×${live.count}`;
       // Updating a duplicate must not force a synchronous browser layout.
       this.cancelTimer(live.timer);
-      live.timer = this.scheduleToastOut(live.el, text);
+      live.timer = this.scheduleToastOut(live.el, text, () => this.toastLaneObscured());
       return;
     }
     // One readable pill in flight, at most two on menu screens.
@@ -1496,8 +1507,26 @@ export class HUD {
     el.textContent = text;
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
-    const timer = this.scheduleToastOut(el, text);
+    const timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured());
     this.liveToasts.set(text, { el, count: 1, timer });
+  }
+
+  /**
+   * Is the toast lane currently unable to be read?
+   *
+   * Measured, not inferred: `getComputedStyle` on the lane itself answers the
+   * question the stylesheet actually implements, including the three rules
+   * that hide it (`visibility:hidden` while a countdown / launch / finish
+   * message owns the screen) and the two more that hide it by state. Guessing
+   * from `data-feedback` would have to be kept in sync with the stylesheet by
+   * hand; reading the computed value cannot drift.
+   *
+   * `getComputedStyle` forces style resolution, so it is polled rather than
+   * read every frame — see `TOAST_OBSCURE_POLL_MS`.
+   */
+  private toastLaneObscured(): boolean {
+    const cs = getComputedStyle(this.toastLayer);
+    return cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0";
   }
 
   /**
@@ -1526,21 +1555,61 @@ export class HUD {
    * Floor and ceiling both earn their keep. The floor is because a one-word
    * toast still has to be SEEN. The ceiling is because the layer can be
    * occupied, and an unbounded hold deadlocks it.
+   *
+   * `isObscured` is the part that was missing. The hold used to start the
+   * instant the pill was created, but three of the five feedback slots
+   * (`countdown`, `launch`, `finish`) set `visibility:hidden` on the whole
+   * toast lane in CSS — the launch banner, the countdown and the finish
+   * counter are all in the flight-messages lane, and the stylesheet hides
+   * everything else while they own the screen. A quip fired during one of
+   * those windows was therefore created, sat there for its entire read
+   * window with nobody able to see it, and was then removed. Measured on a
+   * real flight: 48 of 44 sampled frames reported `feedback=countdown`
+   * with the lane hidden, and the `launch` slot alone is ~1 s after EVERY
+   * launch, which in a game about launching is most of the run.
+   *
+   * So the hold must be spent VISIBLE, not merely elapsed. The timer below
+   * measures only the frames the lane is actually painted, and the total is
+   * still bounded — by `TOAST_CEIL_MS` plus the wait, so a message that
+   * arrives at the tail of a long countdown waits rather than vanishing, and
+   * a message whose lane never opens is released anyway rather than leaked.
    */
-  private scheduleToastOut(el: HTMLElement, key: string): number {
-    const hold = messageHoldMs(el.textContent ?? "");
-    return this.after(() => {
-      // Once exit starts, a repeat is a new toast rather than refreshing a
-      // node that already has a pending removal callback.
-      if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
-      el.classList.remove("in");
-      el.classList.add("out");
-      this.after(() => {
-        el.remove();
-        const live = this.liveToasts.get(key);
-        if (live && live.el === el) this.liveToasts.delete(key);
-      }, 420);
-    }, hold);
+  private scheduleToastOut(el: HTMLElement, key: string, isObscured?: () => boolean): number {
+    const text = el.textContent ?? "";
+    const hold = messageHoldMs(text);
+    const budget = hold + TOAST_OBSCURE_WAIT_MS;
+    const startedAt = Date.now();
+    let visibleFor = 0;
+    let lastTick = startedAt;
+    const tick = (): void => {
+      const now = Date.now();
+      const dt = now - lastTick;
+      lastTick = now;
+      // Only bank time the player could actually read.
+      if (!isObscured?.()) visibleFor += dt;
+      if (visibleFor >= hold || now - startedAt >= budget) {
+        // Once exit starts, a repeat is a new toast rather than refreshing a
+        // node that already has a pending removal callback.
+        if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
+        el.classList.remove("in");
+        el.classList.add("out");
+        this.after(() => {
+          el.remove();
+          const live = this.liveToasts.get(key);
+          if (live && live.el === el) this.liveToasts.delete(key);
+        }, 420);
+        return;
+      }
+      this.timers.add(this.scheduleTick(tick));
+    };
+    return this.scheduleTick(tick);
+  }
+
+  /** Poll interval while a toast is waiting for its lane to open. */
+  private scheduleTick(fn: () => void): number {
+    const timer = window.setTimeout(fn, TOAST_OBSCURE_POLL_MS);
+    this.timers.add(timer);
+    return timer;
   }
 
   flash(kind: "perfect" | "fever" | "island" | "sleep"): void {
@@ -1615,7 +1684,9 @@ export class HUD {
 
   private renderScreen(s: HudSnapshot): string {
     switch (s.screen) {
-      case "shop":
+      case "loadout":
+      return renderLoadout(s);
+    case "shop":
         this.shopSnapshot = s;
         return renderShop(s, this.shopBrowse);
       case "paywall":
@@ -1763,7 +1834,20 @@ export class HUD {
     const viewport = this.root.getBoundingClientRect();
     el.style.left = `${Math.max(40, Math.min(lane.width - 40, sx * viewport.width + viewport.left - lane.left))}px`;
     el.style.top = `${Math.max(50, Math.min(lane.height - 20, sy * viewport.height + viewport.top - lane.top))}px`;
-    this.impactPopupsEl.replaceChildren(el);
+    // Append + cap, NOT replaceChildren. Replacing meant the lane held exactly
+    // one popup, so two quips landing inside the same 1100ms window killed the
+    // first on the tick the second arrived — during continuous thudding the
+    // player saw one word flicker instead of a run of them. Coexisting popups do
+    // not collide: `impact-rise` is time-based and travels upward, so by the
+    // time a second one spawns at the bird the first is already higher in its
+    // own arc. The cap is what bounds the lane, exactly as the toast lane's
+    // eviction bounds that one.
+    while (this.impactPopupsEl.children.length >= IMPACT_POPUP_CAP) {
+      const oldest = this.impactPopupsEl.firstElementChild;
+      if (!oldest) break;
+      oldest.remove();
+    }
+    this.impactPopupsEl.appendChild(el);
     // Trigger animation on next frame then remove after it finishes.
     requestAnimationFrame(() => el.classList.add("rise"));
     this.after(() => el.remove(), 1100);
@@ -2250,8 +2334,13 @@ function renderTournamentCountdown(s: HudSnapshot): string {
  * opened by offering the player something they had just been handed, and the
  * two text destinations it taught (racing, the shop) were not the two the game
  * actually needs explained first. It is now the five surfaces a first run has
- * to meet: fly, the hangar, the AI flock, live rivals, and settings — which is
+ * to meet: fly, the loadout, the AI flock, live rivals, and settings — which is
  * every action in `QUICK_ACTIONS` plus the first flight itself.
+ *
+ * Step 2 sends the player to the pre-flight Loadout rather than the Shop. The
+ * step promises a bird, a trail and boosters, and Loadout is the only screen
+ * that stages all three; the Shop is where you spend, which is a different
+ * promise than the one the step makes. The Shop remains one tap from Loadout.
  *
  * The steps are honest about WHERE they are: step 1 used to say "Spend the coins
  * you just earned" on a brand-new save, which starts at zero.
@@ -2278,13 +2367,17 @@ function renderOnboardingRoute(s: HudSnapshot): string {
       done: s.runsPlayed >= 1,
     },
     {
-      n: "02", action: "open-shop", go: t("onboarding.step2Action", undefined, "Shop ›"),
+      n: "02", action: "open-loadout", go: t("onboarding.step2Action", undefined, "Loadout ›"),
       title: t("onboarding.step2Title", undefined, "Choose your bird"),
       sub: t("onboarding.step2Sub", undefined, "Birds, trails and boosts for your next flight"),
-      // `seenShop`, not `wallet > 0`. The wallet is a live balance: a player
-      // who completed this step and then spent their coins saw it revert to
-      // active. A milestone that un-completes itself is worse than none.
-      done: s.firstSteps.shop,
+      // `seenLoadout`, not `seenShop` and not `wallet > 0`. The wallet is a live
+      // balance: a player who completed this step and then spent their coins
+      // saw it revert to active, and a milestone that un-completes itself is
+      // worse than none. Loadout is also the screen that actually does what
+      // this step promises — it stages the bird, trail and boosters you fly
+      // with, and it is reachable from the shop for anything you do not own yet.
+      // The store itself is still one tap away from there.
+      done: s.firstSteps.loadout,
     },
     {
       n: "03", action: "open-practice", go: t("onboarding.step3Action", undefined, "AI race ›"),

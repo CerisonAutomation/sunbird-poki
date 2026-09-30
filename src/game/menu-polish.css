@@ -2852,18 +2852,25 @@ select.setting-select {
   border-radius: 14px !important;
   padding: 10px 8px !important;
   text-align: center !important;
-  cursor: pointer !important;
+  cursor: default;
   transition: box-shadow .12s, transform .1s !important;
   min-height: 90px !important;
 }
-.skin-card:hover {
+/* Only cards that are genuinely selectable carry the pointer affordance and the
+   hover/active lift. The shop emits `data-action` on owned, non-equipped cards
+   and omits it everywhere else. An unowned, unaffordable or prize-only card
+   must not look live: a card that invites a press and then refuses it is a dead
+   end the player can only discover by trying, which is exactly the stranded-CTA
+   problem this build keeps having to undo elsewhere. */
+.skin-card[data-action] { cursor: pointer !important; }
+.skin-card[data-action]:hover {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 3px 0 rgba(150,120,50,0.22),
     0 6px 14px rgba(80,60,20,0.1) !important;
   transform: translateY(-1px) !important;
 }
-.skin-card:active {
+.skin-card[data-action]:active {
   transform: translateY(0) !important;
   box-shadow: inset 0 2px 4px rgba(100,70,20,0.12) !important;
 }

@@ -184,7 +184,7 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
   const ledger = lines
     .map(
       (l) => `<div class="gl-row gl-${escapeHtml(l.kind)}">
-        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i>${escapeHtml(l.label)}</dt>
+        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i><span class="gl-label">${escapeHtml(l.label)}</span></dt>
         <dd><span>${escapeHtml(l.detail)}</span><i class="gl-bar" aria-hidden="true"><b style="width:${(l.progress * 100).toFixed(1)}%"></b></i></dd>
       </div>`,
     )
@@ -197,7 +197,13 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
     const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
     const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
     const text = t(b.key, b.params, b.fallback);
-    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${escapeHtml(b.icon)}</i>${escapeHtml(text)}</div>`;
+    // `b.icon` is an icon NAME ("trophy", "egg", "badge"), not art and not a
+    // glyph. It used to be `escapeHtml(b.icon)` — the name, escaped, as the
+    // row's leading text — so every beat on the results card rendered its own
+    // caption in place of its picture: "egg Nest upgraded!", "trophy Trophy:
+    // Cloud Nine". `menuIconSm` draws the SVG; an unknown name draws nothing,
+    // and can no longer become a word (see MenuIcons).
+    return `<div class="${cls}" role="listitem"${delay}><i class="beat-icon" aria-hidden="true">${menuIconSm(b.icon)}</i><span class="beat-text">${escapeHtml(text)}</span></div>`;
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");

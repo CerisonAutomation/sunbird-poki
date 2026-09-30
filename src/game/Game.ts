@@ -117,6 +117,8 @@ SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
 FLARE_BRAKE,
 } from "./constants";
+import { RELEASE_KICK } from "./FlightPhysics";
+import { freeSlots } from "./hud/loadout";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, normalizePerks, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
 import { nextWings, wingsFor, wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
@@ -1448,9 +1450,19 @@ export class Game {
     }
     const simDt = raw * this.timeScale;
 
-    // Snapshot before any physics advances so the render can interpolate.
-    this.prevBirdX = this.bird.x;
-    this.prevBirdY = this.bird.y;
+    // NOTE: the render-interpolation snapshot is NOT taken here. It used to be
+    // — once per frame, before the whole physics batch — and that is what made
+    // the bird judder. `lerp(prev, cur, acc / PHYS_DT)` is only a correct
+    // interpolation of ONE physics step if `prev` is the position immediately
+    // before the LAST step. Taken once per frame, `prev` is the position before
+    // however many steps this frame ran, so the lerp was stretched across that
+    // many steps while still being scaled by a single step's alpha. On a 60 Hz
+    // display that is a fixed one-frame lag; on a 144 Hz display, where most
+    // frames run ZERO steps, `prev` equals `cur`, the lerp is a no-op, and the
+    // bird stands still on those frames and then jumps a whole step on the ones
+    // that did step — a visible stutter at exactly the frame rates the
+    // interpolation was added to fix. The snapshot now lives inside each
+    // accumulator loop, so it is always exactly one PHYS_DT behind.
 
     switch (this.state) {
       case "menu":
@@ -1482,6 +1494,12 @@ export class Game {
         // "catch up" would be far worse than a beat of slow motion.
         let steps = 0;
         while (this.acc >= PHYS_DT && this.state === "playing" && steps < MAX_CATCHUP_STEPS) {
+          // One PHYS_DT of render history, taken per STEP. See the note above
+          // the switch: a once-per-frame snapshot stretches the render lerp
+          // across every step the frame ran, which judders on any display
+          // faster than the physics rate.
+          this.prevBirdX = this.bird.x;
+          this.prevBirdY = this.bird.y;
           if (this.versus) this.versusTick(PHYS_DT);
           else this.fixedUpdate(PHYS_DT);
           this.acc -= PHYS_DT;
@@ -1502,6 +1520,8 @@ export class Game {
         {
           let steps = 0;
           while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.prevBirdX = this.bird.x;
+            this.prevBirdY = this.bird.y;
             this.bird.step(PHYS_DT, ASLEEP, this.terrain);
             this.acc -= PHYS_DT;
             steps += 1;
@@ -1546,6 +1566,8 @@ export class Game {
         {
           let steps = 0;
           while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.prevBirdX = this.bird.x;
+            this.prevBirdY = this.bird.y;
             this.bird.step(PHYS_DT, ASLEEP, this.terrain);
             this.acc -= PHYS_DT;
             steps += 1;
@@ -1761,9 +1783,17 @@ export class Game {
    * there is nothing to confirm.
    */
   private releaseFeedback(): void {
-    const strength = this.bird.flareAmount;
+    const strength = Math.max(this.bird.flareAmount / FLARE_BRAKE, this.bird.releaseKickAmount / RELEASE_KICK);
     if (strength <= 0) return;
-    const intensity = Math.min(1, strength / FLARE_BRAKE);
+    // Two signals, because the release is two things and they never overlap: a
+    // dive is met by the sustained BRAKE (`flareAmount`, m/s^2, bounded by
+    // FLARE_BRAKE) and everything else by the one-shot KICK
+    // (`releaseKickAmount`, m/s, bounded by RELEASE_KICK). Each is normalised
+    // against its own bound so a 22 m/s pop is a full-volume cue rather than
+    // 7% of one. Reading only `flareAmount` left the ramp release — the bug
+    // this fixes — completely silent, which is a large part of why it read as
+    // "the release doesn't work" rather than as "the release is quiet".
+    const intensity = Math.min(1, strength);
     this.audio.soarCue(intensity);
     this.haptic(6 + Math.round(10 * intensity));
   }
@@ -3249,7 +3279,12 @@ export class Game {
     const interp = this.state === "menu" ? 1 : clamp(this.acc / PHYS_DT, 0, 1);
     const visX = lerp(this.prevBirdX, this.bird.x, interp);
     const visY = lerp(this.prevBirdY, this.bird.y, interp);
-    this.bird.syncVisual(visDt, diving, glow, this.elapsed, this.terrain, visX, visY);
+    // `interp` goes in as well: the bird interpolates its own heading, roll,
+    // pupil dart, beak and tail flutter from the same one-step history the
+    // position uses, so the whole sprite advances together. Passing only the
+    // interpolated POSITION left every other visual channel reading the raw
+    // 120 Hz physics value — a smooth position with a stepping sprite on it.
+    this.bird.syncVisual(visDt, diving, glow, this.elapsed, this.terrain, visX, visY, interp);
     this.massRace.syncVisual(visDt, this.bird.x, interp);
     if (this.massRace.active && this.state === "playing") {
       const tags = this.massRace.getVisibleNameTags(this.camera.camera.position.x, this.bird.x, this.bird.y, this.startX);
@@ -4503,7 +4538,7 @@ export class Game {
           // sector's value is a real purchasable one.
           const boost = BOOSTS.find((b) => b.id === sector.value);
           if (!boost) break;
-          this.save.armBoost(boost.id);
+          this.save.grantBoost(boost.id);
           this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${boost.name}! Armed for your next flight!`, "gold");
         } else if (sector.kind === "vault") {
           // The wheel is free, so this hatch is free. It used to call the 150
@@ -5047,6 +5082,8 @@ export class Game {
       buySkin: (id) => this.buySkin(id),
       buyBoost: (id) => this.buyBoost(id),
       buyTrail: (id) => this.buyTrail(id),
+      armBoost: (id, n) => this.stageBoost(id, n),
+      unarmBoost: (id, n) => this.save.unarmBoost(id, n),
       buyCoinStarter: () => this.buyCoinStarter(),
       buyCoinGold: () => this.buyCoinGold(),
       buyPortalVip: () => this.buyPortalVip(),
@@ -5970,23 +6007,52 @@ export class Game {
     this.bump();
   }
 
+  /**
+   * Stage copies of a booster for the next flight, respecting the slot cap.
+   *
+   * The cap is enforced HERE, not in the loadout markup. A cap that only
+   * disables a button is a cap the player can walk around, and the loadout is
+   * the one place where "stack every Shield you own" would otherwise be
+   * strictly optimal. The UI reads the same number, so button and rule agree.
+   */
+  private stageBoost(id: string, n: number): number {
+    const def = BOOSTS.find((b) => b.id === id);
+    if (!def || def.permanent) return 0;
+    // The SAME freeSlots() the loadout screen uses to decide whether `+` is
+    // live. The cap is enforced here because a cap that only hides a button is
+    // a cap the player can walk around; sharing the arithmetic is what keeps
+    // the guard and the button from disagreeing about how full the loadout is.
+    const room = freeSlots(
+      BOOSTS.filter((b) => !b.permanent).map((b) => this.save.boostArmed(b.id)),
+    );
+    if (room <= 0) {
+      this.hud.toast(t("hud.loadout.SlotsFull", undefined, "All boost slots are full — unstage one first."), "info");
+      return 0;
+    }
+    const moved = this.save.armBoost(id, Math.min(n, room));
+    if (moved <= 0) this.hud.toast(t("hud.loadout.NoneLeft", undefined, "No more of that in the store."), "info");
+    return moved;
+  }
+
   private buyBoost(id: string): void {
     const def = BOOSTS.find((b) => b.id === id);
     if (!def) return;
-    const st = this.save.state;
     if (def.permanent && this.save.hasUpgrade(id)) {
       this.hud.toast("Already unlocked", "info");
-      return;
-    }
-    if (st.armedBoosts.includes(id)) {
-      this.hud.toast("Already armed for next flight", "info");
       return;
     }
     const deal = dailyDealBoost(this.today);
     const price = def.id === deal.id ? deal.price : def.price;
     if (this.cantAfford(price)) return;
-    if (def.permanent) this.save.ownUpgrade(id);
-    else this.save.armBoost(id);
+    if (def.permanent) {
+      this.save.ownUpgrade(id);
+    } else {
+      // Buying adds to storage; the loadout screen decides what flies. The
+      // old code refused a second copy outright ("Already armed"), which made
+      // "stock a few for later" impossible.
+      this.save.stockBoost(id);
+      this.save.armBoost(id, 1);
+    }
     this.audio.purchase();
     this.hud.toast(`${iconGlyph(def.icon)} ${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power");
     this.telemetry.track("boost_bought", { id, price });
@@ -6070,7 +6136,7 @@ export class Game {
     this.save.addCoins(STARTER_PACK.coins);
     this.save.ownTrail(STARTER_PACK.trailId);
     this.save.equipTrail(STARTER_PACK.trailId);
-    this.save.armBoost("sunflask");
+    this.save.grantBoost("sunflask");
     this.audio.fanfare();
     this.hud.toast(`${iconGlyph("star")} First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold");
     this.telemetry.track("purchase_ok", { sku: "sunbird_starter", source });
@@ -7301,7 +7367,7 @@ export class Game {
       const p = grant.prize;
       if (p.kind === "coins") this.save.addCoins(p.amount);
       else if (p.kind === "skin") this.save.ownSkin(p.id);
-      else if (p.kind === "boost") this.save.armBoost(p.id);
+      else if (p.kind === "boost") this.save.grantBoost(p.id);
       this.telemetry.track("cup_prize", { tier: grant.tier, kind: p.kind, id: p.id });
     }
     // trails/titles were already recorded inside Tournaments.claim()
@@ -7629,6 +7695,10 @@ export class Game {
     if (s === "board") platform.measure("button", "portal-leaderboard", "visible");
     // The wardrobe lives in the shop screen's skin grid.
     if (s === "shop") platform.measure("cosmetic", "skin-grid", "visible");
+    // The loadout's bird picker is measured on interaction only, so the screen
+    // that shows it reports the exposure — otherwise the pre-flight picker is
+    // the one cosmetic the portal sees engaged but never seen offered.
+    if (s === "loadout") platform.measure("cosmetic", "bird-row", "visible");
   }
 
   private bump(): void {
@@ -7790,7 +7860,19 @@ export class Game {
     const deal = dailyDealBoost(this.today);
     this.boostViews = BOOSTS.map((def) => {
       const dealPrice = def.id === deal.id ? deal.price : undefined;
-      return { def, armed: def.permanent ? st.ownedUpgrades.includes(def.id) : st.armedBoosts.includes(def.id), affordable: st.wallet >= (dealPrice ?? def.price), dealPrice };
+      const permanent = Boolean(def.permanent);
+      const armedCount = permanent ? 0 : this.save.boostArmed(def.id);
+      const stocked = permanent ? 0 : this.save.boostStocked(def.id);
+      return {
+        def,
+        armed: permanent ? st.ownedUpgrades.includes(def.id) : armedCount > 0,
+        affordable: st.wallet >= (dealPrice ?? def.price),
+        dealPrice,
+        stocked,
+        armedCount,
+        spare: Math.max(0, stocked - armedCount),
+        permanent,
+      };
     });
     this.shopTrailViews = SHOP_TRAILS.map((def) => ({
       def,
@@ -7975,6 +8057,7 @@ export class Game {
     settings: st.settings,
     firstSteps: {
       shop: st.seenShop,
+      loadout: st.seenLoadout,
       pve: st.seenPve,
       pvp: st.seenPvp,
       settings: st.seenSettings,

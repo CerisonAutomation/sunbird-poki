@@ -24,7 +24,7 @@ export const SCREEN = {
   campaign: "campaign", squad: "squad", rivalRank: "rank", tournaments: "cups",
   gameModes: "modes", atlas: "atlas", shop: "shop", coinStore: "paywall",
   confirmUnlock: "checkout", highGlides: "progress", nestPass: "pass",
-  trophyCase: "trophies", account: "account",
+  trophyCase: "trophies", account: "account", loadout: "loadout",
 } as const;
 
 /**
@@ -54,6 +54,7 @@ export const SCREEN_HEADINGS: Readonly<Record<keyof typeof SCREEN, string>> = {
   nestPass: "Nest Pass",
   trophyCase: "Trophy Case",
   account: "Account",
+  loadout: "Loadout",
 };
 
 /**

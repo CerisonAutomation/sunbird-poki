@@ -60,6 +60,7 @@ export type UiScreen =
   | "challenges"
   | "campaign"
   | "squad"
+  | "loadout"
   | "nameEntry";
 
 export type UiState = "menu" | "playing" | "paused" | "continue" | "ad" | "gameover";
@@ -239,7 +240,7 @@ export type HudSnapshot = {
   settings: Settings;
   /** First-visit milestones for the home walkthrough. Stored, not derived:
    *  "did you open the shop" has no counter that means only that. */
-  firstSteps: { shop: boolean; pve: boolean; pvp: boolean; settings: boolean };
+  firstSteps: { shop: boolean; loadout: boolean; pve: boolean; pvp: boolean; settings: boolean };
   goldPrice: string;
   starterPrice: string;
   starterFeatures: string[];

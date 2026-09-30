@@ -32,7 +32,7 @@ import { MissionRow } from "./Missions";
 import { TRACK_NAMES } from "./Music";
 
 import { streakOpacity } from "./SpeedFeel";
-import { messageHoldMs, TOAST_ACQUIRE_MS, TOAST_MS_PER_WORD, TOAST_FLOOR_MS, TOAST_CEIL_MS } from "./MessageTiming";
+import { messageHoldMs } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
@@ -1480,8 +1480,7 @@ export class HUD {
    * occupied, and an unbounded hold deadlocks it.
    */
   private scheduleToastOut(el: HTMLElement, key: string): number {
-    const words = (el.textContent ?? "").trim().split(/\s+/).filter(Boolean).length;
-    const hold = Math.min(TOAST_CEIL_MS, Math.max(TOAST_FLOOR_MS, TOAST_ACQUIRE_MS + words * TOAST_MS_PER_WORD));
+    const hold = messageHoldMs(el.textContent ?? "");
     return this.after(() => {
       // Once exit starts, a repeat is a new toast rather than refreshing a
       // node that already has a pending removal callback.

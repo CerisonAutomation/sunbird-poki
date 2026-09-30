@@ -1509,9 +1509,23 @@ export class Game {
         break;
       case "gameover":
         this.acc += raw;
-        while (this.acc >= PHYS_DT) {
-          this.bird.step(PHYS_DT, ASLEEP, this.terrain);
-          this.acc -= PHYS_DT;
+        // Bounded, like `playing` and `continue`. This one was the last bare
+        // loop: the dt clamp allows a 250 ms frame, and at PHYS_HZ 120 that is
+        // ~30 physics steps fired in the frame the results card appears — on
+        // exactly the device the clamp exists for, and at the one moment the
+        // player is reading their score. The bird is asleep here, so dropping
+        // the stale tail costs a sleeping bird's slide and nothing else.
+        {
+          let steps = 0;
+          while (this.acc >= PHYS_DT && steps < MAX_CATCHUP_STEPS) {
+            this.bird.step(PHYS_DT, ASLEEP, this.terrain);
+            this.acc -= PHYS_DT;
+            steps += 1;
+          }
+          if (this.acc > PHYS_DT * MAX_CATCHUP_STEPS) {
+            this.telemetry.track("sim_backlog_dropped", { seconds: this.acc });
+            this.acc = 0;
+          }
         }
         if (this.screen === "main") this.holdToStart(raw, 0.12);
         break;

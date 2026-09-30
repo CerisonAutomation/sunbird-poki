@@ -96,3 +96,4 @@ hallways.json
 # is a full checkout of the source tree, so a bare `git add -A` would commit a
 # nested copy of src/ and api/ under worktrees/. Same hazard as hive/ above.
 worktrees/
+.dyad/

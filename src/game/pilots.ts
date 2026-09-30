@@ -13,6 +13,7 @@
  * Pilot Lookup panel uses when no network lookup is available.
  */
 import type { RoomPeer } from "./Realtime";
+import { storage } from "./Storage";
 
 /** The slice of a room peer this book needs — keeps it testable without net. */
 export type SeenPilot = Pick<RoomPeer, "id" | "name"> & Partial<Pick<RoomPeer, "skin" | "distance" | "place" | "finished">>;
@@ -57,11 +58,14 @@ export type PilotBookStorage = {
 };
 
 function defaultStorage(): PilotBookStorage | null {
-  try {
-    return typeof localStorage === "undefined" ? null : localStorage;
-  } catch {
-    return null; // private mode / blocked storage: memory-only is fine
-  }
+  // Through `Storage`, not raw `localStorage`. This module used to probe for
+  // `localStorage` itself, which is exactly the case `Storage` exists for: on a
+  // portal that hands the frame a restrictive storage policy every direct
+  // `localStorage` access throws, and the book silently became empty on every
+  // launch with no way to tell that from "no rivals yet". `Storage` falls back
+  // to sessionStorage, then memory, and it owns the Poki cloud-sync key
+  // prefix (with a read-through migration, so an existing book is not lost).
+  return storage;
 }
 
 /** Keeps the newest sighting and the best of what both sightings know. */

@@ -173,7 +173,7 @@ export function renderRank(s: Pick<HudSnapshot, "duel" | "duelFoe" | "loadout" |
       <div class="season-head"><b>Season</b><span class="pill">${r.season.daysLeft}d left</span></div>
       <div class="season-body">Peak ${r.season.peakIcon} ${r.season.peak} · pays <b>● ${r.season.rewardCoins}</b> at reset, then ratings drift halfway back to 1000.</div>
     </div>
-    ${sectionTitle("Recent races", "this device only")}
+    ${sectionTitle(t("hud.ui.SRecentRaces", undefined, "Recent races"), t("hud.ui.SRecentRacesSub", undefined, "this device only"))}
     ${
       r.matches.length
         ? `<div class="match-list">${[...r.matches]
@@ -185,7 +185,7 @@ export function renderRank(s: Pick<HudSnapshot, "duel" | "duelFoe" | "loadout" |
             .join("")}</div>`
         : `<p class="fineprint">${t("hud.renderRank.NRankedRacesYetFirst40BirdFinishSetsTone", undefined, "No ranked races yet. Your first 40-bird finish sets the tone.")}</p>`
     }
-    ${sectionTitle("Duels", "ranked 1v1 · ±16 rating")}
+    ${sectionTitle(t("hud.ui.SDuels", undefined, "Duels"), t("hud.ui.SDuelsSub", undefined, "ranked 1v1 · ±16 rating"))}
     <div class="duel-card">
       <div class="vs-stage slim">
         <div class="vs-you"><span class="bird-badge you">${(() => {
@@ -222,7 +222,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   const notice = s.squadNotice ? `<div class="reward-strip">${escapeHtml(s.squadNotice)}</div>` : "";
 
   const quests = `
-    ${sectionTitle("Squadron Team Quests", "Co-Op Milestones")}
+    ${sectionTitle(t("hud.ui.SSquadronTeamQuests", undefined, "Squadron Team Quests"), t("hud.ui.SSquadronTeamQuestsSub", undefined, "Co-Op Milestones"))}
     <div class="squad-quests">
       ${SQUAD_QUESTS.map((q) => {
         const prog = q.id === "migration" ? Math.min(q.target, Math.round(s.bestDistance * 1.5)) : q.id === "drafting" ? Math.min(q.target, Math.round(s.runsPlayed * 5)) : Math.min(q.target, Math.round(s.todayBest / 100));
@@ -282,11 +282,11 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
       ...sq.requestsOut.map((r) => `<div class="friend-row"><span class="fr-name">📤 ${escapeHtml(r.name)}</span><span class="fr-code">request pending</span><button class="mini-btn ghost" data-ui data-action="req-cancel" data-id="${escapeHtml(r.requestId)}">Cancel</button></div>`),
     ];
     if (!rows.length) return "";
-    return `${sectionTitle("Requests", `${rows.length} waiting`)}<div class="friend-list">${rows.join("")}</div>`;
+    return `${sectionTitle(t("hud.ui.SRequests", undefined, "Requests"), `${rows.length} waiting`)}<div class="friend-list">${rows.join("")}</div>`;
   })();
 
   const lookupPanel = `
-    ${sectionTitle("🔍 Pilot Lookup", sq.live && !sq.isAutonomous ? "online directory" : "offline build")}
+    ${sectionTitle(t("hud.ui.SPilotLookup", undefined, "🔍 Pilot Lookup"), sq.live && !sq.isAutonomous ? "online directory" : "offline build")}
     <p class="fineprint">Look a pilot up by their exact code. Results come from the pilot directory — nothing here is invented, and an unknown or unreachable code says so.</p>
     <div class="redeem">
       <input data-ui data-ref="pilotCode" data-enter-action="pilot-add" aria-label="${t("hud.renderCampaign.FCodex", undefined, "Friend code")}" placeholder="Friend code (SUN-9F3K2A)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${escapeHtml(sq.pilotQuery)}" />
@@ -298,11 +298,11 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   const wingmen = (() => {
     const page = sq.friends.length > 0 ? friendPage : { items: [], page: 0, pages: 0 };
     if (!sq.friends.length) {
-      return `${sectionTitle("🪽 Wingmen", "0")}
+      return `${sectionTitle(t("hud.ui.SWingmen", undefined, "🪽 Wingmen"), "0")}
         <div class="empty-note">No wingmen yet. Look one up by code above, or save a pilot you have actually raced with below. Your code is <b>${escapeHtml(sq.myCode || "…")}</b>.</div>`;
     }
     return `
-    ${sectionTitle("🪽 Wingmen", String(sq.friends.length))}
+    ${sectionTitle(t("hud.ui.SWingmen", undefined, "🪽 Wingmen"), String(sq.friends.length))}
     <div class="friend-list">${(page.items as typeof sq.friends)
       .map((f) => {
         const presence = f.local ? "met in a race" : f.online ? "● online" : "○ offline";
@@ -326,7 +326,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
         return `<div class="friend-row"><span class="fr-name">🏁 vs ${escapeHtml(ch.challengerName)} <small>${escapeHtml(status)}</small></span><span class="fr-code">beat ${formatNumberLocalized(Math.round(ch.ghostDistance))} m ${kindLabel[ch.challengeKind]}</span><button class="mini-btn gold" data-ui data-action="challenge-race" data-id="${escapeHtml(ch.id)}">🏁 Race ghost</button></div>`;
       })
       .join("");
-    return `${sectionTitle("🏁 Ghost Challenges", `${challenges.length} active`)}
+    return `${sectionTitle(t("hud.ui.SGhostChallenges", undefined, "🏁 Ghost Challenges"), `${challenges.length} active`)}
       <p class="fineprint">Async races against a wingman's posted line — race the ghost and the result settles the instant you land.</p>
       <div class="friend-list">${rows}</div>`;
   })();
@@ -335,7 +335,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   const flewWith = (() => {
     const mates = s.recentPilots.filter((m) => !sq.friends.some((f) => f.name.toLowerCase() === m.name.toLowerCase()));
     if (!s.recentPilots.length) {
-      return `${sectionTitle("🛫 Flew with", "0")}<div class="empty-note">Pilots who share a room with you appear here — real rooms, real names, remembered on this device.</div>`;
+      return `${sectionTitle(t("hud.ui.SFlewWith", undefined, "🛫 Flew with"), "0")}<div class="empty-note">Pilots who share a room with you appear here — real rooms, real names, remembered on this device.</div>`;
     }
     const rows = mates.slice(0, 8).map((m) => `<div class="friend-row">
       <span class="fr-name">🐦 ${escapeHtml(m.name)}</span>
@@ -344,7 +344,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
       <button class="mini-btn ghost" data-ui data-action="mate-invite" data-id="${escapeHtml(m.name)}">Invite</button>
       <button class="mini-btn ghost" data-ui data-action="mate-forget" data-id="${escapeHtml(m.name)}" aria-label="Forget ${escapeHtml(m.name)}">✕</button>
     </div>`).join("");
-    return `${sectionTitle("🛫 Flew with", `${s.recentPilots.length} remembered`)}
+    return `${sectionTitle(t("hud.ui.SFlewWith", undefined, "🛫 Flew with"), `${s.recentPilots.length} remembered`)}
       <p class="fineprint">${t("hud.renderCampaign.KDeviceFromRacesActuallyFlewTogether", undefined, "Kept on this device from races you actually flew together.")}</p>
       <div class="friend-list">${rows || `<div class="empty-note">${t("hud.renderCampaign.EFlewAlreadyWingmen", undefined, "Everyone you flew with is already in your wingmen.")}</div>`}</div>`;
   })();
@@ -367,13 +367,13 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
     : "";
   const clubs = myClub
     ? `
-    ${sectionTitle("Your club", `${myClub.members}/30 members`)}
+    ${sectionTitle(t("hud.ui.SYourClub", undefined, "Your club"), `${myClub.members}/30 members`)}
     <div class="club-card mine">
       <div class="daily-head"><span class="daily-icon">🏰</span><div><b>${escapeHtml(myClub.name)}</b><em>${escapeHtml(myClub.motto)}</em></div><button class="mini-btn ghost" data-ui data-action="squad-leave-club">Leave</button></div>
     </div>
     ${clubChat}`
     : `
-    ${sectionTitle("Flight Clubs", "join or found one")}
+    ${sectionTitle(t("hud.ui.SFlightClubs", undefined, "Flight Clubs"), t("hud.ui.SFlightClubsSub", undefined, "join or found one"))}
     ${
       sq.clubs.length
         ? `<div class="club-list">${clubPage.items
@@ -395,7 +395,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   // is an explicit, confirmed re-enrollment into a fresh profile.
   const recovery = sq.credentialError && !sq.isAutonomous
     ? `<section class="squad-recovery" role="region" aria-label="${t("hud.renderRank.SProfileRecovery", undefined, "Squad profile recovery")}">
-        ${sectionTitle("Squad profile recovery", "key missing")}
+        ${sectionTitle(t("hud.ui.SSquadProfileRecovery", undefined, "Squad profile recovery"), t("hud.ui.SSquadProfileRecoverySub", undefined, "key missing"))}
         <p>${escapeHtml(sq.error || "This browser cannot unlock the saved Squad profile.")} Your flight progress, coins and birds are untouched — only the Squad identity is locked.</p>
         <label class="recovery-consent"><input type="checkbox" data-ui /> I understand this creates a separate Squad profile.</label>
         <div class="room-actions-bar">
@@ -445,7 +445,7 @@ export function renderModes(s: Pick<HudSnapshot, "modeId" | "modes">): string {
         )
         .join("")}
     </div>
-    ${sectionTitle("Racing Circuits", "PVP &amp; AI")}
+    ${sectionTitle(t("hud.ui.SRacingCircuits", undefined, "Racing Circuits"), t("hud.ui.SRacingCircuitsSub", undefined, "PVP &amp; AI"))}
     <div class="mode-list">
       ${PVP_MODES
         .map(
@@ -458,7 +458,7 @@ export function renderModes(s: Pick<HudSnapshot, "modeId" | "modes">): string {
         )
         .join("")}
     </div>
-    ${sectionTitle("Race the flock offline")}
+    ${sectionTitle(t("hud.ui.SRaceTheFlockOffline", undefined, "Race the flock offline"))}
     <button class="primary-btn gold wide" data-ui data-action="open-practice">🤖 AI PvP · pick a circuit &amp; race the neural flock</button>
     <button class="soft-btn wide" data-ui data-action="versus">👥 Split-screen · 2 players on this device</button>
   `;

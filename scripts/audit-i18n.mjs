@@ -53,6 +53,16 @@ const CATEGORIES = [
     re: /\bhead\(\s*"(?:[^"\\]|\\.)*"/g,
   },
   {
+    id: "sectionTitle",
+    label: 'sectionTitle("…") headings',
+    // Mid-screen section headings. These were a whole category of player-facing
+    // English that the ratchet could not see: 31 of them shipped across the
+    // account, squad, race and shop sheets, every screen's headings, with no
+    // category to count them. The gate reported 301 debt and was silent about
+    // all of it. `sectionTitle(t("k", …), …)` does not count.
+    re: /\bsectionTitle\(\s*"(?:[^"\\]|\\.)*"/g,
+  },
+  {
     id: "ariaLabel",
     label: 'aria-label="…" literals',
     re: /aria-label="[^"${]*[A-Za-z]{3}[^"${]*"/g,

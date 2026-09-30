@@ -17,6 +17,8 @@
  * a tab switch can offer "rejoin" instead of losing the pilot's seat silently.
  */
 
+import { storage } from "./Storage";
+
 export type RoomStatus = "lobby" | "racing";
 
 export type LiveRoom = {
@@ -225,12 +227,14 @@ export type RememberedRoom = { code: string; seed: string; at: number };
 type BrowserStorage = Pick<globalThis.Storage, "getItem" | "setItem" | "removeItem">;
 
 function store(): BrowserStorage | null {
-  try {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage;
-  } catch {
-    return null;
-  }
+  // `Storage`, not raw `localStorage`. This used to probe for `localStorage`
+  // directly, so on a portal whose storage policy makes every direct access
+  // throw, the rejoin offer vanished on every launch while the player was told
+  // nothing — the one failure a "you can get your seat back" affordance must
+  // not have. `Storage` falls back to sessionStorage, then memory, and owns
+  // the Poki cloud-sync key prefix (with read-through migration, so an
+  // existing remembered room is still found).
+  return storage;
 }
 
 /** Remembers the room this device was in so a reload can offer a way back. */

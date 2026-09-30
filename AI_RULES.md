@@ -103,6 +103,14 @@ down a layer, never to import sideways.
   fails when untranslated strings grow. Never hard-code copy in markup.
 - Add the key to the barrel, then regenerate packs (`node scripts/gen-i18n-packs.mjs`); the locale test
   fails on drift.
+- **The i18n ratchet only counts what its categories match, so a new *kind* of copy is invisible
+  until a category exists for it.** It watched `hud.toast()`, `head()`, `aria-label` and `<button>`
+  labels — and said nothing about `sectionTitle()`, which was 31 hardcoded English headings across
+  every menu sheet in a 36-locale build. Wrapping copy in `t()` with the English third argument is
+  safe and free (a missing key resolves `pack[key] ?? EN[key] ?? defaultText`, so the rendered text
+  cannot change), but adding the key to the barrel without all 36 translations *fails* the locale
+  test — so wrapping and translating are two separate commits. When you add a new way for the UI to
+  emit copy, add a category for it in the same change.
 
 ### `Game.ts` is a god-object — extract it behind ports, one table at a time
 `src/game/Game.ts` is one class, 182 methods, ~4,850 `this` references. Handlers are being moved

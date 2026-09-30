@@ -76,7 +76,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     s.share.available || s.share.loaded || s.share.code
       ? `
     <div class="share-run">
-      ${sectionTitle("🔗 Shared run", "friend's code · async race")}
+      ${sectionTitle(t("hud.ui.SSharedRun", undefined, "🔗 Shared run"), t("hud.ui.SSharedRunSub", undefined, "friend's code · async race"))}
       ${
         s.share.code
           ? `<div class="friend-row"><span class="fr-name">${t("hud.renderGameOver.RCode", undefined, "Run code")}</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">${t("hud.renderGameOver.CCode", undefined, "Copy code")}</button></div>`

@@ -1793,7 +1793,7 @@ function renderBoard(s: HudSnapshot): string {
     </div>`
     }
     <div class="prize-card">
-      ${sectionTitle("🏆 Tournament Rank Prizes")}
+      ${sectionTitle(t("hud.ui.STournamentRankPrizes", undefined, "🏆 Tournament Rank Prizes"))}
       <div class="prize-grid">
         <div class="prize-tier gold"><span>🥇 ${t("hud.rank.peak", undefined, "Peak rating")}</span><b>${seasonReward(s.rival.rating).division.name} &middot; ${seasonReward(s.rival.rating).coins} coins</b></div>
         <div class="prize-tier silver"><span>🥈 ${t("hud.rank.now", undefined, "You now")}</span><b>${escapeHtml(s.rival.division ?? seasonReward(s.rival.rating).division.name)}</b></div>
@@ -1822,7 +1822,7 @@ function renderChallenges(s: HudSnapshot): string {
       </div>
     </section>`;
   const daily = `
-    ${sectionTitle("Daily challenge", "resets at midnight")}
+    ${sectionTitle(t("hud.ui.SDailyChallenge", undefined, "Daily challenge"), t("hud.ui.SDailyChallengeSub", undefined, "resets at midnight"))}
     <div class="daily-card ${d.done ? "done" : ""}">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(d.modeIcon)}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
       <div class="daily-mod"><b>${menuIconSm(d.modifierIcon)} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
@@ -1834,7 +1834,7 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   const gauntlet = `
-    ${sectionTitle("Weekly gauntlet", "3 stages · resets Monday")}
+    ${sectionTitle(t("hud.ui.SWeeklyGauntlet", undefined, "Weekly gauntlet"), t("hud.ui.SWeeklyGauntletSub", undefined, "3 stages · resets Monday"))}
     <div class="gauntlet">
       ${g.stages
         .map(
@@ -1849,7 +1849,7 @@ function renderChallenges(s: HudSnapshot): string {
     </div>`;
 
   const calendar = `
-    ${sectionTitle("Login calendar", `day ${c.cycleDay || "—"} of 28`)}
+    ${sectionTitle(t("hud.ui.SLoginCalendar", undefined, "Login calendar"), `day ${c.cycleDay || "—"} of 28`)}
     <div class="cal-grid">
       ${c.days
         .map(
@@ -1865,7 +1865,7 @@ function renderChallenges(s: HudSnapshot): string {
     }`;
 
   const mastery = `
-    ${sectionTitle("Mode mastery", "fly every mode")}
+    ${sectionTitle(t("hud.ui.SModeMastery", undefined, "Mode mastery"), t("hud.ui.SModeMasterySub", undefined, "fly every mode"))}
     <div class="mastery-list">
       ${s.mastery
         .map(
@@ -1888,7 +1888,7 @@ function renderChallenges(s: HudSnapshot): string {
   const th = s.monthlyTheme;
   const trailDone = s.themeTrailClaimed;
   const event = `
-    ${sectionTitle("Live event", "new twist every week")}
+    ${sectionTitle(t("hud.ui.SLiveEvent", undefined, "Live event"), t("hud.ui.SLiveEventSub", undefined, "new twist every week"))}
     <div class="event-card">
       <div class="daily-head"><span class="daily-icon">${menuIconSm(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
       <div class="event-meta"><span>Fly ${formatNumberLocalized(ev.target)} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>

@@ -5427,54 +5427,6 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .growth-ledger .gl-wings .gl-bar b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
 .growth-ledger .gl-mastery .gl-bar b { background: linear-gradient(90deg, #ffe08a, var(--coin-gold)); }
 
-/* In-flight quest strip. Sits above the goal strip so a quest fill is the
-   thing the eye lands on when it crosses, not the permanent goal row. */
-.mission-strip {
-  position: absolute;
-  /* Anchored to the LEFT edge, not the centre. It used to sit at 50% and
-     translateX(-50%), which parks a five-row stack directly under the bird —
-     over the terrain the player is reading to decide whether to dive. Centre
-     is where the gaze and the gameplay are; nothing but transient feedback
-     belongs there. */
-  left: calc(10px + env(safe-area-inset-left));
-  bottom: calc(var(--hud-footer-height, 90px) + 16px + env(safe-area-inset-bottom));
-  width: min(210px, 46vw);
-  /* Cap what can show during a run. Five rows climbed ~140px into the play
-     field; the full set is still on the results card and in the pause menu,
-     so nothing is lost — it just stops covering the hill. */
-  max-height: 78px;
-  overflow: hidden;
-  pointer-events: none;
-}
-.mission-strip .ms-row:nth-child(n+4) { display: none; }
-.mission-strip.hidden { display: none; }
-.mission-strip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.ms-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 2px 8px;
-  padding: 4px 9px 5px;
-  border-radius: 10px;
-  background: rgba(20, 16, 40, 0.42);
-  backdrop-filter: blur(4px);
-  font: 600 11px/1.2 var(--display);
-  color: var(--text-on-sky);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-.ms-row .ms-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-row .ms-num { opacity: 0.8; font-weight: 500; }
-.ms-row .ms-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
-.ms-row .ms-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); transition: width 0.2s ease; }
-.ms-row.done { opacity: 0.72; }
-.ms-row.done .ms-bar b { background: var(--gold); }
-.ms-row.just { animation: ms-bank 0.6s ease-out; }
-@keyframes ms-bank {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
-  40% { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
-}
-
 /* Wings proximity bar */
 /* Absolutely positioned like every other flight element. It was the last
    child never added to a `lane()`, which made it the first in-flow block of
@@ -5512,10 +5464,10 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 
 /* Reduce motion overrides */
 .sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }
-.sb-reduce-motion .ms-row.just { animation: none; }
+.sb-reduce-motion .gs-quest.just { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .celebration .beat { opacity: 1; }
-  .ms-row.just { animation: none; }
+  .gs-quest.just { animation: none; }
 }
 
 @import "./menu-polish.css";
@@ -5782,3 +5734,51 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 @media (prefers-reduced-motion: reduce) {
   .stat-medal.close { animation: none; }
 }
+
+/* Quest rows inside the one goal panel. They reuse the `.gs` widget — same
+   label / progress / bar row as the session goals — because the two used to be
+   two separate panels drawing the same thing, which read as a duplicate panel
+   to anyone playing (and was the "why are there two goal bars" report). Now
+   there is one panel and the rows are distinguished by a colour, not a box. */
+.gs-quest { border-color: rgba(127, 232, 200, 0.34); }
+.gs-quest > i > b { background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
+.gs-quest.done { opacity: 0.86; border-color: var(--gold); }
+.gs-quest.done > i > b { background: var(--gold); }
+.gs-quest.just { animation: gs-bank 0.6s ease-out; }
+@keyframes gs-bank {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
+  40%  { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
+}
+
+/* ---------- stat glyphs ----------
+   The flight readouts were bare text: "DISTANCE", "best 0", "daylight",
+   "0 m". Coins had a glyph and daylight had a knob icon, so the top bar read
+   as one styled readout and three plain labels, and the eye had to read every
+   one of them to know what it was looking at. Each label now carries a small
+   SVG so the bar scans as a set of the same widget.
+
+   Deliberately absent from the COINS label: the coin glyph already sits in the
+   value below it, and a second coin in the same block is the two-circles
+   report again. */
+.stat-label,
+.stat-sub,
+.sun-caption,
+.alt-read {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stat-block.right .stat-label { justify-content: flex-end; }
+.stat-label .icon-sm,
+.stat-sub .icon-sm,
+.sun-caption .icon-sm,
+.alt-read .icon-sm {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  opacity: 0.9;
+  /* Nudged down a hair: the icons sit optically high against 10-11px caps. */
+  transform: translateY(0.5px);
+}
+.alt-read .icon-sm { width: 11px; height: 11px; }

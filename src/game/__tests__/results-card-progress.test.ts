@@ -171,13 +171,25 @@ describe("results card: the producer half (wired)", () => {
     expect(growthLedger(WINGS, MASTERY).length, "growthLedger() itself is broken").toBeGreaterThan(0);
   });
 
-  it("shows the in-flight mission strip", async () => {
+  it("draws quests in the one goal strip, not a second panel", async () => {
     // `missionRows` had 25 test references and no caller: `renderMissions` draws
     // `MissionView[]` for the menu and progress screens and nothing anywhere
-    // drew `MissionRow[]`. The strip is part of the HUD's structure, so it is
-    // in the DOM on every screen and hidden when there is nothing to say.
+    // drew `MissionRow[]`.
+    //
+    // Quests used to get their OWN panel (`.mission-strip`, left edge) beside
+    // the goal strip (centre-bottom), both drawing the same progress row. That
+    // is now ONE panel — the "why are there 2 goal bars" report was correct.
+    // So: the quest host must be gone, and the strip must be the one place a
+    // quest row can appear.
     const { root } = await mountHud({ ...SHIPPED, sessionGoals: [], missions: [] });
-    expect(root.querySelector(".mission-strip, .quest-strip, [data-ref='missionStrip']"), "no mission strip in the results card").not.toBeNull();
+    expect(
+      root.querySelector(".mission-strip, [data-ref='missionStrip']"),
+      "the second goal panel is back",
+    ).toBeNull();
+    expect(
+      root.querySelector("[data-ref='goalStrip']"),
+      "no goal strip to draw quests in",
+    ).not.toBeNull();
     expect(ROWS.length).toBeGreaterThan(0);
     expect(nextActionLine(ROWS, 4200)).toBeTruthy();
   });

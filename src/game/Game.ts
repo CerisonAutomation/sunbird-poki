@@ -58,7 +58,14 @@ import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
 import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews } from "./Campaign";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
-import { emptySquadState, SquadClient } from "./Squad";
+import {
+  emptySquadState,
+  squadQuestClaimState,
+  squadQuestScope,
+  SquadClient,
+  SQUAD_QUESTS,
+  type SquadQuestProgressInput,
+} from "./Squad";
 import { PowerUps } from "./PowerUps";
 import { Racer } from "./Racer";
 import {
@@ -5333,23 +5340,35 @@ export class Game {
         return true;
       }
       case "claim-squad-quest": {
-        const questId = id;
-        const rewards: Record<string, number> = {
-          migration: 150,
-          drafting: 120,
-          precision: 100,
-        };
-        const coins = rewards[questId] ?? 100;
+        const quest = SQUAD_QUESTS.find((q) => q.id === id);
+        // An unknown id paid a flat 100 before; nothing to pay it from.
+        if (!quest) return true;
         if (!this.save.state.squadQuestsClaimed) this.save.state.squadQuestsClaimed = {};
-        if (this.save.state.squadQuestsClaimed[questId] === this.today) {
-          this.hud.toast("Already claimed today!", "info");
+        // Re-validate here, not at the button. Every other claim path in the
+        // game does this; this one used to trust the UI, so a lifetime
+        // milestone guarded only per-day paid out again every day forever.
+        const state = squadQuestClaimState(quest, this.squadQuestProgressInput(), this.save.state.squadQuestsClaimed, this.today);
+        if (state === "already-claimed") {
+          this.hud.toast(
+            squadQuestScope(quest) === "lifetime"
+              ? t("hud.squad.questClaimedLifetime", undefined, "Already claimed — this one is a lifetime goal.")
+              : t("hud.squad.questClaimedToday", undefined, "Already claimed today!"),
+            "info",
+          );
           return true;
         }
-        this.save.state.squadQuestsClaimed[questId] = this.today;
-        this.save.addCoins(coins);
+        if (state === "not-complete") {
+          this.hud.toast(t("hud.squad.questNotComplete", undefined, "Not finished yet."), "info");
+          return true;
+        }
+        this.save.state.squadQuestsClaimed[quest.id] = this.today;
+        this.save.addCoins(quest.rewardCoins);
         this.audio.chapterFanfare();
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("star")} Squadron Goal Claimed! +● ${coins} coins!`, "gold");
+        this.hud.toast(
+          `${iconGlyph("star")} ` + t("hud.squad.questClaimed", { coins: String(quest.rewardCoins) }, "Squadron Goal Claimed! +{{coins}} coins!"),
+          "gold",
+        );
         this.bump();
         return true;
       }
@@ -7810,8 +7829,7 @@ export class Game {
     const st = this.save.state;
     const stats = this.runStats();
     this.stepMissionRows(stats);
-    let todayBest = 0;
-    for (const h of st.highScores) if (h.date === this.today && h.distance > todayBest) todayBest = h.distance;
+    const todayBest = this.todayBestDistance(st);
     const sTier = this.seasonPass.tier();
     const sProg = this.seasonPass.progressInTier();
     const snap: HudSnapshot = {
@@ -7907,6 +7925,25 @@ export class Game {
     };
   }
 
+  /** Longest flight recorded today. The only day-scoped "best" in the save
+   *  file — `state.bestDistance` is a lifetime record and stays that way. */
+  private todayBestDistance(st: SaveData["state"]): number {
+    let best = 0;
+    for (const h of st.highScores) if (h.date === this.today && h.distance > best) best = h.distance;
+    return best;
+  }
+
+  /** The three stats `SQUAD_QUESTS` are measured against, read once so the
+   *  claim handler and the squad panel always judge the same numbers. */
+  private squadQuestProgressInput(): SquadQuestProgressInput {
+    const st = this.save.state;
+    return {
+      bestDistance: st.bestDistance,
+      runsPlayed: st.runsPlayed,
+      todayBest: this.todayBestDistance(st),
+    };
+  }
+
   /** Wallet, progression, missions, quests, shop views, pack pricing,
    *  checkout, season pass and trophies. */
   private hudProfile(st: SaveData["state"], todayBest: number, sTier: number, sProg: { have: number; need: number }) {
@@ -7928,6 +7965,7 @@ export class Game {
     quests: this.questViews,
     highScores: st.highScores,
     todayBest,
+    today: this.today,
     runsPlayed: st.runsPlayed,
     newlyCompleted: this.newlyCompleted,
     claimedQuests: this.claimedQuests,
@@ -8095,6 +8133,7 @@ export class Game {
         ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
         : [],
     netState: this.net?.info().state ?? "offline",
+    squadQuestsClaimed: st.squadQuestsClaimed ?? {},
     linkQuality: this.net?.connectionQuality ?? "unknown",
     netError: this.net?.info().error ?? "",
     draft: this.massRace.draft,

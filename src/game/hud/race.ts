@@ -8,7 +8,7 @@ import { menuIcon, menuIconSm } from "../MenuIcons";
 import { PVP_MODES } from "../Modes";
 import { paginate } from "../Pagination";
 import { type FriendChallenge } from "../SocialSystem";
-import { SQUAD_QUESTS } from "../Squad";
+import { SQUAD_QUESTS, squadQuestClaimState, squadQuestProgress, squadQuestScope } from "../Squad";
 import { rivalPalette, skinPalette, skinShape, sunbirdSVG } from "../Sunbird";
 import { SQUAD_CHAT } from "../edition";
 import { seenAgo } from "../pilots";
@@ -214,7 +214,7 @@ export function renderRank(s: Pick<HudSnapshot, "duel" | "duelFoe" | "loadout" |
 }
 
 /** Exported so the Pilot Lookup panel can be tested without a live game. */
-export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallenges" | "recentPilots" | "runsPlayed" | "squad" | "squadNotice" | "todayBest">): string {
+export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallenges" | "recentPilots" | "runsPlayed" | "squad" | "squadNotice" | "squadQuestsClaimed" | "today" | "todayBest">): string {
   const sq = s.squad;
   const friendPage = paginate(sq.friends, sq.friendPage);
   const clubPage = paginate(sq.clubs, sq.clubPage);
@@ -225,12 +225,18 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
     ${sectionTitle(null, "Squadron Team Quests", "Co-Op Milestones")}
     <div class="squad-quests">
       ${SQUAD_QUESTS.map((q) => {
-        const prog = q.id === "migration" ? Math.min(q.target, Math.round(s.bestDistance * 1.5)) : q.id === "drafting" ? Math.min(q.target, Math.round(s.runsPlayed * 5)) : Math.min(q.target, Math.round(s.todayBest / 100));
+        // One progress implementation, shared with the claim handler, and the
+        // ledger decides visibility — so a spent reward leaves the screen
+        // instead of leaving a button that pays again tomorrow.
+        const prog = squadQuestProgress(q, s);
+        const state = squadQuestClaimState(q, s, s.squadQuestsClaimed, s.today);
         return `<div class="squad-quest-card">
           <div class="sq-info"><b>${escapeHtml(q.title)}</b><span>${escapeHtml(q.desc)}</span></div>
           <div class="sq-action">
-            ${prog >= q.target
+            ${state === "claimable"
               ? `<button class="mini-btn gold" data-ui data-action="claim-squad-quest" data-id="${q.id}">Claim ● ${q.rewardCoins}</button>`
+              : state === "already-claimed"
+              ? `<span class="sq-prog-label">✓ ${squadQuestScope(q) === "daily" ? t("hud.squad.claimedTodayBadge", undefined, "claimed today") : t("hud.squad.claimedBadge", undefined, "Claimed")}</span>`
               : `<span class="sq-prog-label">${prog}/${q.target}</span>`}
           </div>
         </div>`;

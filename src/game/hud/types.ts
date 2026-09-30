@@ -227,6 +227,9 @@ export type HudSnapshot = {
   quests: QuestView[];
   highScores: HighScore[];
   todayBest: number;
+  /** The active calendar day, `YYYY-MM-DD`. The squad quest ledger stores
+   *  claim days, so the panel needs the current one to compare against. */
+  today: string;
   runsPlayed: number;
   newlyCompleted: string[];
   claimedQuests: QuestReward[];
@@ -402,6 +405,10 @@ export type HudSnapshot = {
   campaignDone: number;
   campaignTotal: number;
   squad: SquadState;
+  /** Claim ledger for `SQUAD_QUESTS` — quest id -> the day it was claimed.
+   *  The squad panel needs it so a claim button can disappear once spent; a
+   *  button that outlives its own reward is the re-claim hole. */
+  squadQuestsClaimed: Record<string, string>;
   /** Active ghost-race challenges (SocialSystem) — pending or accepted. */
   friendChallenges: FriendChallenge[];
   /** Real pilots from rooms this device shared — see src/game/pilots.ts. */

@@ -88,6 +88,14 @@ function medalText(earned: Medal, toNext: number | null): string {
  *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
  *  threshold, so the footer and the strip can never disagree. */
 const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
+/** How long a finished quest keeps its row before it leaves the strip. Long
+ *  enough to read "✓ +120", short enough that the panel is not a wall of
+ *  banked rows by the end of a run. The `goalPop` toast carries the celebration
+ *  past this point, so nothing is lost by letting the row go. */
+const QUEST_DONE_LINGER_MS = 4_500;
+/** Ceiling on rows in the one goal panel. Three fits a phone footer; more than
+ *  that is the "wall of permanent bars" the threshold above exists to prevent. */
+const GOAL_STRIP_MAX_ROWS = 3;
 /** Longest single-run distance, used to decide whether a mid-run goal is
  *  actually actionable. Measured from the shipped build: a good run reaches
  *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
@@ -195,7 +203,6 @@ export class HUD {
   private countdownEl!: HTMLElement;
   private versusBar!: HTMLElement;
   private goalStrip!: HTMLElement;
-  private missionStrip!: HTMLElement;
   private goalPop!: HTMLElement;
   private rankUp!: HTMLElement;
   private standingsEl!: HTMLElement;
@@ -224,7 +231,9 @@ export class HUD {
   private lastGoals = "";
 
   private lastGoalPop = "";
-  private lastMissionStrip = "";
+  /** First frame each quest was seen complete, so the linger window has a start.
+   *  Cleared when the row goes back to open, and pruned on reset. */
+  private readonly doneRowAt = new Map<string, number>();
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
@@ -305,9 +314,9 @@ export class HUD {
       <div class="play-hud hidden" data-ref="playHud">
         <div class="top-bar">
           <div class="stat-block">
-            <div class="stat-label">${t("hud.stat.distance", undefined, "Distance")}</div>
+            <div class="stat-label">${menuIconSm("ruler")}<span>${t("hud.stat.distance", undefined, "Distance")}</span></div>
             <div class="stat-value" data-ref="distance">0 m</div>
-            <div class="stat-sub">best <span data-ref="best">0</span></div>
+            <div class="stat-sub">${menuIconSm("trophy")}<span>best</span> <span data-ref="best">0</span></div>
             <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
@@ -315,9 +324,13 @@ export class HUD {
               <div class="sun-fill" data-ref="sunFill"></div>
               <div class="sun-knob" data-ref="sunKnob">${menuIcon("daily")}</div>
             </div>
-            <div class="sun-caption">${t("hud.stat.daylight", undefined, "daylight")}</div>
+            <div class="sun-caption">${menuIconSm("sun")}<span>${t("hud.stat.daylight", undefined, "daylight")}</span></div>
           </div>
           <div class="stat-block right">
+            <!-- No icon on this label, and that is deliberate. Every other stat
+                 label now carries a glyph so the readouts scan as a set, but the
+                 coin's glyph already sits in the VALUE below it. Putting a coin
+                 up here as well is the two-circles report, verbatim. -->
             <div class="stat-label">${t("hud.stat.coins", undefined, "Coins")}</div>
             <div class="stat-value coin">${COIN_SVG}<span data-ref="coins">0</span></div>
           </div>
@@ -330,13 +343,12 @@ export class HUD {
             <i class="alt-fill" data-ref="altFill"></i>
             <b class="alt-bird" data-ref="altBird">${menuIcon("bird")}</b>
           </div>
-          <div class="alt-read" data-ref="altRead">0 m</div>
+          <div class="alt-read" data-ref="altRead">${menuIconSm("glide")}<span>0 m</span></div>
         </div>
         <div class="chain-readout" data-ref="chainReadout" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="launch-banner" data-ref="launchBanner"></div>
         <div class="power-strip" data-ref="powerStrip"></div>
-        <div class="goal-strip" data-ref="goalStrip"></div>
-        <div class="mission-strip hidden" data-ref="missionStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
+        <div class="goal-strip" data-ref="goalStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
         <div class="goal-pop" data-ref="goalPop" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="rank-up" data-ref="rankUp" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="countdown" role="status" aria-live="assertive" aria-atomic="true" data-ref="countdown"></div>
@@ -1065,7 +1077,10 @@ export class HUD {
       const aN = Math.min(1, Math.pow(s.altitude / 340, 0.65));
       this.setStyle(this.altFill, "altFill", "height", `${aN * 100}%`);
       this.setStyle(this.altBird, "altBird", "bottom", `calc(${aN * 100}% - 9px)`);
-      this.setText(this.altRead, "altRead", `${Math.round(s.altitude)} m`);
+      // The readout now holds an icon plus a <span>, so the writer has to
+      // target the span — setting textContent on the wrapper would delete the
+      // glyph on the first frame.
+      this.setText(this.altRead.querySelector("span") ?? this.altRead, "altReadNum", `${Math.round(s.altitude)} m`);
       this.altGauge.dataset.zone = String(s.altZone);
 
       const chainKey = `${s.chainLabel}|${s.chainTier}`;
@@ -1120,7 +1135,12 @@ export class HUD {
         }
       }
 
-      // Goal strip: max 2 rows — beat row + closest goal, OR closest goal + career.
+      // ONE goal panel. Session goals and quests used to be two separate
+      // panels — the strip centre-bottom, and a `.mission-strip` pinned to the
+      // left edge — each drawing the same label / progress / bar row in the
+      // same corner of a phone screen. That is the "why are there two goal
+      // bars" report, and the player was not misreading it: there were two.
+      // They are now rows in one strip, capped at GOAL_STRIP_MAX_ROWS.
       let lead: SessionGoal | null = null;
       for (const g of s.sessionGoals) {
         if (g.done) continue;
@@ -1133,7 +1153,42 @@ export class HUD {
       const ntRaw = s.nearestTrophy as AchievementView | null;
       const nt = ntRaw && ntRaw.def && typeof ntRaw.def.target === "number" && ntRaw.def.target > 0 && typeof ntRaw.progress === "number" ? ntRaw : null;
       const tk = nt ? `${nt.def.id}:${Math.floor((nt.progress / nt.def.target) * 20)}` : "";
-      const stripKey = `${blKey}|${gk}|${wk}|${tk}`;
+
+      // Quests: what is worth showing right now.
+      //
+      // The expiry is the "goals are stuck on the HUD" report. The filter kept
+      // `r.done` UNCONDITIONALLY, so a quest you had already banked sat on
+      // screen for the rest of the flight with a full gold bar, permanently.
+      // Completion is a moment, not a state: a finished row lingers long enough
+      // for the payoff to land, then leaves. `goalPop` carries the celebration
+      // past that point.
+      const now = performance.now();
+      const questRows: MissionRow[] = [];
+      for (const r of s.missionRows) {
+        if (r.done) {
+          if (!this.doneRowAt.has(r.id)) this.doneRowAt.set(r.id, now);
+          if (now - this.doneRowAt.get(r.id)! > QUEST_DONE_LINGER_MS) continue;
+        } else {
+          this.doneRowAt.delete(r.id);
+          // A row sitting at zero trains the player to stop reading the strip —
+          // `closestGoalLine` says so in its own comment, and gates its line on
+          // 50%+. The strip now uses the same threshold.
+          if (r.pct < IN_FLIGHT_MISSION_MIN_PCT) continue;
+        }
+        questRows.push(r);
+      }
+      // The remaining linger is bucketed INTO the key, or a key that never
+      // changes is a row that never leaves — the exact bug being fixed.
+      const questKey = questRows
+        .map((r) => {
+          const left = r.done
+            ? Math.ceil((QUEST_DONE_LINGER_MS - (now - (this.doneRowAt.get(r.id) ?? now))) / 400)
+            : 0;
+          return `${r.id}${Math.round(r.pct * 200)}${r.done ? `D${left}` : ""}${r.justDone ? "J" : ""}`;
+        })
+        .join("|");
+
+      const stripKey = `${blKey}|${gk}|${wk}|${tk}|${questKey}`;
       if (stripKey !== this.lastGoals) {
         this.lastGoals = stripKey;
         const rows: string[] = [];
@@ -1148,7 +1203,7 @@ export class HUD {
         }
 
         // Row 2a: closest goal (if beat row is showing) or Row 1: closest goal
-        if (lead && (!bl || rows.length < 2)) {
+        if (lead && rows.length < GOAL_STRIP_MAX_ROWS) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
           rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
@@ -1169,46 +1224,33 @@ export class HUD {
         // belongs. The bar is only hidden while a run is in flight; a goal that
         // becomes reachable mid-run shows itself, because `nextNeeded` is part
         // of the strip key.
-        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < 2) {
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < GOAL_STRIP_MAX_ROWS) {
           const cpct = Math.min(100, s.wings.progress * 100);
           rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
         }
 
         // Trophy progress: lowest priority — only when a slot is still free.
-        if (nt && rows.length < 2) {
+        if (nt && rows.length < GOAL_STRIP_MAX_ROWS) {
           const tpct = Math.min(100, (nt.progress / nt.def.target) * 100);
           rows.push(`<span class="gs gs-trophy"><em>${menuIconSm("trophy")} ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
         }
 
+        // Quests fill whatever slots the session goals left. They are the same
+        // `.gs` widget, so the panel reads as one list rather than two panels
+        // that happen to both be progress bars.
+        for (const r of questRows) {
+          if (rows.length >= GOAL_STRIP_MAX_ROWS) break;
+          const qpct = Math.min(100, r.pct * 100);
+          const cls = r.done ? " done" : r.pct >= 0.7 ? " close" : "";
+          const num = r.done
+            ? `✓ ${COIN_SVG}${r.reward}`
+            : `${Math.round(r.progress)}/${Math.round(r.target)} · +${COIN_SVG}${r.reward}`;
+          rows.push(
+            `<span class="gs gs-quest${cls}${r.justDone ? " just" : ""}"><em>${escapeHtml(r.title)}</em><u>${num}</u><i><b style="width:${qpct.toFixed(1)}%"></b></i></span>`,
+          );
+        }
+
         this.goalStrip.innerHTML = rows.join("");
-      }
-      // The quest strip. Keyed on the numbers rather than rebuilt per frame, so
-      // a 30 Hz HUD push does not churn 3-4 nodes; the `just` class is folded
-      // into the key so the "banked" flourish still fires on the frame it lands.
-      // Only quests worth looking at right now.
-      //
-      // This rendered EVERY mission unconditionally, so a fresh run put three
-      // permanent bars on screen reading 0/6, 0/15 and 0/2 — a screenshot of
-      // the shipped build shows exactly that, sitting in the lower-left of the
-      // terrain-reading zone. The codebase already contains the answer to this
-      // and the strip was ignoring it: `closestGoalLine`'s comment says a
-      // permanent "you are 3% of the way there" nag "teaches the player to
-      // ignore the strip", and then gates its own line on 50%+. So the in-flight
-      // strip now uses the same threshold.
-      //
-      // Kept: quests at 50%+ (they are close, and close is motivating), and
-      // anything that just completed this frame (the payoff is the point of
-      // showing it). Dropped: the rows sitting at zero, which are the ones that
-      // train the player to stop reading the strip. Nothing is *lost* — every
-      // quest is still listed on the progress screen.
-      const worthShowing = s.missionRows.filter(
-        (r) => r.done || r.justDone || r.pct >= IN_FLIGHT_MISSION_MIN_PCT,
-      );
-      const mkey = worthShowing.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
-      if (mkey !== this.lastMissionStrip) {
-        this.lastMissionStrip = mkey;
-        this.missionStrip.classList.toggle("hidden", worthShowing.length === 0);
-        this.missionStrip.innerHTML = renderMissionStrip(worthShowing);
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;
@@ -1685,7 +1727,6 @@ export class HUD {
     this.matchmakingKeep = grab("matchmakingKeep");
     this.matchmakingReady = grab("matchmakingReady");
     this.goalStrip = grab("goalStrip");
-    this.missionStrip = grab("missionStrip");
     this.goalPop = grab("goalPop");
     this.rankUp = grab("rankUp");
     this.standingsEl = grab("standings");
@@ -2420,25 +2461,4 @@ function renderScores(s: HudSnapshot): string {
   `;
 }
 
-/**
- * The in-flight quest strip — `missionRows`, drawn next to the goal strip.
- *
- * Emitted unconditionally (and hidden when empty) for the same reason
- * `.growth-ledger` is: the element is part of the HUD's structure, so a test
- * and a screen reader can both find it whether or not this particular run has a
- * quest in it. It is a `<ul>` of rows, each with its progress as text, because a
- * bar alone tells a screen reader nothing.
- */
-function renderMissionStrip(rows: MissionRow[]): string {
-  if (!rows.length) return "";
-  return `<ul class="mission-strip-list">${rows
-    .map(
-      (r) => `<li class="ms-row${r.done ? " done" : ""}${r.justDone ? " just" : ""}">
-        <span class="ms-title">${r.done ? "✓ " : ""}${escapeHtml(r.title)}</span>
-        <span class="ms-num">${Math.round(r.progress)}/${Math.round(r.target)}</span>
-        <i class="ms-bar" aria-hidden="true"><b style="width:${(r.pct * 100).toFixed(1)}%"></b></i>
-      </li>`,
-    )
-    .join("")}</ul>`;
-}
 

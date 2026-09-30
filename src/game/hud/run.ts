@@ -10,7 +10,7 @@ import { adEscapeArmed, adEscapeCountdown } from "../adGate";
 import { formatNumberLocalized, t } from "../../i18n";
 import { flightTakeaway } from "../FlightGuidance";
 import { growthLedger } from "../GrowthLedger";
-import { menuIcon, menuIconSm } from "../MenuIcons";
+import { clockSvg, menuIcon, menuIconSm } from "../MenuIcons";
 import { type CelebrationView } from "../ProgressBeats";
 import { type RacerStats } from "../Racer";
 import { nextBird } from "../ShopBrowse";
@@ -337,8 +337,8 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button></div>`
-      : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
+      : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
       <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
@@ -367,11 +367,14 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
     <div class="ad-actions">
       ${
         s.adSkippable
-          ? `<button class="mini-btn" data-ui data-action="ad-skip" data-live="adSkip" disabled>Continues in ${Math.ceil(s.adTimer)}</button>`
-          // Never render an empty .ad-actions. On Poki BOTH branches above are
-          // false, so the panel was a frozen bar and "Your run is paused" for up
-          // to 60 s with nothing to press. After the safety window the run is
-          // returned to, and the button says so.
+          // A placeholder break is NOT skippable either. This used to be a
+          // `ad-skip` button that unlocked at zero — and since the game never
+          // ended a placeholder break by itself, clicking it was the only way
+          // out, which made "skip" the intended exit. The break now completes
+          // on its own the instant the countdown lands (see Game.fixedUpdate),
+          // so there is nothing here to press: this is a read-only status
+          // chip, not a control.
+          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>Continues in <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
           // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
           // so this used to render enabled with a flat "Return to flight" from
           // the first frame of every break — one click skipped a real ad. It is
@@ -382,7 +385,9 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
               const armed = adEscapeArmed(s.adElapsed, s.adSafetySeconds);
               const left = adEscapeCountdown(s.adElapsed, s.adSafetySeconds);
               return `<button class="mini-btn" data-ui data-action="ad-stuck"${armed ? "" : " disabled"}>${
-                armed ? "Return to flight" : `Break in progress — return available in ${left}`
+                armed
+                  ? "Return to flight"
+                  : `${clockSvg()}<span>Break in progress — return in <b>${left}</b>s</span>`
               }</button>`;
             })()
       }

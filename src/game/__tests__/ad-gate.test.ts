@@ -15,7 +15,10 @@ describe("ad break gate", () => {
     // A canary: if the markup ever stops being parsed (renamed attribute, moved
     // template) this test would vacuously pass over an empty list. Fail loudly.
     expect(HUD_ACTIONS.length).toBeGreaterThan(40);
-    expect(HUD_ACTIONS).toContain("ad-skip");
+    // `ad-skip` deliberately no longer appears in the markup: the placeholder
+    // panel renders a read-only countdown chip and the break ends itself.
+    expect(HUD_ACTIONS).not.toContain("ad-skip");
+    expect(HUD_ACTIONS).toContain("ad-gold");
     expect(HUD_ACTIONS).toContain("back");
     expect(HUD_ACTIONS).toContain("pause");
   });
@@ -29,10 +32,13 @@ describe("ad break gate", () => {
     }
   });
 
-  it("allows only the game-owned skip controls during a PLACEHOLDER break", () => {
+  it("allows only the upsell during a PLACEHOLDER break", () => {
+    // Was `ad-skip || ad-gold`. `ad-skip` is gone: a placeholder break had no
+    // self-exit, so pressing skip was the only way out of it and skipping was
+    // therefore the intended exit from every break on a non-portal build. The
+    // break now completes itself in fixedUpdate when the countdown lands.
     for (const action of HUD_ACTIONS) {
-      const allowed = action === "ad-skip" || action === "ad-gold";
-      expect(adBreakAllowsAction(action, false), action).toBe(allowed);
+      expect(adBreakAllowsAction(action, false), action).toBe(action === "ad-gold");
     }
   });
 
@@ -66,9 +72,11 @@ describe("ad break gate", () => {
     // action is permitted AND the break may end. Neither alone awards anything.
     const tile = (action: string, portalOwned: boolean, adTimer: number) =>
       adBreakAllowsAction(action, portalOwned) && adBreakCanEnd(portalOwned, adTimer);
-    expect(tile("ad-skip", false, 2)).toBe(false); // mid-countdown
-    expect(tile("ad-skip", false, 0)).toBe(true); // countdown finished
+    expect(tile("ad-skip", false, 2)).toBe(false); // gone: never permitted
+    expect(tile("ad-skip", false, 0)).toBe(false); // gone: the break self-ends
     expect(tile("ad-skip", true, 0)).toBe(false); // portal: SDK only
+    expect(tile("ad-gold", false, 2)).toBe(false); // upsell, mid-countdown
+    expect(tile("ad-gold", false, 0)).toBe(true); // upsell, countdown done
     expect(tile("ad-gold", true, 0)).toBe(false); // portal: SDK only
     expect(tile("back", false, 0)).toBe(false); // not an ending action
   });

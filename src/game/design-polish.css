@@ -394,6 +394,66 @@
 }
 
 /* ---------------------------------------------------------------------
+   D-14  Every timer wears a clock.
+
+   Countdowns were bare text ("Continues in 7", "Second wind closes in 9s")
+   or the emoji hourglass U+23F3 — same family as the glyphs already caught
+   rendering as tofu, and on a timer of all things. A number with no icon
+   also reads as a label rather than as something *counting*: the player has
+   to re-read it to notice it moved.
+
+   One vector clock (clockSvg) marks every value that counts down, so "there
+   is time on this" is a shape the eye learns once. The glyph is optically
+   aligned to the digits rather than the line box, and the numerals are
+   tabular so a 10 -> 9 transition does not shuffle the words after it.
+   --------------------------------------------------------------------- */
+.hud-root .timer-glyph {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+  /* Cap-height alignment: a circular glyph on a text baseline sits high. */
+  transform: translateY(0.06em);
+  opacity: 0.9;
+}
+.hud-root :is(.ad-countdown, .reward-strip, .wake-strip) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.hud-root :is(.ad-countdown, .reward-strip) b {
+  font-variant-numeric: tabular-nums;
+  /* Two digits of reserved width so 60 -> 9 does not jump the label. */
+  min-width: 2ch;
+  display: inline-block;
+  text-align: right;
+}
+
+/* The placeholder break's countdown is a read-only status chip, not a
+   control. It must not look like one: no border, no shadow, no pointer. */
+.hud-root .ad-countdown {
+  padding: 10px 16px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 22%);
+  color: var(--text-on-sky);
+  font-weight: 600;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The escape hatch keeps its clock while disabled, and loses it when it
+   finally arms — at that point it is an action, not a countdown. */
+.hud-root .ad-actions .mini-btn[disabled] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------------------------------------------------------------
    D-12  Focus is visible everywhere, not just in the menu.
 
    menu-polish.css gives `.overlay` controls a 3 px focus ring. The flight

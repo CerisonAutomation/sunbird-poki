@@ -37,7 +37,11 @@ So on a real Poki ad, the game drew an enabled button saying "Return to flight",
 
 Nothing was *granted* on that path, which is the one mercy — the rewarded payouts all correctly key off the SDK's `earned` flag. But an interstitial could be dismissed outright, and unwinding a break under a live ad is what an ad network calls inventory fraud, not a bug.
 
-**This is the third skip vector found in this codebase.** The other two are in the file history: `ad-gold` once ended breaks immediately and for free, and `ad-skip` once rendered enabled during portal ads for the *same* `adTimer === 0` reason. Three instances of one root cause — a control gated on a timer that the portal path never sets — is a pattern, not an accident.
+**Vector 4, found on the second pass: a placeholder break had no self-exit at all.** With no portal the game runs its own countdown — and it never ended the break when that countdown landed. The only exits were the `ad-skip` button, the upsell, or the 60-second safety valve. **Pressing skip was the intended way out of every break on a non-portal build.** The panel was, in effect, a mandatory skip button with a delay on it.
+
+Fixed by making the break complete itself in `Game.fixedUpdate` the instant `adTimer` lands, and then removing the control entirely: the placeholder panel now renders a **read-only status chip**, `ad-skip` is dropped from `PLACEHOLDER_ACTIONS`, and the action is an explicit no-op retained only so a stray dispatch is swallowed rather than falling through. There is nothing on the break panel that a player can press to end a break, on either path.
+
+**This is the fourth skip vector in this file's history.** The others: `ad-gold` once ended breaks immediately and for free; `ad-skip` once rendered enabled during portal ads for the *same* `adTimer === 0` reason; and keyboard was a fifth path that never went past the ad gate at all. Four instances of one root cause — a control gated on a timer the portal path never sets, on a screen with no self-exit — is a pattern, not an accident. Which is why the guard is now a shared pure function called from both the view and the action handler, and why the test asserts the *allowlist itself* by exact equality rather than testing the newest hole.
 
 **The fix.**
 
@@ -45,9 +49,12 @@ Nothing was *granted* on that path, which is the one mercy — the rewarded payo
 - `Game.handleAction` enforces it **independently of the view**. A disabled attribute is a rendering detail; an action handler is the contract. Anything dispatching the action directly is refused.
 - `Game.handleHotkeys` now swallows pause and restart during a break. Keyboard was a second path that never went past the ad gate at all: ESC/P and R had their own routes into `backScreen()` and `replayRun()`. Mute and fullscreen are still allowed on purpose — neither shortens a break, and a player must always be able to silence a game.
 - The escape hatch functions **fail closed** on junk input: a `NaN` elapsed time reads as "not armed", never as "open forever".
-- `design-polish.css` makes the disabled hatch honestly inert — no hover, no pointer, no active transform — while the progress bar keeps full contrast, so the player sees that something *is* happening rather than that the game is broken.
+- `design-polish.css` makes the disabled hatch honestly inert — no hover, no pointer, no active transform — while the progress bar keeps full contrast, so the player sees that something *is* happening rather than that the game is broken. The placeholder chip is styled as a readout, not a control: no border, no shadow, `cursor: default`.
+- A live-updater in `HUD.ts` was rewriting the countdown element's entire `textContent` every frame. That is harmless for a bare label and fatal for one containing an icon — it wiped the clock on the first tick after render. The countdown now lives in its own `<b>` and only the number is live.
 
-**Guard.** `src/game/__tests__/ad-unskippable.test.ts` — **13 tests** that enumerate all three historical vectors rather than testing only the newest, and assert the invariant that catches a fourth: *on a portal-owned break, no value of any game-side input ends the break early.* Sixteen actions × every timer value including infinities, the full 0→60 s sweep of the hatch, monotonicity of its countdown, and fail-closed behaviour.
+**Guard.** `src/game/__tests__/ad-unskippable.test.ts` — **20 tests** that enumerate all three historical vectors rather than testing only the newest, and assert the invariant that catches a fourth: *on a portal-owned break, no value of any game-side input ends the break early.* Sixteen actions × every timer value including infinities, the full 0→60 s sweep of the hatch, monotonicity of its countdown, fail-closed behaviour, an exact-equality assertion that the placeholder allowlist is `["ad-gold"]` and nothing else so the set cannot quietly regrow, and render-level assertions that the panel contains no `ad-skip` button, no enabled hatch inside the window, and no negative countdown.
+
+Three pre-existing tests asserted the *old* contract — `ad-gate.test.ts` required `ad-skip` to be in the HUD inventory and permitted mid-break, and `ad-surfaces.test.ts` asserted "our own break has to end somehow" against the presence of a skip button. They were correct about the old code and wrong about what the code should do; all three were rewritten to the new contract with the reasoning recorded inline, not deleted.
 
 **Verified in-browser against the real renderer**, driving `renderAd` with a portal-owned break:
 
@@ -155,7 +162,13 @@ The one thing added that moves is the scroll-driven mask. It is disabled under `
 
 `menu-polish.css` gives every `.overlay` control a 3 px focus ring. The flight HUD's own chrome — pause, mute, the emote wheel — had none, so a keyboard or switch-control player actually flying the game could not see what they were about to press. The same ring now covers HUD chrome. The colour was a magic number duplicated per sheet; it is now a `--focus-ring` token, which is also how the change stayed inside the colour ratchet rather than adding a third copy.
 
-### 12 ✅ Shrinking art must not shrink the target — Accessibility, Responsive
+### 12 ✅ Every timer now wears a clock — Visual Design, Typographer
+
+You asked for it and the codebase deserved it. Countdowns were bare text — "Continues in 7", "Break in progress — return available in 60" — or `⏳` U+23F3, an emoji-presentation code point from the same family as the glyphs already caught rendering as tofu, on a *timer* of all things.
+
+A number with no icon also reads as a label rather than as something counting: the player has to re-read it to notice it moved. One vector `clockSvg()` now marks every value that counts down — the placeholder chip, the escape hatch, both Second-Wind variants — so "there is time on this" is a shape the eye learns once. The hands sit at ten-past because a vertical minute hand disappears into the face's stroke at 14 px; the glyph is cap-height aligned to the digits rather than the line box; and the numerals are tabular with 2ch reserved, so 60 → 9 does not shuffle the words after it.
+
+### 13 ✅ Shrinking art must not shrink the target — Accessibility, Responsive
 
 Finding 8 caps illustration size at short viewports. An icon may shrink; a hit target may not. Icon buttons, back buttons and ad controls are pinned to 44 × 44 px minimum independently of their glyph size.
 
@@ -170,8 +183,6 @@ The two-column layout and the affordance work cut the *symptom* (scroll depth ro
 ◻ **The pause card is a second main menu** — twelve controls (`shots/p-pause.png`). "Keep flying" is correctly dominant, but ten side-doors out of pause are ten paths that are not "back into gameplay", which is precisely the condition Poki attaches to `commercialBreak()`. Recommended set: Keep flying / Restart / Exit / Sound / Settings / Fullscreen. Same reason for not doing it unilaterally.
 
 ◻ **The menu backdrop is dead space** and the attract bird reads as an orange blob at 1280×720 (`shots/00-boot.png`). Either push it to a hero shot or honestly blur it. Art direction call.
-
-◻ **`ad-skip` on placeholder breaks is a real skip, by design.** With no portal the game runs its own countdown and the button unlocks at zero. That is correct — there is no ad to defraud — but it is worth stating explicitly so nobody "fixes" it into a portal-path guard or, worse, copies the placeholder pattern onto the portal path. That copy is how all three skip vectors were born.
 
 ◻ **Space does not resume from pause.** ESC and P both toggle correctly — verified `flying → pause-actions → flying → pause-actions`. Poki's wording mentions spacebar; since Space is the dive key, accepting it would need a short input lockout so the resume press does not also dive. Defensible as-is, flagged for a decision.
 
@@ -205,9 +216,9 @@ Full gate, after all changes:
 |---|---|
 | `lint --max-warnings 0` | ✅ |
 | `typecheck` | ✅ |
-| `test` | ✅ **2,790 passed / 9 skipped, 194 files** (+21 legibility, +13 ad-unskippable) |
+| `test` | ✅ **2,797 passed / 9 skipped, 194 files** (+21 legibility, +20 ad-unskippable) |
 | `circular:check` | ✅ no cycles |
-| `build` | ✅ 2,119 kB / 644 kB gzip |
+| `build` | ✅ 2,121 kB / 645 kB gzip |
 | `build:poki` | ✅ |
 | `i18n:audit` | ✅ ratchet held |
 | `poki:audit` | ✅ |

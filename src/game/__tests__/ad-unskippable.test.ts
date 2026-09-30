@@ -64,10 +64,19 @@ describe("a portal-owned break cannot be ended by the game", () => {
 });
 
 describe("a placeholder break plays to the end", () => {
-  it("only lets the game run its own two controls", () => {
-    expect(adBreakAllowsAction("ad-skip", PLACEHOLDER)).toBe(true);
+  it("no longer admits ad-skip at all", () => {
+    // Vector 4. A placeholder break had NO self-exit: the game never ended it,
+    // so pressing `ad-skip` was the only way out and skipping was therefore
+    // the intended exit from every break on a non-portal build. The break now
+    // completes itself in fixedUpdate when the countdown lands, the panel
+    // renders a read-only chip, and the action is an explicit no-op.
+    expect(adBreakAllowsAction("ad-skip", PLACEHOLDER)).toBe(false);
+    expect(adBreakAllowsAction("ad-skip", PORTAL)).toBe(false);
+  });
+
+  it("only lets the game run the upsell", () => {
     expect(adBreakAllowsAction("ad-gold", PLACEHOLDER)).toBe(true);
-    for (const a of ["ad-stuck", "pause", "menu", "resume", "continue-sleep"]) {
+    for (const a of ["ad-skip", "ad-stuck", "pause", "menu", "resume", "continue-sleep"]) {
       expect(adBreakAllowsAction(a, PLACEHOLDER), a).toBe(false);
     }
   });
@@ -81,10 +90,19 @@ describe("a placeholder break plays to the end", () => {
   });
 
   it("does not let the upsell double as a skip", () => {
-    // `ad-gold` is allowed to *run*, but it is gated on the same countdown as
-    // `ad-skip`, so taking the offer still plays the ad out first.
+    // `ad-gold` is allowed to *run*, but it is gated on the countdown, so
+    // taking the offer still plays the ad out first.
     expect(adBreakAllowsAction("ad-gold", PLACEHOLDER)).toBe(true);
     expect(adBreakCanEnd(PLACEHOLDER, 4)).toBe(false);
+  });
+
+  it("exposes exactly one allowed action, so the set cannot quietly regrow", () => {
+    const allowed = [
+      "ad-skip", "ad-gold", "ad-stuck", "pause", "resume", "menu",
+      "restart-flight", "continue-ad", "continue-gold", "continue-sleep",
+      "open-shop", "open-settings", "mode-select", "set-mute",
+    ].filter((a) => adBreakAllowsAction(a, PLACEHOLDER));
+    expect(allowed).toEqual(["ad-gold"]);
   });
 });
 
@@ -154,5 +172,64 @@ describe("the guard lives in the action handler, not only in the view", () => {
     // hud/run.ts and Game.handleAction now call adEscapeArmed.
     expect(typeof adEscapeArmed).toBe("function");
     expect(adEscapeArmed.length).toBe(2);
+  });
+});
+
+/* ------------------------------------------------- the panel the player sees */
+
+describe("the rendered break panel offers nothing that ends the break", () => {
+  const base = {
+    adReason: "continue" as const,
+    gold: false,
+    portalName: "poki" as const,
+    adSafetySeconds: AD_SAFETY_SECONDS,
+  };
+
+  it("renders no ad-skip button on a placeholder break — it is a status chip", async () => {
+    const { renderAd } = await import("../hud/run");
+    const html = renderAd({ ...base, adSkippable: true, adTimer: 7, adElapsed: 0 });
+    expect(html).not.toMatch(/<button[^>]*data-action="ad-skip"/);
+    expect(html).toContain('class="ad-countdown"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Continues in");
+  });
+
+  it("renders the portal escape hatch disabled for the whole safety window", async () => {
+    const { renderAd } = await import("../hud/run");
+    for (const elapsed of [0, 0.016, 1, 30, AD_SAFETY_SECONDS - 0.5]) {
+      const html = renderAd({ ...base, adSkippable: false, adTimer: 0, adElapsed: elapsed });
+      const button = html.match(/<button[^>]*data-action="ad-stuck"[^>]*>/)?.[0] ?? "";
+      expect(button, `elapsed=${elapsed}`).toContain("disabled");
+      expect(html).not.toContain(">Return to flight<");
+    }
+  });
+
+  it("arms the hatch only at the safety window, and drops the countdown then", async () => {
+    const { renderAd } = await import("../hud/run");
+    const html = renderAd({ ...base, adSkippable: false, adTimer: 0, adElapsed: AD_SAFETY_SECONDS });
+    const button = html.match(/<button[^>]*data-action="ad-stuck"[^>]*>/)?.[0] ?? "";
+    expect(button).not.toContain("disabled");
+    expect(html).toContain("Return to flight");
+  });
+
+  it("puts a clock on every countdown it draws", async () => {
+    const { renderAd } = await import("../hud/run");
+    const placeholder = renderAd({ ...base, adSkippable: true, adTimer: 7, adElapsed: 0 });
+    const portalWaiting = renderAd({ ...base, adSkippable: false, adTimer: 0, adElapsed: 5 });
+    for (const html of [placeholder, portalWaiting]) {
+      expect(html).toContain("timer-glyph");
+      expect(html).toContain("<svg");
+    }
+    // A bare hourglass emoji is exactly the glyph class that was caught
+    // rendering as tofu; no timer may go back to one.
+    expect(placeholder).not.toContain("\u23f3");
+    expect(portalWaiting).not.toContain("\u23f3");
+  });
+
+  it("never draws a negative countdown", async () => {
+    const { renderAd } = await import("../hud/run");
+    const html = renderAd({ ...base, adSkippable: true, adTimer: -3, adElapsed: 0 });
+    expect(html).toContain("<b>0</b>");
+    expect(html).not.toMatch(/<b>-\d/);
   });
 });

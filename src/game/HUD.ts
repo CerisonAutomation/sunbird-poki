@@ -277,7 +277,8 @@ export class HUD {
   }
   private contTimerEl: HTMLElement | null = null;
   private adBarEl: HTMLElement | null = null;
-  private adSkipEl: HTMLButtonElement | null = null;
+  private adSkipEl: HTMLElement | null = null;
+  private adSkipCountEl: HTMLElement | null = null;
   private adHeaderEl: HTMLElement | null = null;
   private adLabelEl: HTMLElement | null = null;
   private lastKey = "";
@@ -1390,10 +1391,21 @@ export class HUD {
       // and started over" right when the player was about to be let out.
       const p = done ? 1 : 1 - Math.max(0, s.adTimer) / Math.max(0.01, s.adTotal);
       if (this.adBarEl) this.adBarEl.style.width = `${p * 100}%`;
-      if (this.adSkipEl && s.adSkippable) {
-        this.adSkipEl.disabled = !done;
-        const txt = done ? (s.adReason === "continue" ? "Wake up ▶" : "Continue ▶") : `Continues in ${Math.ceil(s.adTimer)}`;
-        if (this.adSkipEl.textContent !== txt) this.adSkipEl.textContent = txt;
+      if (this.adSkipCountEl) {
+        // Only the NUMBER is live. This used to rewrite the whole element's
+        // textContent every frame, which is fine for a bare label and fatal
+        // for one containing an icon — it wiped the clock on the first tick
+        // after render. The countdown now lives in its own <b>, and the
+        // surrounding words and the glyph are written once.
+        const left = String(Math.ceil(Math.max(0, s.adTimer)));
+        if (this.adSkipCountEl.textContent !== left) this.adSkipCountEl.textContent = left;
+      }
+      if (this.adSkipEl) {
+        // The chip is a status readout, not a control, so there is no disabled
+        // state to drive and nothing to press when the countdown lands — the
+        // break ends itself (Game.fixedUpdate). `done` only changes how the
+        // chip reads.
+        this.adSkipEl.classList.toggle("done", done);
       }
       // The header/label are baked into the initial render and, unlike the bar
       // and skip button above, were never touched again — so a placeholder
@@ -1567,6 +1579,7 @@ export class HUD {
       this.adCard.innerHTML = renderCoins(renderAd(s));
       this.adBarEl = this.adCard.querySelector('[data-live="adBar"]');
       this.adSkipEl = this.adCard.querySelector('[data-live="adSkip"]');
+      this.adSkipCountEl = this.adSkipEl?.querySelector("b") ?? null;
       this.adHeaderEl = this.adCard.querySelector(".portal-ad-wait h3");
       this.adLabelEl = this.adCard.querySelector(".ad-label");
     }

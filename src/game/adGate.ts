@@ -12,16 +12,27 @@
  *    fraud, and it is why the reward is only granted from the SDK callback.
  *
  *  • A PLACEHOLDER break (no portal, so the game runs its own countdown) ends
- *    only once that countdown has reached zero. Before then, `ad-skip` and the
- *    "remove breaks" upsell are re-armed but inert, so the break always plays.
+ *    only once that countdown has reached zero — and then it ends ITSELF, in
+ *    fixedUpdate, with no control to press. It previously had no self-exit at
+ *    all, so pressing `ad-skip` was the only way out and skipping was
+ *    therefore the intended exit from every break on a non-portal build. The
+ *    "remove breaks" upsell is gated on the same countdown, so taking the
+ *    offer still plays the break out first.
  *
  * Both were real, shipped bugs: the upsell used to end the break immediately
  * for free, and `ad-skip` used to render enabled during a portal ad because
  * `adTimer` is left at 0 on the SDK path.
  */
 
-/** Actions the game itself may run while a placeholder break is live. */
-const PLACEHOLDER_ACTIONS: ReadonlySet<string> = new Set(["ad-skip", "ad-gold"]);
+/** Actions the game itself may run while a placeholder break is live.
+ *
+ * `ad-skip` used to be in here. It is not any more: a placeholder break now
+ * ends itself when its countdown lands, the panel renders a read-only chip
+ * instead of a button, and the action is an explicit no-op. Skipping is not
+ * a thing the player can do on either path. `ad-gold` stays — it is the
+ * upsell, and it is separately gated on the same countdown, so taking the
+ * offer still plays the break out first. */
+const PLACEHOLDER_ACTIONS: ReadonlySet<string> = new Set(["ad-gold"]);
 
 /**
  * May `action` run at all while an ad break is live?

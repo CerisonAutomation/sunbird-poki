@@ -1508,6 +1508,16 @@ export class Game {
         break;
       case "ad":
         this.adTimer -= raw;
+        // A placeholder break now COMPLETES ITSELF the instant its countdown
+        // lands. It never did: the only exit was the player pressing
+        // `ad-skip`, which made skipping the intended way out of every break
+        // on a non-portal build — the exact opposite of the contract the rest
+        // of adGate.ts enforces. The break plays in full and then ends, with
+        // no control to press and nothing to skip.
+        if (!this.portalEnabled() && this.adTimer <= 0) {
+          this.endAd();
+          break;
+        }
         // Safety valve: the ad state is exit-blocked by design, so a platform
         // ad whose promise never settles must not be allowed to trap the game.
         // Generous on purpose — every real break resolves long before this, so
@@ -5726,12 +5736,16 @@ export class Game {
         this.hud.toast("Returned to your flight", "info");
         return true;
       case "ad-skip":
-        // Placeholder ads only. A portal-served break is ended by the SDK's own
-        // completion callback, never by a game button: on that path adTimer is
-        // left at 0, so an unguarded `adTimer <= 0` test was already true and
-        // the button rendered enabled during a real ad — clicking it skipped
-        // the break AND paid out the reward.
-        if (this.state === "ad" && adBreakCanEnd(this.portalEnabled(), this.adTimer)) this.endAd();
+        // Retained as an explicit no-op, not deleted.
+        //
+        // There is no longer any surface that dispatches this: the placeholder
+        // panel renders a read-only countdown chip, and a placeholder break
+        // ends itself the moment its timer lands (see fixedUpdate). Keeping
+        // the case means a stray dispatch — a cached view, a deep link, a
+        // console call, a future refactor that re-adds the button — is
+        // swallowed here rather than falling through to whatever `default`
+        // does next year. A portal break was never endable this way and still
+        // is not.
         return true;
       case "ad-gold":
         // The upsell must not be an ad-skip. This button used to end the break

@@ -168,7 +168,7 @@ export class Telemetry {
     // On Poki, route the curated engagement set through the portal's own
     // analytics channel. Every value goes through sanitizeMeasure first, so a
     // prop the live loader would reject is dropped here rather than silently
-    // lost server-side — the same rule PokiNetlibClient's measure() follows.
+    // lost server-side.
     if (POKI_BUILD) this.emitPokiMeasure(name, props);
     // Queue a coarse copy for the aggregate backend counter (hard-capped).
     if (endpointUrl() && this.outbox.length < 64) {

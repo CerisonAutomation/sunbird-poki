@@ -65,6 +65,7 @@ type PokiShareableData = Record<string, string | number | boolean>;
  * `PokiUser`, `PokiShareableData` and `PokiInitOptions` stay local: they
  * describe our call sites, not Poki's published surface.
  */
+import { POKI_LEADERBOARD } from "./env";
 import { measureViaPoki, pokiAuthToken, type PokiSdk } from "./poki-canon";
 
 /**
@@ -77,14 +78,6 @@ type PokiInitOptions = {
   logging?: boolean;
   submitScore?: (submit: (leaderboard: string, score: number) => void) => void;
 };
-
-/**
- * Leaderboard the run score is submitted to. The name must match the board as
- * it is configured in Poki for Developers; `VITE_POKI_LEADERBOARD` lets a
- * build be re-pointed at a renamed board without a code change, and the
- * default stays the one the game has always submitted to.
- */
-const POKI_LEADERBOARD = (import.meta.env.VITE_POKI_LEADERBOARD as string | undefined)?.trim() || "distance";
 
 /**
  * The placeholder the shipped core returns when nobody is signed in:

@@ -20,6 +20,7 @@
  * offering a button that cannot work.
  */
 import type { PokiAuds } from "../sdk/auds";
+import { pokiGameId } from "../sdk/env";
 
 /** Key namespace for run shares. Public + listable (top runs of a seed). */
 export const SHARE_KEY = "sb:shared:run:v1";
@@ -68,13 +69,14 @@ function cleanText(value: unknown, max: number): string {
 
 /**
  * True when this build can publish and read share codes at all: a Poki build
- * with an AUDS game id. Deliberately free of imports — the HUD asks this every
- * frame, and the AUDS module must not enter any other edition's bundle.
+ * with an AUDS game id. The only import is `sdk/env`, a leaf with no AUDS
+ * client in it — the HUD asks this every frame, and the AUDS module must not
+ * enter any other edition's bundle. The id and its validation used to be
+ * duplicated here verbatim.
  */
 export function sharingAvailable(): boolean {
   if (import.meta.env.VITE_PORTAL_TARGET !== "poki") return false;
-  const id = import.meta.env.VITE_POKI_GAME_ID as string | undefined;
-  return typeof id === "string" && /^[a-z0-9-]+$/i.test(id);
+  return pokiGameId() !== null;
 }
 
 /**

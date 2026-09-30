@@ -74,7 +74,7 @@ async function boot() {
   vi.resetModules();
   vi.stubEnv("VITE_PORTAL_TARGET", "poki");
   vi.stubGlobal("RTCPeerConnection", class RtcStub {});
-  const mod = await import("../PokiNetlib");
+  const mod = await import("../../sdk/PokiNetlib");
   PokiNetlibClient = mod.PokiNetlibClient as unknown as typeof PokiNetlibClient;
   listPublicLobbies = mod.listPublicLobbies as unknown as typeof listPublicLobbies;
   closeLobbyBrowser = mod.closeLobbyBrowser;

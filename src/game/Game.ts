@@ -6733,7 +6733,7 @@ export class Game {
    *  release). Called when a search ends or is cancelled. */
   private closeRoomBrowser(): void {
     if (!POKI_MULTIPLAYER) return;
-    void import("./PokiNetlib").then((m) => m.closeLobbyBrowser()).catch(() => {
+    void import("../sdk/PokiNetlib").then((m) => m.closeLobbyBrowser()).catch(() => {
       /* the connection is best-effort */
     });
   }
@@ -6764,7 +6764,7 @@ export class Game {
     if (!isMultiplayerConfigured()) return [];
     if (POKI_MULTIPLAYER) {
       // Compile-time gated: only the Poki bundle contains the P2P browser.
-      const { listPublicLobbies } = await import("./PokiNetlib");
+      const { listPublicLobbies } = await import("../sdk/PokiNetlib");
       return listPublicLobbies();
     }
     return fetchPublicRooms();

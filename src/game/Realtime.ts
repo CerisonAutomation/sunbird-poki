@@ -8,11 +8,11 @@ import { POKI_MULTIPLAYER } from "./edition";
 // not pull @poki/netlib into non-Poki bundles. The heavy PokiNetlibClient
 // class lives in PokiNetlib.ts and is loaded only via dynamic import from
 // Game.makeNet() on Poki builds.
-import type { PokiNetlibClient } from "./PokiNetlib";
+import type { PokiNetlibClient } from "../sdk/PokiNetlib";
 import {
   isPokiMultiplayerAvailable,
   makePokiRoomCode,
-} from "./PokiMpUtils";
+} from "../sdk/PokiMpUtils";
 
 /**
  * Realtime multiplayer client for up to 40 concurrent pilots.

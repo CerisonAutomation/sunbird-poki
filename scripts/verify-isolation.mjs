@@ -14,13 +14,20 @@
  *      platform integration at all — no netlib, no AUDS, no Poki, no
  *      CrazyGames. It is platform-agnostic infrastructure.
  *   2. `@poki/netlib` (the P2P transport) is imported by exactly one module,
- *      `src/game/PokiNetlib.ts`, and that module reaches nothing self-hosted.
+ *      `src/sdk/PokiNetlib.ts`, and that module reaches nothing self-hosted.
  *   3. The self-hosted transport (`src/game/Realtime.ts`) touches the Poki
  *      transport only as a *type* — never a runtime import — so a non-Poki
  *      bundle can never drag WebRTC signalling along with it.
  *   4. The Poki-only modules carry no self-hosted endpoints or storage keys.
  *
  * Run: node scripts/verify-isolation.mjs   (also part of `poki:preflight`)
+ *
+ * NOT HERE, ON PURPOSE: the rule that only `src/sdk/` may touch the Poki SDK
+ * global. That one is enforced in `src/sdk/__tests__/poki-canon.test.ts`
+ * ("SDK access is confined to src/sdk/"), which walks the tree rather than
+ * checking a file list, so it cannot go stale when a module moves. It needs
+ * the same character-level comment/string stripping this file does not have,
+ * and duplicating it here would be two gates to keep in sync.
  *
  * Two things this file used to get wrong, kept here so they are not
  * reintroduced:
@@ -109,7 +116,7 @@ end(
 begin(2);
 const srcFiles = walk(path.join(ROOT, "src"), (f) => f.endsWith(".ts") && !f.includes("__tests__"));
 const netlibImporters = srcFiles.filter((f) => /from\s+["']@poki\/netlib["']/.test(read(f)));
-const expected = ["src/game/PokiNetlib.ts"];
+const expected = ["src/sdk/PokiNetlib.ts"];
 const unexpected = netlibImporters.map(rel).filter((p) => !expected.includes(p));
 if (unexpected.length) {
   failures.push(`@poki/netlib imported outside the Poki transport module: ${unexpected.join(", ")}`);
@@ -153,7 +160,7 @@ for (const m of realtime.matchAll(/^\s*import\s+([^;]*?)\s*from\s*["']([^"']+)["
   }
 }
 // A re-export is just as much a runtime edge as an import: `export { X } from
-// "./PokiNetlib"` puts the class in the module graph whether or not this file
+// "../sdk/PokiNetlib"` puts the class in the module graph whether or not this file
 // imported it. The old pattern missed those entirely.
 for (const m of realtime.matchAll(/^\s*export\s+([^;]*?)\s*from\s*["']([^"']*PokiNetlib[^"']*)["']/gm)) {
   const line = realtime.slice(0, m.index).split("\n").length;
@@ -178,8 +185,8 @@ for (const [re, why] of RUNTIME_USE) {
   }
 }
 const gameSrc = read(path.join(ROOT, "src/game/Game.ts"));
-if (!/await import\(["']\.\/PokiNetlib["']\)/.test(gameSrc)) {
-  failures.push('src/game/Game.ts no longer loads the Poki transport via `await import("./PokiNetlib")` — the P2P client would be bundled into every edition');
+if (!/await import\(["']\.\.\/sdk\/PokiNetlib["']\)/.test(gameSrc)) {
+  failures.push('src/game/Game.ts no longer loads the Poki transport via `await import("../sdk/PokiNetlib")` — the P2P client would be bundled into every edition');
 }
 end(
   `Poki transport is ${valueHits === 0 ? "type-only" : `used at runtime (${valueHits} site(s))`} in Realtime.ts and dynamically imported in Game.ts`,
@@ -188,8 +195,8 @@ end(
 /* 4 — Poki-only modules reach nothing self-hosted ------------------------- */
 begin(4);
 const POKI_MODULES = [
-  "src/game/PokiNetlib.ts",
-  "src/game/PokiMpUtils.ts",
+  "src/sdk/PokiNetlib.ts",
+  "src/sdk/PokiMpUtils.ts",
   // Was `src/game/edition.poki.ts`. The three per-portal edition modules were
   // consolidated into one `edition.ts` in this Poki-only fork, so listing the
   // old name made this check read a file that no longer exists.
@@ -251,6 +258,25 @@ const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 for (const dep of ["zustand", "@react-three/fiber", "@react-three/drei"]) {
   if (allDeps[dep]) {
     failures.push(`package.json depends on ${dep} — that is the R3F/Zustand template, not this Poki game`);
+  }
+}
+// Phaser and Poki's Phaser 3 plugin. Poki publishes an engine plugin per
+// engine; the Phaser one is a `Phaser.Game` scene plugin whose whole API is
+// `scene.plugins.get('poki')`. Sunbird is Three.js — an imperative `Game.ts`
+// loop with no scene manager — so there is nothing for it to attach to. Its
+// only real function is injecting and initialising the Poki SDK
+// asynchronously, which `src/sdk/platform.ts` already does directly and on
+// purpose (a static remote <script> fails the portal zip audit).
+//
+// It is listed here because it is an easy, plausible-looking install: the
+// documentation page for it is the first result for "Poki SDK", and adding it
+// would be pure bundle cost against a size-gated build. Banned rather than
+// merely discouraged.
+for (const dep of ["phaser", "@poki/phaser-3", "@poki/cocos", "@poki/godot", "@poki/defold"]) {
+  if (allDeps[dep]) {
+    failures.push(
+      `package.json depends on ${dep} — that is an engine plugin for a different engine; Sunbird is Three.js and drives the Poki SDK through src/sdk/`,
+    );
   }
 }
 end(`one-game gate: ${FORBIDDEN_MODULES.length} parallel-stack modules absent, no R3F/Zustand dependency`);

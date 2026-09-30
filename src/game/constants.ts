@@ -104,7 +104,7 @@ export const FLARE_BUFFER = 0.18;
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;
 /** Speed-borne lift while gliding: cancels up to this fraction of gravity. */
-export const GLIDE_LIFT_MAX = 0.45;
+export const GLIDE_LIFT_MAX = 0.55;
 export const GLIDE_LIFT_SPEED = 62;
 /** Downforce that keeps a diving bird glued through convex crests. */
 export const STICK_ACCEL_DIVE = 190;

@@ -29,6 +29,7 @@
  * Without a configured id all storage falls back to localStorage.
  */
 
+import { pokiGameId } from "./env";
 import { pokiAuthToken } from "./poki-canon";
 
 const AUDS_ORIGIN = "https://auds.poki.io";
@@ -422,8 +423,11 @@ async function pokiBearerToken(): Promise<string | null> {
 /** Resolve an AUDS client only when a Poki game id is configured. */
 export function createAudsIfConfigured(): PokiAuds | null {
   try {
-    const id = (import.meta.env.VITE_POKI_GAME_ID as string | undefined) ?? "";
-    if (!id || typeof id !== "string" || !/^[a-z0-9-]+$/i.test(id)) return null;
+    // Validated in one place — this module used to carry its own copy of the
+    // id regex, and so did the two game-layer modules that answer the same
+    // "is AUDS available?" question.
+    const id = pokiGameId();
+    if (!id) return null;
     return new PokiAuds({ gameId: id, getToken: pokiBearerToken });
   } catch {
     return null;

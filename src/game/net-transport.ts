@@ -20,7 +20,7 @@ import { RealtimeClient, type AnyRealtimeClient } from "./Realtime";
  * The neutral editions build a client from an already-imported module, so
  * there is nothing to fetch: the hook exists so `Game` can warm Poki's Netlib
  * module through the same per-target module it creates the transport from,
- * instead of a second `import("./PokiNetlib")` in shared code.
+ * instead of a second `import("../sdk/PokiNetlib")` in shared code.
  */
 export function prewarmNetTransport(): void {}
 

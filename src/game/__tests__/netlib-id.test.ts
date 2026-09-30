@@ -7,7 +7,7 @@
  * discarded at build time — never shipped, never silently used.
  */
 import { describe, expect, it } from "vitest";
-import { isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode, POKI_NETLIB_GAME_ID } from "../PokiMpUtils";
+import { isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode, POKI_NETLIB_GAME_ID } from "../../sdk/PokiMpUtils";
 
 describe("netlib: game id", () => {
   it("accepts canonical UUIDs (any case) and nothing else", () => {

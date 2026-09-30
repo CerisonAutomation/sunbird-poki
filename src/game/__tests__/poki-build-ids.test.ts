@@ -18,7 +18,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { isNetlibGameId } from "../PokiMpUtils";
+import { isNetlibGameId } from "../../sdk/PokiMpUtils";
 
 const scripts = (
   JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {

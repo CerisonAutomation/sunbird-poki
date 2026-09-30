@@ -1,14 +1,14 @@
+import { POKI_BUILD } from "../sdk/env";
 import { isPortalBuild } from "../sdk/platform";
 import { measureViaPoki } from "../sdk/poki-canon";
 
 /**
- * True only on a Poki build, where measure() is the sanctioned egress.
- *
- * Read at module scope, like `TARGET` in `sdk/platform.ts`, so Vite folds it to
- * a literal at build time (non-Poki bundles lose the whole `measure` path) and
- * so a test can flip it with resetModules + a fresh import.
+ * `measure()` is the sanctioned egress on a Poki build. `POKI_BUILD` is a
+ * compile-time constant from `sdk/env` (like `TARGET` in `sdk/platform.ts`),
+ * so Vite folds it to a literal and a non-Poki bundle loses the whole measure
+ * path. The tests flip it with `vi.stubEnv` + `vi.resetModules` + a fresh
+ * import, which is why it has to stay a module-scope read of the env.
  */
-const POKI_BUILD = (import.meta.env.VITE_PORTAL_TARGET ?? "none") === "poki";
 
 type Props = Record<string, string | number | boolean>;
 type Entry = { name: string; props: Props; t: number };

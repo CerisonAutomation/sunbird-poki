@@ -112,7 +112,7 @@ export default defineConfig({
                 audio: ["./src/game/Audio.ts", "./src/game/Music.ts"],
                 net: [
                   "./src/game/Realtime.ts",
-                  "./src/game/PokiMpUtils.ts",
+                  "./src/sdk/PokiMpUtils.ts",
                   "./src/game/MassRace.ts",
                   "./src/game/GhostNet.ts",
                   "./src/game/bufferUpdates.ts",

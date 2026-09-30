@@ -19,13 +19,13 @@
  * game never ends up holding a client that can never connect.
  */
 import { RealtimeClient, type AnyRealtimeClient } from "./Realtime";
-import { isPokiMultiplayerAvailable } from "./PokiMpUtils";
+import { isPokiMultiplayerAvailable } from "../sdk/PokiMpUtils";
 
 /** One in-flight import shared by the warm-up and the first real client. */
-let netlib: Promise<typeof import("./PokiNetlib")> | null = null;
+let netlib: Promise<typeof import("../sdk/PokiNetlib")> | null = null;
 
-function loadNetlib(): Promise<typeof import("./PokiNetlib")> {
-  const pending = (netlib ??= import("./PokiNetlib"));
+function loadNetlib(): Promise<typeof import("../sdk/PokiNetlib")> {
+  const pending = (netlib ??= import("../sdk/PokiNetlib"));
   void pending.catch(() => { if (netlib === pending) netlib = null; });
   return pending;
 }

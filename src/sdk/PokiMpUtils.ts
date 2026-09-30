@@ -10,6 +10,10 @@
 // Direct constant comparison — Vite replaces import.meta.env.VITE_PORTAL_TARGET
 // with a string literal at build time so Rollup can DCE the whole poki-only
 // block away in non-poki builds (no "RTCPeerConnection" string, no game id).
+// The id itself is read through `sdk/env`, the one place any VITE_POKI_*
+// variable is read.
+import { pokiNetlibGameId } from "./env";
+
 const IS_POKI: boolean = (import.meta.env.VITE_PORTAL_TARGET as string) === "poki";
 
 /**
@@ -41,8 +45,8 @@ const DEV_NETLIB_GAME_ID = "33c4c5a6-ee70-4726-aa1f-ced8a9578254";
  * production, and failing at build time is better than failing in a lobby.
  */
 export const POKI_NETLIB_GAME_ID: string = IS_POKI
-  ? isNetlibGameId(import.meta.env.VITE_POKI_NETLIB_GAME_ID as string | undefined)
-    ? (import.meta.env.VITE_POKI_NETLIB_GAME_ID as string)
+  ? isNetlibGameId(pokiNetlibGameId() || undefined)
+    ? pokiNetlibGameId()
     : DEV_NETLIB_GAME_ID
   : "";
 

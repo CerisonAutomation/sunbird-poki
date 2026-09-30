@@ -161,7 +161,7 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
 
 ### Poki integration → `src/sdk/*` only
 - `@poki/sdk` is imported in `src/sdk/poki-canon.ts` / `poki.ts` only; game code calls the adapter.
-  `@poki/netlib` may be imported in `src/game/PokiNetlib.ts` only — `pnpm isolation:check` fails the
+  `@poki/netlib` may be imported in `src/sdk/PokiNetlib.ts` only — `pnpm isolation:check` fails the
   build otherwise.
 - Ad and gameplay events go through the wrapper + `GameplayEventSink`; breaks respect
   `src/game/ContinueOffer.ts` and `adGate.ts`. The honesty rule: anything simulated on-device is

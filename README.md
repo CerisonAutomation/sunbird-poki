@@ -124,7 +124,7 @@ Every portal zip is self-contained (`index.html` + `icons/` + `fonts/`), uses on
 | Any build without WebRTC / a backend | Local AI flock (the UI says so) | none |
 
 The split is enforced, not assumed: `pnpm isolation:check` fails if the Rust stack names
-a platform integration, if `@poki/netlib` is imported outside `src/game/PokiNetlib.ts`, or
+a platform integration, if `@poki/netlib` is imported outside `src/sdk/PokiNetlib.ts`, or
 if the self-hosted client reaches the Poki transport at runtime; the portal markers
 (`verify:portals`, `audit:zips`, `verify:upload`) do the same for the shipped bundles — no
 `auds.poki.io` outside Poki, and no `/mp/v1/`, `sunbird-social` or `ws://` anywhere in a

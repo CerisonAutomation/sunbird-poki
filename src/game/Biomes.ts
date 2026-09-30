@@ -95,6 +95,18 @@ export type BiomeDef = {
   skew: number;
   /** Noise layering on top of the base cosine: 0 = smooth, 1 = very jagged. */
   roughness: number;
+  /** How much lift this biome's air gives you, as a multiple.
+   *
+   *  This is the per-world character of the FLIGHT, and the fork lost it: the
+   *  parent monorepo has these values (0.90-1.12) and this checkout had none, so
+   *  every island glided identically. That is why the worlds felt same-y — the
+   *  visual biome changed the hills and the sky but not a single thing about how
+   *  the bird moved through it.
+   *
+   *  Values are a feel, not physics: 1.0 is neutral, above floats, below sinks.
+   *  Coral Reach at 1.12 is a sky-is-the-level island you chain updrafts over;
+   *  Dune Sea at 0.90 is heavy air that punishes a lazy glide. */
+  liftMult: number;
   /** The rhythm the arches are laid out in — see TerrainProfile. */
   terrain: TerrainProfile;
   /** terrain vertex colours */
@@ -133,6 +145,7 @@ export type BiomeDef = {
 export const BIOMES: BiomeDef[] = [
   {
     id: "green",
+    liftMult: 1.0,
     name: "Green Hills",
     tagline: "Quick rollers — learn dive → release, sunflower trampolines",
     emoji: "leaf",
@@ -166,6 +179,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "tropical",
+    liftMult: 1.06,
     name: "Tropical Atoll",
     tagline: "Turquoise thermals — chain the updrafts, never touch ground",
     emoji: "island",
@@ -199,6 +213,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "reef",
+    liftMult: 1.12,
     name: "Coral Reach",
     tagline: "Pastel lagoons, tall thermals — surf, don't glide",
     emoji: "shell",
@@ -232,6 +247,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "sunset",
+    liftMult: 0.94,
     name: "Sunset Ridge",
     tagline: "Violet speed valleys — dive hard, release late for 2× distance",
     emoji: "buildings",
@@ -265,6 +281,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "desert",
+    liftMult: 0.9,
     name: "Dune Sea",
     tagline: "Colossal dunes, sand thermals — massive air, thermals catch you",
     emoji: "dunes",
@@ -298,6 +315,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "night",
+    liftMult: 1.0,
     name: "Midnight Coast",
     tagline: "Glowing rings under moon — storm clouds chase you",
     emoji: "moon",
@@ -331,6 +349,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "aurora",
+    liftMult: 1.02,
     name: "Aurora Peaks",
     tagline: "Ice lips + gust walls — tuck to punch, release to soar",
     emoji: "aurora",
@@ -364,6 +383,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "volcano",
+    liftMult: 0.92,
     name: "Cinder Forge",
     tagline: "Black glass + ash storms — low, fast, dodge or dive",
     emoji: "volcano",
@@ -397,6 +417,7 @@ export const BIOMES: BiomeDef[] = [
   },
   {
     id: "canyon",
+    liftMult: 0.98,
     name: "Skyreach Canyon",
     tagline: "Red walls, monster lips — biggest launches, gust crosswinds",
     emoji: "mountain",
@@ -460,6 +481,11 @@ export function biomeForIsland(island: number): BiomeDef {
   const shift = Math.floor((rnd() - 0.5) * 36) + lap * 12;
   const amp = base.amp * (1 + lap * 0.07 + rnd() * 0.08);
   const wave = base.wave * (1 + (rnd() - 0.5) * 0.14);
+  // Lift drifts per lap too, so a remixed island is not just a recolour — it
+  // is slightly easier or harder to hold height in. Same ±3% band the parent
+  // uses, and it is applied AFTER the rnd() calls above are fixed in count so
+  // the sequence for existing seeds does not shift under it.
+  const liftMult = base.liftMult * (0.98 + rnd() * 0.06);
   // Slope scales with relief/lenScale, so cap the RATIO rather than each field:
   // jittering the two independently can otherwise push a remixed island past a
   // gradient no hand-tuned world has ever had. rng order is unchanged.
@@ -474,7 +500,7 @@ export function biomeForIsland(island: number): BiomeDef {
     name: `${base.name} ${suffix} ${lap + 1}`,
     tagline: `Uncharted lap ${lap + 1} — remixed ${base.name.toLowerCase()}`,
     emoji: base.emoji,
-    amp, wave,
+    amp, wave, liftMult,
     top: shade(base.top, shift), ridge: shade(base.ridge, shift),
     mid: shade(base.mid, shift), deep: shade(base.deep, shift),
     sand: shade(base.sand, Math.floor(shift / 2)),

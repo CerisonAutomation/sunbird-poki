@@ -18,16 +18,16 @@
  * See https://github.com/poki/netlib and developers.poki.com/guide/game-dev-tools.
  */
 import { Network, type Peer, type LobbyListEntry } from "@poki/netlib";
-import { generatePilotName } from "./pilotNameGenerator";
+import { generatePilotName } from "../game/pilotNameGenerator";
 import type {
   NetTransport,
   RemoteSnapshot,
-} from "./MassRace";
-import { truncate } from "./math";
-import { MOVEMENT_LIMITS, PROTOCOL_VERSION } from "./protocol/v1";
+} from "../game/MassRace";
+import { truncate } from "../game/math";
+import { MOVEMENT_LIMITS, PROTOCOL_VERSION } from "../game/protocol/v1";
 import { isPokiMultiplayerAvailable, makePokiRoomCode as makeRoomCode, POKI_NETLIB_GAME_ID as NETLIB_GAME_ID } from "./PokiMpUtils";
-import { gradeStateCadence } from "./Racer";
-import { normalizeRooms, sortRooms, type LiveRoom } from "./RoomBrowser";
+import { gradeStateCadence } from "../game/Racer";
+import { normalizeRooms, sortRooms, type LiveRoom } from "../game/RoomBrowser";
 
 /** Outbound state rate — same 15 Hz cadence as the WS transport. */
 const SEND_HZ = 15;

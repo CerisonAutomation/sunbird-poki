@@ -427,6 +427,11 @@ export class Bird {
     const was = this.grounded;
     this.wasGrounded = was;
 
+    // Per-world flight feel. The terrain already knows which biome the bird is
+    // over, so the world's character comes from the same source as its hills —
+    // no new plumbing, and it can never disagree with the ground being drawn.
+    const biome = terrain.biomeAt(this.x);
+
     const diving = opts.diving && !this.asleep;
 
     // Latch the release here — after `diving` resolves, and crucially BEFORE
@@ -554,7 +559,11 @@ export class Bird {
       }
       const lift = diving
         ? 0
-        : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1)) * glideLiftScale(this.airTime);
+        // `biome.liftMult` is what makes one island feel different to fly over
+        // another. Without it every world glided identically no matter what the
+        // hills and sky were doing, which is why the fork's islands read as
+        // reskins of each other: the terrain changed and the FLIGHT did not.
+        : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1) * biome.liftMult) * glideLiftScale(this.airTime);
       this.vy -= (diving ? GRAVITY_DIVE : GRAVITY_GLIDE) * gMult * (1 - lift) * dt;
 
       const k = (diving ? AIR_DRAG_DIVE : AIR_DRAG_GLIDE) * (opts.dragMult ?? 1);

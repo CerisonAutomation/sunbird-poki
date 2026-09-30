@@ -1091,7 +1091,7 @@
       "status": "informational",
       "verify": {
         "type": "file",
-        "path": "src/game/PokiNetlib.ts"
+        "path": "src/sdk/PokiNetlib.ts"
       },
       "evidence": "Client implemented behind a code-split."
     },
@@ -1115,7 +1115,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "RTCPeerConnection"
       },
       "evidence": "P2P is selected only when the build targets Poki AND RTCPeerConnection/crypto are present (PokiMpUtils.isPokiMultiplayerAvailable); WebSocket and local paths remain for every other build."
@@ -2050,7 +2050,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "new Network\\(NETLIB_GAME_ID\\)"
       },
       "evidence": "Host creates, guest joins by code; both wrapped behind the game's NetTransport interface."
@@ -2063,7 +2063,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "unreliable"
       },
       "evidence": "15 Hz unreliable state + reliable hello/start/place events."
@@ -2076,7 +2076,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "RTCPeerConnection"
       },
       "evidence": "isPokiMultiplayerAvailable() gates the Netlib client; net-transport.poki.ts falls back to the WebSocket client."
@@ -2102,7 +2102,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "closedByUs"
       },
       "evidence": "Reconnect + seat preservation in PokiNetlibClient; MassRace keeps flying the local squadron otherwise."
@@ -2116,7 +2116,7 @@
       "verify": {
         "type": "grep",
         "path": "src/game/net-transport.poki.ts",
-        "pattern": "import\\(\"\\./PokiNetlib\"\\)"
+        "pattern": "import\\(\"\\.\\./sdk/PokiNetlib\"\\)"
       },
       "evidence": "One shared dynamic import (loadNetlib) is awaited by createNetTransport and warmed by prewarmNetTransport: the library is never in the boot path, and never in a non-Poki bundle."
     },
@@ -2140,7 +2140,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "ABCDEFGHJKLMNPQRSTUVWXYZ"
       },
       "evidence": "No 0/O/1/I alphabet, five characters, shared with the WebSocket transport."

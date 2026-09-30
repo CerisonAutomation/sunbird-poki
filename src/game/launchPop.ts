@@ -102,3 +102,62 @@ export function launchPopEligible(releaseAge: number, runUpSeconds: number): boo
 export function withinPopCoyote(sinceLaunch: number, grace = LAUNCH_POP_COYOTE_S): boolean {
   return Number.isFinite(sinceLaunch) && sinceLaunch >= 0 && sinceLaunch <= grace;
 }
+
+/* ------------------------------------------------------------------ the gate */
+
+/**
+ * How decisively the physics must exceed the surface's hold before a launch
+ * is allowed WITHOUT a recognised crest under the bird.
+ *
+ * 1.0 would disable the prominence filter entirely and bring back the
+ * noise-driven micro-launches it was added to stop. Much above ~1.5 and the
+ * filter is still effectively a veto on real ramps. This is the margin at
+ * which "the bird has left the surface" stops being ambiguous.
+ */
+export const CREST_BYPASS_RATIO = 1.3;
+
+/**
+ * Should the bird leave the ground this step?
+ *
+ * The regression this exists to fix, found by reading the first commit in
+ * the repository rather than by guessing:
+ *
+ *   ORIGINAL (1aea134)    `if (curv > 0) { ...if (needed > available) launched = true }`
+ *   CURRENT               `if (curv > 0 && terrain.hasCrestProminence(this.x))`
+ *
+ * `hasCrestProminence` was added for the AI's crest cache, and it asks a
+ * strict question: is the terrain climbing 6 units BEHIND me and already
+ * descending 6 units AHEAD of me? On the last ramp of an island — where the
+ * far side runs out into the ocean gap, or where the crest is simply broad —
+ * the second half is false, so the gate returns false and the launch is
+ * VETOED. Not weakened: vetoed. The centripetal test could say the bird has
+ * unambiguously left the surface and the bird would stay glued to it anyway.
+ *
+ * That is the reported bug exactly — "the release doesn't work on the last
+ * ramp, the bird doesn't jump" — and it is also why tuning the pop had no
+ * effect: the pop is applied inside the `launched` branch, downstream of a
+ * gate that never opened.
+ *
+ * Prominence is an ANTI-NOISE FILTER, not a physics authority. It keeps its
+ * veto over marginal cases, which is all it was ever for; it loses its veto
+ * over decisive ones, because the surface cannot hold a bird that the maths
+ * says it is no longer touching.
+ *
+ * @param needed        centripetal acceleration required to stay glued
+ * @param available     what gravity plus stick can actually supply
+ * @param hasProminence does a recognised crest sit under the bird?
+ */
+export function shouldLeaveGround(
+  needed: number,
+  available: number,
+  hasProminence: boolean,
+  bypassRatio = CREST_BYPASS_RATIO,
+): boolean {
+  if (!Number.isFinite(needed) || !Number.isFinite(available)) return false;
+  // Still glued: no amount of crest makes a launch happen.
+  if (needed <= available) return false;
+  // A real lip: the original behaviour, unchanged.
+  if (hasProminence) return true;
+  // No recognised lip, but the surface demonstrably cannot hold on.
+  return needed > available * bypassRatio;
+}

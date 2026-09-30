@@ -185,7 +185,7 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
   const ledger = lines
     .map(
       (l) => `<div class="gl-row gl-${escapeHtml(l.kind)}">
-        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i>${escapeHtml(l.label)}</dt>
+        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i><span>${escapeHtml(l.label)}</span></dt>
         <dd><span>${escapeHtml(l.detail)}</span><i class="gl-bar" aria-hidden="true"><b style="width:${(l.progress * 100).toFixed(1)}%"></b></i></dd>
       </div>`,
     )
@@ -204,7 +204,14 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
     // results card read "egg Nest upgraded!" and "trophy Trophy: Cloud Nine".
     // It survived because iconGlyph used to fall back to the name it was
     // given, which is indistinguishable from a working lookup.
-    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${escapeHtml(iconGlyph(b.icon))}</i>${escapeHtml(text)}</div>`;
+    // Prefer the real miniature SVG over a text glyph. `smGlyph` has an entry
+    // for every one of these names, but they are abstract stand-ins (a trophy
+    // is "◎", a badge is "⊛") chosen for plain-text contexts like toasts. The
+    // results card is HTML and there is authored artwork for all of them, so
+    // it gets the artwork; the glyph stays as the fallback for anything the
+    // illustrator has not drawn yet.
+    const mark = menuIconSm(b.icon) || escapeHtml(iconGlyph(b.icon));
+    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${mark}</i>${escapeHtml(text)}</div>`;
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");

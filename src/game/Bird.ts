@@ -46,6 +46,7 @@ import {
   LAUNCH_POP_COYOTE_S,
   LAUNCH_POP_FLOOR,
   launchPopQuality,
+  shouldLeaveGround,
   withinPopCoyote,
 } from "./launchPop";
 import { clamp, lerp, lerpAngle } from "./math";
@@ -566,10 +567,16 @@ export class Bird {
       // terrain noise alone can spike it positive with no real lip underfoot.
       // Gate on the same crest-prominence rule the AI's distanceToCrest()
       // cache uses, so a launch only fires off a genuine climb-then-drop.
-      if (curv > 0 && terrain.hasCrestProminence(this.x)) {
+      if (curv > 0) {
         const needed = vt * vt * curv; // centripetal pull required to stay glued
         const available = (diving ? GRAVITY_DIVE : GRAVITY_GLIDE) * gMult * n2.ny + (diving ? STICK_ACCEL_DIVE : STICK_ACCEL_GLIDE);
-        if (needed > available) launched = true;
+        // The prominence check is an anti-noise FILTER, not a veto. It used to
+        // be `curv > 0 && hasCrestProminence(x)`, which let a strict terrain
+        // probe overrule the physics: on the last ramp of an island the far
+        // side has not started descending yet, so the gate returned false and
+        // the launch never happened however well the player released. See
+        // shouldLeaveGround() for the full archaeology.
+        if (shouldLeaveGround(needed, available, terrain.hasCrestProminence(this.x))) launched = true;
       }
       if (launched) {
         this.grounded = false;

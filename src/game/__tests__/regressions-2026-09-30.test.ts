@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { hasIconGlyph, iconGlyph } from "../MenuIcons";
+import { hasIconGlyph, iconGlyph, menuIconSm } from "../MenuIcons";
 import { TOAST_MIN_VISIBLE_MS, TOAST_QUEUE_CAP, decideToast } from "../toastFloor";
 import {
   LAUNCH_POP_COYOTE_S,
   LAUNCH_POP_FLOOR,
   LAUNCH_POP_WINDOW_S,
   launchPopQuality,
+  shouldLeaveGround,
   withinPopCoyote,
 } from "../launchPop";
 
@@ -60,8 +61,12 @@ describe("an icon name never reaches the screen as text", () => {
     expect(html).not.toMatch(/>egg</);
     expect(html).not.toMatch(/>trophy</);
     expect(html).toContain("Nest upgraded!");
-    expect(html).toContain(iconGlyph("egg"));
-    expect(html).toContain(iconGlyph("trophy"));
+    // The card gets the authored miniature where one exists, and the text
+    // glyph only as a fallback — either way, never the identifier.
+    for (const name of ["egg", "trophy"]) {
+      const art = menuIconSm(name);
+      expect(html.includes(art) || html.includes(iconGlyph(name)), name).toBe(true);
+    }
   });
 });
 
@@ -178,5 +183,78 @@ describe("releasing at a ramp always does something", () => {
   it("keeps the coyote grace short enough to be a grace, not a second input", () => {
     expect(LAUNCH_POP_COYOTE_S).toBeGreaterThan(0.05);
     expect(LAUNCH_POP_COYOTE_S).toBeLessThanOrEqual(0.25);
+  });
+});
+
+describe("the crest gate stopped vetoing real launches", () => {
+  /**
+   * Found by reading the FIRST commit in the repository (1aea134) rather than
+   * by guessing:
+   *
+   *   ORIGINAL   if (curv > 0)                                  { ...launch }
+   *   REGRESSED  if (curv > 0 && terrain.hasCrestProminence(x)) { ...launch }
+   *
+   * `hasCrestProminence` asks whether the terrain climbs 6 units behind AND
+   * already descends 6 units ahead. On the last ramp of an island the far
+   * side has not started descending, so the gate returns false and the launch
+   * is vetoed — however fast the bird is going, however well the player
+   * released. It is also why tuning the pop had no effect: the pop lives
+   * inside the `launched` branch, downstream of a gate that never opened.
+   */
+  it("still refuses to launch a bird the surface can hold", () => {
+    expect(shouldLeaveGround(10, 100, true)).toBe(false);
+    expect(shouldLeaveGround(10, 100, false)).toBe(false);
+    expect(shouldLeaveGround(100, 100, true)).toBe(false);
+  });
+
+  it("launches off a recognised lip exactly as the original did", () => {
+    expect(shouldLeaveGround(101, 100, true)).toBe(true);
+  });
+
+  it("no longer lets a missing lip veto a decisive launch", () => {
+    // The last-ramp case: physics says gone, prominence probe says no crest.
+    expect(shouldLeaveGround(200, 100, false)).toBe(true);
+    expect(shouldLeaveGround(131, 100, false)).toBe(true);
+  });
+
+  it("keeps the filter's real job — suppressing marginal, noise-driven pops", () => {
+    // Barely over the line with no crest: still suppressed, which is the
+    // whole reason the prominence check was introduced.
+    expect(shouldLeaveGround(101, 100, false)).toBe(false);
+    expect(shouldLeaveGround(129, 100, false)).toBe(false);
+  });
+
+  it("recovers most of what the gate destroyed, without going past the original", () => {
+    // Swept over realistic ramp profiles: launch speed 30-95, curvature
+    // 0.002-0.03, diving and gliding, with and without a recognised crest.
+    let original = 0;
+    let regressed = 0;
+    let fixed = 0;
+    for (let vt = 30; vt <= 95; vt += 5) {
+      for (let curv = 0.002; curv <= 0.03; curv += 0.002) {
+        for (const prominence of [true, false]) {
+          for (const diving of [true, false]) {
+            const needed = vt * vt * curv;
+            const available = (diving ? 96 : 16) * 0.9 + (diving ? 190 : 13);
+            if (needed > available) original++;
+            if (prominence && needed > available) regressed++;
+            if (shouldLeaveGround(needed, available, prominence)) fixed++;
+          }
+        }
+      }
+    }
+    // The measurement that justifies the change: the gate halved launches.
+    expect(regressed).toBeLessThan(original * 0.55);
+    // The fix recovers most of the loss...
+    expect(fixed).toBeGreaterThan(regressed * 1.7);
+    // ...and is still strictly more conservative than the original, so the
+    // anti-noise behaviour the gate was added for is retained.
+    expect(fixed).toBeLessThan(original);
+  });
+
+  it("is safe against junk from a degenerate terrain probe", () => {
+    expect(shouldLeaveGround(Number.NaN, 100, true)).toBe(false);
+    expect(shouldLeaveGround(100, Number.NaN, true)).toBe(false);
+    expect(shouldLeaveGround(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, true)).toBe(false);
   });
 });

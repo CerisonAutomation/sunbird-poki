@@ -48,6 +48,58 @@ export const GROUND_STICK_DIVE = 11;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
+/**
+ * FLARE — what releasing a dive actually does.
+ *
+ * Until now it did nothing at all. Measured on a clean one-second hold in clear
+ * air: the bird is at -95.4 m/s, and half a second after letting go it is at
+ * -97.7. The dive was a one-way door, because lift in this model only ever
+ * *reduces* downward gravity — the strongest thing the game could do was take
+ * GRAVITY_GLIDE from 16 down to 8.8 m/s², and nothing anywhere pushed back.
+ *
+ * So the release now adds a one-shot upward impulse, proportional to how fast
+ * you were actually falling. It is a flare, not a jet: it SHEDS dive speed, it
+ * never lifts you, and at low speed it is nearly nothing, so a gentle tap and a
+ * committed plunge are different gestures.
+ *
+ * 26 m/s against a 95 m/s terminal dive removes about a quarter of the speed —
+ * enough that the next crest is reachable and a bad dive is survivable, small
+ * enough that diving deep still means committing. `FLARE_REFERENCE` is the
+ * falling speed at which the full amount applies; below it the impulse scales
+ * down linearly to nothing.
+ */
+export const FLARE_REFERENCE = 95;
+/** How long the pull-out brakes for, and how hard it pushes at the start.
+ *
+ *  An IMPULSE was not enough, and the measurement is why. A one-frame nudge of
+ *  26 m/s took a 95 m/s dive to 69 — and then gravity took it straight back:
+ *  -70 at 42ms, -71 at 192ms, -73 at 492ms. The bird never approached zero. It
+ *  just descended slightly more slowly, which reads as a softer dive, not as
+ *  catching anything.
+ *
+ *  So the pull-out is a DECAYING BRAKE instead: a sustained upward acceleration
+ *  for FLARE_DURATION, strongest the instant the button comes up and falling
+ *  linearly to nothing. Linear decay rather than a curve because it gives a
+ *  closed-form impulse — BRAKE * DURATION / 2 ≈ 65 m/s, which takes 95 down to
+ *  about 30 — and because a smooth curve would be tuning by feel against a
+ *  quantity that should be arithmetic.
+ *
+ *  It can brake a dive to FLARE_MAX_RISE but never past it, so the flare can
+ *  never turn into a climb. Releasing is recovery, not a launch pad.
+ */
+export const FLARE_BRAKE = 300;
+export const FLARE_DURATION = 0.42;
+/** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
+export const FLARE_MAX_RISE = -14;
+/** How long a release stays live and can still spend the flare.
+ *
+ *  Without this the pull-out depended on the player letting go during one
+ *  specific frame, which is not a thing a person can do reliably. 180ms covers
+ *  a release that lands while the bird is briefly grounded, or on the frame
+ *  where vy crosses zero at the bottom of an arc, without being so long that a
+ *  player who lets go and immediately presses again gets a free brake.
+ */
+export const FLARE_BUFFER = 0.18;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;

@@ -22,6 +22,7 @@ import { PICKUP_STYLE, Collectibles, type CloudKind, type PickupKind } from "./C
 import { evaluateNearMiss, FlowTuner, SessionGoals, type NearMiss } from "./Engagement";
 import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, SURRENDER_QUIPS, THUD_QUIPS, SurpriseEngine, quip } from "./Surprises";
 import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Moments";
+import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
 import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, EFFECT_UP_FRAME_SECONDS, nextBloomBudget, nextDpr, QUALITY_WINDOW_SECONDS } from "./quality";
@@ -382,6 +383,8 @@ export class Game {
   private readonly funnel = new Funnel();
   private funnelSummarySent = false;
   private momentLastAt: Partial<Record<MomentKind, number>> = {};
+  /** Second throttle for musical reactions — see `fireMoment`. */
+  private readonly momentMusicGate = new MusicMomentGate();
   private konamiBuffer: string[] = [];
   /** Edge-trigger for the ocean-entry splash burst (see fixedUpdate). */
   private wasInWater = false;
@@ -3310,7 +3313,7 @@ export class Game {
     // `fail` until the goal is actually reached (death/sun-out/elimination
     // all keep it a fail).
     this.runOutcome = "fail";
-    this.platform?.measure("mode", this.modeId, "start");
+    this.platform?.measure("run", this.modeId, "start");
     // Snapshot the record to beat BEFORE this run writes anything, so the
     // mid-run "new record" moment and the results "NEW BEST" banner compare
     // against the genuinely previous best.
@@ -3482,6 +3485,23 @@ export class Game {
     if (!this.versus && this.networkStartAt <= 0 && this.roomCode === "") {
       this.countdown = SOLO_START_COUNTDOWN;
     }
+
+    // Compile every shader this run can use BEFORE the clock starts.
+    //
+    // Three.js compiles a material's program lazily, on the first frame that
+    // actually draws it. That is invisible until it is not: the first run of a
+    // session stalls on whichever new material appears mid-flight. Measured on
+    // the running build — 350 frames, median 83ms under SwiftShader, p95 149ms,
+    // and one frame at 858ms. That outlier is a compile, not rendering, and it
+    // lands somewhere random in the first seconds of a player's very first
+    // run, which is the worst possible moment for the first impression.
+    //
+    // `renderer.compile` walks the scene and forces the driver to build every
+    // program now. It costs the same total work, just moved off the first
+    // seconds of play and into the load the player is already waiting through.
+    // Wrapped because it touches WebGL and must never be the reason a run fails
+    // to start.
+    this.warmShaders();
 
     this.setState("playing");
     this.setScreen("main");
@@ -3681,7 +3701,7 @@ export class Game {
     // reached its goal, `fail` when it ended by death/elimination/sun-out.
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
-    this.platform?.measure("mode", this.modeId, this.runOutcome);
+    this.platform?.measure("run", this.modeId, this.runOutcome);
     const stats = this.runStats();
     // Freeze the number the results card shows: `bird.asleep` only damps
     // velocity (see Bird.update), it doesn't zero it, so the bird keeps
@@ -6641,6 +6661,16 @@ export class Game {
     if (opts.popup !== false) this.popupAtBird(opts.shout ?? def.shout, def.popup);
     if (opts.toast) this.hud.toast(opts.toast, def.tone);
     this.haptic(def.haptic);
+    // Make the beat a *musical* event, not only a sound effect. This is the one
+    // place every moment passes through, so wiring it here covers all kinds.
+    // The gate is the second throttle: `momentShouldReact` above already decided
+    // this beat is worth showing, and this keeps a burst of them from stacking
+    // six bus automations onto the same frame.
+    const nowMs = this.runTime * 1000;
+    if (this.momentMusicGate.allow(kind, nowMs)) {
+      this.momentMusicGate.mark(kind, nowMs);
+      this.audio.musicReaction(momentMusic(kind));
+    }
     if (this.moments.isFirstEver(kind)) {
       this.telemetry.track("moment_first", { kind, mode: this.modeId });
       this.markFunnel("first_moment");
@@ -7406,7 +7436,7 @@ export class Game {
       const credited = this.save.addCoins(bonus);
       this.audio.chapterFanfare();
       this.hud.toast(`3× flight bonus — +● ${credited} coins`, "gold");
-      platform.measure("item", "results-coin-multiplier", "granted");
+      platform.measure("reward", "results-coin-multiplier", "granted");
     } else {
       this.hud.toast("No reward this time — the 3× bonus is still on the card", "warn");
     }
@@ -7682,6 +7712,18 @@ export class Game {
       zenith: this.zeniths,
       pickups: this.pickups,
     };
+  }
+
+  /** Force every shader in the current scene to compile now rather than on the
+   *  frame that first draws it. Best-effort: a driver that refuses is a lost
+   *  optimisation, never a failed run. */
+  private warmShaders(): void {
+    try {
+      this.scene.updateMatrixWorld(true);
+      this.renderer.compile(this.scene, this.camera.camera);
+    } catch {
+      /* SwiftShader / a lost context — the frame will compile it instead. */
+    }
   }
 
   /** 0..1 — continuous musical intensity from the moment-to-moment flight. */

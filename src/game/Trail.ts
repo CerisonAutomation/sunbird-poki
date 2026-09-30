@@ -4,6 +4,10 @@ import * as THREE from "three";
 const TRAIL_MAX = 48;
 const TRAIL_LIFE = 0.65;
 const TRAIL_SPACING = 0.45;
+/** Longest jump the ribbon will BRIDGE. Past this the strip is cut and
+ *  restarted, because a quad drawn between two samples that far apart is a
+ *  straight line across the screen, not a trail. */
+const TRAIL_MAX_GAP = 12;
 const TRAIL_Z = 0.28;
 
 type TrailSample = { x: number; y: number; age: number };
@@ -105,7 +109,27 @@ export class TrailRibbon {
   /** Record the bird's current position — offset behind bird to prevent bird/trail overlap */
   push(x: number, y: number): void {
     const last = this.samples[this.samples.length - 1];
+    // Too close to the head: a redundant sample that would only add a
+    // zero-length quad.
     if (last && Math.abs(x - last.x) < TRAIL_SPACING && Math.abs(y - last.y) < TRAIL_SPACING) return;
+    // Too far: the ribbon was not being sampled for a while, and connecting
+    // across that gap draws a long straight sweep through the sky.
+    //
+    // This is not hypothetical. `Game.updateTrailRibbon` only pushes a sample
+    // while `show` is true, and `show` is a speed gate (speed > 48, or fever,
+    // or boost). A player crossing that threshold — which happens constantly
+    // around it — leaves a time gap, and the bird can cover a lot of ground in
+    // it: at 2.8 km the gaps were hundreds of units. The old check only
+    // de-duplicated CLOSE samples, so every one of those gaps was bridged, and
+    // oscillating around the threshold produced loops of ribbon arcing over
+    // the top of the screen.
+    //
+    // Cutting instead is also what the eye expects: a trail that has just
+    // resumed is short, and grows. A bridge is not a trail resuming, it is a
+    // line drawn between two places the bird was never between.
+    if (last && (x - last.x) ** 2 + (y - last.y) ** 2 > TRAIL_MAX_GAP * TRAIL_MAX_GAP) {
+      this.samples.length = 0;
+    }
     this.samples.push({ x, y, age: 0 });
     if (this.samples.length > TRAIL_MAX) this.samples.shift();
   }

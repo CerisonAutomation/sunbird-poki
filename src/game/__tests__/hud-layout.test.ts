@@ -45,7 +45,25 @@ describe("readable HUD feedback", () => {
     expect(root.querySelectorAll(".top-bar .hud-controls button")).toHaveLength(2);
     expect(root.querySelector(".hud-header .roster-bar")).not.toBeNull();
     expect(root.querySelector(".flight-footer .fever-wrap")).not.toBeNull();
-    expect(root.querySelectorAll(".flight-messages > *")).toHaveLength(5);
+    // Membership, not a count. `toHaveLength(5)` pinned the lane's exact
+    // child count, so adding `.chain-readout` to the flight-messages lane —
+    // which is where ui.css has always said it belongs — failed here instead of
+    // being accepted, and the only way to satisfy it was to leave the element
+    // outside the lane. A count assertion silently forbids the fix for the very
+    // bug it should have caught.
+    //
+    // What actually matters is that the lane's declared members ARE in the lane,
+    // and that nothing undeclared is. Asserting the names means a new lane
+    // member is a one-line change here and a wrong lane is a failure.
+    const msgs = root.querySelector(".flight-messages")!;
+    for (const sel of [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]) {
+      expect(msgs.querySelector(sel), `${sel} must be in the flight-messages lane`).not.toBeNull();
+    }
+    // Everything in the lane is a declared member — no strays parked there.
+    const declared = [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"];
+    for (const child of [...msgs.children]) {
+      expect(declared.some((d) => child.matches(d)), `undeclared ${child.className} in the lane`).toBe(true);
+    }
     hud.dispose();
     expect(disconnect).toHaveBeenCalledOnce();
   });

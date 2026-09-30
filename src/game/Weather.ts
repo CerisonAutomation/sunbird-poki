@@ -69,6 +69,14 @@ export class Weather {
     this.stormTex = makeStormTexture();
   }
 
+  /** Read-only view of where the live thermals are, for inspection and tests.
+   *  The pool is private because placement and recycling are internal, but
+   *  "is there lift where the player is about to be" is a fair question to ask
+   *  from outside, and answering it is cheaper than casting the whole class. */
+  get activeThermals(): readonly { x: number; w: number; top: number }[] {
+    return this.thermals.filter((t) => t.active);
+  }
+
   addTo(scene: THREE.Scene): void {
     scene.add(this.group);
   }
@@ -192,6 +200,32 @@ export class Weather {
       const ground = terrain.heightAt(x);
       this.placeThermal(x, 11 + r * 6, ground + 40 + r * 14, ground);
     }
+    // THE OPENING THERMAL. Island 0 otherwise pushes its first thermal out to
+    // x >= 330, which means a new player launches, discovers the one verb the
+    // game has (hold), and then holds — for three hundred metres — before the
+    // thing the game is actually built around (release, to ride lift) has any
+    // reason to happen. That is the 30-second quit: the first run teaches the
+    // wrong half of the loop.
+    //
+    // So every run gets one guaranteed thermal just past the launch ramp. The
+    // player is rising and short of altitude, the column is right there, and
+    // letting go is the only way to get more. Release is taught by the world
+    // rather than by a tutorial, within the first couple of seconds.
+    //
+    // Placed AFTER the ramp (RAMP_START) and past the same crest-seeking the
+    // other thermals use, so a good launch genuinely carries the bird into it
+    // and a bad one does not — it rewards the skill the game already asks for
+    // rather than replacing it.
+    if (island === 0) {
+      let ox = RAMP_START + 40;
+      for (let k = 0; k < 24; k++) {
+        if (terrain.slopeAt(ox) < -0.05) break;
+        ox += 3;
+      }
+      const oGround = terrain.heightAt(ox);
+      this.placeThermal(ox, 26, oGround + 52, oGround);
+    }
+
     // an extra thermal right before the ocean ramp on tough islands
     if (island >= 2) {
       const x = base + RAMP_START - 60;

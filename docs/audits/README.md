@@ -27,6 +27,7 @@ For **live** status use the generated docs instead:
 | [`PRODUCTION-GAP-ANALYSIS-2026-09.md`](./PRODUCTION-GAP-ANALYSIS-2026-09.md) | 2026-09-14 | superseded | Portal/leaderboard/Rust gap list; the live register is [`PRODUCTION_READINESS_PLAN.md`](../../PRODUCTION_READINESS_PLAN.md) |
 | [`EXPERIENCE_QUALITY_PASS.md`](./EXPERIENCE_QUALITY_PASS.md) | undated | historical evidence | Shop, flight-loop and live-race quality rationale (illustrated navigation, 23-illustration SVG family) |
 | [`PR_VALIDATION.md`](./PR_VALIDATION.md) | undated | superseded | Branch validation note for a tree that has since moved on |
+| [`SUNBIRD_ASSESSMENT_2026-09-23.md`](./SUNBIRD_ASSESSMENT_2026-09-23.md) | 2026-09-23 | historical evidence | Modernization assessment of the game client. Written against a sibling checkout on another machine, so its file paths do not resolve here — the findings and counts are what it is kept for |
 
 ## Why these are kept at all
 

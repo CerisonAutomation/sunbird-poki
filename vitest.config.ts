@@ -48,6 +48,21 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}", "api/**/*.{test,spec}.{ts,tsx}"],
+    // 30s, not the 5s default. Several suites here construct the real HUD —
+    // a 4,374-line module that builds the entire DOM tree — and jsdom is
+    // single-threaded, so a busy machine pushed them past 5s and the suite went
+    // red with "Test timed out in 5000ms" on tests that pass in about 3s when
+    // run alone. Same failure shape as the Playwright budgets, same cause: the
+    // budget was measuring the machine, not the test.
+    //
+    // This does not slow the suite. A test that is actually broken fails on its
+    // own assertion, not on the budget — the timeout only decides what happens
+    // to one that is merely slow. Observed on a machine at load average 77: a
+    // fully green 2,455-test suite intermittently reported 2-4 failures and
+    // went back to green on a re-run, which is the worst signal a suite can
+    // send, because it teaches everyone that red means nothing.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],

@@ -24,10 +24,20 @@ export default defineConfig({
   testMatch: /portal-policy\.spec\.ts/,
   // Booting the shipped single-file build under headless SwiftShader is slow
   // (WebGL warm-up alone stalls the main thread for seconds) and the ad-removal
-  // case walks 17 menu screens. At 120s the desktop project timed out mid-walk
-  // while the phone project passed the same assertions in ~9s — the budget was
-  // the constraint, not the behaviour.
-  timeout: 240_000,
+  // case walks 17 menu screens. Two earlier budgets were not enough: at 120s the
+  // desktop project timed out mid-walk, and at 240s the suite went 3/8 red on a
+  // machine sitting at load average 144 — while those same cases took 22s and
+  // 26s when run on their own.
+  //
+  // That 10x gap is the actual story. SwiftShader rasterises on the CPU, so this
+  // suite's runtime is a function of whatever else the machine is doing. 240s
+  // left the slowest case at 228s: twelve seconds of headroom on a shared
+  // runner, which is why it read as "the tests are broken" when nothing was. A
+  // gate that flips on ambient load trains people to re-run it until it happens
+  // to go green, which is worse than having no gate at all. The budget is now
+  // wide enough that load alone does not decide the outcome; a real regression
+  // still fails fast on its own `expect` timeouts, which is what should catch it.
+  timeout: 600_000,
   expect: { timeout: 20_000 },
   workers: 1,
   fullyParallel: false,

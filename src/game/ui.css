@@ -2273,7 +2273,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .roster-bar {
   position: absolute;
   left: 50%;
-  top: 66px;
+  /* Same fix as `.finish-countdown`: this is a second element in the top zone
+     pinned to a magic pixel count with no safe-area term, so it collided on a
+     notched phone in landscape for the same reason. */
+  top: calc(56px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   width: min(620px, 94vw);
   pointer-events: none;
@@ -2428,7 +2431,15 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .finish-countdown {
   position: absolute;
   left: 50%;
-  top: 120px;
+  /* Was a hardcoded `top: 120px`, which collided with a landscape notch /
+     Dynamic Island because it carried no safe-area term at all. Bound to the
+     same two things the header it must clear is bound to — the shared
+     `--hud-header-height` token and `env(safe-area-inset-top)` — so the
+     countdown can never end up underneath the bar it is supposed to sit below,
+     whatever the device or the header does. The bare 120px also went stale
+     the moment the header height changed, which is exactly the class of bug
+     this removes. */
+  top: calc(var(--hud-header-height, 110px) + 10px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   font-size: 26px;
   font-weight: 800;
@@ -5714,4 +5725,42 @@ html.sb-reduce-motion .play-hud *::after { animation: none; transition: none; }
   font-size: 13px;
   line-height: 1.4;
   color: var(--muted-rose);
+}
+
+/* ---------------- run medal ladder ----------------
+   Sits under the distance block, which is where the player's eye already is for
+   the number it qualifies. Deliberately small and quiet: it answers "what is
+   next", not "how am I doing", and it must never compete with the terrain.
+
+   `data-medal` carries the earned rung so the colour follows the ladder
+   instead of being a second hardcoded mapping in the stylesheet. */
+.stat-medal {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-on-sky, rgba(255, 248, 235, 0.72));
+  text-shadow: 0 1px 2px rgba(42, 28, 40, 0.45);
+  font-variant-numeric: tabular-nums;
+  transition: color 160ms ease;
+}
+.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.55)); opacity: 0.7; }
+.stat-medal[data-medal="bronze"] { color: var(--coral, #e8853f); }
+.stat-medal[data-medal="silver"] { color: var(--text-on-sky, #f6efe2); }
+.stat-medal[data-medal="gold"] { color: var(--gold, #ffc14a); }
+.stat-medal[data-medal="platinum"] { color: var(--aqua, #7fe3d0); }
+
+/* Within a quarter of the next rung the goal is close enough to steer by, and
+   that is the one moment this line is allowed to be loud. */
+.stat-medal.close {
+  color: var(--gold, #ffc14a);
+  animation: medal-breathe 900ms ease-in-out infinite;
+}
+@keyframes medal-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat-medal.close { animation: none; }
 }

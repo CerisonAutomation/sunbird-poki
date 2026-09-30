@@ -1,5 +1,11 @@
 # Sunbird — Modernization Assessment
 
+> **Status:** historical evidence. Written 2026-09-23 against a sibling
+> checkout on another machine, so the absolute paths below do not resolve in
+> this tree. The findings and counts are why it is kept; current state is in
+> [`../HANDOFF.md`](../HANDOFF.md) and the live gap register is
+> [`../../PRODUCTION_READINESS_PLAN.md`](../../PRODUCTION_READINESS_PLAN.md).
+
 **System:** sunbird (browser flight game)
 **Date:** 2026-09-23
 **Tool used:** scc (fallback: `find`/`wc` — scc failed on Node 26: "config.json missed"), manual review, subagents

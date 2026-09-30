@@ -42,6 +42,7 @@ import type { TierView } from "./SeasonPass";
 import { growthLedger } from "./GrowthLedger";
 import type { CelebrationView } from "./ProgressBeats";
 import { streakOpacity } from "./SpeedFeel";
+import { medalStanding, type Medal } from "./RunMedals";
 
 export type UiScreen =
   | "progress"
@@ -70,6 +71,24 @@ export type UiScreen =
  * restored view: whatever the player last scrolled, landing on the home menu
  * must never park the one button that starts a run above the fold. */
 const LAUNCH_CTA = ".home-launch";
+
+/** The medal line's copy. `toNext` null means the ladder is topped, which says
+ *  so rather than going blank — an empty slot reads as a bug, and "maxed" is
+ *  the payoff for clearing every rung. */
+function medalText(earned: Medal, toNext: number | null): string {
+  if (toNext === null) return "◆ Maxed";
+  if (earned === "none") return `${toNext} m to first medal`;
+  return `${toNext} m to next`;
+}
+/** In-flight quest strip: how close a quest must be before it earns screen
+ *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
+ *  threshold, so the footer and the strip can never disagree. */
+const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
+/** Longest single-run distance, used to decide whether a mid-run goal is
+ *  actually actionable. Measured from the shipped build: a good run reaches
+ *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
+ *  it mid-flight is showing a bar that cannot move. */
+const RUN_REACHABLE_M = 3000;
 
 /** Stable screen identifiers used by automation, telemetry, and QA. */
 export const SCREEN = {
@@ -542,6 +561,9 @@ export class HUD {
   private distanceEl!: HTMLElement;
   private coinsEl!: HTMLElement;
   private bestEl!: HTMLElement;
+  /** Live medal line under the distance block. */
+  private medalLine!: HTMLElement;
+  private lastMedalKey = "";
   private islandEl!: HTMLElement;
   private multEl!: HTMLElement;
   private goldChip!: HTMLElement;
@@ -714,6 +736,7 @@ export class HUD {
             <div class="stat-label">${t("hud.stat.distance", undefined, "Distance")}</div>
             <div class="stat-value" data-ref="distance">0 m</div>
             <div class="stat-sub">best <span data-ref="best">0</span></div>
+            <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
             <div class="sun-track">
@@ -890,7 +913,21 @@ export class HUD {
     // puts them there, in normal flow, rather than an absolute offset that has
     // to be kept in sync with the button row's height.
     const header = lane("hud-header", [".top-bar", ".power-strip", ".mid-meta", ".power-chips", ".roster-bar", ".versus-bar"]);
-    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown"]);
+    // `.chain-readout` belongs in this lane and was missing from the list.
+    //
+    // ui.css:5609 documents the intent — "In the flight-messages lane, not
+    // floating at 22% of the screen… Lane placement is what the sibling
+    // announcements already do and is size-proof" — and the rule sets
+    // `position: static`, which only makes it a flow child INSIDE a lane. The
+    // element was never added here, so it stayed a static in-flow child of
+    // `.play-hud` itself: a full-width text block at the top of the play area.
+    // That is the "CHAIN x2 prints over the distance bar" problem the comment
+    // was written to prevent, arriving by a different route.
+    //
+    // It also escaped `e2e/layout.spec.ts`, whose overlap assertion names the
+    // lanes — an element in no lane cannot be asserted into one. The assertion
+    // picks it up automatically now that the lane exists.
+    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]);
     // `.fever-wrap` stays in the footer lane: it is `position: static` there
     // (see `.flight-footer .fever-wrap`), so it is a flow child of the footer.
     // Moving it out made the absolutely-positioned base rule resolve against
@@ -1317,6 +1354,29 @@ export class HUD {
       this.setText(this.distanceEl, "dist", distanceText(s.distance));
       this.setText(this.coinsEl, "coins", formatNumberLocalized(s.coins));
       this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      // The medal ladder, shown WHILE flying rather than only at the end.
+      //
+      // "340 m, best 340 m" tells a player where they are and nothing about
+      // what is next. This is the line that answers the question they are
+      // actually asking on the attempt after a near miss, and it is worth far
+      // more in the top-left corner — where the eye already is for the distance
+      // number — than in a results card the player sees once it is over.
+      //
+      // Keyed rather than rewritten every push, same as the other HUD text
+      // here, so a 30Hz push does not churn a node for a string that rarely
+      // changes (once per metre at most).
+      {
+        const m = medalStanding(s.distance);
+        const mkey = `${m.earned}${m.toNext ?? ""}`;
+        if (mkey !== this.lastMedalKey) {
+          this.lastMedalKey = mkey;
+          this.medalLine.textContent = medalText(m.earned, m.toNext);
+          this.medalLine.dataset.medal = m.earned;
+          // Near-miss emphasis: within 25% of the next rung, the goal is close
+          // enough to steer by, and that is the moment it is worth shouting.
+          this.medalLine.classList.toggle("close", m.toNext !== null && m.toNext <= (m.nextAt ?? Infinity) * 0.25);
+        }
+      }
       this.setText(this.islandEl, "island", `Island ${s.island + 1}`);
       // Mobile HUD declutter: the island chip flashes "recent" for 3s right
       // after the island changes, then fades back to unobtrusive (CSS scopes
@@ -1522,8 +1582,22 @@ export class HUD {
           rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
 
-        // Career rung: only when no beat row and there's a next rank to chase
-        if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
+        // Career rung: only when no beat row and there's a next rank to chase.
+        //
+        // ...and only when a SINGLE RUN can actually move it. A run covers a
+        // few hundred metres to a couple of km, and the career ladder is measured
+        // in tens of km — so this row was permanently unreachable and permanently
+        // on screen. The shipped build showed "Paper Wings -> Bronze Wings /
+        // 25.00 km to go" during runs measured in hundreds of metres: a progress
+        // bar that cannot move, competing with the terrain, for the whole run.
+        //
+        // This is the same defect the quest strip had, and the same fix. A goal
+        // worth showing mid-run is one the player can chase RIGHT NOW. The full
+        // career ladder is on the progress screen, where a number that big
+        // belongs. The bar is only hidden while a run is in flight; a goal that
+        // becomes reachable mid-run shows itself, because `nextNeeded` is part
+        // of the strip key.
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < 2) {
           const cpct = Math.min(100, s.wings.progress * 100);
           rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
         }
@@ -1539,11 +1613,30 @@ export class HUD {
       // The quest strip. Keyed on the numbers rather than rebuilt per frame, so
       // a 30 Hz HUD push does not churn 3-4 nodes; the `just` class is folded
       // into the key so the "banked" flourish still fires on the frame it lands.
-      const mkey = s.missionRows.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
+      // Only quests worth looking at right now.
+      //
+      // This rendered EVERY mission unconditionally, so a fresh run put three
+      // permanent bars on screen reading 0/6, 0/15 and 0/2 — a screenshot of
+      // the shipped build shows exactly that, sitting in the lower-left of the
+      // terrain-reading zone. The codebase already contains the answer to this
+      // and the strip was ignoring it: `closestGoalLine`'s comment says a
+      // permanent "you are 3% of the way there" nag "teaches the player to
+      // ignore the strip", and then gates its own line on 50%+. So the in-flight
+      // strip now uses the same threshold.
+      //
+      // Kept: quests at 50%+ (they are close, and close is motivating), and
+      // anything that just completed this frame (the payoff is the point of
+      // showing it). Dropped: the rows sitting at zero, which are the ones that
+      // train the player to stop reading the strip. Nothing is *lost* — every
+      // quest is still listed on the progress screen.
+      const worthShowing = s.missionRows.filter(
+        (r) => r.done || r.justDone || r.pct >= IN_FLIGHT_MISSION_MIN_PCT,
+      );
+      const mkey = worthShowing.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
       if (mkey !== this.lastMissionStrip) {
         this.lastMissionStrip = mkey;
-        this.missionStrip.classList.toggle("hidden", s.missionRows.length === 0);
-        this.missionStrip.innerHTML = renderMissionStrip(s.missionRows);
+        this.missionStrip.classList.toggle("hidden", worthShowing.length === 0);
+        this.missionStrip.innerHTML = renderMissionStrip(worthShowing);
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;
@@ -1668,9 +1761,18 @@ export class HUD {
       // One verb, one source. The hand said "Tap . Space . up" - a TAP on a
       // HOLD game, naming two keys that do not exist on the device this
       // ships to - on screen at the same moment as a coach saying HOLD.
-      this.handHintEl.textContent = s.settings.tapToggleDive
-        ? t("onboarding.tapToDive", undefined, "Tap to dive")
-        : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
+      //
+      // And when the coach line IS up, the hand does not repeat it. Both were
+      // showing at once in the shipped build: "HOLD to dive down the hill" with
+      // "Hold to dive" stacked directly beneath it, saying the same thing
+      // twice, mid-screen, over the terrain the player is trying to read. The
+      // hand still gestures - a gesture is not noise, it is the affordance -
+      // it just stops talking while something else already is.
+      this.handHintEl.textContent = s.hint
+        ? ""
+        : s.settings.tapToggleDive
+          ? t("onboarding.tapToDive", undefined, "Tap to dive")
+          : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
       if (html !== this.lastChips) {
         this.lastChips = html;
         this.powersEl.innerHTML = renderCoins(html);
@@ -1926,6 +2028,7 @@ export class HUD {
     this.distanceEl = grab("distance");
     this.coinsEl = grab("coins");
     this.bestEl = grab("best");
+    this.medalLine = grab("medalLine");
     this.islandEl = grab("island");
     this.multEl = grab("mult");
     this.goldChip = grab("goldChip");

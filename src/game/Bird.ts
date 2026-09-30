@@ -3,6 +3,10 @@ import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
   AIR_DRAG_DIVE,
+  FLARE_BRAKE,
+  FLARE_BUFFER,
+  FLARE_DURATION,
+  FLARE_MAX_RISE,
   AIR_DRAG_GLIDE,
   BIRD_RADIUS,
   BOOST_EXTRA_SPEED,
@@ -145,6 +149,16 @@ export class Bird {
   private wingTuck = 0;
   /** Smoothed dive pitch offset in radians (0 when not diving). See step(). */
   private divePitch = 0;
+  /** m/s of upward impulse applied by the most recent flare, 0 if none this
+   *  step. Public so a sound or a particle can react to the pull-out. */
+  flareAmount = 0;
+  /** Whether the previous physics step was a dive. The flare fires on the
+   *  falling edge, so a held dive does not re-apply it every step. */
+  private wasDiving = false;
+  /** Seconds of pull-out brake remaining. See the flare in step(). */
+  private flareTimer = 0;
+  /** Seconds during which a release is still "live" and can spend the flare. */
+  private releaseBuffer = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -396,10 +410,31 @@ export class Bird {
     this.justLanded = false;
     this.justLaunched = false;
     this.impact = 0;
+    this.flareAmount = 0;
+
+    // Record the release ONCE, here, before the grounded/ballistic branch —
+    // so it is latched whether the bird is flying or still on the ground.
+    //
+    // The flare used to require `wasDiving && !diving && vy < 0` on one
+    // frame, which failed in two ways players actually hit. Releasing while
+    // the bird sat on the ground changed nothing at all, because that whole
+    // check lived inside the ballistic branch. And releasing on the one frame
+    // where vy happened to be >= 0 — the bottom of an arc — missed the edge
+    // entirely and could never fire, because `wasDiving` had already been
+    // consumed. That is "sometimes the release does nothing", and no amount of
+    // tuning the brake fixes it, because the brake was never given the chance
+    // to run.
     const was = this.grounded;
     this.wasGrounded = was;
 
     const diving = opts.diving && !this.asleep;
+
+    // Latch the release here — after `diving` resolves, and crucially BEFORE
+    // the grounded/ballistic branch below, so a release while the bird is still
+    // on the ground is recorded rather than discarded.
+    if (this.wasDiving && !diving) this.releaseBuffer = FLARE_BUFFER;
+    this.wasDiving = diving;
+    this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
     const gMult = opts.gravityMult ?? 1;
     const cap =
       (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (opts.boost ? BOOST_EXTRA_SPEED : 0);
@@ -464,6 +499,59 @@ export class Bird {
     } else {
       /* ---------- ballistic flight ---------- */
       const sp = Math.max(0.001, this.speed());
+
+      // The flare: what releasing the button actually does.
+      //
+      // Before this, release did nothing measurable. Lift only ever *reduces*
+      // downward gravity, so a 95 m/s dive kept accelerating into the ground
+      // after you let go — a one-way door, and the reason the pull-out felt
+      // like a jolt rather than a recovery. This adds a one-shot upward impulse
+      // on the falling edge, scaled by how fast you were genuinely falling.
+      //
+      // Three properties keep it a flare and not a jet:
+      //  - it only fires on the DIVE -> GLIDE transition, so holding still
+      //    produces one impulse rather than one per step;
+      //  - it is scaled by dive speed, so a gentle tap out of a shallow dip is
+      //    almost nothing and a committed plunge is worth real recovery;
+      //  - it can only ever reduce downward speed. `fall < 0` guards the sign,
+      //    so releasing while already climbing adds nothing at all.
+      //
+      // The fall is captured BEFORE any gravity runs, because by the time this
+      // is reached the bird has already been accelerated downward this step.
+      // A release inside the buffer window, waiting for a moment it can be
+      // spent. See `noteRelease` for why this is a latch and not an edge.
+      if (this.releaseBuffer > 0 && !diving && this.vy < 0) {
+        this.releaseBuffer = 0;
+        this.flareTimer = FLARE_DURATION;
+      }
+
+      // The pull-out: a DECAYING BRAKE, not an impulse.
+      //
+      // An impulse was measurably not enough. A 26 m/s one-frame nudge took a
+      // 95 m/s dive to 69 and then gravity took it straight back — -70 at 42ms,
+      // -73 at 492ms, never approaching zero. The player released and kept
+      // diving, which is exactly the complaint: the pull-out does not catch.
+      //
+      // What a flare actually is, aerodynamically, is a sustained brake. So it
+      // is one now: strongest the frame the button comes up, falling linearly
+      // to nothing over FLARE_DURATION. The decay is the point — it means the
+      // pull-out has an end, so it is a recovery rather than a free lift, and a
+      // player cannot chain releases into sustained climb.
+      //
+      // Clamped to FLARE_MAX_RISE so it can arrest a dive and never convert one
+      // into a launch. Divided by dt-free scaling: the acceleration is
+      // BRAKE * (remaining/duration), applied over dt.
+      this.flareAmount = 0;
+      if (this.flareTimer > 0) {
+        const strength = FLARE_BRAKE * (this.flareTimer / FLARE_DURATION);
+        this.vy += strength * dt;
+        this.flareTimer = Math.max(0, this.flareTimer - dt);
+        if (this.vy > FLARE_MAX_RISE) {
+          this.vy = FLARE_MAX_RISE;
+          this.flareTimer = 0;
+        }
+        this.flareAmount = strength;
+      }
       const lift = diving
         ? 0
         : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1)) * glideLiftScale(this.airTime);

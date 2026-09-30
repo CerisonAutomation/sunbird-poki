@@ -768,6 +768,11 @@ export class Music {
   /** 0..1 — continuous intensity (speed / altitude / fever / danger / combos). */
   private intensity = 0;
   private intensityTarget = 0;
+  /** Moment-driven intensity offset, decaying to 0 — see `pushIntensity`. */
+  private intensityPush = 0;
+  private intensityPushAtStart = 0;
+  private intensityPushStarted = 0;
+  private intensityPushUntil = 0;
 
   private readonly bus: GainNode;
   private readonly filter: BiquadFilterNode;
@@ -1174,6 +1179,88 @@ export class Music {
     this.duckGain.gain.setTargetAtTime(1, t + 0.12, release);
   }
 
+  // ---------------------------------------------------------------------------
+  // Moment reactions — the four primitives `MusicMoments.ts` dispatches to.
+  //
+  // These exist so a comedy beat is a *musical* event and not only a sound
+  // effect: the soundtrack used to play straight through a BONK. The shared
+  // rule across all four is that none of them may slow the flight down. They
+  // shape the score's brightness, pitch and level for a beat or two; none of
+  // them touches tempo, which is what the player's hands are reading.
+  // ---------------------------------------------------------------------------
+
+  /** Cartoon descending sag + hard duck: the score face-plants with the bird. */
+  faceplant(): void {
+    if (this.baseLevel <= 0) return;
+    // A pitch sag on the whole bus, restored from the same timer slot the
+    // glissando uses rather than a second one — two timers fighting over
+    // `transpose` would leave the score in the wrong key if a BONK landed
+    // mid-glissando, so when one is running the sag is skipped, not queued.
+    if (this.viralGlissandoTimer === null) {
+      const home = this.transpose;
+      this.transpose = home - 7;
+      this.viralGlissandoTimer = setTimeout(() => {
+        this.viralGlissandoTimer = null;
+        this.transpose = home;
+      }, 420);
+    }
+    this.duck(0.5, 0.45);
+    this.sidechainPump(0.5, 0.24);
+  }
+
+  /** Muffle the whole bus low, then surface again — "you are in the sea". */
+  underwater(seconds = 0.9): void {
+    if (this.baseLevel <= 0) return;
+    const t = this.ctx.currentTime;
+    const f = this.filter.frequency;
+    f.cancelScheduledValues(t);
+    f.setValueAtTime(f.value, t);
+    f.exponentialRampToValueAtTime(240, t + 0.14);
+    f.exponentialRampToValueAtTime(Math.max(240, this.lastCutoff), t + seconds);
+    this.duck(0.3, 0.35);
+  }
+
+  /** Rising glockenspiel run — the bright lift a PERFECT or RECORD earns. */
+  sparkle(seconds = 0.55): void {
+    if (this.baseLevel <= 0) return;
+    const t = this.ctx.currentTime;
+    const notes = [1318.5, 1567.98, 1760, 2093]; // E6 G6 A6 C7
+    notes.forEach((hz, i) => {
+      const at = t + i * 0.055;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(hz, at);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.16, at + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + seconds * 0.5);
+      osc.connect(g);
+      g.connect(this.bus);
+      osc.start(at);
+      osc.stop(at + seconds);
+    });
+  }
+
+  /**
+   * Temporary intensity offset that decays back to the game-driven value.
+   *
+   * Deliberately additive on top of `intensityTarget` rather than a replacement:
+   * the game keeps driving the target every frame, so the push has to ride
+   * along and fade, or it would either stomp the game's own value or be
+   * immediately overwritten by it.
+   */
+  pushIntensity(delta: number, seconds: number): void {
+    if (!Number.isFinite(delta) || !Number.isFinite(seconds) || seconds <= 0) return;
+    const t = this.ctx.currentTime;
+    // A second push inside an active window compounds and restarts the clock;
+    // two moments in quick succession should stack, not truncate.
+    const compounding = this.intensityPushUntil > t && this.intensityPush !== 0;
+    this.intensityPush = compounding ? this.intensityPushAtStart + delta : delta;
+    this.intensityPushAtStart = this.intensityPush;
+    this.intensityPushStarted = t;
+    this.intensityPushUntil = t + seconds;
+  }
+
   dispose(): void {
     if (this.viralGlissandoTimer !== null) {
       clearTimeout(this.viralGlissandoTimer);
@@ -1286,7 +1373,26 @@ export class Music {
     // on elapsed audio time rather than a fixed fraction per tick is what keeps
     // those four in agreement after the browser throttles our interval.
     const rising = this.intensityTarget > this.intensity;
-    this.intensity = intensityFollow(this.intensity, this.intensityTarget, now - this.lastTick);
+    // The moment push rides ON TOP of whatever the game asked for and fades on
+    // the audio clock, so a PANIC landing mid-run lifts the run it is reacting
+    // to instead of replacing it. `intensityTarget` stays the pure game-driven
+    // value — `setIntensity` owns it and is called every frame — so the sum is
+    // taken here, at the one point all four intensity consumers already read
+    // from. That keeps filter, hats, tempo and arrangement moving as one number.
+    let target = this.intensityTarget;
+    if (this.intensityPush !== 0) {
+      if (this.intensityPushUntil <= now) {
+        this.intensityPush = 0;
+      } else {
+        // Linear fade over the window the caller asked for.
+        const span = Math.max(0.05, this.intensityPushUntil - this.intensityPushStarted);
+        const left = this.intensityPushUntil - now;
+        this.intensityPush = (this.intensityPushAtStart * left) / span;
+        if (Math.abs(this.intensityPush) < 0.005) this.intensityPush = 0;
+        target = Math.max(0, Math.min(1, target + this.intensityPush));
+      }
+    }
+    this.intensity = intensityFollow(this.intensity, target, now - this.lastTick);
     this.lastTick = now;
     this.applyIntensity(rising);
     this.syncPhase();

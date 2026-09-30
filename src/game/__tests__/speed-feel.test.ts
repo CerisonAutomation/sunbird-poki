@@ -165,7 +165,30 @@ describe("weeCheck", () => {
     expect(weeCheck({ armed: true }, 1, 6).fire).toBe(false);
     expect(weeCheck({ armed: true }, 1, 0).fire).toBe(false);
     expect(weeCheck({ armed: true }, 0.6, -30).fire).toBe(false);
-    expect(weeCheck({ armed: true }, WEE_FIRE_ABOVE, -(WEE_MIN_DIVE - 1)).fire).toBe(false);
+    // ABSOLUTE numbers, deliberately not derived from the constants.
+    //
+    // This line used to read
+    //   weeCheck(state, WEE_FIRE_ABOVE, -(WEE_MIN_DIVE - 1))
+    // which is a tautology with respect to WEE_MIN_DIVE: whatever the constant
+    // is, the input is one below it, so the comparison is always false and the
+    // assertion always holds. It pinned the `>=` operator and nothing else — a
+    // mutation probe lowering WEE_MIN_DIVE from 10 to 3 left all 21 tests in
+    // this file green, which is how it was found. A tuning value a player can
+    // feel has to be pinned by a number someone chose, not by the number under
+    // test.
+    //
+    // The design intent: WEE is the reward for a real dive. A gentle 9 m/s dip
+    // is not a dive and must stay silent; 10 m/s is the floor that counts.
+    expect(weeCheck({ armed: true }, 1, -9.9).fire).toBe(false);
+    expect(weeCheck({ armed: true }, 1, -9).fire).toBe(false);
+    // And the floor itself is inclusive, so the boundary is pinned from both sides.
+    expect(weeCheck({ armed: true }, 1, -10).fire).toBe(true);
+    expect(WEE_MIN_DIVE).toBe(10);
+    // The speed gate gets the same treatment, for the same reason. WEE is the
+    // top band only: holding a 20 m/s dive at cruise must not celebrate.
+    expect(weeCheck({ armed: true }, WEE_FIRE_ABOVE - 0.01, -20).fire).toBe(false);
+    expect(weeCheck({ armed: true }, WEE_FIRE_ABOVE, -20).fire).toBe(true);
+    expect(WEE_FIRE_ABOVE).toBe(0.95);
   });
 
   it("fires exactly once per acceleration — hysteresis, not a machine gun", () => {

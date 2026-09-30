@@ -24,15 +24,29 @@ Every claim below was produced by a command in this tree, not remembered.
 | `pnpm audit:ui` | pass — no dead buttons, no null refs, no unlabelled controls (19 advisory warnings) |
 | `pnpm i18n:audit` | pass — debt **down to 312** (two toast batches, the celebration strip, then batch 3: every screen title — that category is now **0**), ratchet re-blessed |
 | `pnpm docs:audit` | pass — no broken links, no orphans, every snapshot statused |
-| `pnpm typecheck` + `pnpm typecheck:server` | pass |
-| `pnpm test` | **2,319 passed**, 9 skipped, 161 files |
-| `pnpm test:server` | **48 passed**, 7 files |
+| `pnpm typecheck` | pass |
+| `pnpm test` | **2,358 passed**, 9 skipped, 162 files |
 | `pnpm verify:prod` | **PRODUCTION READY** — coverage 49.3% + 19 module floors, JS 1.69 / 2.50 MB (positional i18n packs took it down from 1.78 MB), zero debug artifacts in shipped client code |
-| `pnpm build:portals` + `pnpm verify:portals` | **3/3 zips shippable** — poki 945 KB, crazy 932 KB, generic 929 KB (the positional pack format took ~105 KB of repeated key names out of every bundle) |
+| `pnpm build:poki` + `pnpm verify:portals` | **1/1 zip shippable** — poki 945 KB. `build:portals` was replaced by `build:poki` in `f2ce415`; this fork is Poki-only, so there is no CrazyGames or generic build and `verify-portal.mjs` / `audit-zips.mjs` both carry `PORTALS = ["poki"]` |
 | `pnpm audit:zips` · `verify:upload` · `verify:thumbnail` · `isolation:check` | pass |
 | `pnpm poki:preflight` | exit 0 — the whole portal pipeline, ending in a live audit run |
 | `pnpm poki:audit` | **116/131** rules satisfied · 5 need a human at Poki's dashboard or a GPU (§6) · 10 informational |
-| `pnpm gate` → `test:policy` / `test:artifact` / `test:mobile` | **environment-blocked**: Playwright cannot download browser binaries in this sandbox. CI runs them. Not a code failure. |
+| `pnpm test:policy` | pass — the phone first-run character-count failure recorded in `RELEASE-VERDICT.md` §8 was fixed by `80bf00f` (`HUD.syncNameCount`) and now passes |
+
+**Scripts removed as unrunnable, not renamed.** `typecheck:server`,
+`test:server`, `verify:server` and `verify:full` all pointed at a
+`server/tsconfig.json` and a server test tree that are not in this checkout, and
+exited 1. `RELEASE-VERDICT.md` §6 had already called leaving them "the one
+option that is neither". They are deleted. The `pvp-live` CI job was deleted for
+the same reason: `pvp:check` spawns `server/src/index.ts` (`scripts/pvp-check.mjs:94`).
+
+**CI was not running.** Every job on `main` aborted in 3–4s with *"The job was
+not started because recent account payments have failed or your spending limit
+needs to be increased."* Nothing on this table had been validated by CI at
+that point — it was all local runs. **Fix the GitHub billing/spending-limit
+first**, then re-run; the workflow was repaired in the meantime (the `portals`
+job named `build:portals`, and `build-itch` named a script that has never
+existed, so those two would have failed the moment billing was restored).
 
 Localization: **36 locales** (the 34 codes the portal inspector offers, plus `vi`
 and `mt` that already shipped, plus `"auto"` = browser detection) × **484 barrel
@@ -81,11 +95,22 @@ enforces it, because a decision without an enforcing test is a rumour.
    (public, Node-rendered) lists every edition's hosts. Each bundle carries only
    its own `legal.edition.*`, because a shared policy would put
    `netlib.poki.io` inside the CrazyGames zip.
-7. **A comedy beat is a musical event, not just a sound effect.** Every kind in
-   `Moments.ts` has a bounded reaction in `MusicMoments.ts`; the design rule the
-   tests enforce is that no reaction may slow the flight down (only PHEW may pull
-   intensity, and gently). Add a moment kind → add its recipe → the coverage test
-   fails until you do.
+7. **A comedy beat is a musical event, not just a sound effect.** ✅ built and
+   wired, 2026-09-29. This entry was previously stated as a standing fact and
+   was false: the parent monorepo has `MusicMoments.ts` and a passing test, and
+   its header claims "`Music` grows four primitives (`faceplant`, `underwater`,
+   `sparkle`, `pushIntensity`)" — it never did, in either repo. Those four names
+   existed only in the `MusicReactionTarget` interface and the test's mock
+   recorder; the real `Music` class implemented none of them and nothing called
+   `applyMusicActions`. So no player had ever heard the score react to a BONK.
+   Now: `Music.ts` implements all eight primitives, `Audio.musicReaction` is the
+   narrow pass-through, and `Game.fireMoment` — the one place every moment
+   passes through — applies the recipe behind a `MusicMomentGate` second
+   throttle. The design rule is enforced by the test, not just documented: only
+   PHEW may pull intensity, and only to −0.2, and no recipe may exceed three
+   gestures. Add a moment kind → the coverage test fails until you give it one.
+   Caveat: the songbook player is a fixed recording with no bus to shape, so a
+   moment played over a songbook track gets its SFX but no musical reaction.
 8. **Speed feel has one source of truth: `src/game/SpeedFeel.ts`.** The bands
    (cruise 0.45 / rush 0.72 / warp 0.90 of `MAX_SPEED`) and every curve derived
    from them — dive FOV kick (`CameraRig`), streak + warp-vignette opacity
@@ -115,9 +140,19 @@ enforces it, because a decision without an enforcing test is a rumour.
 11. **Versions have one inventory and one guard.** `docs/VERSIONS.md` lists every
     identifier (semver, build id, save schema, wire protocol, replay format, HTTP
     namespace, editions) with its owner and what breaks on drift;
-    `version-lockstep.test.ts` fails the build when the client and server copies
-    disagree — the realtime gateway *rejects* frames whose protocol version it
-    does not recognise, so a client-only bump breaks every room. `BUILD_ID` is
+    `version-lockstep.test.ts` keeps the client's protocol constants consistent
+    with each other and the replay/save format decodable. ⚠️ *This entry
+    previously claimed it "fails the build when the client and server copies
+    disagree — the realtime gateway rejects frames whose protocol version it
+    does not recognise, so a client-only bump breaks every room."* That is not
+    what it does **in this fork**: there is no server here (`server/` holds one
+    file, and the Rust gateway lives in the parent monorepo), and the Poki
+    transport is Netlib P2P with no version negotiation at all. The test's own
+    comment already says so. What it actually pins is
+    `PROTOCOL_MIN_VERSION === PROTOCOL_VERSION` — both literals in
+    `src/game/protocol/v1.ts` — so it catches a bump of one without the other
+    and deliberately passes when both move together, which is the correct
+    behaviour for that contract. `BUILD_ID` is
     `<semver>-<portal>-<sha8>` and must stay deterministic: it was
     `Date.now().toString(36)` and nothing read it, which made every rebuild of the
     same commit a new "version" and made the server's `SUNBIRD_CLIENT_BUILD` pin

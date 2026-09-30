@@ -1,6 +1,6 @@
 # Poki compliance report
 
-**Generated:** 2026-09-26 by `pnpm poki:audit` — do not edit by hand.
+**Generated:** 2026-09-30 by `pnpm poki:audit` — do not edit by hand.
 **Result:** ✅ no machine-checked rule failed · **155/188 machine-verified** · **12 human-attested** · 131 hard requirements.
 **Read the difference.** _Machine-verified_ means a check ran and passed — that is a gate result. _Human-attested_ means nothing ran: a person signed the rule off, which is the right instrument for "is the art accurate?" and no evidence at all for "did a gate check it". _Wired but not run_ means a gate is attached that this invocation did not execute, so the rule has no evidence yet. Only the first number is a gate result.
 **Rule count overstates independent checking.** 26 machine-verified rules are produced by 10 distinct gate commands (several of which are pnpm aliases of the same script), so one failing takes down all of its rules at once.
@@ -109,7 +109,7 @@
 | `LOC-01` | recommendation | Localization is essential for engagement outside English-speaking regions. | ✅ verified | src/i18n/translations.barrel.json |
 | `LOC-02` | requirement | Centralize all text into a single file format before translating. | ✅ verified | src/i18n/index.ts matches /export function t\(/ |
 | `LOC-03` | recommendation | Prioritise localization for text-carrying genres/mechanics. | ✅ verified | docs/poki/05-localization.md |
-| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 262 strings complete |
+| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 489 strings complete |
 | `LOC-05` | requirement | Detect the browser language and serve it; a manual selector should exist too. | ✅ verified | src/i18n/__tests__/locales.test.ts |
 
 ## THB — Game thumbnail

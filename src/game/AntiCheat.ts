@@ -35,6 +35,20 @@ export function verifyRunSubmission(
   const score = Number(submission.score ?? 0);
   const duration = Number(submission.durationMs ?? 0);
 
+  // Non-finite first, and before every other rule, because it defeats all of
+  // them. Every comparison against NaN is false, so `NaN < 0` is false, `NaN > 0`
+  // is false, and the whole `if (dist > 0)` block below — average speed, minimum
+  // run duration, score density — is skipped outright. A submission carrying
+  // `distance: Number("abc")` therefore came back `valid: true` having passed no
+  // check at all, and `rows.sort((a, b) => b.distance - a.distance)` returns
+  // NaN from its comparator for such a row, which silently corrupts the local
+  // board's ordering. JSON turns NaN into null on the wire, so this was never
+  // visible to the server — it was a hole on the client, in the one function
+  // whose job is to be the trust boundary.
+  if (!Number.isFinite(dist) || !Number.isFinite(score) || !Number.isFinite(duration)) {
+    return { valid: false, quarantined: true, reason: "Non-finite telemetry values" };
+  }
+
   if (dist < 0 || score < 0 || duration < 0) {
     return { valid: false, quarantined: true, reason: "Negative telemetry values" };
   }

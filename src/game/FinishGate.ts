@@ -79,7 +79,16 @@ export class FinishGate {
     this.group.visible = false;
   }
 
-  /** @returns metres remaining, or -1 when inactive/passed. */
+  /**
+   * @returns metres remaining, or -1 when the gate is hidden.
+   *
+   * NOT -1 once the bird has passed: the count keeps going negative, because
+   * "how far past the line" is meaningful. The only consumer (HUD) renders the
+   * readout under `finishRemaining > 0`, so a negative value is what hides the
+   * counter after the line. The earlier "or -1 when passed" wording described
+   * behaviour this never had; the caller has always been written against the
+   * real contract.
+   */
   update(dt: number, birdX: number): number {
     if (!this.group.visible) return -1;
     this.pulse += dt;

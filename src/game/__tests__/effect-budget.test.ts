@@ -18,8 +18,8 @@ const fresh = (over: Partial<EffectBudget> = {}): EffectBudget => ({
   ...over,
 });
 
-const run = (start: EffectBudget, frames: number[], shadowsAllowed = true): EffectBudget =>
-  frames.reduce((state, f) => nextEffectBudget(state, f, { shadowsAllowed }), start);
+const run = (start: EffectBudget, frames: number[], shadowsAllowed = true, particleCeiling = 1): EffectBudget =>
+  frames.reduce((state, f) => nextEffectBudget(state, f, { shadowsAllowed, particleCeiling }), start);
 
 /**
  * `nextDpr` exists because "a single bad moment permanently degrading the rest
@@ -37,7 +37,7 @@ const run = (start: EffectBudget, frames: number[], shadowsAllowed = true): Effe
  */
 describe("effect budget recovers, on every device", () => {
   it("sheds shadows the moment the budget is blown", () => {
-    const after = nextEffectBudget(fresh(), BAD, { shadowsAllowed: true });
+    const after = nextEffectBudget(fresh(), BAD, { shadowsAllowed: true, particleCeiling: 1 });
     expect(after.shadows).toBe(false);
     // The expensive thing goes first; particles are not also cut in the same
     // window, because losing the shadow pass may well be enough.
@@ -74,9 +74,9 @@ describe("effect budget recovers, on every device", () => {
   });
 
   it("is harder to earn back than it is to lose", () => {
-    const degraded = nextEffectBudget(fresh(), BAD, { shadowsAllowed: true });
+    const degraded = nextEffectBudget(fresh(), BAD, { shadowsAllowed: true, particleCeiling: 1 });
     // One good window is not enough — that is what would oscillate.
-    const oneGood = nextEffectBudget(degraded, GOOD, { shadowsAllowed: true });
+    const oneGood = nextEffectBudget(degraded, GOOD, { shadowsAllowed: true, particleCeiling: 1 });
     expect(oneGood.shadows).toBe(false);
     expect(oneGood.particles).toBe(degraded.particles);
     expect(EFFECT_RECOVERY_WINDOWS * QUALITY_WINDOW_SECONDS).toBeGreaterThanOrEqual(7.5);
@@ -90,6 +90,16 @@ describe("effect budget recovers, on every device", () => {
     const holding = run(degraded, [OK, OK, OK, OK, OK]);
     expect(holding.shadows).toBe(false);
     expect(holding.goodWindows).toBe(0);
+  });
+
+  it("climbs back only to the density this device was configured for", () => {
+    // Mobile runs a lighter decorative stream by default (0.5). A ladder that
+    // recovered to 1 regardless would quietly undo that setting the first
+    // time the frame looked healthy — the same class of bug, slower.
+    const degraded = run(fresh({ particles: 0.5 }), [BAD, BAD], true, 0.5);
+    expect(degraded.particles).toBeLessThan(0.5);
+    const recovered = run(degraded, Array.from({ length: 40 }, () => GOOD), true, 0.5);
+    expect(recovered.particles).toBe(0.5);
   });
 
   it("never switches shadows on where they were never allowed", () => {

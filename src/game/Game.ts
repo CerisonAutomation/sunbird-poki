@@ -335,6 +335,10 @@ export class Game {
   private renderDpr = 0;
   private dustCooldown = 0;
   private particleBudget = 1;
+  /** The particle density this device is configured for — what the adaptive
+   * ladder may climb back to, which is not always 1 (mobile defaults to 0.5,
+   * "low" quality pins 0.3). */
+  private particleCeiling = 1;
   /** Soft-shadow + particle state for the two-way adaptive policy. Mirrors
    * `renderer.shadowMap.enabled` and `particleBudget`; see `nextEffectBudget`. */
   private effectBudget: EffectBudget = { shadows: true, particles: 1, goodWindows: 0 };
@@ -6397,6 +6401,7 @@ export class Game {
     // events still render because critical emitters are short-lived and the
     // adaptive quality loop can shed more work under sustained load.
     this.particleBudget = s.quality === "low" ? 0.3 : this.isMobile ? 0.5 : 1;
+    this.particleCeiling = this.particleBudget;
     this.particles.setBudget(this.particleBudget);
     // Soft shadows are the single priciest feature on mobile GPUs — keep them
     // only when the user asked for high quality (auto tiers shed them first).
@@ -6479,7 +6484,10 @@ export class Game {
     // session. See `nextEffectBudget`.
     const shadowsAllowed = !this.softwareMode && this.deviceProfile.tier !== "lite";
     const beforeEffects = this.effectBudget;
-    this.effectBudget = nextEffectBudget(beforeEffects, this.frameEma, { shadowsAllowed });
+    this.effectBudget = nextEffectBudget(beforeEffects, this.frameEma, {
+      shadowsAllowed,
+      particleCeiling: this.particleCeiling,
+    });
     if (this.effectBudget.shadows !== beforeEffects.shadows) {
       this.renderer.shadowMap.enabled = this.effectBudget.shadows;
       this.telemetry.track(this.effectBudget.shadows ? "shadows_restored" : "shadows_disabled", {});

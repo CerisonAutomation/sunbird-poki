@@ -112,8 +112,14 @@ export const EFFECT_RECOVERY_WINDOWS = 3;
 export function nextEffectBudget(
   state: EffectBudget,
   frameSeconds: number,
-  opts: { shadowsAllowed: boolean },
+  opts: { shadowsAllowed: boolean; particleCeiling: number },
 ): EffectBudget {
+  // Recovery restores what the device was *configured* for, not an absolute 1.
+  // Mobile deliberately runs a lighter decorative stream (0.5) by default and
+  // "low" quality pins 0.3; a ladder that climbed to 1 regardless would undo
+  // the setting the moment the frame looked healthy, which is a slower and
+  // more confusing version of the bug this function exists to fix.
+  const ceiling = Math.max(PARTICLE_FLOOR, Math.min(1, opts.particleCeiling));
   // A device that may never draw shadows (software renderer, `lite` tier) is
   // not "degraded" for not having them; it just never had them.
   const shadows = opts.shadowsAllowed && state.shadows;
@@ -138,8 +144,8 @@ export function nextEffectBudget(
     return { shadows, particles: state.particles, goodWindows };
   }
   // Earned a step back. Particles first — they are what the player reads.
-  if (state.particles < 1) {
-    return { shadows, particles: Math.min(1, state.particles + PARTICLE_STEP), goodWindows: 0 };
+  if (state.particles < ceiling) {
+    return { shadows, particles: Math.min(ceiling, state.particles + PARTICLE_STEP), goodWindows: 0 };
   }
   if (opts.shadowsAllowed && !shadows) {
     return { shadows: true, particles: state.particles, goodWindows: 0 };

@@ -65,7 +65,7 @@ export type DailyChallenge = {
 const DAILY_TEMPLATES: { mode: ModeId; metric: ChallengeMetric; base: number; spread: number; title: string }[] = [
   { mode: "daytrip", metric: "distance", base: 900, spread: 700, title: "Long Light" },
   { mode: "distance", metric: "distance", base: 1100, spread: 900, title: "Far Shore" },
-  { mode: "zenith", metric: "zenith", base: 1, spread: 2, title: "Skyward" },
+  { mode: "daytrip", metric: "zenith", base: 1, spread: 2, title: "Skyward" },
   { mode: "coinrush", metric: "coins", base: 20, spread: 18, title: "Coin Fever" },
   { mode: "perfect", metric: "perfects", base: 4, spread: 4, title: "Clean Sheets" },
   { mode: "daytrip", metric: "clouds", base: 3, spread: 3, title: "Head in the Clouds" },
@@ -195,7 +195,7 @@ const GAUNTLET_POOL: { mode: ModeId; metric: ChallengeMetric; base: number; labe
   { mode: "distance", metric: "distance", base: 800, label: "Distance run" },
   { mode: "daytrip", metric: "coins", base: 14, label: "Coin sweep" },
   { mode: "perfect", metric: "perfects", base: 3, label: "Perfect chain" },
-  { mode: "zenith", metric: "zenith", base: 1, label: "Skyline hunt" },
+  { mode: "daytrip", metric: "zenith", base: 1, label: "Skyline hunt" },
   { mode: "coinrush", metric: "coins", base: 18, label: "Rush hour" },
 ];
 

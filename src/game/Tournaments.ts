@@ -74,7 +74,7 @@ const CATALOG: {
     name: "Skyline Trials",
     blurb: "Chain launches and touch the stratosphere.",
     icon: "rocket",
-    mode: "zenith",
+    mode: "distance",
     metric: "altitude",
     cuts: { bronze: 60, silver: 130, gold: 220, diamond: 330 },
   },

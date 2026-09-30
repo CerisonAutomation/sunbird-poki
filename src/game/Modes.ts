@@ -1,7 +1,6 @@
 export type ModeId =
   | "daytrip"
   | "race"
-  | "zenith"
   | "distance"
   | "coinrush"
   | "perfect"
@@ -144,16 +143,6 @@ export const MODES: ModeDef[] = [
     clock: 0,
     finish: 4000,
     scoreBy: "time",
-    escalate: false,
-  },
-  {
-    id: "zenith",
-    name: "Skyline",
-    blurb: "Ninety seconds to climb above the clouds and bonk the skybox.",
-    icon: "rocket",
-    clock: 90,
-    finish: 0,
-    scoreBy: "altitude",
     escalate: false,
   },
   {

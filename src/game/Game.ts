@@ -63,6 +63,7 @@ import { emptySquadState, SquadClient } from "./Squad";
 import { PowerUps } from "./PowerUps";
 import { Racer } from "./Racer";
 import {
+  ALT_CEILING,
   ALT_CLOUDS,
   ALT_HIGH,
   ALT_SKY,
@@ -150,6 +151,7 @@ import { Sky } from "./Sky";
 import { Telemetry } from "./Telemetry";
 import { shopAction, type ShopActionContext } from "./actions/shop";
 import { journeyAction, type JourneyActionContext } from "./actions/journey";
+import { settingsAction, type SettingsActionContext } from "./actions/settings";
 import { crashReporter } from "./resilience/CrashReporter";
 import { Watchdog } from "./resilience/Watchdog";
 import { TerrainSystem } from "./TerrainSystem";
@@ -2761,21 +2763,47 @@ export class Game {
       const alt = this.bird.y - ground;
       if (alt >= ZENITH_ALT) {
         this.zeniths += 1;
-        const pts = Math.round(alt * 4);
+
+        // Altitude tier: each band has its own feel, copy, and reward weight.
+        // Tiers align with the world's visual layers (ALT_CLOUDS=72, ALT_HIGH=135, ALT_CEILING=230).
+        const tier =
+          alt >= ALT_CEILING ? 4 :
+          alt >= ALT_HIGH    ? 3 :
+          alt >= ALT_CLOUDS  ? 2 : 1;
+
+        const ptsPerUnit = tier === 4 ? 12 : tier === 3 ? 8 : tier === 2 ? 6 : 4;
+        const slowmoDur  = tier === 4 ? 1.4 : tier === 3 ? 1.0 : tier === 2 ? 0.75 : ZENITH_DURATION;
+        const punchStr   = tier === 4 ? 14 : tier === 3 ? 11 : tier === 2 ? 9 : 7;
+        const glowStr    = tier === 4 ? 1.0 : tier === 3 ? 0.9 : tier === 2 ? 0.85 : 0.75;
+        const ringColor  = tier === 4 ? 0xffdd44 : tier === 3 ? 0x88aaff : tier === 2 ? 0xaaddff : 0xffffff;
+
+        // Streak multiplier: successive zeniths in the same run reward consistency.
+        const streakMult = this.zeniths >= 3 ? 2.0 : this.zeniths === 2 ? 1.5 : 1.0;
+
+        const basePts = Math.round(alt * ptsPerUnit);
+        const pts = Math.round(basePts * streakMult);
         this.bonus += pts;
+
         this.timeScale = ZENITH_SLOWMO;
-        this.zenithTimer = ZENITH_DURATION;
-        this.camera.punch(9);
-        this.particles.burstRing(this.bird.x, this.bird.y, 0xffffff);
-        this.particles.emitPerfectBurst(this.bird.x, this.bird.y, 2);
-        this.popupAtBird(`SKY HIGH! +${pts}`, "zenith");
+        this.zenithTimer = slowmoDur;
+        this.camera.punch(punchStr);
+        this.particles.burstRing(this.bird.x, this.bird.y, ringColor);
+        this.particles.emitPerfectBurst(this.bird.x, this.bird.y, tier >= 3 ? 3 : 2);
+
+        const tierLabel =
+          tier === 4 ? "ORBITAL" :
+          tier === 3 ? "STRATOSPHERE" :
+          tier === 2 ? "ABOVE THE CLOUDS" : "SKY HIGH";
+        const streakSuffix = this.zeniths >= 3 ? " ×2!" : this.zeniths === 2 ? " ×1.5!" : "!";
+
+        this.popupAtBird(`${tierLabel}${streakSuffix} +${pts}`, "zenith");
         this.audio.zenith();
-        this.audio.duckMusic(0.6, 0.7);
-        this.hud.toast(`SKYLINE +${pts}`, "zenith");
+        this.audio.duckMusic(tier >= 3 ? 0.45 : 0.6, tier >= 3 ? 0.9 : 0.7);
+        this.hud.toast(`${tierLabel} +${pts}`, "zenith");
         this.flash("perfect");
-        this.glow(0.8);
-        this.haptic([60, 40, 80]);
-        this.telemetry.track("zenith", { alt: Math.round(alt) });
+        this.glow(glowStr);
+        this.haptic(tier >= 3 ? [80, 40, 100, 40, 120] : [60, 40, 80]);
+        this.telemetry.track("zenith", { alt: Math.round(alt), tier, streakMult });
       }
     }
     this.prevVy = vy;
@@ -5207,124 +5235,41 @@ export class Game {
    * Extracted from handleAction; same break-to-return-true transform as the
    * shop/social sub-handlers.
    */
+  /** The port ./actions/settings runs on.
+   *
+   *  Only `resetArmed` and `resetTimer` are writable, and only for the
+   *  two-tap progress reset — see the accessor note in journeyContext.
+   *  Everything else either is a shared object mutated by reference
+   *  (`save.state.settings.*`) or is called. */
+  private settingsContext(): SettingsActionContext {
+    const self = this;
+    return {
+      save: self.save,
+      hud: self.hud,
+      audio: self.audio,
+      telemetry: self.telemetry,
+      get resetArmed() {
+        return self.resetArmed;
+      },
+      set resetArmed(value) {
+        self.resetArmed = value;
+      },
+      get resetTimer() {
+        return self.resetTimer;
+      },
+      set resetTimer(value) {
+        self.resetTimer = value;
+      },
+      applySettings: () => self.applySettings(),
+      applySkin: () => self.applySkin(),
+      bump: () => self.bump(),
+    };
+  }
+
+  /** Settings + danger-zone actions. The table lives in ./actions/settings.
+   *  Returns true when the action was consumed. */
   private handleSettingsEvent(action: string, id: string): boolean {
-    switch (action) {
-      case "set-mute":
-        this.save.state.settings.mute = !this.save.state.settings.mute;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-doubletap":
-        if (!this.save.hasUpgrade("doubletap")) return true;
-        this.save.state.settings.doubleTapBoost = !this.save.state.settings.doubleTapBoost;
-        this.save.persist();
-        this.bump();
-        return true;
-      case "set-music":
-        this.save.state.settings.music = !this.save.state.settings.music;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-music-vol": {
-        const cur = this.save.state.settings.musicVolume;
-        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
-        this.save.state.settings.musicVolume = next;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      }
-      case "set-sfx-vol": {
-        const cur = this.save.state.settings.sfxVolume;
-        const next = id !== "" && Number.isFinite(Number(id)) ? Math.max(0, Math.min(1, Number(id) / 100)) : cur >= 1 ? 0 : Math.min(1, Math.round((cur + 0.25) * 100) / 100);
-        this.save.state.settings.sfxVolume = next;
-        this.save.persist();
-        this.applySettings();
-        this.audio.ding();
-        return true;
-      }
-      case "set-track": {
-        const cur = this.save.state.settings.musicTrack;
-        const next = id === "shuffle" ? "shuffle" : id !== "" && Number.isInteger(Number(id)) && Number(id) >= 0 && Number(id) < TRACK_NAMES.length ? Number(id) : cur === "shuffle" ? 0 : cur >= TRACK_NAMES.length - 1 ? "shuffle" : cur + 1;
-        this.save.state.settings.musicTrack = next;
-        this.save.persist();
-        this.applySettings();
-        this.audio.uiTick();
-        return true;
-      }
-      case "set-music-style": {
-        this.save.state.settings.musicStyle =
-          id === "procedural" || id === "songbook"
-            ? id
-            : this.save.state.settings.musicStyle === "songbook"
-              ? "procedural"
-              : "songbook";
-        this.save.persist();
-        this.applySettings();
-        this.audio.uiTick();
-        return true;
-      }
-      case "set-haptics":
-        this.save.state.settings.haptics = !this.save.state.settings.haptics;
-        this.save.persist();
-        this.bump();
-        return true;
-      case "dismiss-onboarding":
-        // Explicit skip on the "START HERE" route — once dismissed it stays
-        // gone even though `runsPlayed < 2` would otherwise keep showing it.
-        this.save.state.settings.dismissedOnboarding = true;
-        this.save.persist();
-        this.bump();
-        return true;
-      case "set-motion":
-        this.save.state.settings.reduceMotion = !this.save.state.settings.reduceMotion;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-colorassist":
-        this.save.state.settings.colorAssist = !this.save.state.settings.colorAssist;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-soft-camera":
-        this.save.state.settings.softCamera = !this.save.state.settings.softCamera;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-bigtext":
-        this.save.state.settings.bigText = !this.save.state.settings.bigText;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-tap-toggle-dive":
-        this.save.state.settings.tapToggleDive = !this.save.state.settings.tapToggleDive;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      case "set-quality": {
-        const order = ["auto", "high", "low"] as const;
-        const cur = this.save.state.settings.quality;
-        this.save.state.settings.quality = id === "auto" || id === "high" || id === "low" ? id : order[(order.indexOf(cur) + 1) % order.length]!;
-        this.save.persist();
-        this.applySettings();
-        return true;
-      }
-      case "reset-progress":
-        if (!this.resetArmed) {
-          this.resetArmed = true;
-          this.resetTimer = 3;
-        } else {
-          this.resetArmed = false;
-          this.save.resetProgress();
-          this.applySkin();
-          this.applySettings();
-          this.hud.toast("Progress reset", "warn");
-          this.telemetry.track("progress_reset", {});
-        }
-        this.bump();
-        return true;
-      default:
-        return false;
-    }
+    return settingsAction(this.settingsContext(), action, id);
   }
 
   /**

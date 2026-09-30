@@ -311,6 +311,12 @@ textarea {
   color: var(--text-on-sky);
   text-shadow: 0 2px 0 rgba(42, 28, 40, 0.18), 0 8px 18px rgba(20, 20, 40, 0.25);
   line-height: 1.1;
+  /* Tabular figures, on the BASE rule rather than only on `.hud-header`.
+     Distance and coins are the two readouts that change every single frame,
+     and in proportional figures a 1 -> 11 digit swap shoves the whole value
+     sideways — the motion draws the eye to a change that carries no meaning.
+     The header already asked for this; the flight HUD never did. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* The coin counter's glyph is the SAME inline SVG the menus use, injected in
@@ -2186,6 +2192,9 @@ fieldset.squad-fields {
   transform: none;
   margin: 0;
   font: 700 14px/1 var(--body);
+  /* After the shorthand, because the shorthand resets it. The streak counter
+     climbs continuously, so proportional figures make it twitch on every tick. */
+  font-variant-numeric: tabular-nums;
   padding: 4px 7px;
   border-radius: 999px;
   background: rgba(20, 16, 32, 0.42);

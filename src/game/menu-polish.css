@@ -3887,6 +3887,14 @@ button.upsell:active,
 /* ── Stat value / coin display ───────────────────────────────────────────────── */
 .stat-value {
   font: 700 22px/1.1 var(--display) !important;
+  /* The `font` shorthand above is !important, which makes every longhand it
+     resets !important too — including font-variant-numeric, which it resets to
+     `normal`. That silently defeated the tabular-nums on `.stat-value` and on
+     `.hud-header .stat-value`, so distance and coins — the two readouts that
+     change every single frame — were the only live numbers in the HUD still
+     set in proportional figures, and they shifted sideways on every digit
+     change. Restated after the shorthand, and !important to match it. */
+  font-variant-numeric: tabular-nums !important;
   color: var(--text-on-sky) !important;
   text-shadow: 0 2px 0 var(--halo-on-sky), 0 8px 18px rgba(20, 20, 40, 0.78) !important;
 }

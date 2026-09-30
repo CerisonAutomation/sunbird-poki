@@ -180,6 +180,18 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
   allowlist. Each token is defined exactly once across all three sheets.
 - Motion already exists in depth (56 `@keyframes`, 71 `transition` declarations). Check before
   adding more.
+- **The `font` shorthand silently resets `font-variant-numeric`.** Any live number needs tabular
+  figures, and a `font:` shorthand *after* the `tabular-nums` declaration puts it back to
+  `normal` — and when the shorthand is `!important` (as `.stat-value` is in `menu-polish.css`),
+  every longhand it resets inherits that importance, so a plain `tabular-nums` loses to it. This
+  is why distance and coins were the only per-frame readouts still jittering. Declare
+  `font-variant-numeric` *after* any `font` shorthand that can reach the element.
+- **The flight lane belongs to the bird.** The centre 50% × 50% of the viewport is where the
+  character and the immediate threat are rendered; persistent HUD furniture stays out of it. A
+  full-width `> i` progress bar counts as a painted band, not a readout — `.wings-near` drew a
+  340px rule through the middle of the screen until it became a chip in the altitude gauge's
+  column. Check with painted width, not container width: a transparent full-width flex wrapper
+  paints nothing.
 - **Known gap:** `prefers-reduced-motion` is scoped to `.overlay *` and a few elements, so the
   Settings "reduce motion" toggle (`sb-reduce-motion` on `documentElement`, set in `HUD.ts`) does
   not reach the *flight* HUD — speed lines, particles, trail, impact popups. Fixing it needs

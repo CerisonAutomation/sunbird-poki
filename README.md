@@ -2,7 +2,12 @@
 
 > A one-button, side-scrolling arcade glider. Hold to dive, release to soar, chase the daylight across procedurally generated islands.
 
-[![CI](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml/badge.svg)](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml)
+> **No GitHub Actions.** The workflow was removed: the account is billing-blocked
+> and every job sat red without ever starting, which is worse than no gate —
+> it looks like a signal and is not one. The checks it ran are not gone, they
+> are local and stricter: `pnpm gate:local` runs the same eight steps and a
+> `pre-push` hook enforces it. CI cannot be trusted to have run; the local gate
+> is the gate.
 
 > **This is the Poki fork; full infrastructure in parent monorepo.** This
 > checkout ships the client and the Vercel leaderboard functions (`api/`)

@@ -175,6 +175,15 @@ const RING_CHAIN_WINDOW = 2.8;
 
 const ASLEEP: BirdStepOpts = { diving: false, fever: false, speedMult: 1, boost: false };
 
+/* Mode surge strengths, in m/s of extra cap headroom. These used to be velocity
+ * injections with `Math.min(234, …)` guards; see `BirdStepOpts.speedBonus`. */
+const SLINGSHOT_BONUS = 16;
+const TYPHOON_BONUS = 10;
+const SLALOM_WARP_BONUS = 18;
+const COIN_TURBO_BONUS = 6;
+/** How fast a one-shot surge decays back to nothing, m/s per second. */
+const MODE_BONUS_DECAY = 45;
+
 /** Per-biome intro hint shown for ~9 s when the player first enters a world. */
 const BIOME_INTRO_HINTS: Record<string, string> = {
   green:   "HOLD to dive · RELEASE to launch — master the rhythm",
@@ -288,6 +297,10 @@ export class Game {
   private climbRelief = 0;
   /** Seconds of extra daylight the run has earned by clearing walls. */
   private climbDaylight = 0;
+    /** Transient cap headroom from the active mode's surge mechanic, in m/s.
+     * Decays every step and is applied through `BirdStepOpts.speedBonus`; see
+     * `Bird` for why it is a cap raise and not a velocity injection. */
+    private modeSpeedBonus = 0;
   /** Seconds of extra daylight bought by a store boost. */
   private boostDaylight = 0;
   private screen: UiScreen = "main";
@@ -1222,23 +1235,23 @@ export class Game {
     bootStage("flight");
     this.bump();
     this.pushHud();
-    // First use: ask for a name only where the player can actually choose one.
-    // Portal editions roll a curated call sign instead of accepting typed text
-    // (edition CUSTOM_PILOT_NAMES), so a "confirm your name" screen there has
-    // nothing to confirm — it is one screen and one tap between the visitor and
-    // the first `gameplayStart()`, and that first gameplay event is exactly what
-    // Poki measures as conversion to play. The generated name is accepted
-    // silently instead; the dice button on the board page can still reroll it, and
-    // `pilotNameChosen` stays false so a signed-in player is still adopted by
-    // `adoptPortalIdentity()` when the portal identity resolves.
+    // First use: never put a screen between the visitor and the first
+    // `gameplayStart()`. This used to branch on `CUSTOM_PILOT_NAMES` and send
+    // the portal build to `nameEntry` — so the edition whose own comment
+    // argued the gate "is one screen and one tap between the visitor and the
+    // first gameplayStart(), and that first gameplay event is exactly what
+    // Poki measures as conversion to play" was the one edition that showed it.
+    // The flag meant the opposite of what its name said, and the audit is right
+    // that the two comments on this path contradicted the shipped build.
+    //
+    // The generated call sign is accepted silently instead. Nothing is lost:
+    // the board page still has rename and reroll, so a player who wants a name
+    // picks one when they have an incentive to, and `pilotNameChosen` stays
+    // false so a signed-in player is still adopted by `adoptPortalIdentity()`
+    // when the portal identity resolves.
     if (!this.save.state.pilotNameCustomized && this.state === "menu") {
-      if (CUSTOM_PILOT_NAMES) {
-        this.setScreen("nameEntry");
-        this.hud.setValue("pilotNameInput", this.pilotName);
-      } else {
-        this.save.state.pilotNameCustomized = true;
-        this.save.persist();
-      }
+      this.save.state.pilotNameCustomized = true;
+      this.save.persist();
     }
   }
 
@@ -1665,12 +1678,18 @@ export class Game {
       this.activateManualBoost("stall_rescue");
     }
 
-    this.bird.step(
-      dt,
-      {
-        diving,
-        fever: this.feverOn,
-        speedMult: skin.speedMult * this.challengeMods.speedMult * this.escalateMult(),
+    // Decay the mode surge before the step that spends it. A surge is a burst,
+        // not a mode: without this, a slingshot landing in a typhoon would hold its
+        // headroom until the next one fired.
+        this.modeSpeedBonus = Math.max(0, this.modeSpeedBonus - MODE_BONUS_DECAY * dt);
+    
+        this.bird.step(
+          dt,
+          {
+            diving,
+            fever: this.feverOn,
+            speedMult: skin.speedMult * this.challengeMods.speedMult * this.escalateMult(),
+            speedBonus: this.modeSpeedBonus,
         boost: this.boostTimer > 0 || this.powers.boostOn(),
         liftMult: this.powers.liftMult() * this.masteryPerk.liftMult,
         // Slipstream: tucking behind a rival genuinely reduces your drag.
@@ -1825,7 +1844,7 @@ export class Game {
             this.audio.chirp();
             this.haptic([15, 10, 25]);
             this.popupAtBird(`SLINGSHOT! ${iconGlyph("rocket")}`, "perfect");
-            this.bird.vx = Math.min(234, this.bird.vx + 6);
+            this.modeSpeedBonus = Math.max(this.modeSpeedBonus, SLINGSHOT_BONUS);
             this.particles.emitWind(this.bird.x, this.bird.y + 0.5, 1.6);
           }
         }
@@ -1847,12 +1866,12 @@ export class Game {
 
       // Typhoon blitz storm tailwinds
       if (this.modeId === "pvp_typhoon" && !this.bird.asleep && !this.bird.grounded) {
-        this.bird.vx = Math.min(235, this.bird.vx + dt * 4.0);
+        this.modeSpeedBonus = Math.max(this.modeSpeedBonus, TYPHOON_BONUS);
       }
 
       // Sky Slalom launch surge
       if (this.modeId === "pvp_slalom" && this.bird.justLaunched && this.lastLaunch?.rating === "perfect") {
-        this.bird.vx = Math.min(240, this.bird.vx + 6.5);
+        this.modeSpeedBonus = Math.max(this.modeSpeedBonus, SLALOM_WARP_BONUS);
         this.popupAtBird(`WARP SLALOM! ${iconGlyph("lightning")}`, "fever");
         this.particles.emitWind(this.bird.x, this.bird.y, 1.4);
       }
@@ -2233,7 +2252,7 @@ export class Game {
         this.markFunnel("first_reward");
         this.bonus += 4 * COIN_VALUE * value;
         if (this.modeId === "pvp_coinrush") {
-          this.bird.vx = Math.min(225, this.bird.vx + 2.5);
+          this.modeSpeedBonus = Math.max(this.modeSpeedBonus, COIN_TURBO_BONUS);
           this.popupAtBird(`COIN TURBO! ${iconGlyph("lightning")}`, "splash");
         }
         this.awardXp(XP_RULES.coin);
@@ -4195,8 +4214,12 @@ export class Game {
   }
 
   private resetRun(idle: boolean): void {
-    this.attractPilot.reset();
-    this.flightCues.reset();
+      this.attractPilot.reset();
+      this.flightCues.reset();
+      // A mode surge belongs to the run that earned it. It self-limits to well
+      // under a second, but a fresh run must not open with headroom the player
+      // has not earned yet.
+      this.modeSpeedBonus = 0;
     // A new run inherits nothing from the last one: the card's progress strip,
     // the mission diff baseline and the once-per-quest "just banked" flags are
     // all per-run, and carrying them over would replay the previous flight's
@@ -5808,9 +5831,10 @@ export class Game {
     this.demoTime = 0;
     this.demoStuck = 0;
     this.setState("menu");
-    // Show name entry on first use
-    const screen = !this.save.state.pilotNameCustomized ? "nameEntry" : "main";
-    this.setScreen(screen);
+    // Back to the menu: never the name gate. This one was not even conditional
+    // on the edition, so a player who returned to the menu before choosing a
+    // name was re-intercepted here even after the first-use path stopped.
+    this.setScreen("main");
     this.camera.setIntro(1);
   }
 
@@ -5990,13 +6014,9 @@ export class Game {
       this.restoreMessage = "Hmm, that code isn't valid.";
     } else if (!this.save.redeem(code)) {
       this.restoreMessage = "That code was already used.";
-    } else if (promo.type === "gold") {
-      this.grantGold("promo");
-      this.restoreMessage = "Gold unlocked with code ✦";
-    } else if (promo.type === "vip") {
-      this.grantVip("promo");
-      this.restoreMessage = "VIP unlocked with code ♛";
     } else {
+      // Coins only. The gold and vip arms that used to live here granted paid
+      // entitlements from a table that ships in the bundle — see `Promo`.
       this.save.addCoins(promo.amount);
       this.audio.ding();
       this.restoreMessage = `+${promo.amount} coins added.`;

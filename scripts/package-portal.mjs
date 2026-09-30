@@ -156,6 +156,22 @@ for (const junk of ["sw.js", "manifest.webmanifest", "service-worker.js"]) {
   }
 }
 
+// Removing the file is only half of it: `index.html` still pointed at
+// `manifest.webmanifest`, so the portal build shipped a <link rel=manifest>
+// resolving to a file that is no longer there and 404ed on every load. The
+// upload folder had its HTML rewritten already, which is why the shipped zip
+// was clean and `dist-poki/` — the folder anyone serves directly to check the
+// build — was the one left dangling.
+const builtIndex = path.join(src, "index.html");
+if (existsSync(builtIndex)) {
+  const before = readFileSync(builtIndex, "utf8");
+  const after = before.replace(/[ \t]*<link\b[^>]*\brel=["']manifest["'][^>]*>\r?\n?/gi, "");
+  if (after !== before) {
+    writeFileSync(builtIndex, after);
+    console.log(`  · removed <link rel="manifest"> from ${src}/index.html`);
+  }
+}
+
 /* --------------------------------------------------------- the zip -------- */
 
 const stage = `dist-${portal}-zip`;

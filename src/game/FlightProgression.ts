@@ -8,9 +8,16 @@ export function flightProgression(island: number): { hillScale: number; rhythmSc
   return { hillScale: 1 + progress * 0.32, rhythmScale: 1 + progress * 0.24 };
 }
 
+/**
+ * The asymptote of `endlessSpeedScale`. Exported because the anti-cheat speed
+ * ceiling has to be able to name the largest scale this function can ever
+ * return; it used to inline its own `0.55` and drift from the real curve.
+ */
+export const ENDLESS_SPEED_SCALE_MAX = 1.55;
+
 export function endlessSpeedScale(island: number, runSeconds: number): number {
   const pressure = Math.max(0, island) * 0.055 + Math.max(0, runSeconds) / 600;
-  return 1 + 0.55 * (1 - Math.exp(-pressure));
+  return 1 + (ENDLESS_SPEED_SCALE_MAX - 1) * (1 - Math.exp(-pressure));
 }
 
 export function terrainDifficulty(requested: number): number {

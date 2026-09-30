@@ -1,4 +1,5 @@
-import { BOOST_EXTRA_SPEED, MAX_SPEED_FEVER } from "./constants";
+import { BOOST_EXTRA_SPEED, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER } from "./constants";
+import { ENDLESS_SPEED_SCALE_MAX } from "./FlightProgression";
 import type { ScoreSubmission } from "./Leaderboard";
 
 export type VerificationResult = {
@@ -11,22 +12,44 @@ export type VerificationResult = {
  * The fastest a run may legally average, derived from the physics rather than
  * typed in.
  *
- * It used to be a literal `120`, which is below the bird's own ceiling:
- * `MAX_SPEED_FEVER` is 128 and a boost adds 42, so a legal fever-and-boost run
- * tops out near 170 m/s. Every such run averaged out above 120 and was
- * quarantined as cheating — the gate was rejecting exactly the players the
- * leaderboard is for, and a literal can never be re-checked when the physics
- * moves. The floor is now the physics floor.
+ * It used to be a literal `120`, which is below the bird's own ceiling, so
+ * every fever-and-boost run was quarantined as cheating. Replacing it with
+ * `MAX_SPEED_FEVER + BOOST_EXTRA_SPEED` fixed that instance but left the same
+ * bug one layer down: `Bird.step` computes its cap as
+ *
+ *     (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (boost ? BOOST_EXTRA_SPEED : 0)
+ *
+ * and `opts.speedMult` is NOT 1 in a real run. `Game.fixedUpdate` passes
+ * `skin.speedMult * challengeMods.speedMult * escalateMult()`, so a 1.08 skin
+ * in a long escalating run reaches a cap of
+ * 128 * 1.08 * 1.55 + 42 = 256.3 m/s. The gate said 170, so the fastest
+ * legitimate runs — exactly the players a leaderboard is for — were still being
+ * quarantined, and `MIN_DURATION_MS_PER_100M` was derived from the same wrong
+ * number, so both checks agreed with each other and disagreed with the game.
+ *
+ * So the ceiling multiplies out the same three factors the physics does. The
+ * challenge half is omitted deliberately: `CHALLENGE_MODS` only ever *lowers*
+ * speed (`heavy_wings` is 0.95, everything else 1), so it cannot raise the cap.
+ * `anticheat.test.ts` drives the real `Bird` at these settings and fails if this
+ * ceiling is ever lower than what the bird actually reaches.
  */
-const MAX_SPEED_MPS = MAX_SPEED_FEVER + BOOST_EXTRA_SPEED;
+const MAX_SPEED_MPS = MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * ENDLESS_SPEED_SCALE_MAX + BOOST_EXTRA_SPEED;
 
 /**
  * The slowest a run may legally average, as ms per 100 m. Derived from the same
- * ceiling so the two checks cannot contradict each other — the old companion
- * constant (500 ms/100 m) implied a 200 m/s ceiling while the speed gate said
- * 120, so one of the two could never fire.
+ * ceiling so the two checks cannot contradict each other.
  */
 const MIN_DURATION_MS_PER_100M = (100 / MAX_SPEED_MPS) * 1000;
+
+/**
+ * Exported so `anticheat.test.ts` can read the client's real numbers back and
+ * compare them with `server/src/anticheat/limits.ts`. The server is the side
+ * that actually decides, and the two had drifted apart silently: the server
+ * still rejected above 120 m/s while the client had already moved to 170, so a
+ * legal fast run was accepted locally and then thrown away on submission.
+ */
+export const ANTICHEAT_MAX_SPEED_MPS = MAX_SPEED_MPS;
+export const ANTICHEAT_MIN_MS_PER_100M = MIN_DURATION_MS_PER_100M;
 
 export function verifyRunSubmission(
   submission: Partial<ScoreSubmission> & { distance?: number; score?: number; durationMs?: number },

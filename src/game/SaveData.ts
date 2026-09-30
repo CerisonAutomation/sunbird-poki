@@ -249,6 +249,28 @@ export type ChallengeState = {
   dailyChallengeFailures: number;
 };
 
+/**
+ * The OS motion preference, used only to seed a player who has never opened
+ * Settings.
+ *
+ * The CSS half of reduced-motion already reads `prefers-reduced-motion` on its
+ * own, which is why this looked handled. The game's half cannot: the same
+ * setting gates screen shake, hit-stop, the 0.45 slow-motion, camera punch,
+ * dolly zoom and `flash()` in `Game`, and none of that is reachable from a
+ * stylesheet — CSS cannot stop a particle emitter or a camera punch. So a
+ * player who set the OS flag got the full treatment until they happened to find
+ * the in-game toggle. Seeding the default respects it once instead of asking
+ * twice.
+ *
+ * Deliberately initial-only: once a value is in the save, the player's own
+ * choice in Settings wins, including if they turn motion back on.
+ */
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   mute: false,
   doubleTapBoost: true,
@@ -258,7 +280,7 @@ const DEFAULT_SETTINGS: Settings = {
   musicTrack: "shuffle",
   musicStyle: "songbook",
   haptics: true,
-  reduceMotion: false,
+  reduceMotion: prefersReducedMotion(),
   colorAssist: false,
   softCamera: false,
   bigText: false,

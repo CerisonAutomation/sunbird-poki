@@ -112,6 +112,13 @@ export const STICK_ACCEL_GLIDE = 13;
 
 export const MAX_SPEED = 108;
 export const MAX_SPEED_FEVER = 128;
+/**
+ * The highest `speedMult` any skin may carry. The anti-cheat ceiling multiplies
+ * by this, so it is a ceiling on the *content* as well as on the gate: a skin
+ * added above it would be legal to fly and illegal to submit. Pinned by
+ * `anticheat.test.ts`, which fails if `SKINS` ever exceeds it.
+ */
+export const MAX_SKIN_SPEED_MULT = 1.08;
 export const BIRD_RADIUS = 0.9;
 export const MIN_KEEP_SPEED = 12; // higher floor: bird never stalls on uphill terrain
 

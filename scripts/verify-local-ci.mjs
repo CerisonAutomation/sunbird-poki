@@ -134,7 +134,7 @@ console.log(`\n${c.bold}${results.length - failed.length}/${results.length} pass
 
 if (failed.length) {
   console.log(`\n${c.red}not pushing:${c.off} ${failed.map((f) => f.step.name).join(", ")}`);
-  console.log(`${c.dim}These are the same checks .github/workflows/ci.yml runs. Fix them, or if the`);
+  console.log(`${c.dim}These are the same checks the removed CI workflow used to run. Fix them, or if the`);
   console.log(`failure is environmental (browsers, network), re-run with --only= to isolate a step.${c.off}`);
   process.exit(1);
 }

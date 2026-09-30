@@ -46,6 +46,23 @@ export type BirdStepOpts = {
   fever: boolean;
   speedMult: number;
   boost: boolean;
+  /**
+   * Transient extra cap headroom in m/s, for mode mechanics (draft slingshot,
+   * typhoon tailwind, slalom warp, coin turbo).
+   *
+   * This exists because those mechanics used to write `bird.vx` directly with a
+   * `Math.min(234, …)`-style guard. Every one of those literals was above every
+   * reachable cap, so the `Math.min` never did anything, and `step()` re-clamped
+   * total speed to `cap` on the very next 8.3 ms substep — the boost was deleted
+   * before it was ever visible. A mechanic that pays out a banner and a particle
+   * burst for no speed is worse than one that is absent, because the player
+   * learns the mode rewards nothing.
+   *
+   * Raising the cap is the only version that survives: the bird still obeys one
+   * speed limit, so this cannot compound across frames the way an injected
+   * velocity could.
+   */
+  speedBonus?: number;
   /** wing boost / golden wings — multiplies speed-borne lift */
   liftMult?: number;
   /** long glide — scales air drag down */
@@ -442,7 +459,9 @@ export class Bird {
     this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
     const gMult = opts.gravityMult ?? 1;
     const cap =
-      (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (opts.boost ? BOOST_EXTRA_SPEED : 0);
+          (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult +
+          (opts.boost ? BOOST_EXTRA_SPEED : 0) +
+          (opts.speedBonus ?? 0);
 
     if (was) {
       /* ---------- carving the surface ---------- */

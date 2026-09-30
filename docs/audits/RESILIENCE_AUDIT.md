@@ -88,7 +88,7 @@ Where the competition still leads: cloud save/account ecosystems (CrazyGames Dat
 
 | Gate (ISO 25010 / OWASP / WCAG / CWV framing) | State | Evidence |
 |---|---|---|
-| Critical acceptance tests pass | ✅ 1290/1290 unit, e2e suites green in CI | `.github/workflows/ci.yml`, `pvp-live` job |
+| Critical acceptance tests pass | ✅ unit suite green (2,630 passing, 9 skipped). e2e/PvP-live suites are **opt-in, not gated** — the CI workflow that ran them has been deleted | `pnpm gate:local` / `pnpm gate:local:full` |
 | 0 critical/high security findings; secrets out of source | ✅ no secrets in repo; HMAC signing; CSP/HSTS/XFO headers | `vercel.json` L69–93, `LEGAL_SECURITY.md` |
 | WCAG 2.2 AA | 🟡 strong baseline (keyboard, RTL, reduced-motion, colorblind, large-text, semantic controls) | `input-standards`, `i18n`, visual baselines |
 | Performance budgets in CI | ✅ frame-ceiling jank gate (max < ceiling), boot-time trend | `e2e/perf.spec.ts` |

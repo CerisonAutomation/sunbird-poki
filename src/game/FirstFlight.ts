@@ -9,7 +9,6 @@
  */
 
 import { t } from "../i18n";
-import { iconGlyph } from "./MenuIcons";
 
 export type CoachState = {
   /** Big instruction line, empty when the coach is idle/done. */
@@ -49,7 +48,13 @@ export class FirstFlight {
       case 0:
         // Teach the dive: hold on a meaningful downslope for a cumulative beat.
         if (sig.diving && (sig.slope < -0.05 || !sig.grounded)) this.diveHeld += dt;
-        if (this.diveHeld >= 0.55) this.step = 1;
+        // `sig.grounded` is load-bearing. The player's thumb is already down
+        // when they tap "Fly now", and that press carries through the frozen
+        // countdown, so without this the step-0 bar began filling at menu
+        // time and the coach could announce "RELEASE at the top to launch"
+        // before the bird had ever left the ground — teaching a gesture for
+        // an event the player has not seen.
+        if (this.diveHeld >= 0.55 && sig.grounded) this.step = 1;
         break;
       case 1:
         // Teach the launch: an actual ramp launch, not a timer.
@@ -81,8 +86,8 @@ export class FirstFlight {
     if (!this.active) return { text: "", step: -1, steps: STEPS, justCompleted: false };
     const text = [
       tapMode
-        ? `↓ ${t("onboarding.tapToDive", undefined, "TAP to dive down the hill")}`
-        : `↓ ${t("onboarding.holdToDive", undefined, "HOLD to dive down the hill")}`,
+        ? `↓ ${t("onboarding.tapToDive", undefined, "TAP to dive — pick up speed")}`
+        : `↓ ${t("onboarding.holdToDive", undefined, "HOLD to dive — pick up speed")}`,
       tapMode
         ? `↑ ${t("onboarding.tapToLaunch", undefined, "TAP again at the top to launch")}`
         : `↑ ${t("onboarding.releaseToLaunch", undefined, "RELEASE at the top to launch")}`,
@@ -90,10 +95,15 @@ export class FirstFlight {
       // over before it can be done - and it had no tapMode branch, so a
       // player who enabled tap-to-toggle was told to RELEASE a game with
       // nothing to release.
-      `${iconGlyph("bird")} ${
+      // No leading glyph: `iconGlyph("bird")` is U+2B28, a Dingbats-block
+      // addition from Unicode 8 with patchy coverage on the Android and
+      // desktop font stacks this ships to — a tofu box on the exact platform
+      // Poki targets. Every other icon in the flight HUD is an SVG; the
+      // sentence carries the meaning on its own.
+      `${
         tapMode
-          ? t("onboarding.tapSoar", undefined, "TAP to soar - stay airborne!")
-          : t("onboarding.soarInAir", undefined, "RELEASE & SOAR - stay airborne!")
+          ? t("onboarding.tapSoar", undefined, "Soar — stay airborne!")
+          : t("onboarding.soarInAir", undefined, "Soar — stay airborne!")
       }`,
     ][this.step]!;
     return { text, step: this.step, steps: STEPS, justCompleted: false };

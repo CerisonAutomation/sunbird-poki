@@ -948,8 +948,8 @@ export class Bird {
         // branch are untouched — they solve a different failure (the launch
         // not firing at all, and the GROUNDED pop scoring zero on a long ramp)
         // and sit upstream of this branch.
-        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown);
-        this.vy = applyReleaseKick(this.vy, this.kickCooldown);
+        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown, this.speed());
+        this.vy = applyReleaseKick(this.vy, this.kickCooldown, this.speed());
         this.kickCooldown = RELEASE_KICK_COOLDOWN;
       }
 

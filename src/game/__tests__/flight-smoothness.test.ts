@@ -171,7 +171,46 @@ describe("the physics history a render interpolates against exists", () => {
     // And each of the other two states gets one too, so a mid-race transition
     // (dying, or taking a continue) cannot drop the bird a step on the first
     // frame after it.
-    expect(src.split("this.prevBirdX = this.bird.x;").length - 1, "expected one snapshot per accumulator loop").toBe(3);
+    //
+    // Checked per loop rather than by counting the assignments. A count of
+    // exactly 3 was the old form, and it measured the wrong thing: the
+    // property that matters is that EVERY accumulator loop snapshots, and a
+    // count cannot tell "three loops, one each" from "one loop, three". A
+    // fourth snapshot elsewhere is not a regression — `resetRun` seeds the
+    // snapshot for the same reason, and is asserted on its own below.
+    const loopStarts: number[] = [];
+    for (let at = src.indexOf("while (this.acc >= PHYS_DT"); at !== -1;
+      at = src.indexOf("while (this.acc >= PHYS_DT", at + 1)) loopStarts.push(at);
+    expect(loopStarts.length, "expected one accumulator loop per frame state").toBe(3);
+    for (const [i, at] of loopStarts.entries()) {
+      const loopBody = src.slice(at, loopStarts[i + 1] ?? src.length);
+      expect(loopBody, `accumulator loop ${i + 1} does not snapshot the bird`)
+        .toContain("this.prevBirdX = this.bird.x;");
+      expect(loopBody, `accumulator loop ${i + 1} does not snapshot the bird`)
+        .toContain("this.prevBirdY = this.bird.y;");
+    }
+
+    // `resetRun` teleports the bird to the start line, but no physics step runs
+    // until GO and `interp` is 0 while the accumulator is empty — which is the
+    // whole countdown. Without re-seeding here, the bird mesh and the camera
+    // following it are drawn at the PREVIOUS run's final position for the
+    // entire countdown and then snap on the first frame after GO. Measured on a
+    // second run: a 92-unit jump in one 16.7 ms frame where cruising at 48 m/s
+    // should move 0.8 — and the magnitude is however far the last run went.
+    const resetAt = src.indexOf("this.bird.reset(this.startX, y);");
+    expect(resetAt, "resetRun's bird.reset was not found").toBeGreaterThan(-1);
+    // Slice to the NEXT statement, not by a fixed character count: a fixed
+    // window is silently too small the moment someone documents the line they
+    // just added, which is exactly how a guard like this decays into one that
+    // passes while asserting nothing.
+    const afterResetEnd = src.indexOf("this.bird.vx = START_SPEED;", resetAt);
+    expect(afterResetEnd, "the end of the resetRun re-seed block was not found")
+      .toBeGreaterThan(resetAt);
+    const afterReset = src.slice(resetAt, afterResetEnd);
+    expect(afterReset, "resetRun does not re-seed the render interpolation snapshot")
+      .toContain("this.prevBirdX = this.bird.x;");
+    expect(afterReset, "resetRun does not re-seed the render interpolation snapshot")
+      .toContain("this.prevBirdY = this.bird.y;");
   });
 
   it("render passes the interpolation alpha through to syncVisual", () => {

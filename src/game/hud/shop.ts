@@ -60,7 +60,7 @@ function renderSkinCollections(s: Pick<HudSnapshot, "portalName" | "skins" | "wa
       return `<details class="collection ${complete ? "complete" : ""}" data-ref="collection-${c.id}${filtered ? "-filtered" : ""}" ${filtered ? "open" : ""}>
         <summary class="coll-head"><span class="collection-art">${menuIcon(c.id === "tournament" ? "trophy" : c.id === "achievement" ? "medal" : c.id === "cosmic" ? "endless" : c.id === "premium" ? "rank" : c.id === "elements" ? "boost" : c.id === "nature" ? "atlas" : "bird")}</span><b>${c.name}</b>
         <span class="coll-count">${complete ? "✓ complete" : `${got}/${collection.length} · bonus ● ${bonus}`}</span></summary>
-        <div class="skin-grid">${skins.map((v) => renderSkinCard(v, portal, browse.preview, s.wallet)).join("")}</div>
+        <div class="skin-grid">${skins.map((v) => renderSkinCard(v, portal, s.wallet)).join("")}</div>
       </details>`;
     })
     .join("");
@@ -94,7 +94,7 @@ export function skinAction(v: SkinView, portal: boolean, wallet: number): string
   return action + (!v.owned && !v.locked && !d.prizeOnly && !v.affordable ? `<small class="purchase-shortfall">${Math.max(0, price - wallet)} more coins</small>` : "");
 }
 
-function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: number): string {
+function renderSkinCard(v: SkinView, portal: boolean, wallet: number): string {
   const d = v.def, rarity = skinRarity(d);
   // Species and colour together, and a real wingbeat. This card is the product
   // shot: it was 88px, static, and one silhouette for all sixty-nine birds, so
@@ -116,7 +116,7 @@ function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: n
   return `<div class="skin-card r-${rarity.key} ${v.equipped ? "equipped" : ""} ${v.owned ? "owned" : ""} ${v.dealPrice !== undefined ? "deal" : ""}" data-skin="${d.id}"${select}>
     <span class="rarity">${rarity.label}</span>
     ${dealTag}
-    <button class="skin-bird skin-preview" data-ui data-action="preview-skin" data-id="${d.id}" aria-label="Preview ${d.name}" aria-pressed="${preview === d.id}">${birdSvg}<span>Preview</span></button>
+    <div class="skin-bird skin-art">${birdSvg}</div>
     <div class="sk-name">${d.name}</div><div class="sk-perk">${d.perk}</div>${skinStatBars(d)}${skinAction(v, portal, wallet)}</div>`;
 }
 
@@ -157,7 +157,7 @@ function renderTrailCard(v: ShopTrailView, wallet: number): string {
 export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dailyFlash" | "gold" | "nestLevel" | "nestMaxed" | "nestMult" | "nestPrice" | "portalName" | "shopTrails" | "skins" | "stipendClaimed" | "vip" | "wallet" | "wingmanBundle">, browse: ShopBrowse): string {
   const owned = s.skins.filter((v) => v.owned).length;
   const armedBoosts = s.boosts.filter((b) => b.armed);
-  const equippedSkin = s.skins.find(v => v.def.id === browse.preview) ?? s.skins.find(v => v.equipped);
+  const equippedSkin = s.skins.find(v => v.equipped);
   const matches = browseSkins(s.skins, browse).length;
   const heroSvg = equippedSkin
     ? sunbirdSVG({ palette: skinPalette(equippedSkin.def), shape: skinShape(equippedSkin.def), width: 168, animateWings: true, title: equippedSkin.def.name })
@@ -226,7 +226,6 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
               ? `<button class="primary-btn gold" data-ui data-action="buy-skin" data-id="${flashDef.id}">Unlock · ● ${flash.price}</button>`
               : `<span class="tag need">Need ● ${flash.price - s.wallet}</span>`
           }
-          <button class="mini-btn" data-ui data-action="preview-skin" data-id="${flashDef.id}">Preview</button>
         </div>
       </div>
     </div>
@@ -235,7 +234,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
       ${menuHorizon()}
       <div class="shop-hero-bird">${heroSvg}</div>
       <div class="shop-hero-info">
-        <small class="shop-preview-label">${equippedSkin?.equipped ? "YOUR EQUIPPED BIRD" : "BIRD PREVIEW · NOT EQUIPPED"}</small>
+        <small class="shop-preview-label">YOUR EQUIPPED BIRD</small>
         <div class="shop-hero-name" tabindex="-1">${equippedSkin ? equippedSkin.def.name : "Sunbird"}</div>
         <div class="shop-hero-perk">${equippedSkin ? equippedSkin.def.perk : "The original. Fast, honest, unstoppable."}</div>
         ${equippedSkin ? `<div class="shop-preview-action">${skinAction(equippedSkin, s.portalName !== "none", s.wallet)}</div>` : ""}
@@ -252,7 +251,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     <div class="section-title shop-catalog-divider">${t("hud.renderShop.BCatalog", undefined, "Browse catalog ")}<small>${t("hud.renderShop.BBoostsTrails", undefined, "Birds · Boosts · Trails")}</small></div>
     <nav class="shop-jumps" aria-label="${t("hud.renderPaywall.SSections", undefined, "Shop sections")}">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
 
-    <section class="shop-browser" data-ref="shopBirds" aria-label="Browse birds">
+    <section class="shop-browser" data-ref="shopBirds" aria-label="${t("hud.aria.browseBirds", undefined, "Browse birds")}">
       <div class="section-title shop-section-birds">${t("hud.renderShop.BCollection", undefined, "Bird collection ")}<small>${owned}/${s.skins.length} owned</small></div>
       <label class="field-label" for="shop-search">${t("hud.renderShop.FBird", undefined, "Find a bird")}</label>
       <input id="shop-search" type="search" data-ui data-ref="shopSearch" value="${escapeHtml(browse.query)}" placeholder="Name, collection or perk" maxlength="80" autocomplete="off" />
@@ -261,7 +260,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
       ${renderSkinCollections(s, browse)}
     </section>
 
-    <details class="shop-section" data-ref="shopBoosts"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
+    <details class="shop-section" data-ref="shopBoosts" open><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
       <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
       <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
       ${sectionTitle(null, "Nest", "permanent score multiplier")}
@@ -279,7 +278,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
       </div></div>
     </details>
 
-    <details class="shop-section" data-ref="shopTrails"><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>${t("hud.renderShop.CYoursForever", undefined, "Cosmetic · yours forever")}</span></summary>
+    <details class="shop-section" data-ref="shopTrails" open><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>${t("hud.renderShop.CYoursForever", undefined, "Cosmetic · yours forever")}</span></summary>
       <div class="trail-list">${s.shopTrails.map((t) => renderTrailCard(t, s.wallet)).join("")}</div>
     </details>
 

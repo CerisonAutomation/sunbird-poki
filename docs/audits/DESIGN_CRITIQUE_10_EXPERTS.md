@@ -4,7 +4,9 @@
 
 **Method.** Headless Chromium 153 driven over CDP against the live dev server — the same server the preview pane shows. Eighteen menu destinations × six viewports (640×360, 836×470, 1031×580, 390×844, 844×390, 1280×720), plus launch, sustained flight to 1.65 km, pause, and the continue offer. Every claim below is either a measurement or a captured frame in `shots/`. Nothing here is from reading the source alone.
 
-**Status.** This is not a wishlist. Findings marked ✅ were **fixed and re-verified in-browser** in the same pass; the measurement after the fix is quoted next to the measurement before it. Findings marked ◻ are open, with the reason.
+> **Status:** current evidence — ten-lens visual/design critique, 2026-09-30. Findings marked ✅ were fixed and re-verified in-browser in the same pass; ◻ are open with the reason.
+
+This is not a wishlist. Findings marked ✅ were **fixed and re-verified in-browser** in the same pass; the measurement after the fix is quoted next to the measurement before it. Findings marked ◻ are open, with the reason.
 
 ---
 

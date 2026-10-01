@@ -81,8 +81,8 @@ function snapshot(over: Partial<ShopSnapshot> = {}): ShopSnapshot {
   } as unknown as ShopSnapshot;
 }
 
-const html = (over: Partial<ShopSnapshot> = {}, preview = ""): string =>
-  renderShop(snapshot({ skins: [skinView({ def: STARTER, equipped: true })], ...over }), { ...newShopBrowse(), preview });
+const html = (over: Partial<ShopSnapshot> = {}): string =>
+  renderShop(snapshot({ skins: [skinView({ def: STARTER, equipped: true })], ...over }), newShopBrowse());
 
 /**
  * The DOM node a press on `target` actually reaches.
@@ -190,11 +190,19 @@ describe("shop: selecting a bird", () => {
     }
   });
 
-  it("still lets the art preview and the button equip", () => {
-    // Innermost-first: the wrapper must not swallow the two controls nested
-    // inside it, or the fix would have cost the screen its preview.
+  it("leaves the card art inert and the button as the only way to equip", () => {
+    // The preview control is gone: it scrolled the page back up to a hero
+    // above the catalog, so a tap on a bird moved the view away from the grid
+    // and the only feedback was off-screen. What this still has to protect is
+    // that the whole-card wrapper does not swallow the one real control
+    // nested inside it, so Equip stays reachable.
     const out = html(two);
-    expect(pressTarget(out, BLUEJAY.id, ".skin-preview")).toEqual(["preview-skin", BLUEJAY.id]);
+    // The art carries no action of its own, so a press on it resolves to the
+    // card's own select — which is the point of dressing an owned card as a
+    // control. What must NOT come back is the old preview action, from either
+    // the art or anywhere else on the card.
+    expect(out, "the preview control is still in the shop").not.toContain("preview-skin");
+    expect(pressTarget(out, BLUEJAY.id, ".skin-art")).toEqual(["select-skin", BLUEJAY.id]);
     expect(pressTarget(out, BLUEJAY.id, ".mini-btn")).toEqual(["equip-skin", BLUEJAY.id]);
   });
 

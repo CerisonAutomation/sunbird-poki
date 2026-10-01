@@ -1,5 +1,5 @@
 import { clamp, lerp } from "./math";
-import { ALT_CEILING, ALT_CEILING_FADE, FLARE_MAX_RISE } from "./constants";
+import { ALT_CEILING, ALT_CEILING_FADE, FLARE_MAX_RISE, GLIDE_LIFT_SPEED } from "./constants";
 
 /** Anti-bore lift decay: a good launch stays exciting through a 2.5s plateau,
  * then lift decays to a 0.32 floor over the next 4s (fully decayed by ~6.5s),
@@ -38,8 +38,20 @@ export function dampClimbAtCeiling(vy: number, altitude: number): number {
  * A FLIGHT-CARVING game where release is a real verb. Hold commits you
  * downward; letting go has to hand something back, or the stick is a one-way
  * door and "release at the top of the ramp" is a tip the game does not honour.
+ *
+ * 22 was too much, and the player said so: one release bought 26 m of rise at
+ * cruising speed, against `START_ALTITUDE` of 14 — one button press was worth
+ * nearly two full opening drop-ins, and at 62+ m/s it crossed `ALT_SKY` in a
+ * single press. 15 still clears the "a real launch, not a nudge" bar (the
+ * reported bug was this value reading 0) while the rise at cruise drops from
+ * ~15 m to ~9 m.
+ *
+ * This is the CEILING-independent half of the fix. The other half is that the
+ * kick is now scaled by the bird's speed in `releaseKick`, so it is earned
+ * rather than constant: at 12 m/s the same press buys 0.9 m of rise, at 62 m/s
+ * it buys 15 m.
  */
-export const RELEASE_KICK = 22;
+export let RELEASE_KICK = 15;
 
 /**
  * Ceiling on the climb a release can buy, in m/s.
@@ -50,7 +62,7 @@ export const RELEASE_KICK = 22;
  * its full kick rather than being clipped by the limiter, and only a bird that
  * is already rocketing loses anything.
  */
-export const RELEASE_MAX_RISE = 40;
+export let RELEASE_MAX_RISE = 40;
 
 /**
  * Seconds before another release can buy a kick.
@@ -62,7 +74,7 @@ export const RELEASE_MAX_RISE = 40;
  * a 22 m/s kick), so chaining always loses, and a single honest release is
  * never delayed by it.
  */
-export const RELEASE_KICK_COOLDOWN = 0.35;
+export let RELEASE_KICK_COOLDOWN = 0.35;
 
 /**
  * The upward impulse a release buys, in m/s, given the bird's vertical speed at
@@ -96,16 +108,26 @@ export const RELEASE_KICK_COOLDOWN = 0.35;
  *  - Nothing at all while the cooldown is running, which is what stops the
  *    kick being chained.
  */
-export function releaseKick(vy: number, cooldownLeft: number): number {
+export function releaseKick(vy: number, cooldownLeft: number, speed = Number.POSITIVE_INFINITY): number {
   if (cooldownLeft > 0) return 0;
   if (vy < FLARE_MAX_RISE) return 0; // a dive worth braking — the brake owns it
   if (vy >= RELEASE_MAX_RISE) return 0; // already past the ceiling; nothing to add
+  let share = 1;
   if (vy < 0) {
     // Between the brake's ceiling and level: a drift. Fade from the full kick
     // at level to nothing where the brake takes over.
-    return RELEASE_KICK * clamp(1 + vy / -FLARE_MAX_RISE, 0, 1);
+    share = clamp(1 + vy / -FLARE_MAX_RISE, 0, 1);
   }
-  return RELEASE_KICK;
+  // Scale by how fast the bird is actually travelling, the same way LAUNCH_POP
+  // already does. It used to return the full constant for ANY `vy >= 0`, which
+  // made the release unearned: a bird grinding along the 12 m/s ground conveyor
+  // bought the same 22 m/s as one at the 108 m/s cap, and measured rise was only
+  // 18.0 m at 12 m/s against 29.7 m at 108 — a 9× difference in speed for a 1.4×
+  // difference in reward, because the reward was not connected to anything.
+  // A kick you have to earn by arriving fast is also a kick that cannot be
+  // farmed from a standstill.
+  if (Number.isFinite(speed)) share *= clamp(speed / GLIDE_LIFT_SPEED, 0.25, 1);
+  return RELEASE_KICK * share;
 }
 
 /**
@@ -118,7 +140,33 @@ export function releaseKick(vy: number, cooldownLeft: number): number {
  * +30 m/s and released at the top of the arc was slammed to -14: a 44 m/s
  * discontinuity, invisible in the code and very obvious in the hand.
  */
-export function applyReleaseKick(vy: number, cooldownLeft: number): number {
+export function applyReleaseKick(vy: number, cooldownLeft: number, speed?: number): number {
   if (vy >= RELEASE_MAX_RISE) return vy;
-  return Math.min(vy + releaseKick(vy, cooldownLeft), RELEASE_MAX_RISE);
+  return Math.min(vy + releaseKick(vy, cooldownLeft, speed), RELEASE_MAX_RISE);
+}
+
+/* ---------------- live tuning surface ----------------
+ *
+ * `releaseKick` is pure and reads these three at call time, so reassigning the
+ * bindings is enough to change what the very next release buys — no re-import,
+ * no Bird.ts edit. Same one-writer rule as `constants.applyLiveTune`: an ES
+ * module cannot reassign another module's `let`, so this file owns its own.
+ */
+const releaseApply = {
+  RELEASE_KICK: (v: number) => { RELEASE_KICK = v; },
+  RELEASE_MAX_RISE: (v: number) => { RELEASE_MAX_RISE = v; },
+  RELEASE_KICK_COOLDOWN: (v: number) => { RELEASE_KICK_COOLDOWN = v; },
+};
+
+/** Names `applyReleaseTune` accepts. */
+export type ReleaseTunable = keyof typeof releaseApply;
+
+/** Compiled defaults, captured before any override can reach them. */
+export const RELEASE_TUNE_DEFAULTS: Record<ReleaseTunable, number> = {
+  RELEASE_KICK, RELEASE_MAX_RISE, RELEASE_KICK_COOLDOWN,
+};
+
+/** Write one release tunable. */
+export function applyReleaseTune(key: ReleaseTunable, value: number): void {
+  releaseApply[key](value);
 }

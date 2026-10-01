@@ -42,6 +42,23 @@ const bless = process.argv.includes("--bless");
 /** Files scanned. The render layer plus every module that can raise a toast. */
 const TARGETS = ["src/game"];
 
+/**
+ * Modules no player can ever see, so their English is not translation debt.
+ *
+ * `DevPanel.tsx` is the dev tuning panel. It is reached only through a dynamic
+ * import inside `if (import.meta.env.DEV)` in main.tsx, which is a build-time
+ * substitution: a production bundle drops the branch and never emits the chunk
+ * (asserted by dev-panel.test.ts, and checked against a real `vite build`).
+ * Counting its `aria-label`s made the ratchet report debt for copy that cannot
+ * reach a single locale file — and worse, it made the honest fix (translating
+ * them) pointless, because there is nothing to translate them FOR.
+ *
+ * This is a claim about unreachability, so it is scoped to files whose ONLY
+ * route in is a dev-gated dynamic import. A file that ships to players must be
+ * removed from this list, not "translated".
+ */
+const DEV_ONLY = new Set(["DevPanel.tsx", "DevPanelMount.tsx"]);
+
 const CATEGORIES = [
   {
     id: "toast",
@@ -119,6 +136,7 @@ const offenders = Object.fromEntries(CATEGORIES.map((c) => [c.id, []]));
 for (const target of TARGETS) {
   for (const file of walk(join(root, target))) {
     const rel = relative(root, file);
+    if (DEV_ONLY.has(file.split("/").pop())) continue;
     const text = readFileSync(file, "utf8");
     for (const cat of CATEGORIES) {
       cat.re.lastIndex = 0;

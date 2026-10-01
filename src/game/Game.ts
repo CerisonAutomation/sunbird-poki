@@ -19,7 +19,7 @@ import { AttractPilot } from "./pilot";
 import { CameraRig } from "./CameraRig";
 import { PICKUP_STYLE, Collectibles, type CloudKind, type PickupKind } from "./Collectibles";
 import { evaluateNearMiss, FlowTuner, SessionGoals, type NearMiss } from "./Engagement";
-import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, SURRENDER_QUIPS, THUD_QUIPS, SurpriseEngine, quip } from "./Surprises";
+import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, SURRENDER_QUIPS, SURPRISE_ICON, THUD_QUIPS, SurpriseEngine, quip } from "./Surprises";
 import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Moments";
 import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
@@ -220,6 +220,23 @@ type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };
 
 /** How a run ended. Every branch of `onDaylightOut` used to look
  *  identical to the player, and one of them fires with daylight to spare. */
+/**
+ * How fast the sky is allowed to catch up with the daylight clock, in seconds.
+ * A step change in the clock's denominator becomes a glide over roughly this
+ * long, which is long enough to read as the sun moving and short enough that a
+ * boost still visibly helps before the run ends.
+ */
+const DAY_T_TAU = 0.45;
+
+/**
+ * The daylight level the main menu is lit at. A late, warm, high-sky look: far
+ * enough from either end of the palette that the menu cannot be mistaken for
+ * gameplay, and now that the palette has a rose stop on the way to gold, it
+ * lands on a sunset rather than on the desaturated patch a straight blue-to-
+ * cream blend used to put there.
+ */
+const MENU_DAY_T = 0.86;
+
 export type RunEndReason = "daylight" | "water" | "settled";
 
 export class Game {
@@ -399,6 +416,8 @@ export class Game {
   private continueOfferView: ContinueOffer | null = null;
 
   private daylight = DAYLIGHT_MAX;
+  /** What the SKY is showing. Lags `daylight / daylightMax` by `DAY_T_TAU`. */
+  private dayTSmooth = 1;
   /** Seconds the bird has sat settled (grounded/water, slow, no input). */
   private settleAcc = 0;
   /** Why the last run ended — see `onDaylightOut`. The only thing the player
@@ -1411,7 +1430,11 @@ export class Game {
     // 10 fps, and with a tighter cap the GAME CLOCK runs slower than real
     // time — runs take forever and timed gates drift. Physics is fixed-step
     // (PHYS_DT accumulator), so a larger delta just means more cheap substeps.
-    const raw = Math.min(0.25, (now - this.last) / 1000);
+    // Floor the delta at zero as well as the ceiling. `this.last` is written
+    // from performance.now() at several points that can run mid-frame, while
+    // `now` is the rAF timestamp; one negative delta made the frame clock run
+    // BACKWARDS, which printed a "4" in a three-second countdown.
+    const raw = Math.max(0, Math.min(0.25, (now - this.last) / 1000));
     this.last = now;
     if (this.hidden || this.contextLost) return;
 
@@ -1485,7 +1508,7 @@ export class Game {
       case "playing":
         if (this.countdown > 0) {
           const before = Math.ceil(this.countdown - 1);
-          this.countdown = this.networkStartAt > 0 ? Math.max(0, (this.networkStartAt - Date.now()) / 1000) : this.countdown - raw;
+          this.countdown = this.networkStartAt > 0 ? Math.max(0, (this.networkStartAt - Date.now()) / 1000) : Math.max(0, this.countdown - raw);
           const after = Math.ceil(this.countdown - 1);
           // The countdown used a bird chirp for its ticks, which reads as
           // ambience rather than a cue, while the purpose-built countdownBeep
@@ -2199,7 +2222,7 @@ export class Game {
       this.shake(0.45);
       this.daylight = Math.max(0, this.daylight - DAYLIGHT_OCEAN_PENALTY);
       this.splashQuipN += 1;
-      if (this.splashQuipN % 3 === 1) this.hud.toast(quip(SPLASH_QUIPS, this.splashQuipN), "cloud");
+      if (this.splashQuipN % 3 === 1) this.hud.quip(quip(SPLASH_QUIPS, this.splashQuipN), "cloud");
     }
   }
 
@@ -2216,7 +2239,7 @@ export class Game {
       () => this.surpriseRng.next(),
     );
     if (surprise) {
-      this.hud.toast(surprise.toast, "gold");
+      this.hud.toast(surprise.toast, "gold", SURPRISE_ICON[surprise.kind] ?? "sparkle");
       switch (surprise.kind) {
         case "golden-goose":
           this.audio.honk();
@@ -2379,12 +2402,11 @@ export class Game {
           // frame — the "Sky gem +5" readout was created and destroyed before
           // it could ever be drawn. Merged so the number and the joke arrive
           // together, and the joke now gets the full read window.
-          this.hud.toast(
-            this.runGems % 2 === 1
-              ? `Sky gem +${value} · ${quip(GEM_QUIPS, this.runGems)}`
-              : `Sky gem +${value}`,
-            "gold",
-          );
+          this.hud.toast(`Sky gem +${value}`, "gold", "gem");
+          // The joke rides the quip lane rather than being welded onto the score
+          // with a "·". On the old single-pill toast that put "Sky gem +12" and
+          // a six-word sentence in one narrow pill competing for the same slot.
+          if (this.runGems % 2 === 1) this.hud.quip(quip(GEM_QUIPS, this.runGems), "gold");
         }
         this.haptic(8);
       },
@@ -2439,7 +2461,7 @@ export class Game {
       this.particles.emitSparkle(this.bird.x, this.bird.y);
       // Every 1,000 m the sky heckles you — a wink to keep long runs fresh.
       if (this.nextMilestone % 1000 === 0) {
-        this.hud.toast(quip(MILESTONE_QUIPS, this.nextMilestone), "cloud");
+        this.hud.quip(quip(MILESTONE_QUIPS, this.nextMilestone), "cloud");
         this.glow(0.25);
       }
     }
@@ -2724,7 +2746,7 @@ export class Game {
       this.camera.tilt(-0.06 - Math.min(0.14, combo * 0.03));
       if (res.speed > 74) {
         this.particles.emitSonicBoom(this.bird.x, this.bird.y);
-        this.hud.toast(quip(BIG_LAUNCH_QUIPS, combo + Math.round(res.speed)), "apex");
+        this.hud.quip(quip(BIG_LAUNCH_QUIPS, combo + Math.round(res.speed)), "apex");
       }
       if (this.perfectChain >= FEVER_NEED) this.enterFever();
     } else if (res.rating === "great") {
@@ -2769,12 +2791,27 @@ export class Game {
       this.hud.toast("Butter landing", "cloud");
       this.particles.burstRing(this.bird.x, this.bird.y, 0xffffff);
     } else if (q < 0.8) {
-      this.launch.breakCombo();
-      this.perfectChain = 0;
-      // The thunk: an 80 ms freeze on a hard thud, matching the prototype's
-      // hit-stop. Same path as the perfect-launch freeze above.
-      if (!this.save.state.settings.reduceMotion) {
-        this.hitStopTimer = Math.max(this.hitStopTimer, 0.08);
+      // A player's very first touchdown is absorbed rather than punished.
+      //
+      // The opening is deterministic: startX is 64 for every non-race mode, so
+      // everyone touches down on the same terrain feature, and the coach's own
+      // first instruction is "HOLD to dive" with the thumb already down. Held,
+      // that is GRAVITY_DIVE from START_ALTITUDE, measured at ~0.70 s to a
+      // touchdown with landingQuality ~0.45 and ~19% of the speed gone. So the
+      // tutorial was punishing the exact input it had just asked for, on the
+      // first frame of the first run, identically for every player — and the
+      // result card for that run then reads as a bad one.
+      //
+      // The combo and the hit-stop are what teach "land well"; neither has
+      // anything to say to a player who has not yet flown.
+      if (this.save.state.firstFlightDone) {
+        this.launch.breakCombo();
+        this.perfectChain = 0;
+        // The thunk: an 80 ms freeze on a hard thud, matching the prototype's
+        // hit-stop. Same path as the perfect-launch freeze above.
+        if (!this.save.state.settings.reduceMotion) {
+          this.hitStopTimer = Math.max(this.hitStopTimer, 0.08);
+        }
       }
       if (this.bird.impact > 6) {
         // Contact sound and camera impulse are emitted once by the main step.
@@ -2805,7 +2842,7 @@ export class Game {
       this.particles.emitFeverBurst(this.bird.x, this.bird.y);
       this.particles.emitConfetti(this.bird.x, this.bird.y);
       this.popupAtBird("ON FIRE!", "fever");
-      this.hud.toast(quip(FEVER_QUIPS, this.perfectChain), "fever");
+      this.hud.quip(quip(FEVER_QUIPS, this.perfectChain), "fever");
       this.telemetry.track("fever", { distance: Math.round(this.bird.x - this.startX) });
     }
   }
@@ -3370,7 +3407,18 @@ export class Game {
     this.maybeRecenter();
     this.terrain.update(this.bird.x);
 
-    const dayT = Math.max(0, Math.min(1, this.daylight / this.daylightMax()));
+    // The raw ratio is the honest one and the audio wants it now. The sky does
+    // not, because the ratio is a DIVISION by a value that moves underneath it:
+    // buying or expiring a boost, clearing an island, and a mode that hands
+    // over a 90 s clock all change `daylightMax()` mid-run, and every one of
+    // them steps `daylight / daylightMax` in a single frame. A measured case
+    // swung the sky by 902x in one frame — a hard cut from one time of day to
+    // another, mid-flight, with nothing in the world having changed. Damping
+    // toward the target turns every one of those steps into the sunset they
+    // were always meant to be.
+    const dayTRaw = Math.max(0, Math.min(1, this.daylight / this.daylightMax()));
+    this.dayTSmooth += (dayTRaw - this.dayTSmooth) * (1 - Math.exp(-rawDt / DAY_T_TAU));
+    const dayT = dayTRaw;
     this.audio.update(rawDt, this.bird.speed(), diving, this.bird.grounded, this.feverOn, dayT, playing, this.weather.gust);
     this.audio.setMusicIntensity(this.musicIntensity());
 
@@ -3391,7 +3439,7 @@ export class Game {
     const biome = this.terrain.biomeAt(x + 60);
     // The island picks the song, so crossing a border changes the music.
     this.audio.setBiome(biome.musicMode, biome.id);
-    const dayT = this.state === "menu" ? 0.86 : Math.max(0, Math.min(1, this.daylight / this.daylightMax()));
+    const dayT = this.state === "menu" ? MENU_DAY_T : this.dayTSmooth;
     const altT = clamp((altitude - ALT_CLOUDS) / (ALT_STRATO - ALT_CLOUDS), 0, 1);
     const isAurora = biome.id === "aurora";
     const auroraVal = isAurora ? 0.9 : altT > 0.4 ? (altT - 0.4) * 1.3 : 0;
@@ -3631,6 +3679,10 @@ export class Game {
       (this.mode.clock > 0 ? this.mode.clock : this.daylightMax()) *
       this.challengeMods.daylightMult *
       (this.eventRun ? this.weeklyMods.daylightMult : 1);
+    // Seeded, not damped: the first frame of a run must draw the sky the run
+    // starts in, and a damped value would glide in from wherever the menu left
+    // it — a visible fade-in on every launch.
+    this.dayTSmooth = Math.max(0, Math.min(1, this.daylight / this.daylightMax()));
     this.settleAcc = 0;
     this.lastInputAt = 0;
     // Open the window the run's coin payout is timed-weighted over. A run's
@@ -3861,7 +3913,7 @@ export class Game {
     this.audio.sleep();
     this.audio.setMusicMode("sleep");
     this.flash("sleep");
-    this.hud.toast(quip(SLEEP_QUIPS, Math.round(this.bird.x)), "cloud");
+    this.hud.quip(quip(SLEEP_QUIPS, Math.round(this.bird.x)), "cloud");
     const gold = this.save.state.gold;
     const canCoins = this.save.state.wallet >= CONTINUE_COST;
     // A portal BUILD is not a portal SESSION: a blocked SDK script, an ad-blocked
@@ -4404,6 +4456,19 @@ export class Game {
     // showed a bird sunk into the grass.
     const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + START_ALTITUDE;
     this.bird.reset(this.startX, y);
+    // Re-seed the render-interpolation snapshot. `visX` is
+    // `lerp(prevBirdX, bird.x, interp)`, and `interp` is 0 whenever the
+    // accumulator is empty — which is the ENTIRE start countdown, because
+    // `setState("playing")` zeroes `acc` and no physics step runs until GO.
+    // So without this the bird mesh, and the camera following it, are drawn at
+    // wherever the PREVIOUS run finished, then snap to the start line on the
+    // first frame after GO. Measured on a second run: a 92-unit jump in one
+    // 16.7 ms frame, where cruising at 48 m/s should move 0.8 — and the
+    // magnitude is however far the last run went, so a 60 s run makes it
+    // thousands of units. This is the run-start jolt, and it is the single
+    // largest discontinuity in the game.
+    this.prevBirdX = this.bird.x;
+    this.prevBirdY = this.bird.y;
     this.bird.vx = START_SPEED;
     this.bird.vy = 0;
     if (this.modeId === "pvp_sprint" || this.modeId === "pvp_typhoon") {
@@ -4498,9 +4563,17 @@ export class Game {
         this.rivalGhostPlayer.loadRecord(pace.record);
         this.hud.toast(
           challenge
-            ? `${iconGlyph("ghost")} Ghost challenge vs ${challenge.challengerName} — beat ${Math.round(challenge.ghostDistance)} m`
-            : `${iconGlyph("ghost")} Chase ${pace.name} — pass it before the finish`,
+            ? `Ghost challenge vs ${challenge.challengerName} — beat ${Math.round(challenge.ghostDistance)} m`
+            : // Only the modes with a real finish line may promise one. Five of
+              // the six solo modes are `finish: 0` (endless), and this line
+              // fires on every one of them at run start — so the game's very
+              // first statement of the objective was to promise an end that
+              // does not exist, aimed at a player with no context to doubt it.
+              this.mode.finish > 0
+                ? `Chase ${pace.name} — pass it before the finish`
+                : `Chase ${pace.name} — stay ahead`,
           "quest",
+          "ghost",
         );
 
         // Prefer an actual player's compatible ghost when one exists.
@@ -4510,7 +4583,7 @@ export class Game {
             if (!rg || this.disposed || epoch !== this.runEpoch || this.state !== "playing") return;
             this.rivalGhostName = rg.name;
             this.rivalGhostPlayer.loadRecord({ seed: this.seed, distance: rg.distance, samples: rg.samples });
-            this.hud.toast(`${iconGlyph("ghost")} ${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest");
+            this.hud.toast(`${rg.name} flew ${Math.round(rg.distance)} m here — chase them`, "quest", "ghost");
           });
         }
       }
@@ -6001,7 +6074,7 @@ export class Game {
         this.hud.toast(`⚔ Duel forfeited · ${res.delta} rating`, "warn");
       }
       // A graceful retreat still deserves a punchline.
-      this.hud.toast(quip(SURRENDER_QUIPS, Math.round(this.bird.x)), "cloud");
+      this.hud.quip(quip(SURRENDER_QUIPS, Math.round(this.bird.x)), "cloud");
     }
     this.disconnectRace();
     this.roomCode = "";
@@ -6951,7 +7024,10 @@ export class Game {
   /** Opt into a public room, ready when connected, and launch only on the
    * server's shared start. A timed-out search explicitly disconnects before
    * starting local AI practice. Browsing or cancelling cannot block a room. */
-  private static readonly MM_WINDOW = 15;
+  // The PvP matchmaking search window. 15 s of waiting on a spinner reads as
+  // the game being stuck; 10 s still gives a real lobby time to fill while
+  // keeping the wait shorter than the player's patience for it.
+  private static readonly MM_WINDOW = 10;
 
   /** Ends the search and hands back what it was searching for. Both exits out
    *  of matchmaking -- "the run already started" and "the lobby came back

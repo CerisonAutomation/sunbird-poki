@@ -9,15 +9,14 @@ import { readFileSync } from "node:fs";
  * this corpus is 35 characters (~6 words), which got 1.73 s — about how long six
  * words take to read, with nothing left for finding the text first.
  */
-const ACQUIRE = 450;   // peripheral novel target on a moving background
-const PER_WORD = 415;  // 238 wpm, derated for peripheral + divided attention
-const FLOOR = 1100;
-const CEIL = 6000;
-
-const need = (text: string) => {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.min(CEIL, Math.max(FLOOR, ACQUIRE + words * PER_WORD));
-};
+// Import the REAL model rather than re-implementing it.
+//
+// This file used to declare its own copy of the formula with the same five
+// constants. That made all six tests below satisfiable by the copy: delete
+// src/game/MessageTiming.ts entirely, or restore the old 1200 + 28ms/char model
+// this suite exists to guard against, and every one still passed. A guard that
+// cannot fail is worse than no guard — it certifies a model nobody ships.
+import { messageHoldMs as need, wordCount } from "../MessageTiming";
 
 describe("message timing model", () => {
   it("gives the corpus's real median quip enough time to read", () => {
@@ -27,17 +26,24 @@ describe("message timing model", () => {
     const quips = pools.flatMap((p) => [...p[1]!.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!));
     expect(quips.length, "corpus not found").toBeGreaterThan(100);
 
-    const long = quips.filter((q) => q.trim().split(/\s+/).length > 4);
+    // Literal 450 / 415, NOT the imported constants. Comparing the production
+    // function against values it imports from the same module is satisfied by
+    // ANY self-consistent model — breaking ACQUIRE to 5 passed, and so did
+    // replacing the whole formula with the old 1.2s + 28ms/char one. The point
+    // of this file is to pin the shipped numbers, so the numbers live here.
+    const ACQUIRE_MS = 450;   // peripheral novel target on a moving background
+    const PER_WORD_MS = 415;  // 238 wpm, derated for peripheral + divided attention
+    const long = quips.filter((q) => wordCount(q) > 4);
     for (const q of long) {
-      const words = q.trim().split(/\s+/).length;
-      expect(need(q), `"${q}"`).toBeGreaterThanOrEqual(ACQUIRE + words * PER_WORD);
+      expect(need(q), `"${q}"`).toBeGreaterThanOrEqual(ACQUIRE_MS + wordCount(q) * PER_WORD_MS);
     }
   });
 
   it("never gives a message LESS than it needs", () => {
+    const ACQUIRE_MS = 450;
+    const PER_WORD_MS = 415;
     for (const s of ["THUD!", "Great landing", "The fish gave that landing a standing ovation", "New skill unlocked: damp"]) {
-      const words = s.trim().split(/\s+/).length;
-      expect(need(s), s).toBeGreaterThanOrEqual(ACQUIRE + words * PER_WORD);
+      expect(need(s), s).toBeGreaterThanOrEqual(ACQUIRE_MS + wordCount(s) * PER_WORD_MS);
     }
   });
 
@@ -50,12 +56,14 @@ describe("message timing model", () => {
   });
 
   it("keeps a one-word message above the see-it floor", () => {
-    expect(need("THUD!")).toBe(FLOOR);
+    // Literal 1100, not TOAST_FLOOR_MS: asserting a function returns the
+    // constant it reads is true for every value of that constant.
+    expect(need("THUD!")).toBe(1100);
   });
 
   it("caps so an occupied layer cannot deadlock", () => {
     const absurd = new Array(40).fill("word").join(" ");
-    expect(need(absurd)).toBe(CEIL);
+    expect(need(absurd)).toBe(6000);
   });
 
   it("the old model was the bug — it under-read the median quip", () => {

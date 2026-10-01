@@ -149,38 +149,66 @@ describe("the toast lane sits below the ring chain, not level with it", () => {
     }
   });
 
-  it("every breakpoint that resizes the lane keeps it below the chain", () => {
-    // The 640px and 500px overrides both restate `top`. If either drops back to
-    // a literal the collision returns on exactly the frames Poki serves.
-    const chainTop = headerOffset(decl(chainRule.body, "top")!)!;
-    const anchored = rulesFor(".toasts").filter((r) => r.media !== null && headerOffset(decl(r.body, "top") ?? "") !== null);
+  it("no breakpoint re-anchors the lane, because the band already has", () => {
+    // The 640px and 500px overrides used to restate `top`, and this test checked
+    // each restatement was still below the chain. That was a real defence, but it
+    // is also the thing that let the four message lanes drift: a per-breakpoint
+    // `top` is a second guess at a number `HUD.publishMessageBand` now measures,
+    // and a second guess cannot be checked against a measurement for ever.
+    //
+    // So the contract is inverted. No breakpoint may restate `top` at all; the
+    // only anchor is the measured band, whose `max()` floor is the header offset
+    // asserted above. A new `@media` that wants to move the lane has to move the
+    // band, which is the one place the arithmetic is reviewed.
+    //
+    // All four transient lanes are named, not just the toast lane. This used to
+    // check `.toasts` alone, while the comment claimed a general rule — so a
+    // breakpoint that re-anchored the coaching band, the coach hand or the popup
+    // reservation reintroduced the exact second guess the comment rules out, and
+    // the suite stayed green. The mutation that proved it: injecting
+    // `@media (max-height: 360px) { .flight-messages { top: calc(var(--hud-header-height) + 76px) } }`
+    // passed every assertion here.
+    const anchored = [".flight-messages", ".toasts", ".hand", ".impact-popups"].flatMap((sel) =>
+      rulesFor(sel)
+        .filter((r) => r.media !== null && decl(r.body, "top") !== null)
+        .map((r) => `${sel} @ ${r.media}`),
+    );
     expect(
-      anchored.length,
-      "expected the max-width:640px and max-height:500px overrides to both restate the lane",
-    ).toBeGreaterThanOrEqual(2);
-    for (const r of anchored) {
-      const t = headerOffset(decl(r.body, "top")!)!;
-      expect(
-        t,
-        `@media ${r.media} re-anchored the lane to ${t}px, level with the chain at ${chainTop}px`,
-      ).toBeGreaterThanOrEqual(chainTop + CHAIN_PILL_PX);
-    }
+      anchored,
+      "a breakpoint re-anchors a message lane; move --hud-stack-bottom / --hud-messages-top in HUD.publishMessageBand instead",
+    ).toEqual([]);
   });
 });
 
 describe("on short viewports the lane stays off the flight controls", () => {
-  it("is anchored below the header, not pulled up over the buttons", () => {
-    // The `max-height: 600px` block. Mute and pause live in `.hud-controls` at
-    // the top-right of the header, so any `top` small enough to clear the
-    // viewport top is sitting on them.
+  it("stays in the measured stack, which is below the header by construction", () => {
+    // Mute and pause live in `.hud-controls` at the top-right of the header, so
+    // any `top` small enough to clear the viewport top is sitting on them.
+    //
+    // This used to be answered by re-anchoring the lane to the bottom of the free
+    // band in a `max-height: 600px` block. That worked, and it cost a fourth
+    // independent anchor: on a 844x390 frame the bottom-anchored lane landed at
+    // y 132..172 while the measured band sat at y 150..177 — it moved the lane
+    // out of the controls and straight into the coaching sentence. The stack is
+    // the answer now, and the assertion is that it is the ONLY answer: the
+    // breakpoint may compress the pill, but it may not place the lane.
     const short = rulesFor(".toasts").filter((r) => r.media?.includes("max-height: 600px"));
-    expect(short, "the max-height:600px block must restate the lane").not.toHaveLength(0);
+    expect(short, "the max-height:600px block must still compress the lane").not.toHaveLength(0);
     for (const r of short) {
-      const body = r.body;
-      // Anchored to the bottom of the free band, off the measured footer.
-      expect(decl(body, "bottom"), "the lane must anchor to the bottom").toContain("hud-footer-height");
-      expect(decl(body, "top"), "the lane must release the top edge").toBe("auto");
+      expect(decl(r.body, "top"), `@media ${r.media} re-anchors the toast lane`).toBeNull();
+      expect(decl(r.body, "bottom"), `@media ${r.media} re-anchors the toast lane`).toBeNull();
     }
+    // And the one anchor it does have puts it below the measured band, so it
+    // cannot be inside the header whatever the viewport.
+    //
+    // The variable is `--hud-stack-bottom`, not `--hud-messages-bottom`. The
+    // coach hand hangs OFF the band rather than off the header, so the bottom of
+    // the band is not the bottom of the stack: the hand's own measured height
+    // sits between them. A lane anchored to the band's bottom would therefore
+    // land on the hand — which is the same collision this test exists to catch,
+    // one variable name further down. The header term stays in the expression as
+    // a floor for the window before the band has been measured.
+    expect(decl(effectiveLane.body, "top")).toContain("--hud-stack-bottom");
   });
 });
 
@@ -237,5 +265,142 @@ describe("the touch ripple respects prefers-reduced-motion without spending !imp
   it("carries no !important, because nothing competes for display", () => {
     const body = ripple.map((r) => r.body).join("\n");
     expect(body, "the ripple rule regressed to specificity debt").not.toContain("!important");
+  });
+});
+
+/** Count top-level whitespace-separated tracks, so `minmax(0, 1fr)` is one. */
+function trackCount(value: string): number {
+  let depth = 0;
+  let count = 0;
+  let seenToken = false;
+  for (const ch of value) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (depth === 0 && /\s/.test(ch)) {
+      if (seenToken) count++;
+      seenToken = false;
+      continue;
+    }
+    if (depth === 0 && !/\s/.test(ch)) seenToken = true;
+  }
+  return seenToken ? count + 1 : count;
+}
+
+/** The track list of a `grid-template-columns`, split on the whitespace that
+ *  is not inside a function. `minmax(0, 1fr)` is one track, not two. */
+function splitTracks(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of value) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (depth === 0 && /\s/.test(ch) && current) {
+      out.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+describe("the altitude gauge clears the footer in the orientation the footer moves", () => {
+  // `--hud-footer-height` does not mean one thing. `HUD` measures it from the
+  // bottom on landscape, but design-polish.css moves the footer to the TOP in
+  // portrait and `HUD` switches to measuring its bottom edge downward instead.
+  // The base `.play-hud .alt-gauge` rule reads the variable the landscape way
+  // and subtracts it from `100%`.
+  //
+  // In portrait that arithmetic asks for a spot above a footer that is not
+  // there. At 320x568 the gauge took the header term (H + 28 = 195.4) because
+  // the footer term (100% - 290.4 - 46 = 231.6) was larger, while the footer
+  // actually starts at H + 8 = 175.4 — so the gauge rendered inside the goal
+  // strip by 33x44px. Its height term came out at 38.2px, under the 44px
+  // floor, so it was crushed as well: wrong place and wrong size at once.
+  const portrait = RULES.filter(
+    (r) => r.media?.includes("max-aspect-ratio") && r.selector.includes(".alt-gauge"),
+  );
+
+  it("has a portrait override, because the base rule cannot be right in both", () => {
+    expect(
+      portrait.length,
+      "no portrait override for .alt-gauge; the base rule reads --hud-footer-height as a bottom inset, which a top-anchored footer is not",
+    ).toBeGreaterThan(0);
+    expect(decl(portrait.map((r) => r.body).join("\n"), "top"), "the portrait override does not place the gauge").toBeTruthy();
+    expect(decl(portrait.map((r) => r.body).join("\n"), "height"), "the portrait override does not size the gauge").toBeTruthy();
+  });
+
+  it("hangs below whichever of the header and the footer ends lower", () => {
+    // The premise of the whole fix: the footer's TOP edge is `H + 8`, so no
+    // fixed header offset can clear it. Only a `max()` over both offsets can,
+    // and `min()` is the bug being asserted against — it is what picked the
+    // header term and dropped the gauge into the strip.
+    const top = decl(portrait.map((r) => r.body).join("\n"), "top")!;
+    expect(top, "the portrait gauge must clear the footer, so it needs a max()").toMatch(/max\(/);
+    expect(top, "the portrait gauge no longer clears the header").toContain("--hud-header-height");
+    expect(top, "the portrait gauge no longer clears the footer").toContain("--hud-footer-height");
+  });
+
+  it("sizes from the footer's bottom edge, not from both edges", () => {
+    // The old term was `100% - H - F - 72`: subtracting the header again on top
+    // of a `max()` top that already clears it is what drove the height under
+    // the floor. Below the footer the header is spent.
+    const height = decl(portrait.map((r) => r.body).join("\n"), "height")!;
+    expect(height, "the portrait height must be measured from the footer's bottom edge").toContain("--hud-footer-height");
+    expect(height, "the header is already cleared by the top; subtracting it again starves the height").not.toContain("--hud-header-height");
+  });
+});
+
+describe("the narrow top bar has a track for everything it places", () => {
+  // At <=640px the daylight meter is moved onto its own full-width row two
+  // lines down. Nothing is placed in the third column of row one — but the
+  // `auto` track still took its size from the spanning meter and took 96px off
+  // the row, leaving each stat block 88px. The best row needs 76px of content
+  // inside a 76px box, so "1.44 km" broke into "1.44" / "km".
+  const narrowTopBar = rulesFor(".hud-header .top-bar").filter(
+    (r) => r.media?.includes("max-width: 640px") && decl(r.body, "grid-template-columns") !== null,
+  );
+  const narrowSun = rulesFor(".hud-header .sun-meter").filter(
+    (r) => r.media?.includes("max-width: 640px") && decl(r.body, "grid-row") !== null,
+  );
+
+  it("declares exactly as many tracks as it places items on the first row", () => {
+    expect(narrowTopBar.length, "the <=640px top-bar grid rule is gone").toBeGreaterThan(0);
+    const cols = decl(narrowTopBar[0]!.body, "grid-template-columns")!;
+    // The premise, checked first: the meter really is on its own row, so the
+    // first row really does hold only the two stat blocks. Without this the
+    // column count below would be asserting an accident.
+    expect(narrowSun.length, "the <=640px rule no longer moves the sun meter off row one").toBeGreaterThan(0);
+    expect(decl(narrowSun[0]!.body, "grid-row"), "the sun meter is back on row one, so a third track is needed").toBe("2");
+    expect(
+      trackCount(cols),
+      `the first row places two stat blocks but the grid declares ${trackCount(cols)} tracks (${cols})`,
+    ).toBe(2);
+  });
+
+  it("sizes the distance block from the free space, with no auto track between the stat blocks", () => {
+    // Belt and braces on the specific mechanism: an `auto` track sitting BETWEEN
+    // two 1fr tracks is exactly what starved them. Grid sizes an `auto` track
+    // from its row's min-content — and on a row that also holds a column-spanning
+    // sibling, that sibling's min-content leaks in, which is how an empty middle
+    // track took 96px off a 76px block and broke "1.44 km" across two lines.
+    //
+    // A TRAILING `auto` is not the bug and is required: the coins column should
+    // hug its number and let the distance block take whatever is left. So the
+    // check is positional, not a blanket ban on `auto` — an earlier version of
+    // this assertion forbade the token outright and was wrong.
+    const cols = decl(narrowTopBar[0]!.body, "grid-template-columns")!;
+    const tracks = splitTracks(cols);
+    expect(
+      tracks[0],
+      `the distance block is in column 1 and must take the free space, so the first track is the flexible one (${cols})`,
+    ).toMatch(/^1fr$|^minmax\(0,\s*1fr\)$/);
+    const autoAt = tracks.findIndex((t) => t === "auto");
+    expect(
+      autoAt,
+      `no auto track may sit between two stat blocks — it sizes off the spanning meter and starves them (${cols})`,
+    ).toBe(tracks.length - 1);
   });
 });

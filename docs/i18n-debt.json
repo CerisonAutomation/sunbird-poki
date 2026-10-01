@@ -1,13 +1,13 @@
 {
-  "generated": "2026-09-30",
-  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless. RE-BLESSED 2026-09-30: 255 -> 335. Most of this rise is the audit now SEEING copy it previously missed, not copy that was newly written: buttonLabel 0->19, iconButtonLabel 0->17 and ariaLabel 0->3 all moved off zero at once, which is the signature of a detection change (the HUD was split into src/game/hud/*.ts and the scanner now matches patterns in the new files) rather than 39 new strings. Toast is the only category that reflects written copy: 249 -> 266, and it is real. Re-blessed so the ratchet guards forward from the true measured value; the untranslated copy is NOT fixed, only counted honestly now.",
+  "generated": "2026-10-01",
+  "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless.",
   "categories": {
-    "toast": 266,
+    "toast": 259,
     "screenTitle": 0,
     "sectionTitle": 30,
-    "ariaLabel": 3,
-    "buttonLabel": 19,
+    "ariaLabel": 0,
+    "buttonLabel": 18,
     "iconButtonLabel": 17
   },
-  "total": 335
+  "total": 324
 }

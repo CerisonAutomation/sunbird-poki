@@ -5,7 +5,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 568, height: 320 }
   test(`real split-screen scores, countdown and controls fit at ${viewport.width}×${viewport.height}`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
     const app = new SunbirdPage(page);
-    await app.open(); await app.ready(); await page.locator('[data-action="versus"]').click();
+    await app.open(); await app.ready(); await app.menuAction("versus").click();
     await expect(page.locator('[data-action="pause"]')).toBeVisible();
     await expect(page.locator(".versus-bar")).toBeVisible();
     await expect(page.locator(".versus-guide")).toContainText(viewport.width / viewport.height >= 1.25 ? "left" : "top");

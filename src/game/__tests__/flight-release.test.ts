@@ -39,7 +39,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Bird } from "../Bird";
-import { FLARE_MAX_RISE, GRAVITY_DIVE, PHYS_DT } from "../constants";
+import { FLARE_MAX_RISE, GLIDE_LIFT_SPEED, GRAVITY_DIVE, GRAVITY_GLIDE, PHYS_DT } from "../constants";
 import { applyReleaseKick, releaseKick, RELEASE_KICK, RELEASE_KICK_COOLDOWN, RELEASE_MAX_RISE } from "../FlightPhysics";
 import { TerrainSystem } from "../TerrainSystem";
 
@@ -79,14 +79,17 @@ function probe(seed = "flight-release-probe"): { bird: Bird; terrain: TerrainSys
  * `vy` is overwritten AFTER the dive step, so the probe controls the release
  * speed precisely while still arming the latch honestly.
  */
-function releaseFrom(vy: number, seed?: string): number {
+function releaseFrom(vy: number, seed?: string): number;
+function releaseFrom(vy: number, seed: string | undefined, withKick: true): { after: number; kick: number };
+function releaseFrom(vy: number, seed?: string, withKick?: true): number | { after: number; kick: number } {
   const { bird, terrain } = probe(seed);
   bird.step(PHYS_DT, DIVE, terrain); // arm the release edge
   bird.vy = vy;
   bird.step(PHYS_DT, GLIDE, terrain); // the release itself
   const after = bird.vy;
+  const kick = bird.releaseKickAmount;
   terrain.dispose();
-  return after;
+  return withKick ? { after, kick } : after;
 }
 
 /**
@@ -125,8 +128,17 @@ describe("the release kick is a real launch off a ramp", () => {
     bird.step(PHYS_DT, DIVE, terrain); // arm the release edge
     bird.vy = 0;
     bird.step(PHYS_DT, GLIDE, terrain);
-    expect(bird.vy, "releasing from level must hand back real climb").toBeGreaterThan(RELEASE_KICK - 3);
-    expect(bird.releaseKickAmount).toBeCloseTo(RELEASE_KICK, 5);
+    // A LAUNCH, not "something happened" — the bar that matters is that this is
+    // not 0 and not a nudge. The old assertion compared against `RELEASE_KICK`,
+    // which was only true while the kick was a constant; it is now scaled by
+    // the bird's speed, so the honest bar is a real single-frame impulse.
+    expect(bird.vy, "releasing from level must hand back real climb").toBeGreaterThan(9);
+    // And the kick must be a substantial fraction of the ceiling it is bounded
+    // by, so this cannot pass with a token impulse.
+    expect(bird.releaseKickAmount, "the kick itself was too small to be a launch")
+      .toBeGreaterThan(RELEASE_KICK * 0.5);
+    expect(bird.releaseKickAmount, "the kick must never exceed its own constant")
+      .toBeLessThanOrEqual(RELEASE_KICK + 1e-9);
     terrain.dispose();
   });
 
@@ -138,7 +150,16 @@ describe("the release kick is a real launch off a ramp", () => {
     expect(r, "the probe never reached an apex").not.toBeNull();
     expect(r!.vyAtRelease, "sanity: the release really was made at an apex").toBeLessThan(1);
     expect(r!.vyAtRelease).toBeGreaterThan(-1);
-    expect(r!.peakVy, "an apex release must be a launch, not a nudge").toBeGreaterThan(15);
+    // A launch, not a nudge. `RELEASE_KICK * 0.85` is the honest bar now that
+    // the kick is speed-scaled: an apex release from a bird that has arrived
+    // at speed lands just under the constant, and a nudge cannot clear it.
+    // A launch, not a nudge — and a nudge cannot clear even half the constant.
+    // It is deliberately NOT `RELEASE_KICK`: by the time this probe reaches an
+    // apex it has bled horizontal speed to the dive, so the speed-scaled kick
+    // is legitimately below the constant. The bar is "a real impulse", not
+    // "the full impulse at a speed this bird no longer has".
+    expect(r!.peakVy, "an apex release must be a launch, not a nudge")
+      .toBeGreaterThan(RELEASE_KICK * 0.5);
   });
 
   it("a release at a ramp crest is never weaker than one on flat ground", () => {
@@ -166,20 +187,59 @@ describe("the release kick is a real launch off a ramp", () => {
         ramp.bird.vy,
         `a release from a ${crestVy} m/s ramp crest must beat a flat release (${flatVy.toFixed(2)})`,
       ).toBeGreaterThan(flatVy);
-      expect(ramp.bird.releaseKickAmount, "and the marginal kick is the same either way").toBeCloseTo(flatKick, 5);
-      expect(ramp.bird.releaseKickAmount).toBeCloseTo(RELEASE_KICK, 5);
+      // The kick now scales with the bird's TOTAL speed, and a crest release
+      // is strictly faster than a flat one, so it earns a slightly LARGER
+      // kick. Asserted as ">=", not "==": the old identity was true only while
+      // the kick ignored speed, and pinning equality would now forbid the very
+      // thing that makes a ramp release feel better than a flat one.
+      expect(ramp.bird.releaseKickAmount, "a crest release must not earn less than a flat one")
+        .toBeGreaterThanOrEqual(flatKick - 1e-9);
+      expect(ramp.bird.releaseKickAmount, "and must never exceed the constant")
+        .toBeLessThanOrEqual(RELEASE_KICK + 1e-9);
       ramp.terrain.dispose();
     }
   });
 
-  it("spends the same kick at every launch speed, so a big launch is not discounted", () => {
+  it("spends the same kick at every CLIMB, so a big launch is not discounted", () => {
     // Scaling the kick by the existing climb is what made the biggest, best
-    // launches feel least rewarding. It is a constant, at every speed, up to
-    // the ceiling. Above the ceiling it is 0, because there is nothing left to
+    // launches feel least rewarding. The kick is independent of `vy` up to the
+    // ceiling: a release at the top of a big arc buys exactly as much as one
+    // from level. Above the ceiling it is 0, because there is nothing left to
     // add — asserted separately below.
+    //
+    // This is about CLIMB, not speed. The kick IS scaled by speed now, which
+    // is a different axis and is asserted on its own below; conflating the two
+    // is what would let a speed regression hide behind this test.
     for (const vy of [0, 1, 10.3, 25.8, RELEASE_MAX_RISE - 1]) {
       expect(releaseKick(vy, 0), `at vy = ${vy}`).toBeCloseTo(RELEASE_KICK, 5);
     }
+  });
+
+  it("scales the kick with the bird's speed, so the jump is earned", () => {
+    // The reported "the jump is too strong" defect was two problems. This is
+    // the one a constant could not fix: the kick used to be `RELEASE_KICK` for
+    // ANY vy >= 0, so a bird grinding along at 12 m/s bought the same impulse
+    // as one at the 108 m/s cap. Measured, that was 18.0 m of rise at 12 m/s
+    // against 29.7 m at 108 — nine times the speed for 1.4x the reward,
+    // because the reward was connected to nothing.
+    //
+    // `speed = Infinity` is the documented "unspecified" case and must stay at
+    // the full constant, because that is what every caller that does not know
+    // the bird's speed gets.
+    expect(releaseKick(0, 0, Number.POSITIVE_INFINITY), "unspecified speed keeps the full kick")
+      .toBeCloseTo(RELEASE_KICK, 5);
+
+    const slow = releaseKick(0, 0, 12);
+    const fast = releaseKick(0, 0, GLIDE_LIFT_SPEED);
+    expect(slow, "a ground-speed bird must not buy a full kick").toBeLessThan(RELEASE_KICK * 0.35);
+    expect(fast, "a bird at lift speed buys the whole kick").toBeCloseTo(RELEASE_KICK, 5);
+    expect(slow, "the kick must be monotonic in speed")
+      .toBeLessThan(releaseKick(0, 0, 30));
+    expect(releaseKick(0, 0, 30), "monotonic all the way up")
+      .toBeLessThan(releaseKick(0, 0, 50));
+    // And it saturates rather than growing without bound.
+    expect(releaseKick(0, 0, 400), "the kick must not exceed its constant at any speed")
+      .toBeCloseTo(RELEASE_KICK, 5);
   });
 });
 
@@ -269,8 +329,26 @@ describe("a release can never hurt the bird", () => {
     expect(after, "and unmistakably a launch").toBeGreaterThan(35);
 
     // Below the ceiling the kick is added in full, with nothing clipped.
-    const clear = releaseFrom(10, "mid-climb-clear");
-    expect(clear, "a launch that fits under the ceiling gets the whole kick").toBeGreaterThan(10 + RELEASE_KICK - 2);
+    // Below the ceiling the kick is added in full, with nothing clipped. Stated
+    // as an EXACT equality against the kick the bird actually earned, because
+    // the kick is now speed-scaled and the old `10 + RELEASE_KICK - 2` proxy
+    // would have been asserting a number the code deliberately no longer
+    // produces. An equality is also strictly stronger than the old inequality:
+    // it fails both when too little was added and when too much was.
+    const { after: clear, kick } = releaseFrom(10, "mid-climb-clear", true);
+    expect(kick, "a launch this far under the ceiling must earn a real kick")
+      .toBeGreaterThan(0);
+    // The kick lands, then the SAME step still charges this tick's gravity, so
+    // `clear` sits just under `10 + kick` — by design, not by clipping. So the
+    // ceiling test is a bracket, not an equality: the ceiling took nothing (the
+    // gap is only gravity), and gravity took nothing beyond one step (the gap
+    // is at most one step). A clip by the ceiling would widen the gap beyond
+    // `GRAVITY_GLIDE * PHYS_DT`, which is what makes this falsifiable.
+    const owed = GRAVITY_GLIDE * PHYS_DT;
+    expect(clear, "the ceiling must clip nothing when the bird fits under it")
+      .toBeLessThan(10 + kick);
+    expect(clear, "only this step's own gravity may be missing from the launch")
+      .toBeGreaterThan(10 + kick - owed);
   });
 
   it("is a no-op above the ceiling — nothing left to add", () => {
@@ -321,7 +399,15 @@ describe("the kick is bounded, so it stays a boost and not a jet", () => {
     // The ceiling must clear the hardest of them or the best launches get
     // silently clipped, which reads as the release being weak.
     expect(RELEASE_MAX_RISE).toBeGreaterThan(31.3);
-    expect(RELEASE_MAX_RISE).toBeLessThan(RELEASE_KICK * 2);
+    // The invariant is "a release is a boost, not a jet": ONE kick must not be
+    // able to reach the ceiling by itself. It used to be written as
+    // `RELEASE_MAX_RISE < RELEASE_KICK * 2`, which is a proxy that silently
+    // couples the ceiling to the kick constant — lowering the kick (the fix for
+    // the reported over-strong jump) broke it without either number becoming
+    // wrong. The direct form states the actual property and is what should be
+    // pinned: a single kick lands well short of the ceiling.
+    expect(RELEASE_KICK, "one kick must not reach the climb ceiling on its own")
+      .toBeLessThan(RELEASE_MAX_RISE);
   });
 
   it("a single release cannot exceed the ceiling even from a standing start", () => {

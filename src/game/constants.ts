@@ -19,8 +19,8 @@ export const MAX_CATCHUP_STEPS = 20;
  *   hold  -> heavier gravity + strong ground suction (carve the valley)
  *   release -> light gravity + lift from speed (ride the arc)
  */
-export const GRAVITY_GLIDE = 16;
-export const GRAVITY_DIVE = 96;
+export let GRAVITY_GLIDE = 16;
+export let GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
 /**
  * Along-slope gravity while GLIDING (stick released), UPHILL.
@@ -43,7 +43,7 @@ export const GROUND_G_GLIDE = 14;
  * Diving is still faster (GROUND_G_DIVE 88), so committing to a dive remains
  * the stronger play and the skill ceiling from 457ff35 is untouched.
  */
-export const GROUND_G_GLIDE_DOWN = 30;
+export let GROUND_G_GLIDE_DOWN = 30;
 export const GROUND_G_DIVE = 88;
 
 /**
@@ -65,7 +65,7 @@ export const GROUND_G_DIVE = 88;
  * deceleration is untouched, because the game is still built on climbs costing
  * you. Only the dead flat ground gains anything.
  */
-export const GROUND_STICK_DIVE = 11;
+export let GROUND_STICK_DIVE = 11;
 /**
  * The slope below which ground counts as "dead flat" for the purposes of
  * GROUND_STICK_DIVE above.
@@ -132,7 +132,7 @@ export const GROUND_STICK_FLAT_SLOPE = 0.12;
 export const GROUND_STICK_GLIDE = 1.5;
 
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
-export const AIR_DRAG_GLIDE = 0.00042;
+export let AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
 /**
  * FLARE — what releasing a dive actually does.
@@ -173,8 +173,8 @@ export const FLARE_REFERENCE = 95;
  *  It can brake a dive to FLARE_MAX_RISE but never past it, so the flare can
  *  never turn into a climb. Releasing is recovery, not a launch pad.
  */
-export const FLARE_BRAKE = 300;
-export const FLARE_DURATION = 0.42;
+export let FLARE_BRAKE = 300;
+export let FLARE_DURATION = 0.42;
 /** Largest m/s of extra speed cap any mode surge can grant — slalom warp's 18.
  *
  *  This lives here, not in `Game.ts`, for one reason: the anti-cheat ceiling
@@ -204,16 +204,27 @@ export const FLARE_MAX_RISE = -14;
  * altitude gauge on 0 m, which is why the run opens by looking broken.
  *
  * The start is now a shallow drop-in: clear of the terrain by a visible margin
- * and carrying real airspeed, so the first arc lasts ~2.8 s instead of 0.3 s
- * and the opening frame is a bird in flight.
+ * and carrying real airspeed, and the opening frame is a bird in flight.
  *
- * The altitude is deliberately small. It is the run PEAK that scores the climb
- * goal (`Game.maxAltitude`), so a generous start would hand out a slice of the
- * 120 m target for doing nothing; 14 m is enough to read as flight and cheap
- * enough that it is 12% of the goal.
+ * The altitude is deliberately small — it is the run PEAK that scores the climb
+ * goal (`Game.maxAltitude`), so a generous start hands out a slice of the goal
+ * for doing nothing. It is not, however, as small as an earlier version of this
+ * comment claimed: that note divided by a "120 m target" that does not exist
+ * anywhere in the codebase and called 14 m "12% of the goal". The real first
+ * altitude goal is 45 m scaled per day (Engagement.ts:79) with a 40 m session
+ * target (Engagement.ts:101), so 14 m is ~31% of the goal, not 12%. That is a
+ * deliberate trade, not an oversight: the run opens with a real arc, and the
+ * climb goal is still the majority of the climb ahead.
+ *
+ * The arc length depends entirely on the input, which is why the earlier "the
+ * first arc lasts ~2.8 s" note was misleading — it was measured coasting, the
+ * one policy the coach never asks for. Held (what the game DOES ask for, with
+ * the thumb already down from tapping "Fly now"), the same 14 m is a ~0.70 s
+ * fall at GRAVITY_DIVE. Both are survivable; see Game.onLanding, which absorbs
+ * the first-ever touchdown rather than punishing the instruction that caused it.
  */
-export const START_ALTITUDE = 14;
-export const START_SPEED = 48;
+export let START_ALTITUDE = 14;
+export let START_SPEED = 48;
 
 /** How long a release stays live and can still spend the flare.
  *
@@ -252,7 +263,7 @@ export const FLARE_BUFFER = 0.18;
  *     speed, so it is a hop with a long tail, not a jump jet.
  */
 /** Seconds before the lip within which a release still counts. */
-export const LAUNCH_POP_WINDOW = 0.45;
+export let LAUNCH_POP_WINDOW = 0.45;
 /**
  * Peak upward velocity (m/s) added by a perfectly timed release.
  *
@@ -269,20 +280,20 @@ export const LAUNCH_POP_WINDOW = 0.45;
  * praise should be easy to earn. The pop window (0.45 s) is tight because it
  * drives distance, and distance is what the leaderboard sorts on.
  */
-export const LAUNCH_POP_MAX = 26;
+export let LAUNCH_POP_MAX = 26;
 /** Launch speed at which the pop reaches full strength. */
-export const LAUNCH_POP_SPEED = 70;
+export let LAUNCH_POP_SPEED = 70;
 /** Rolling resistance while on the ground. */
-export const GROUND_FRICTION = 0.05;
+export let GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;
 /** Speed-borne lift while gliding: cancels up to this fraction of gravity. */
-export const GLIDE_LIFT_MAX = 0.55;
-export const GLIDE_LIFT_SPEED = 62;
+export let GLIDE_LIFT_MAX = 0.55;
+export let GLIDE_LIFT_SPEED = 62;
 /** Downforce that keeps a diving bird glued through convex crests. */
-export const STICK_ACCEL_DIVE = 190;
+export let STICK_ACCEL_DIVE = 190;
 export const STICK_ACCEL_GLIDE = 13;
 
-export const MAX_SPEED = 108;
+export let MAX_SPEED = 108;
 export const MAX_SPEED_FEVER = 128;
 /**
  * The highest `speedMult` any skin may carry. The anti-cheat ceiling multiplies
@@ -292,7 +303,7 @@ export const MAX_SPEED_FEVER = 128;
  */
 export const MAX_SKIN_SPEED_MULT = 1.08;
 export const BIRD_RADIUS = 0.9;
-export const MIN_KEEP_SPEED = 12; // higher floor: bird never stalls on uphill terrain
+export let MIN_KEEP_SPEED = 12; // higher floor: bird never stalls on uphill terrain
 
 /* Sunflower bounce pads — land on a bloom and spring straight back into the
  * sky. Gentler than the balloon (an airborne rare), so they reward line
@@ -327,6 +338,61 @@ export const LAND_FEATHER_FLOOR = 0.88;
 
 /* ---------------- launch rating ---------------- */
 export const LAUNCH_MIN_SPEED = 26;
+
+/**
+ * KNOWN DEFECT (measured, deliberately NOT fixed here — read before touching
+ * the launch gate).
+ *
+ * `Bird.step`'s grounded branch can fire `justLaunched` for a take-off that
+ * never happened. Reproduced from the real start state (airborne, x=64,
+ * START_ALTITUDE, START_SPEED), coasting:
+ *
+ *   seed `a`  t=15.2667 spd=12.0 | t=15.2833 spd=12.0 | t=15.3000 spd=12.3
+ *   seed `b`  t=14.9917 spd=21.4 | t=15.0083 spd=21.9 | t=15.0333 spd=21.6
+ *
+ * The bird is 0.0003 m above the surface for each: it skims, is re-projected
+ * onto the tangent, and falls straight back, all inside 33 ms. `Game.onLaunch`
+ * runs once per event, so one non-event produced three coach updates and three
+ * `slopeChain.launch` calls. The crest pop is speed-scaled and contributes ~0
+ * at 12-22 m/s, so no visible hop justifies any of it. The scorer correctly
+ * rejects all of them (`LAUNCH_MIN_SPEED` is 26), which bounds the damage: the
+ * launch combo survives and no points are awarded.
+ *
+ * Root cause: `needed = vt^2 * curvature` collapses at low ground speed, so
+ * almost any positive curvature satisfies the gate once the bird is being
+ * dragged along at MIN_KEEP_SPEED.
+ *
+ * THREE fixes were implemented, measured, and REVERTED. Recording them so the
+ * next attempt does not repeat the work:
+ *
+ *   1. Speed floor (`vt >= LAUNCH_MIN_SPEED`). Removes the phantoms cleanly,
+ *      but 26 and 24 broke `hold > coast x 1.3` outright and 16-22 left a
+ *      three-launch burst on seed `b`. The `hold` policy depends on those
+ *      low-speed launches, so the gate and the skill ceiling are coupled.
+ *   2. Re-arm timer (require N s of continuous ground contact). Did not work:
+ *      the bird reliably re-grounds for exactly 0.108 s and fires again, so any
+ *      window only paced the scrape.
+ *   3. Clearance gate (require the preceding flight to have reached X m). The
+ *      signal separates cleanly — latching peak height at touchdown gives 27.8 m
+ *      and 10.0 m for genuine launches on seed `a`, 0.000 m for every phantom —
+ *      but wiring it suppressed ALL launches and broke the ceiling, because the
+ *      latch is written at the end of `step` while the gate reads it at the
+ *      start of the next, and the ordering interacts with the ballistic branch's
+ *      own `grounded = true` on touchdown.
+ *
+ * The invariant at stake is `skill-ceiling.test.ts` — a one-button game where
+ * holding the button forever is optimal is not a game. That is load-bearing for
+ * session length, the leaderboard and the shop. It is not worth trading for a
+ * defect whose entire player-visible effect is a few redundant coach updates.
+ *
+ * The correct fix is to make the grounded branch recognise that a "launch"
+ * which leaves the bird within a rounding error of the surface never happened,
+ * WITHOUT altering which inputs produce a genuine departure. That means the
+ * decision has to move to the ballistic branch — fire `justLaunched` on the
+ * first step the bird is actually clear of the surface, rather than optimistically
+ * on the way out of the grounded branch.
+ */
+
 export const LAUNCH_RELEASE_WINDOW = 1.35;
 export const RATING_GOOD = 0.42;
 export const RATING_GREAT = 0.68;
@@ -360,7 +426,7 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 260;
+export let ALT_CEILING = 260;
 /**
  * Depth of the soft band below ALT_CEILING over which a climb is damped out.
  *
@@ -403,11 +469,11 @@ export const ALT_STRATO = 230;
  * twenty seconds of real flying against a 52 s day, so a day is a handful of
  * islands rather than a sprint through two.
  */
-export const ISLAND_PERIOD = 1912;
-export const DROP_START = 1233;
+export let ISLAND_PERIOD = 1912;
+export let DROP_START = 1233;
 export const DROP_BLEND_START = 1094;
 export const RAMP_START = 1470;
-export const GAP_START = 1615;
+export let GAP_START = 1615;
 export const OCEAN_FLOOR = -18;
 export const WATER_Y = 0.4;
 
@@ -430,7 +496,7 @@ export const TERRAIN_FACE_DEPTH = 42;
 export const VISIBLE_CHUNKS_BACK = 4;
 export const VISIBLE_CHUNKS_FWD = 14;
 
-export const DAYLIGHT_MAX = 52;
+export let DAYLIGHT_MAX = 52;
 export const DAYLIGHT_ISLAND_REFILL = 15;
 /**
  * How high you may be and still collect an island's refill.
@@ -442,7 +508,7 @@ export const DAYLIGHT_ISLAND_REFILL = 15;
  * stopped being one. Set well above the ridge line (which tops out around
  * 60) so an honest high glide still counts.
  */
-export const ISLAND_REFILL_CEILING = 120;
+export let ISLAND_REFILL_CEILING = 120;
 /**
  * Sun lost per splash, and how often it is taken.
  *
@@ -453,8 +519,8 @@ export const ISLAND_REFILL_CEILING = 120;
  * it is, at 4.3x the rate the day accrues — but a mistake you can swim out of
  * should cost you a mistake's worth, not the run.
  */
-export const DAYLIGHT_OCEAN_PENALTY = 3;
-export const DAYLIGHT_SPLASH_INTERVAL = 0.7;
+export let DAYLIGHT_OCEAN_PENALTY = 3;
+export let DAYLIGHT_SPLASH_INTERVAL = 0.7;
 
 /**
  * Climb Breaker — the compensation for a biome that is a wall rather than a
@@ -484,14 +550,14 @@ export const FEVER_NEED = 3;
 export const FEVER_DURATION = 9;
 export const NEST_MULT_PER_LEVEL = 0.12;
 
-export const COIN_VALUE = 1;
-export const CLOUD_BONUS = 40;
-export const MAGNET_RADIUS = 15;
+export let COIN_VALUE = 1;
+export let CLOUD_BONUS = 40;
+export let MAGNET_RADIUS = 15;
 export const MAGNET_RADIUS_NORMAL = 1.7;
 
 // A calmer default chase distance gives players more route visibility and
 // keeps the bird from dominating the frame on the first seconds of a run.
-export const CAMERA_BASE_Z = 28;
+export let CAMERA_BASE_Z = 28;
 /**
  * Base visual scale of the bird. It is the subject of the whole game and the
  * only thing the player tracks, so it reads generously rather than realistically
@@ -502,15 +568,15 @@ export const CAMERA_BASE_Z = 28;
  * subject-forward size; the camera-distance term in Bird.syncVisual keeps the
  * altitude case readable on top of it.
  */
-export const BIRD_BASE_SCALE = 1.65;
+export let BIRD_BASE_SCALE = 1.65;
 /**
  * Highest camera distance the altitude pull reaches: the base dolly plus the
  * speed term plus the four altitude tiers summed in CameraRig.update
  * (24 + 14 + 12 + 22 + 34 + 46). It normalises the bird's readability
  * compensation, so retune it if the framing curve moves.
  */
-export const CAMERA_REVEAL_MAX = 152;
-export const CAMERA_LOOKAHEAD = 0.22;
+export let CAMERA_REVEAL_MAX = 152;
+export let CAMERA_LOOKAHEAD = 0.22;
 
 export const SAVE_KEY_V1 = "sunbird.save.v1";
 export const SAVE_KEY = "sunbird.save.v2";
@@ -613,3 +679,79 @@ export const GHOST_MAX_SAMPLES = 6000;
 
 /* ---------- Referral ---------- */
 export const REFERRAL_BONUS = 60;
+
+/* ---------------- live tuning surface ----------------
+ *
+ * Every binding in this block is `let` rather than `const` for one reason: the
+ * dev tuning panel writes them, and an ES module binding is *live*. Bird.ts
+ * reads GRAVITY_GLIDE inside `step`, Game.ts reads COIN_VALUE when a coin
+ * lands, CameraRig reads CAMERA_BASE_Z every frame — all of them see a new value
+ * the instant it is assigned, with no re-import and no edit at a single call
+ * site. As `const` they would have given the panel sliders that move a number on
+ * screen and never move the simulation.
+ *
+ * These are bindings and not properties of a settings object, which is the only
+ * reason the write path has to live here: a module cannot reassign another
+ * module's `let`, so `applyLiveTune` below is the single writer in the app.
+ */
+const liveApply = {
+  GRAVITY_GLIDE: (v: number) => { GRAVITY_GLIDE = v; },
+  GRAVITY_DIVE: (v: number) => { GRAVITY_DIVE = v; },
+  GROUND_G_GLIDE_DOWN: (v: number) => { GROUND_G_GLIDE_DOWN = v; },
+  GROUND_STICK_DIVE: (v: number) => { GROUND_STICK_DIVE = v; },
+  STICK_ACCEL_DIVE: (v: number) => { STICK_ACCEL_DIVE = v; },
+  GLIDE_LIFT_MAX: (v: number) => { GLIDE_LIFT_MAX = v; },
+  GLIDE_LIFT_SPEED: (v: number) => { GLIDE_LIFT_SPEED = v; },
+  AIR_DRAG_GLIDE: (v: number) => { AIR_DRAG_GLIDE = v; },
+  FLARE_BRAKE: (v: number) => { FLARE_BRAKE = v; },
+  FLARE_DURATION: (v: number) => { FLARE_DURATION = v; },
+  START_SPEED: (v: number) => { START_SPEED = v; },
+  START_ALTITUDE: (v: number) => { START_ALTITUDE = v; },
+  MAX_SPEED: (v: number) => { MAX_SPEED = v; },
+  MIN_KEEP_SPEED: (v: number) => { MIN_KEEP_SPEED = v; },
+  GROUND_FRICTION: (v: number) => { GROUND_FRICTION = v; },
+  LAUNCH_POP_MAX: (v: number) => { LAUNCH_POP_MAX = v; },
+  LAUNCH_POP_SPEED: (v: number) => { LAUNCH_POP_SPEED = v; },
+  LAUNCH_POP_WINDOW: (v: number) => { LAUNCH_POP_WINDOW = v; },
+  ALT_CEILING: (v: number) => { ALT_CEILING = v; },
+  COIN_VALUE: (v: number) => { COIN_VALUE = v; },
+  CLOUD_BONUS: (v: number) => { CLOUD_BONUS = v; },
+  MAGNET_RADIUS: (v: number) => { MAGNET_RADIUS = v; },
+  DAYLIGHT_MAX: (v: number) => { DAYLIGHT_MAX = v; },
+  ISLAND_REFILL_CEILING: (v: number) => { ISLAND_REFILL_CEILING = v; },
+  DAYLIGHT_OCEAN_PENALTY: (v: number) => { DAYLIGHT_OCEAN_PENALTY = v; },
+  DAYLIGHT_SPLASH_INTERVAL: (v: number) => { DAYLIGHT_SPLASH_INTERVAL = v; },
+  ISLAND_PERIOD: (v: number) => { ISLAND_PERIOD = v; },
+  GAP_START: (v: number) => { GAP_START = v; },
+  DROP_START: (v: number) => { DROP_START = v; },
+  CAMERA_BASE_Z: (v: number) => { CAMERA_BASE_Z = v; },
+  CAMERA_LOOKAHEAD: (v: number) => { CAMERA_LOOKAHEAD = v; },
+  CAMERA_REVEAL_MAX: (v: number) => { CAMERA_REVEAL_MAX = v; },
+  BIRD_BASE_SCALE: (v: number) => { BIRD_BASE_SCALE = v; },
+};
+
+/** Names `applyLiveTune` accepts. Derived, so a knob cannot be added to one map
+ *  and forgotten in the other. */
+export type LiveTunable = keyof typeof liveApply;
+
+/**
+ * Compiled default of each tunable, read once while this module initialises —
+ * i.e. before any override can reach it, which is what makes it the value a
+ * panel reset returns to.
+ */
+export const LIVE_TUNE_DEFAULTS: Record<LiveTunable, number> = {
+  GRAVITY_GLIDE, GRAVITY_DIVE, GROUND_G_GLIDE_DOWN, GROUND_STICK_DIVE,
+  STICK_ACCEL_DIVE, GLIDE_LIFT_MAX, GLIDE_LIFT_SPEED, AIR_DRAG_GLIDE,
+  FLARE_BRAKE, FLARE_DURATION, START_SPEED, START_ALTITUDE, MAX_SPEED,
+  MIN_KEEP_SPEED, GROUND_FRICTION, LAUNCH_POP_MAX, LAUNCH_POP_SPEED,
+  LAUNCH_POP_WINDOW, ALT_CEILING, COIN_VALUE, CLOUD_BONUS, MAGNET_RADIUS,
+  DAYLIGHT_MAX, ISLAND_REFILL_CEILING, DAYLIGHT_OCEAN_PENALTY,
+  DAYLIGHT_SPLASH_INTERVAL, ISLAND_PERIOD, GAP_START, DROP_START,
+  CAMERA_BASE_Z, CAMERA_LOOKAHEAD, CAMERA_REVEAL_MAX, BIRD_BASE_SCALE,
+};
+
+/** Write one tunable. The only way anything outside this module can change a
+ *  physics constant while the game is running. */
+export function applyLiveTune(key: LiveTunable, value: number): void {
+  liveApply[key](value);
+}

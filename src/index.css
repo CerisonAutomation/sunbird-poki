@@ -698,15 +698,15 @@ textarea {
    sentence and is `width: auto`, so it takes no part in the sentence's line
    breaking — the failure it was introduced along with is structurally gone. */
 .coach-steps {
-  position: absolute;
-  left: 50%;
-  top: 30%;
-  transform: translate(-50%, -50%);
-  /* The hint below is `translate(-50%, -50%)` centred on the same 30% line and
-     is up to two lines tall, so the bar sits a fixed 44px above that origin:
-     clear of the first line of text on one line, clear of the second on two. */
-  margin-top: -46px;
+  /* A flow child of the band, stacked above the sentence it annotates. It used
+     to be `position: absolute; top: 30%; margin-top: -46px` — a hand-picked
+     guess at how tall the coaching sentence is, which is wrong by exactly the
+     difference between a one-line and a two-line cue. The band already reserves
+     its own height from the measurement, so stacking in flow is both simpler
+     and correct at every text length. */
+  position: static;
   display: flex;
+  justify-content: center;
   gap: 5px;
   pointer-events: none;
   opacity: 0;
@@ -2105,14 +2105,31 @@ fieldset.squad-fields {
      the footer, with a floor at H+4 so it can never ride back into the header.
      At 568x320 that lands it at 181.5..205.5 in a 178..226 gap; at 320x568 at
      330.5..381.5 in a 320..390.5 gap. On a tall screen the min() is not the
-     smaller term and the original offset applies unchanged. */
-  top: max(
-    calc(var(--hud-header-height, 110px) + 4px + env(safe-area-inset-top)),
-    min(
-      calc(var(--hud-header-height, 110px) + 82px + env(safe-area-inset-top)),
-      calc(100% - var(--hud-footer-height, 90px) - 60px)
+     smaller term and the original offset applies unchanged.
+
+     That whole clamp is now only the FALLBACK. `--hud-messages-top` is measured
+     by `HUD.publishMessageBand` with the one input CSS cannot know — whether
+     the footer is anchored to the top or the bottom — and in portrait the
+     subtraction below is simply the wrong number. The old expression is kept
+     verbatim as the var() fallback so the first frame, before anything has been
+     measured, still lands somewhere sane. */
+  top: var(
+    --hud-messages-top,
+    max(
+      calc(var(--hud-header-height, 110px) + 4px + env(safe-area-inset-top)),
+      min(
+        calc(var(--hud-header-height, 110px) + 82px + env(safe-area-inset-top)),
+        calc(100% - var(--hud-footer-height, 90px) - 60px)
+      )
     )
   );
+  /* Deliberately NO `max-height` here, and none on the children either. The
+     band's placement is measured, but its HEIGHT is its text: capping it in CSS
+     is what clipped 16px off a two-line cue, and capping it from the measured
+     ceiling is worse still — `--hud-messages-max` is legitimately 0 when the
+     corridor between the top-anchored footer and the quip lane is closed (the
+     slope chain hidden reports its top as 0), and a 0px band is a coaching cue
+     nobody is told. The band lays out; the measurement decides where it goes. */
   left: 50%; transform: translateX(-50%);
   width: min(520px, calc(100% - 100px));
   text-align: center;
@@ -2126,6 +2143,13 @@ fieldset.squad-fields {
   margin: 0; white-space: normal; overflow-wrap: anywhere;
   font-size: clamp(17px, 3vw, 28px);
   animation: none;
+  /* Even line lengths for the short coaching cues. The band is 520px wide and
+     the type scales to 28px, so "HOLD to dive down the hill" filled the first
+     line and left "hill" alone on the second — a one-word orphan under a
+     centred line, which reads as a mistake even though the box is correct.
+     `balance` is the browser's own line-breaker for exactly this case and is a
+     no-op where it is unsupported, so nothing depends on it. */
+  text-wrap: balance;
 }
 .hud-root:not([data-feedback="launch"]) .launch-banner,
 .hud-root:not([data-feedback="hint"]) .hint,
@@ -2149,13 +2173,14 @@ fieldset.squad-fields {
 .flight-footer .fever-wrap:not(.on) { display: none; }
 .flight-footer .emote-wheel { overflow-x: auto; pointer-events: auto; touch-action: pan-x; padding: 2px; }
 .flight-footer .emote-wheel button { flex: 0 0 44px; height: 44px; }
-.hud-root[data-flying="true"] .toasts {
-  top: auto; bottom: calc(var(--hud-footer-height, 65px) + 28px + env(safe-area-inset-bottom));
-  width: min(400px, calc(100% - 100px));
-}
 .toasts .toast { max-width: 100%; overflow-wrap: anywhere; text-align: center; }
 .hud-root[data-flying="true"] .toast:not(:last-child) { display: none; }
-.hud-root[data-feedback="countdown"] .toasts,
+/* Launch and finish own the whole screen — a banner, a count, and a result
+   table — so the toast lane steps aside for them. Countdown deliberately is
+   NOT in this list: it is three frozen seconds in which nothing else is
+   painted, so a hint raised there has the lane to itself and is read the
+   moment it appears. Hiding it cost three seconds of silence on exactly the
+   screens where a new player most needs to be told what is happening. */
 .hud-root[data-feedback="launch"] .toasts,
 .hud-root[data-feedback="finish"] .toasts { visibility: hidden; }
 
@@ -2168,7 +2193,10 @@ fieldset.squad-fields {
      so the fixed value printed this pill on top of the daylight meter on every
      phone and on top of the island chips on desktop, exactly while a chain was
      live. Same lane variable every sibling uses. */
-  top: calc(var(--hud-header-height, 110px) + 4px);
+  top: max(
+    calc(var(--hud-header-height, 110px) + 4px + env(safe-area-inset-top)),
+    var(--hud-chain-clear, 0px)
+  );
   left: auto;
   right: calc(14px + env(safe-area-inset-right, 0px));
   transform: none;
@@ -2184,7 +2212,10 @@ fieldset.squad-fields {
      so the chain keeps the corner and the lane drops below it — and every
      value here now derives from the same measured variable rather than from
      a second guess at the header's height. */
-  top: calc(var(--hud-header-height, 110px) + 72px + env(safe-area-inset-top, 0px));
+  top: max(
+    calc(var(--hud-header-height, 110px) + 72px + env(safe-area-inset-top, 0px)),
+    var(--hud-stack-bottom, 0px)
+  );
   right: calc(14px + env(safe-area-inset-right, 0px));
   left: auto;
   bottom: auto;
@@ -2194,11 +2225,11 @@ fieldset.squad-fields {
 }
 .hud-root[data-flying="true"] .toasts .toast { max-width: 100%; }
 @media (max-width: 640px) {
-  .hud-root[data-flying="true"] .toasts { width: min(240px, 48vw); top: calc(var(--hud-header-height, 110px) + 68px + env(safe-area-inset-top, 0px)); }
+  .hud-root[data-flying="true"] .toasts { width: min(240px, 48vw); }
   .hud-root[data-flying="true"] .ring-chain { right: 12px; }
 }
 @media (max-height: 500px) and (min-width: 641px) {
-  .hud-root[data-flying="true"] .toasts { top: calc(var(--hud-header-height, 110px) + 62px + env(safe-area-inset-top, 0px)); }
+  /* Nothing to override: the lane reads the measured stack at every size. */
 }
 /* Split-screen keeps its score bar but shares the same accessible controls. */
 .play-hud.versus .top-bar { display: flex; justify-content: flex-end; }
@@ -2210,11 +2241,41 @@ fieldset.squad-fields {
   .play-hud .standings { display: none; }
 }
 @media (max-width: 640px) {
-  .hud-header .top-bar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
-  .hud-header .sun-meter { grid-row: 2; grid-column: 1 / -1; }
+/* Every child placed EXPLICITLY, because auto-placement is what put this bar
+     on three rows. `.top-bar` holds four children — distance, sun meter, coins,
+     controls — and with the sun meter spanning a full-width row of its own, the
+     controls had nowhere left to go and fell to a third row. The bar was 134px
+     tall on a 320x568 phone, which pushed the header past the footer's top edge
+     (both are anchored in the portrait layout), and the race surfaces hanging
+     off the footer then printed straight over the goal card.
+
+     Two rows instead, with the controls sharing row two beside the daylight
+     bar rather than below everything:
+       row 1  distance ......... coins
+       row 2  daylight bar .... controls
+
+     The alternative — a three-column row one with the controls between the two
+     stat blocks — was measured first and is worse. `.hud-controls` is 145px
+     wide because it carries the combo badge with the two buttons, so an `auto`
+     middle column left each stat block 64px and "123,456 m" wrapped onto three
+     lines. Here the same `auto` track holds the coins block, which is content
+     the row needs anyway, and the distance block keeps the `1fr`. */
+  .hud-header .top-bar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; }
+  .hud-header .stat-block { grid-row: 1; grid-column: 1; }
+  .hud-header .stat-block.right { grid-row: 1; grid-column: 2; justify-self: end; }
+  .hud-header .sun-meter { grid-row: 2; grid-column: 1; }
+  .hud-header .hud-controls { grid-row: 2; grid-column: 2; justify-self: end; }
   .hud-header .sun-caption { display: none; }
-  .hud-header .stat-value { font-size: 20px; }
-  .hud-header .stat-sub { font-size: 10px; }
+  /* The 54px right padding on the value reserved room for the controls when
+     they were absolutely positioned over the bar's corner. They are a grid
+     cell now, so on a 320px screen the padding was eating a third of the
+     distance block's width to guard against a collision that cannot happen. */
+  .hud-header .stat-value { font-size: 20px; padding-right: 0; }
+  /* The medal line ("🏆 best 1.44 km") is a 40px row that only restates a
+     personal best the player has already seen on the menu. On a narrow phone
+     it is the difference between a header that fits above the footer and one
+     that does not, so it goes the same way it already goes on short landscape. */
+  .hud-header .stat-sub { display: none; }
   .hud-header .mid-meta { font-size: 10px; }
   .hud-header .mid-meta > * { font-size: 10px; padding: 3px 6px; }
   .flight-footer .goal-strip { font-size: 11px; }
@@ -2230,6 +2291,36 @@ fieldset.squad-fields {
   .hud-header .mid-meta .biome-chip { display: none; }
   .hud-header .mid-meta .biome-chip.hazard-near { display: inline-flex; }
 }
+/* The roster bar is the one race surface with no fallback: the standings panel,
+   the room code and the pilot list all still say who you are racing, so losing
+   the bar costs the race its LIVENESS read, not its information.
+
+   It is 42px of a 320px-tall window. Measured at 568x320, the header ran to
+   y 208 while the footer starts at y 186 — the two printed over each other by
+   22px, with the roster bar landing inside the goal card. There is no version
+   of the header that fits that window with the bar in it: the top bar, the
+   power strip and the meta chips alone are 152px of the 182px the footer
+   leaves. So at this height the bar goes, and the standings carry the race.
+
+   Deliberately NOT at the existing `max-height: 500px`: 844x390 has the bar's
+   40px to spare (header 163, footer 110, 390 total) and is one of the two
+   frames Poki embeds most. 360px is where the header stops fitting. */
+@media (max-height: 360px) {
+  .hud-header .roster-bar { display: none; }
+  /* The altitude gauge goes for the same reason, and it is a real trade: a
+     320px-tall window leaves 26px between the header's bottom edge (160) and
+     the footer's top edge (186), and the gauge's floor is 44px. There is no
+     position for it that is not inside one of them — the `top` clamp could
+     only choose which one it overlapped.
+
+     This is the same call the HUD already makes about the coach hand and the
+     impact popups under `max-height: 500px`, and it is a choice about what a
+     very short window is for. The flight corridor is the game; the gauge is a
+     second reading of information the terrain silhouette already gives. If a
+     shorter window ever needs the gauge more than the header does, the header
+     is the thing to cut, not this. */
+  .play-hud .alt-gauge { display: none; }
+}
 @media (max-height: 500px) and (min-width: 641px) {
   .hud-header .stat-sub, .hud-header .sun-caption { display: none; }
   .hud-header .stat-value { font-size: 20px; }
@@ -2237,9 +2328,11 @@ fieldset.squad-fields {
   .hud-header { gap: 4px; }
   .flight-footer .goal-strip .gs:not(:first-child) { display: none; }
   .flight-footer { gap: 4px; bottom: calc(8px + env(safe-area-inset-bottom)); }
-  /* Same rule on short landscape: the chain pills still occupy H+4 .. H+66,
-     so the coaching band keeps its clearance instead of snapping back up. */
-  .flight-messages { top: calc(var(--hud-header-height, 90px) + 76px + env(safe-area-inset-top)); }
+  /* The band's placement is NOT restated here. It used to be, at
+     `H + 76px`, and a per-breakpoint `top` is a second guess at a number
+     `publishMessageBand` measures — the one thing that can put two lanes in the
+     same pixels while both look right. The band keeps the measured value on
+     every viewport; only its type size is a breakpoint's business. */
   .flight-messages > .hint, .flight-messages > .launch-banner { font-size: 19px; }
   .hud-root[data-flying="true"] .toast { font-size: 12px; padding: 5px 10px; }
 }
@@ -2249,11 +2342,7 @@ fieldset.squad-fields {
 
 /* Keep transient text out of the header/footer safe zones even when a
    viewport is short or browser chrome changes the available height. */
-.flight-messages {
-  max-height: calc(100% - var(--hud-header-height, 110px) - var(--hud-footer-height, 65px) - 24px);
-  overflow: visible;
-}
-.flight-messages > * { max-height: 64px; }
+.flight-messages { overflow: visible; }
 .flight-messages > .countdown {
   position: static; transform: none; animation: none;
   font-size: clamp(32px, 7vh, 60px); line-height: 1.1;
@@ -2296,7 +2385,43 @@ fieldset.squad-fields {
   );
   height: clamp(44px, calc(100% - var(--hud-header-height, 110px) - var(--hud-footer-height, 65px) - 72px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 240px);
 }
-.play-hud .hand { top: calc(var(--hud-header-height, 110px) + 92px + env(safe-area-inset-top)); font-size: 38px; }
+/* The rule above reads `--hud-footer-height` as a reservation from the BOTTOM,
+   which is what HUD.ts measures on a landscape screen. In portrait it is not:
+   design-polish.css moves the footer to `top: calc(var(--hud-header-height) +
+   8px)`, so HUD.ts switches to measuring its bottom edge downward instead, and
+   the same variable becomes "the footer ends 290px down". Reading that as a
+   bottom inset is what put the gauge in the wrong place.
+
+   At 320x568 it cost a 33x44px overlap: the gauge took the header term
+   (H + 28 = 195.4) because the footer term (100% - 290.4 - 46 = 231.6) was
+   larger, while the footer actually starts at H + 8 = 175.4 — so the gauge sat
+   *inside* the goal strip. Its height term, `100% - H - F - 72` = 38.2px, was
+   under the 44px floor, so it was crushed as well: wrong place AND wrong size.
+
+   Portrait therefore gets its own arithmetic, and it is the landscape shape with
+   the variable's meaning swapped: hang below whichever of the header and the
+   footer ends lower, and measure the free band from the footer's bottom edge
+   downward. */
+@media (max-aspect-ratio: 3/4) {
+  .play-hud .alt-gauge {
+    top: max(
+      calc(var(--hud-header-height, 104px) + 28px + env(safe-area-inset-top)),
+      calc(var(--hud-footer-height, 290px) + var(--hud-lane-gap, 10px))
+    );
+    height: clamp(44px, calc(100% - var(--hud-footer-height, 290px) - 28px - var(--hud-lane-gap, 10px) - env(safe-area-inset-bottom)), 240px);
+  }
+}
+/* Hangs off the message band's bottom, not off the header. It used to take
+   `H + 92px` — a fourth independent guess at where the band ended, on a lane
+   that is centred like the band and directly below it, so any error put the
+   coach glyph on top of the sentence it was annotating. `publishMessageBand`
+   already includes the hand's own height in `--hud-stack-bottom`, and
+   `--hud-messages-bottom` is where the hand starts. The old offset is the
+   var() fallback for the frame before anything has been measured. */
+.play-hud .hand {
+  top: calc(var(--hud-messages-bottom, calc(var(--hud-header-height, 110px) + 92px + env(safe-area-inset-top))) + var(--hud-lane-gap, 10px));
+  font-size: 38px;
+}
 .hud-root:not([data-feedback="hint"]) .hand { display: none; }
 .hand-hint { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0.03em; color: rgba(255,255,255,0.85); text-shadow: 0 1px 3px rgba(0,0,0,0.5); margin-top: 4px; }
 @media (max-height: 500px) { .play-hud .hand { display: none; } }
@@ -2352,11 +2477,19 @@ fieldset.squad-fields {
      already measured into `--hud-footer-height`, so the bottom of the free
      band is the one anchor on a short screen that is not shared with a
      control. */
-  .hud-root[data-flying="true"] .toasts {
-    width: min(210px, 42vw);
-    top: auto;
-    bottom: calc(var(--hud-footer-height, 65px) + 78px + env(safe-area-inset-bottom, 0px));
-  }
+  /* Width only. The lane's placement is the measured stack on short screens
+     too: a `max-height: 600px` `top`/`bottom` is a fourth guess at a corridor
+     `publishMessageBand` already measured, and it is the guess that put the
+     pill over the landing corridor in the first place. `.impact-popups`
+     reserves the matching width below. */
+  /* `42vw` is 134px on a 320px phone, and a two-clause sentence in 134px wraps
+     to three lines — a 41px toast hanging off the bottom of a 568px screen,
+     10px past the viewport edge. The lane's HEIGHT is what runs out of room on
+     a short screen, so the width is spent on making the text shorter instead:
+     260px holds the same sentence in two lines, and the toast comes back
+     inside the frame. The `100% - 28px` clause keeps the same inset the lane
+     already has from `right` on wider short windows. */
+  .hud-root[data-flying="true"] .toasts { width: min(260px, calc(100% - 28px)); }
   .hud-root[data-flying="true"] .toast {
     font-size: clamp(11px, 1.5vw, 13px);
     padding: 4px 8px;
@@ -2379,7 +2512,7 @@ fieldset.squad-fields {
      this size, so +100px centres FLOW just past its right edge. */
   .hud-root .slope-chain {
     /* Same reasoning at this size: derive it, don't re-hardcode it. */
-    bottom: calc(var(--hud-footer-height, 90px) + 8px + env(safe-area-inset-bottom));
+    bottom: calc(var(--hud-footer-bottom, 90px) + 8px + env(safe-area-inset-bottom));
   }
 }
 
@@ -2409,8 +2542,17 @@ fieldset.squad-fields {
 /* Impact text is secondary: never paint it over a header, replay dialog,
    landing instruction or mobile touch controls. */
 .hud-root .impact-popups {
-  top:calc(var(--hud-header-height,110px) + 94px + env(safe-area-inset-top));
-  bottom:calc(var(--hud-footer-height,65px) + 90px + env(safe-area-inset-bottom));
+  /* Both edges are measured, and they CROSSED. `top` was `H + 94` against a
+     `bottom` of `100% - footer - 90`; in portrait the footer is TOP-anchored, so
+     the top came out BELOW the bottom, the box inverted to zero height, and
+     `HUD.popup`'s height guard returned early — so no impact popup rendered at
+     all on the two frames Poki embeds most. `min-height` is what keeps the lane
+     usable where the two are genuinely close (844x390 leaves 2px between the
+     stack and the quip lane): it is the floor, not the geometry, that stops the
+     guard dropping every popup. */
+  top: var(--hud-stack-bottom, calc(var(--hud-header-height, 110px) + 94px + env(safe-area-inset-top)));
+  bottom: calc(100% - var(--hud-lane-floor, 0px) + 8px);
+  min-height: 22px;
   /* The right inset is deliberately NOT the mirror of the left one, and that
      asymmetry is the whole fix. `.toasts` is a top-RIGHT column while flying
      (top: safe-area + 112px, width min(280px, 34vw)) while this lane ran to
@@ -2479,6 +2621,33 @@ fieldset.squad-fields {
 }
 .flight-footer .emote-wheel button:active {
   transform: scale(0.92);
+}
+/* The emote pill, compacted for a 320px-tall window. It MUST sit after the
+   pill above: a media query adds no specificity, so an identical selector
+   earlier in the file loses on order no matter how carefully it is scoped.
+   This is the measured trade — at 568x320 the footer owns 122px of a 320px
+   screen and leaves a 26px corridor between the header's bottom edge (y 160)
+   and its own top edge (y 186), so the 28px coaching band overlaps the footer
+   by 6px. Shrinking the emote row by 16px moves the footer's top edge to 198
+   and the band clears it with 10px to spare. The pill keeps its 44px target
+   at every other size, where the footer has room to spend it, and a message
+   the player is meant to read outranks 16px of button.
+
+   `height` is stated as well as `min-height`, and that is not belt and braces:
+   the pill rule above never resets `height`, so the `height: 44px` from the
+   mobile `flex: 0 0 44px` rule (line ~2168) is still in force. Lowering
+   `min-height` alone left the button at exactly 44px and the footer's top edge
+   at exactly 186 — the first version of this fix changed nothing measurable. */
+@media (max-height: 360px) {
+  .flight-footer .emote-wheel button {
+    height: 26px;
+    min-width: 34px;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 13px;
+    font-size: 11px;
+  }
+  .flight-footer .emote-wheel { padding: 0; }
 }
 .flight-footer .emote-options {
   display: flex;
@@ -2871,7 +3040,7 @@ label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
      put this pill at 60-85px from the bottom — inside the footer, two
      translucent pills stacked on each other, for the whole time a slope chain
      ran. */
-  position: absolute; bottom: calc(var(--hud-footer-height, 90px) + 8px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: calc(var(--hud-footer-bottom, 90px) + 8px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 8px;
   padding: 5px 14px; border-radius: 999px; pointer-events: none;
   background: rgba(16, 39, 32, .82); border: 1px solid rgba(127, 255, 180, .45);
@@ -2879,6 +3048,27 @@ label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
   font-variant-numeric: tabular-nums;
 }
 .slope-chain.hidden { display: none; }
+
+/* The quip lane is a bottom-anchored flight lane like `.slope-chain`, and it
+   reads `--hud-footer-bottom` for the same reason: that is the footer's
+   reservation measured from the BOTTOM. `--hud-footer-height` is 346 in
+   portrait — where the footer is pinned to the TOP and the variable measures a
+   band downward — so subtracting it from a `bottom` parked this lane 278px up an
+   844px screen, in the middle of the flight field. It sits clear above the slope
+   pill rather than under it: the two are the obstructions the message band's
+   floor is measured against, and stacking them is how the band lost its height
+   in the first place. */
+.quips {
+  position: absolute;
+  bottom: calc(var(--hud-footer-bottom, 90px) + 42px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
 .slope-chain-icon { font-size: 13px; line-height: 1; }
 .slope-chain i {
   display: block;

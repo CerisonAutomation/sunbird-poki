@@ -20,6 +20,13 @@ if (typeof document !== "undefined") {
 // ready by the first interactive frame — target-gated and failure-tolerant.
 preloadPortalSdk();
 
+// The dev tuning panel, on `). `import.meta.env.DEV` is a build-time
+// substitution: a production bundle replaces it with false, this branch is
+// dropped and the panel chunk is never emitted. It has to stay a dynamic
+// import — a static one would pull the panel into the entry chunk of every
+// build, production included.
+if (import.meta.env.DEV) void import("./game/DevPanelMount").then((m) => m.installDevPanel());
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

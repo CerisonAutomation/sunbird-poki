@@ -5598,7 +5598,7 @@ h1, h2, h3, h4, h5, h6, .heading-art {
    the product. Bigger, and lit off the tile so it reads as the thing being
    offered rather than as a thumbnail in a list. */
 .skin-bird .bird-wing { transform-box: view-box; }
-.skin-card .skin-preview svg { filter: drop-shadow(0 3px 5px rgba(58, 34, 24, 0.26)); }
+.skin-card .skin-art svg { filter: drop-shadow(0 3px 5px rgba(58, 34, 24, 0.26)); }
 .shop-hero-bird { filter: drop-shadow(0 6px 12px rgba(58, 34, 24, 0.3)); }
 
 /* Respect the in-game Reduce Motion toggle and the OS setting alike — a

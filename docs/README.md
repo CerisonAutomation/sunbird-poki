@@ -34,6 +34,7 @@ markdown — so this stays true instead of being true once.
 | Use Poki's Arbitrary User Data Store | [`AUDS.md`](./AUDS.md) |
 | Check legal/privacy/security posture | [`LEGAL_SECURITY.md`](../LEGAL_SECURITY.md) |
 | See the ops/service gap register | [`PRODUCTION_READINESS_PLAN.md`](../PRODUCTION_READINESS_PLAN.md) |
+| Walk the pre-release checklist line by line | [`PRODUCTION_CHECKLIST.md`](./PRODUCTION_CHECKLIST.md) |
 | Know which translation debt is left | [`i18n-debt.json`](./i18n-debt.json) (written by `pnpm i18n:audit`) |
 | Read the evidence behind a past decision | [`audits/README.md`](./audits/README.md) |
 

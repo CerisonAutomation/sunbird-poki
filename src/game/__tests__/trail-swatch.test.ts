@@ -61,7 +61,7 @@ function shop(shopTrails: ShopTrailView[]): string {
     vip: false,
     wallet: 0,
     wingmanBundle: null,
-  } as unknown as Parameters<typeof renderShop>[0], { ...newShopBrowse(), preview: "" });
+  } as unknown as Parameters<typeof renderShop>[0], { ...newShopBrowse() });
 }
 
 const everyTrail: ShopTrailView[] = SHOP_TRAILS.map((def) => ({ def, owned: true, equipped: false, affordable: true }));

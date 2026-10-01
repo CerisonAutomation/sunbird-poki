@@ -73,7 +73,7 @@ export function renderProgress(s: Pick<HudSnapshot, "bestDistance" | "calendar" 
     </button>
 
     ${sectionTitle(null, "Career", "RANK &amp; WINGS")}
-    <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
+    <button class="rank-card" data-ui data-action="open-rank" aria-label="${t("hud.aria.rivalRankPractice", undefined, "View local Rival rank (practice field)")}">
       <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
       <span class="rank-num">${s.rival.rating}</span>
       <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>

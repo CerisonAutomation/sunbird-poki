@@ -43,6 +43,7 @@ import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
 import { renderAd, renderContinue, renderGameOver } from "./hud/run";
 import { renderProgress, renderPass, renderTrophies, renderAccount, renderCampaign, renderCups } from "./hud/meta";
 import { renderLive, renderRank, renderSquad, renderPractice, renderModes } from "./hud/race";
+import { LANE_GAP_PX, footerAnchoredTop, messageBand } from "./hud/messageBand";
 
 // The view-model, the shared chrome and the screens now live under ./hud/.
 // This module keeps its public face by re-exporting what Game.ts and the test
@@ -108,6 +109,39 @@ const RUN_REACHABLE_M = 3000;
  *  (thud → bop → thud) without letting a sustained scrape pile the play area
  *  up with words. Mirrors the toast lane's bound. */
 const IMPACT_POPUP_CAP = 3;
+
+/** How long a flavour line stays up before it is retired.
+ *
+ *  A system toast lives 450 ms plus ~415 ms per word. That is sized for "coins
+ *  +12" — you read it in a glance and it has done its job. A quip is the only
+ *  message in the game that is *written* rather than reported, several of them
+ *  run to two lines on a short screen, and the player has to finish the
+ *  sentence to get the joke. On the system-toast timing a two-line quip was
+ *  still being replaced as it was being read.
+ *
+ *  3.4 s is roughly the old maximum read time (the `messageHoldMs` ceiling was
+ *  6 s for very long toasts) applied to the median quip, and it deliberately
+ *  exceeds the moment-to-moment churn of the flight so a joke is not competing
+ *  with the next coin. */
+const QUIP_HOLD_MS = 3400;
+/** Bounded extra wait so a quip raised while its lane is hidden is released
+ *  rather than leaked — the same ceiling the toast lane uses. */
+const QUIP_OBSCURE_WAIT_MS = 2400;
+
+/** One live quip. `timer` is the armed hold poll (re-armed every tick),
+ *  `removal` the pending 260 ms fade-out removal. */
+type QuipLive = {
+  el: HTMLElement;
+  count: number;
+  timer: number;
+  removal: number | null;
+  visibleFor: number;
+  lastTick: number;
+};
+
+/** How long GO! stays painted, and therefore how long the countdown slot holds.
+ *  Matches the CSS exit duration so the slot releases exactly as GO fades. */
+const GO_VISIBLE_MS = 700;
 
 type ActionHandler = (action: string, id: string) => void;
 
@@ -194,20 +228,30 @@ export class HUD {
   private overEl!: HTMLElement;
   private overCard!: HTMLElement;
   private toastLayer!: HTMLElement;
-  /** Pills that have now been on screen long enough to be replaced. Driven
-   *  by a timer rather than a wall clock so it behaves identically under
-   *  fake timers, and so there is one source of truth for "has been seen". */
-  private readonly toastSeen = new WeakSet<HTMLElement>();
   /** Toasts waiting for the incumbent to finish being readable. */
-  private readonly toastQueue: { text: string; kind: string }[] = [];
+  private readonly toastQueue: { text: string; kind: string; icon: string }[] = [];
   private toastDrainTimer: number | null = null;
-  private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number }>();
+  private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number; bornAt: number }>();
+  /** The quip lane: flavour lines, on their own surface.
+   *
+   *  These used to be poured into `.toasts` alongside every system message —
+   *  211 quips sharing a channel capped at ONE visible pill with 267 system
+   *  call sites. In flight the game emits a near-continuous stream of wind,
+   *  thermal, goal and coin messages, so a quip was routinely born and evicted
+   *  inside the same 100 ms. They all fired; almost none survived to be read,
+   *  which is exactly the report that the funny messages "don't even show up".
+   *  See toastFloor.ts for the eviction policy this escapes. */
+  private quipLayer!: HTMLElement;
+  private readonly liveQuips = new Map<string, QuipLive>();
   private flashEl!: HTMLElement;
   private comboEl!: HTMLElement;
   private biomeChip!: HTMLElement;
   private speedLines!: HTMLElement;
   private handEl!: HTMLElement;
   private handHintEl!: HTMLElement;
+  /** The measured message band. Its `top` and height are arithmetic published
+   *  by `publishMessageBand`, so it is a `const` in every stylesheet. */
+  private messagesEl!: HTMLElement;
   private altGauge!: HTMLElement;
   private altFill!: HTMLElement;
   private altBird!: HTMLElement;
@@ -252,6 +296,13 @@ export class HUD {
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
+  /** Wall-clock end of the GO! beat. Holds `data-feedback="countdown"` so GO!
+   *  is actually painted — see `feedbackSlot`.
+   *
+   *  A timestamp rather than a per-frame decrement because `update()` is
+   *  throttled to 30 Hz: a fixed 1/60 step would run at half rate on a 30 Hz
+   *  HUD and release the slot late. */
+  private goUntil = 0;
   /**
    * Tournament countdown urgency (mid-week push): cup ids the "only N days
    * left" toast has already fired for. Never needs manual reset — a cup's
@@ -390,8 +441,8 @@ export class HUD {
           <div class="island-chip" data-ref="island">${t("hud.ui.I1", undefined, "Island 1")}</div>
           <div class="biome-chip" data-ref="biome"></div>
           <div class="mult-chip" data-ref="mult">×1.0</div>
-          <div class="gold-chip hidden" data-ref="goldChip">✦ GOLD</div>
-          <div class="vip-chip hidden" data-ref="vipChip">♛ VIP</div>
+          <div class="gold-chip hidden" data-ref="goldChip">${menuIconSm("half_day")}<span>GOLD</span></div>
+          <div class="vip-chip hidden" data-ref="vipChip">${menuIconSm("crown")}<span>VIP</span></div>
           <div class="ghost-chip hidden" data-ref="ghostChip"></div>
         </div>
         <div class="power-chips" data-ref="powers"></div>
@@ -419,7 +470,7 @@ export class HUD {
         <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
         <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">${pauseSvg()}</button>
         <div class="combo" data-ref="combo"></div>
-        <div class="coach-steps hidden" data-ref="coachSteps" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-label="Coach progress"></div>
+        <div class="coach-steps hidden" data-ref="coachSteps" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-label="${t("hud.aria.coachProgress", undefined, "Coach progress")}"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="hand" data-ref="hand">${menuIconSm("hand")}<span class="hand-hint" data-ref="handHint"></span></div>
         <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
@@ -485,6 +536,7 @@ export class HUD {
       <div class="overlay gameover hidden" data-ref="over"><div class="paper-card" data-ref="overCard"></div></div>
 
       <div class="toasts" data-ref="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+      <div class="quips" data-ref="quips" role="status" aria-live="polite" aria-atomic="false"></div>
       <div class="flash" data-ref="flash"></div>
       <div class="impact-popups" data-ref="impactPopups"></div>
       <div class="matchmaking hidden" data-ref="matchmaking" role="status" aria-live="polite">
@@ -535,7 +587,16 @@ export class HUD {
     // It also escaped `e2e/layout.spec.ts`, whose overlap assertion names the
     // lanes — an element in no lane cannot be asserted into one. The assertion
     // picks it up automatically now that the lane exists.
-    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]);
+    //
+    // `.coach-steps` joins the same lane for the same reason. It was absolutely
+    // positioned at `top: 30%` with a hand-tuned `margin-top: -46px` that had to
+    // guess how tall the sentence below it was — and the guess was 16px short on
+    // a two-line coaching cue. As the first flow child it takes its own line
+    // above the sentence, and the sentence wraps under it however tall it turns
+    // out to be. First in the list so the bar reads above the words it marks.
+    const messages = lane("flight-messages", [".coach-steps", ".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]);
+    this.messagesEl = messages;
+
     // `.fever-wrap` stays in the footer lane: it is `position: static` there
     // (see `.flight-footer .fever-wrap`), so it is a flow child of the footer.
     // Moving it out made the absolutely-positioned base rule resolve against
@@ -559,16 +620,110 @@ export class HUD {
       // header (or above the footer). contentRect.height omits the play-hud
       // padding, causing the elements to land inside the header/footer.
       const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
-      for (const [name, px] of [
-        ["header", header.getBoundingClientRect().bottom - hudRect.top],
-        ["footer", hudRect.bottom - footer.getBoundingClientRect().top],
-      ] as [string, number][]) {
+      const headerPx = header.getBoundingClientRect().bottom - hudRect.top;
+      // The footer is bottom-anchored on landscape and TOP-anchored in the
+      // portrait override (design-polish.css), so the reserved band must be
+      // measured from whichever edge it actually sits against. Measuring
+      // always from the bottom returned most of the viewport in portrait —
+      // a 740px `--hud-footer-height` at 390x844, should be ~115 — and that
+      // bogus number clamped the altitude gauge to its floor and pushed the
+      // toast lane to `top: -15px`, half off-screen.
+      const fRect = footer.getBoundingClientRect();
+      const anchoredTop = footerAnchoredTop({ footerTop: fRect.top, hudTop: hudRect.top, headerPx });
+      const footerPx = anchoredTop
+        ? Math.max(0, fRect.bottom - hudRect.top)
+        : Math.max(0, hudRect.bottom - fRect.top);
+      for (const [name, px] of [["header", headerPx], ["footer", footerPx]] as [string, number][]) {
         this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
       }
+      this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx);
     });
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
+    this.resizeObs.observe(this.quipLayer);
   }
+
+  /**
+   * Publish the one measured stack every transient message lane hangs off.
+   *
+   * The toast lane, the coach hand and the impact-popup lane were each anchored
+   * by their own hand-written `calc()` — each restating the header offset, each
+   * with its own per-breakpoint override. Four lanes, four independent guesses
+   * about the same band, and they drifted: at 1200x762 the messages band and
+   * the popup reservation overlapped by 27,040px², and in portrait the
+   * messages band landed inside the goal strip by 10,012px².
+   *
+   * So the band is measured once and everything below reads it:
+   *
+   *   --hud-messages-top    the band's own `top`
+   *   --hud-messages-bottom the band's bottom edge, INCLUDING the coach hand
+   *                        when it is showing (the hand hangs off the band)
+   *   --hud-lane-floor      the top of the quip lane, the lowest thing the band
+   *                        may push into
+   *   --hud-footer-bottom   the footer's reservation measured from the BOTTOM.
+   *                        Distinct from `--hud-footer-height`, which in portrait
+   *                        measures a top-anchored footer downward and is
+   *                        therefore meaningless as a bottom inset.
+   *
+   * The band's `top` is arithmetic rather than a CSS clamp because a clamp
+   * cannot know which edge the footer sits against — that is the bug itself:
+   * `calc(100% - var(--hud-footer-height) - 60px)` reads a portrait footer
+   * measured downward as though it reserved from the bottom, and loses.
+   */
+  private publishMessageBand(
+    hudRect: { top: number; bottom: number },
+    headerPx: number,
+    anchoredTop: boolean,
+    footerPx: number,
+  ): void {
+    // The band's height is the one value here that is not arithmetic, and it is
+    // measured with the ceiling released first: `--hud-messages-max` is derived
+    // from `laneFloor`, so measuring through it would feed the answer back into
+    // its own input.
+    this.root.style.setProperty("--hud-messages-max", "none");
+    // A `display:none` lane measures 0x0 at the ORIGIN, so reading its top
+    // unconditionally reported the bottom obstruction as sitting at the very
+    // top of the play area. `messageBand` takes `min(quipY, slopeY)`, so a
+    // hidden slope chain dragged the band's floor to y 0: `room` collapsed onto
+    // the ceiling, `maxPx` went to 0, and the coaching band rendered with no
+    // height at all — silently, on every flight with no chain active, which is
+    // most of them. A lane that is not painted obstructs nothing, so it reports
+    // as past the bottom of the play area and `Math.min` ignores it.
+    const hudPx = Math.max(0, hudRect.bottom - hudRect.top);
+    const slopeChain = this.root.querySelector<HTMLElement>(".slope-chain")!;
+    const band = messageBand({
+      hudPx,
+      headerPx,
+      anchoredTop,
+      footerPx,
+      quipY: this.quipLayer.getBoundingClientRect().top - hudRect.top,
+      slopeY: getComputedStyle(slopeChain).display === "none"
+        ? hudPx
+        : slopeChain.getBoundingClientRect().top - hudRect.top,
+      // The hand hangs off the band rather than off the header, so it
+      // contributes its own height to the stack. While it is `display:none`
+      // the offset is zero and the stack stops at the band.
+      handPx: this.handEl.offsetHeight,
+      naturalBandPx: this.messagesEl.offsetHeight,
+    });
+    for (const [name, px] of [
+      ["messages-top", band.top],
+      ["messages-max", band.maxPx],
+      ["messages-bottom", band.bottom],
+      ["stack-bottom", band.stackBottom],
+      ["lane-floor", band.laneFloor],
+      ["chain-clear", band.chainClear],
+      ["footer-bottom", band.footerBottom],
+      // The gap the lanes are offset BY, published so the stylesheet's `top`
+      // expressions and the arithmetic above are one number and not two that
+      // happen to agree.
+      ["lane-gap", LANE_GAP_PX],
+    ] as [string, number][]) {
+      this.root.style.setProperty(`--hud-${name}`, `${px}px`);
+    }
+  }
+
+
 
   /** Matchmaking overlay: live pilot count + honest countdown to backfill. */
   /**
@@ -677,14 +832,6 @@ export class HUD {
         const filter = (t.dataset.id ?? "all") as import("./ShopBrowse").ShopFilter;
         if (filter) this.shopBrowse.filter = filter;
         if (this.shopSnapshot) this.renderStatic(this.shopSnapshot);
-        return;
-      }
-      if (t.dataset.action === "preview-skin") {
-        this.shopBrowse.preview = t.dataset.id ?? "";
-        if (this.shopSnapshot) this.renderStatic(this.shopSnapshot);
-        const preview = this.menuCard.querySelector<HTMLElement>(".shop-hero-name");
-        preview?.focus({ preventScroll: true });
-        this.menuCard.querySelector(".shop-hero")?.scrollIntoView({ block: "start" });
         return;
       }
       if (t.dataset.action === "shop-section") {
@@ -906,7 +1053,8 @@ export class HUD {
     if (this.root.dataset.uiState !== s.state) this.root.dataset.uiState = s.state;
     const flying = String(inPlay);
     if (this.root.dataset.flying !== flying) this.root.dataset.flying = flying;
-    const feedback = feedbackSlot(s);
+    const goHold = this.goUntil > Date.now() ? 1 : 0;
+    const feedback = feedbackSlot({ ...s, goHold });
     if (this.root.dataset.feedback !== feedback) this.root.dataset.feedback = feedback;
     // Menu overlay: (a) main menu/attract, (b) post-crash postcards, or
     // (c) paused-run sub-screens (shop/settings/... overlaid on a frozen flight).
@@ -1154,7 +1302,8 @@ export class HUD {
         } else if (wasLive) {
           this.countdownEl.textContent = "GO!";
           this.countdownEl.className = "countdown show go";
-          setTimeout(() => {
+          this.goUntil = Date.now() + GO_VISIBLE_MS;
+          this.after(() => {
             if (this.countdownEl.textContent === "GO!") {
               this.countdownEl.textContent = "";
               this.countdownEl.className = "countdown";
@@ -1534,7 +1683,7 @@ export class HUD {
     }
   }
 
-  toast(text: string, kind = "info"): void {
+  toast(text: string, kind = "info", icon = ""): void {
     // An empty pill is worse than no pill: it occupies the one flight slot,
     // so it evicts a real message and then renders as nothing. Translation can
     // resolve a key to "" (a blank string is a legitimate translation), and
@@ -1546,10 +1695,15 @@ export class HUD {
     const live = this.liveToasts.get(text);
     if (live && live.el.isConnected) {
       live.count += 1;
-      live.el.textContent = `${text} ×${live.count}`;
+      // Target the text span, not the pill. Assigning `textContent` on the pill
+      // would also destroy the icon element rendered next to it — the ×n bump
+      // would silently strip every picture off a repeated message.
+      const body = live.el.querySelector(".toast-text");
+      if (body) body.textContent = `${text} ×${live.count}`;
+      else live.el.textContent = `${text} ×${live.count}`;
       // Updating a duplicate must not force a synchronous browser layout.
       this.cancelTimer(live.timer);
-      live.timer = this.scheduleToastOut(live.el, text, () => this.toastLaneObscured());
+      live.timer = this.scheduleToastOut(live.el, text, () => this.toastLaneObscured(), (id) => { live.timer = id; });
       return;
     }
     // One readable pill in flight, at most two on menu screens.
@@ -1561,15 +1715,17 @@ export class HUD {
     // could be born and destroyed inside the same 100 ms — which is why the
     // flavour lines never appeared. They were all firing; almost none of them
     // survived to be read. See toastFloor.ts.
+    const incumbent = this.oldestToast();
     const decision = decideToast(
       this.toastLayer.children.length,
       cap,
-      this.oldestToastAgeMs(),
+      incumbent?.ageMs ?? Number.POSITIVE_INFINITY,
       this.toastQueue.length,
+      incumbent?.holdMs ?? messageHoldMs(text),
     );
     if (decision.action === "drop") return;
     if (decision.action === "defer") {
-      this.toastQueue.push({ text, kind });
+      this.toastQueue.push({ text, kind, icon });
       if (this.toastDrainTimer === null) {
         this.toastDrainTimer = this.after(() => {
           this.toastDrainTimer = null;
@@ -1589,31 +1745,173 @@ export class HUD {
     }
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
-    el.textContent = text;
+    // `textContent` cannot hold markup, which is exactly why every toast that
+    // wanted a picture used to paste a TEXT GLYPH into its own sentence:
+    // `iconGlyph("magnet")` is "⊕", so the magnet pickup announced itself as a
+    // circled plus, and golden hour announced itself as "◑". Both had correct
+    // SVG artwork sitting unused in MenuIcons. `icon` is now a first-class
+    // argument rendered as a real `<svg class="icon-sm">` in its own slot.
+    if (icon) {
+      const mark = document.createElement("span");
+      mark.className = "toast-icon";
+      mark.setAttribute("aria-hidden", "true");
+      mark.innerHTML = menuIconSm(icon);
+      el.appendChild(mark);
+    }
+    const body = document.createElement("span");
+    body.className = "toast-text";
+    body.textContent = text;
+    el.appendChild(body);
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
     // Merge: main's obscured-lane callback plus this branch's readability
     // floor. They solve different halves of the same complaint — main stops
     // a toast expiring while something is covering it, this stops a toast
     // being evicted by the next one before it has been on screen at all.
-    const timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured());
-    this.after(() => this.toastSeen.add(el), TOAST_MIN_VISIBLE_MS);
-    this.liveToasts.set(text, { el, count: 1, timer });
+    const fresh = { el, count: 1, timer: -1, bornAt: Date.now() };
+    this.liveToasts.set(text, fresh);
+    // The map entry must exist before scheduling: `onTimer` writes straight
+    // into it, and the poll re-arms itself every 100 ms.
+    fresh.timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured(), (id) => { fresh.timer = id; });
   }
 
-  /** Effective age of the longest-standing pill, as the floor policy sees
-   *  it: either "has been readable" or "has not". */
-  private oldestToastAgeMs(): number {
-    const oldest = this.toastLayer.firstElementChild as HTMLElement | null;
-    if (!oldest) return Number.POSITIVE_INFINITY;
-    return this.toastSeen.has(oldest) ? Number.POSITIVE_INFINITY : 0;
+  /** A flavour line, on its own lane.
+   *
+   *  Deliberately NOT `toast()`. The 211 quips used to share `.toasts` with
+   *  every system message in a lane capped at one visible pill, which meant a
+   *  joke could be evicted by a coin pickup in the same 100 ms it appeared. They
+   *  were firing correctly and being read not at all.
+   *
+   *  This lane has its own cap, its own eviction (newest wins, no queue) and its
+   *  own timer, so a quip can only be replaced by another quip. System messages
+   *  keep their own channel and can no longer take a joke's slot.
+   *
+   *  Quips are held longer than system toasts and are allowed to wrap: they are
+   *  the only messages in the game whose whole job is to be read to the end. */
+  quip(text: string, kind = "cloud"): void {
+    if (!text || !text.trim()) return;
+    const q = this.liveQuips.get(text);
+    if (q && q.el.isConnected) {
+      q.count += 1;
+      const body = q.el.querySelector(".toast-text");
+      if (body) body.textContent = `${text} ×${q.count}`;
+      this.cancelTimer(q.timer);
+      q.visibleFor = 0;
+      q.lastTick = Date.now();
+      q.timer = this.scheduleQuipOut(q.el, text, q);
+      return;
+    }
+    // One quip at a time. A second replaces the first outright rather than
+    // queueing: the backlog a queue would build is exactly the backlog that
+    // used to make these lines feel arbitrary.
+    for (const [k, v] of this.liveQuips) {
+      this.cancelTimer(v.timer);
+      if (v.removal !== null) this.cancelTimer(v.removal);
+      this.liveQuips.delete(k);
+    }
+    this.quipLayer.replaceChildren();
+
+    const el = document.createElement("div");
+    el.className = `quip ${kind}`;
+    const body = document.createElement("span");
+    body.className = "toast-text";
+    body.textContent = text;
+    el.appendChild(body);
+    this.quipLayer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("in"));
+    // Registered BEFORE the hold is armed: `scheduleQuipOut` re-arms itself
+    // every poll and writes its id straight into the entry.
+    const fresh: QuipLive = { el, count: 1, timer: -1, removal: null, visibleFor: 0, lastTick: Date.now() };
+    this.liveQuips.set(text, fresh);
+    fresh.timer = this.scheduleQuipOut(el, text, fresh);
   }
+
+  /**
+   * Hold a quip for QUIP_HOLD_MS of *visible* time.
+   *
+   * The same accounting the toast lane uses, for the same reason: `.quips` is
+   * hidden under the countdown / launch / finish feedback slots, and
+   * `Game.onLaunch` fires a BIG_LAUNCH quip inside the launch banner's own
+   * 1.25 s window. A flat timer therefore burned roughly a third of the read
+   * window of a lane whose entire job is to be read to the end.
+   */
+  private scheduleQuipOut(el: HTMLElement, text: string, q: QuipLive): number {
+    const budget = QUIP_HOLD_MS + QUIP_OBSCURE_WAIT_MS;
+    const startedAt = Date.now();
+    const tick = (): void => {
+      const now = Date.now();
+      const dt = now - q.lastTick;
+      q.lastTick = now;
+      if (!this.quipLaneObscured()) q.visibleFor += dt;
+      if (q.visibleFor >= QUIP_HOLD_MS || now - startedAt >= budget) {
+        this.expireQuip(el, text);
+        return;
+      }
+      q.timer = this.scheduleTick(tick);
+    };
+    return this.scheduleTick(tick);
+  }
+
+  private expireQuip(el: HTMLElement, text: string): void {
+    // Delete first, and delete whenever the entry is OURS even if the node has
+    // already been detached. Guarding the whole body on `isConnected` used to
+    // leave the map entry behind in exactly that case — a leak waiting for any
+    // future reordering of the clear loop and `replaceChildren()`.
+    const q = this.liveQuips.get(text);
+    if (q && q.el === el) this.liveQuips.delete(text);
+    if (!el.isConnected) return;
+    el.classList.remove("in");
+    el.classList.add("out");
+    const removal = this.after(() => el.remove(), 260);
+    if (q && q.el === el) q.removal = removal;
+  }
+
+  private quipLaneObscured(): boolean {
+    if (!this.quipLayer.isConnected) return true;
+    // Same three properties as `toastLaneObscured`, and deliberately so. Today
+    // the stylesheet only ever hides `.quips` with `visibility:hidden`, so the
+    // two extra checks would be dead — but two adjacent lanes answering "can
+    // this be read?" by different rules is how the next hiding rule gets added
+    // to one of them and silently not to the other. Reading all three cannot
+    // drift.
+    const cs = getComputedStyle(this.quipLayer);
+    return cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0";
+  }
+
+  /** Real age and readable-hold of the longest-standing pill.
+   *
+   *  This used to be a boolean dressed as an age: it returned 0 while the pill
+   *  was still in `toastSeen`'s grace period and `Infinity` once it had been
+   *  added, so the only two answers the floor policy ever got were "brand new"
+   *  and "infinitely old". `decideToast` compares the age against a hold
+   *  requirement, so with a real requirement the branch was decided by the
+   *  requirement's *sign*, not its value: a pill was evicted at 520ms and never
+   *  at 1280ms, 3.4s or 6s. The hold `scheduleToastOut` prices for reading was
+   *  paid only when nothing else arrived, which during flight is almost never —
+   *  the lane emits continuously, so every message was replaced mid-word.
+   *
+   *  Both numbers are now real, and the hold is the same `messageHoldMs` the
+   *  exit timer uses: one number for "how long does this need", read by both
+   *  ends of the lane's life. */
+  private oldestToast(): { ageMs: number; holdMs: number } | null {
+    const oldest = this.liveToasts.entries().next();
+    if (oldest.done) return null;
+    const [text, entry] = oldest.value;
+    // The map is keyed by text and the DOM is ordered by arrival, so the two only
+    // agree while the first pill is the map's first entry. If they ever drift,
+    // treat the incumbent as unreadable rather than as infinitely readable.
+    if (this.toastLayer.firstElementChild !== entry.el) return null;
+    return { ageMs: Date.now() - entry.bornAt, holdMs: messageHoldMs(text) };
+  }
+
+
+
 
   /** Replay the deferred backlog once the incumbent has had its look. */
   private drainToastQueue(): void {
     const next = this.toastQueue.shift();
     if (!next) return;
-    this.toast(next.text, next.kind);
+    this.toast(next.text, next.kind, next.icon);
     // `toast` re-queues if the floor still is not met, so this terminates:
     // each pass either shows one or re-defers with a strictly shorter wait.
     if (this.toastQueue.length > 0 && this.toastDrainTimer === null) {
@@ -1689,7 +1987,12 @@ export class HUD {
    * arrives at the tail of a long countdown waits rather than vanishing, and
    * a message whose lane never opens is released anyway rather than leaked.
    */
-  private scheduleToastOut(el: HTMLElement, key: string, isObscured?: () => boolean): number {
+  private scheduleToastOut(
+    el: HTMLElement,
+    key: string,
+    isObscured?: () => boolean,
+    onTimer?: (id: number) => void,
+  ): number {
     const text = el.textContent ?? "";
     const hold = messageHoldMs(text);
     const budget = hold + TOAST_OBSCURE_WAIT_MS;
@@ -1715,14 +2018,23 @@ export class HUD {
         }, 420);
         return;
       }
-      this.timers.add(this.scheduleTick(tick));
+      // Re-arm and publish the NEW id. The caller's stored id is the one that
+      // just fired, so handing back a fresh one is what makes cancelTimer work:
+      // before this, a dedup refreshed nothing and an eviction left an orphan
+      // poll loop running against a detached node.
+      onTimer?.(this.scheduleTick(tick));
     };
-    return this.scheduleTick(tick);
+    const first = this.scheduleTick(tick);
+    onTimer?.(first);
+    return first;
   }
 
   /** Poll interval while a toast is waiting for its lane to open. */
   private scheduleTick(fn: () => void): number {
-    const timer = window.setTimeout(fn, TOAST_OBSCURE_POLL_MS);
+    // Mirrors `after`: the id leaves the set when the callback fires, so a
+    // long session polling at ~10 Hz per live pill does not grow the set
+    // without bound.
+    const timer = window.setTimeout(() => { this.timers.delete(timer); fn(); }, TOAST_OBSCURE_POLL_MS);
     this.timers.add(timer);
     return timer;
   }
@@ -1758,6 +2070,8 @@ export class HUD {
     for (const timer of this.timers) window.clearTimeout(timer);
     this.timers.clear();
     this.liveToasts.clear();
+    this.liveQuips.clear();
+    this.toastQueue.length = 0;
     this.root.remove();
   }
 
@@ -1893,6 +2207,7 @@ export class HUD {
     this.overEl = grab("over");
     this.overCard = grab("overCard");
     this.toastLayer = grab("toasts");
+    this.quipLayer = grab("quips");
     this.flashEl = grab("flash");
     this.comboEl = grab("combo");
     this.biomeChip = grab("biome");
@@ -1948,10 +2263,23 @@ export class HUD {
     el.textContent = text;
     // Project into the protected flight corridor, not over menus/controls.
     const lane = this.impactPopupsEl.getBoundingClientRect();
-    if (lane.width < 80 || lane.height < 70) return;
+    const short = window.innerHeight <= 500;
+    // The popup's own line box at this viewport: `clamp(13px,2.2vw,17px)` on
+    // short screens, `clamp(14px,2.5vw,22px)` above it, both in index.css.
+    const fontPx = short
+      ? Math.min(17, Math.max(13, window.innerWidth * 0.022))
+      : Math.min(22, Math.max(14, window.innerWidth * 0.025));
+    // A lane has to be able to hold one popup plus the edge margin its own
+    // placement clamps keep. That used to be a flat 70px — a number matching
+    // neither the popup's height nor the clamps' margins — so it silently
+    // suppressed every popup at 844x390 and 320x568, the two frames Poki embeds
+    // most. The lane there is real and correctly placed; it was simply shorter
+    // than a threshold nobody had measured.
+    if (lane.width < fontPx + 20 || lane.height < fontPx + 8) return;
     const viewport = this.root.getBoundingClientRect();
-    el.style.left = `${Math.max(40, Math.min(lane.width - 40, sx * viewport.width + viewport.left - lane.left))}px`;
-    el.style.top = `${Math.max(50, Math.min(lane.height - 20, sy * viewport.height + viewport.top - lane.top))}px`;
+    const margin = fontPx + 8;
+    el.style.left = `${Math.max(margin, Math.min(lane.width - margin, sx * viewport.width + viewport.left - lane.left))}px`;
+    el.style.top = `${Math.max(margin, Math.min(lane.height - margin, sy * viewport.height + viewport.top - lane.top))}px`;
     // Append + cap, NOT replaceChildren. Replacing meant the lane held exactly
     // one popup, so two quips landing inside the same 1100ms window killed the
     // first on the tick the second arrived — during continuous thudding the

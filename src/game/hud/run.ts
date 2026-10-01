@@ -57,7 +57,10 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
 `
         : `<div class="race-hero dnf">
            <div class="race-medal">${menuIconSm("boom")}</div>
-           <div class="race-place"><b>${s.modeId === "pvp_knockout" ? "KNOCKED OUT" : "RACE INCOMPLETE"}</b><span>${s.modeId === "pvp_knockout" ? "Eliminated by the countdown timer" : `DNF · Reached ${Math.round(s.distance)}m of ${s.raceFinishM}m`}</span></div>
+           <div class="race-place"><b>${s.modeId === "pvp_knockout" ? "KNOCKED OUT" : "RACE INCOMPLETE"}</b><span>${s.modeId === "pvp_knockout" ? // Not a timer. Knockout gates every 500 m of distance
+              // (Game.nextKnockoutDist), so blaming a clock contradicted the mode
+              // card's own blurb on the same product.
+              "Fell behind the elimination gate" : `DNF · Reached ${Math.round(s.distance)}m of ${s.raceFinishM}m`}</span></div>
            ${
              s.raceRated
                ? `<div class="race-rating">Rival rating ${s.rival.rating} ${deltaTxt}<span class="race-rated-tag">ranked · local</span></div>`

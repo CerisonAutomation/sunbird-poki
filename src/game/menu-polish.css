@@ -719,10 +719,12 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .overlay .skin-card.r-rare { background:linear-gradient(150deg,#fffaf0,#e0ebf3); }
 .overlay .skin-card.r-epic, .overlay .skin-card.r-mythic { background:linear-gradient(150deg,#fffaf0,#e9ddf3); }
 .overlay .skin-card.r-legendary { background:linear-gradient(150deg,#fffaf0,#f4dfa9); }
-.overlay .skin-card .skin-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:100%; padding:10px 0 6px; border-radius:12px; border:1px solid #cabc9d55; background:#fffaf05c; filter:none; color:#61583f; }
-.skin-preview > svg { width:88px; max-width:100%; height:72px; }
-.skin-preview > span { font:700 10px var(--body); }
-.skin-preview[aria-pressed="true"] { outline:2px solid #487363; outline-offset:-2px; }
+/* The product shot, not a control. It was a button labelled "Preview" whose
+   only effect was to scroll the page back up to a hero above the catalog, so
+   the art is now inert and the card carries the affordance instead. No hover,
+   no pressed outline, nothing that promises a press. */
+.overlay .skin-card .skin-art { display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; padding:10px 0 6px; border-radius:12px; }
+.skin-art > svg { max-width:100%; }
 .overlay .sk-name { font:600 16px var(--display); color:#3d503b; }
 .overlay .sk-perk { font-size:12px; color:#655f4c; line-height:1.45; }
 .overlay .sk-stat { grid-template-columns:45px minmax(0,1fr) 30px; font-size:10px; }

@@ -31,6 +31,25 @@ export type Surprise = {
   feverSeconds: number;
 };
 
+/** A real SVG for each surprise, so the toast can carry a picture.
+ *
+ *  Until this existed every toast had to spell its meaning out in text, because
+ *  the toast lane was built with `textContent` and could not hold markup. That
+ *  is where the coin moments went to using a `●` bullet and the magnet pickup
+ *  went to using `⊕`. Every name here is a valid `smArtwork` key; `menuIconSm`
+ *  renders nothing for an unknown one, so the `??` at the call site is a real
+ *  fallback rather than decoration. */
+export const SURPRISE_ICON: Record<SurpriseKind, string> = {
+  "golden-goose": "coin",
+  tailwind: "wind",
+  sneeze: "sparkle",
+  "coin-comet": "comet",
+  photobomb: "photo",
+  encore: "sparkle",
+  moonbow: "rainbow",
+  "flock-chorus": "flock",
+};
+
 const POOL: { kind: SurpriseKind; weight: number; toasts: string[]; coins: number; fever: number }[] = [
   {
     kind: "golden-goose",

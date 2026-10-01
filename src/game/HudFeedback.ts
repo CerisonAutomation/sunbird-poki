@@ -1,6 +1,13 @@
 /** One priority slot for text that competes with flight/landing visibility. */
-export function feedbackSlot(s: { countdown: number; finishRemaining: number; launchBannerT: number; goalPop: string }): string {
-  return s.countdown > 0 ? "countdown"
+export function feedbackSlot(s: { countdown: number; finishRemaining: number; launchBannerT: number; goalPop: string; goHold?: number }): string {
+  // `goHold` keeps the countdown slot alive for the length of the GO beat.
+  // The frame that writes "GO!" is the FIRST frame where countdown <= 0, so
+  // without this the slot flipped to "hint" in the same update that rendered
+  // GO — and the stylesheet's
+  // `.hud-root:not([data-feedback="countdown"]) .countdown { display: none }`
+  // hid it on every single frame. Measured over a real launch: GO! sat in the
+  // DOM for 86 frames and was visible for 0.
+  return s.countdown > 0 || (s.goHold ?? 0) > 0 ? "countdown"
     : s.finishRemaining > 0 && s.finishRemaining < 900 ? "finish"
     : s.launchBannerT > 0 ? "launch"
     : s.goalPop ? "goal" : "hint";

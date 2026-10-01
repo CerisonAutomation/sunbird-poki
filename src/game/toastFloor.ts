@@ -60,12 +60,18 @@ export type ToastDecision =
  * @param cap          how many are allowed (1 in flight, 2 on menus)
  * @param oldestAgeMs  age of the oldest visible pill; `Infinity` when none
  * @param queueLength  how many toasts are already deferred
+ * @param holdMs       how long the INCUMBENT needs to stay readable. Defaults to
+ *   the floor, which is right for a caller with nothing better to say, and wrong
+ *   for the HUD: it has a per-message read time (`messageHoldMs`, 1.1s–6s) and
+ *   must not evict a six-word message at 520ms because the constant happened to
+ *   be the only requirement the signature knew about.
  */
 export function decideToast(
   visibleCount: number,
   cap: number,
   oldestAgeMs: number,
   queueLength: number,
+  holdMs: number = TOAST_MIN_VISIBLE_MS,
 ): ToastDecision {
   // Room to spare: nothing to arbitrate.
   if (visibleCount < cap) return { action: "show" };
@@ -73,10 +79,10 @@ export function decideToast(
   if (cap <= 0) return { action: "drop" };
   // The incumbent has had its look — the newcomer is more current, so it wins.
   const age = Number.isFinite(oldestAgeMs) ? oldestAgeMs : Number.POSITIVE_INFINITY;
-  if (age >= TOAST_MIN_VISIBLE_MS) return { action: "show" };
+  if (age >= holdMs) return { action: "show" };
   if (queueLength >= TOAST_QUEUE_CAP) return { action: "drop" };
   // Wait exactly as long as the incumbent still needs, never longer: the
   // backlog must drain as fast as the floor allows or it stops being a queue
   // and starts being a delay.
-  return { action: "defer", waitMs: Math.max(1, Math.ceil(TOAST_MIN_VISIBLE_MS - age)) };
+  return { action: "defer", waitMs: Math.max(1, Math.ceil(holdMs - age)) };
 }

@@ -22,7 +22,8 @@
 import { describe, expect, it } from "vitest";
 
 import { Bird } from "../Bird";
-import { FLARE_MAX_RISE, PHYS_DT } from "../constants";
+import { FLARE_MAX_RISE, PHYS_DT, START_SPEED } from "../constants";
+import { RELEASE_KICK } from "../FlightPhysics";
 import { TerrainSystem } from "../TerrainSystem";
 
 /** Which part of the vertical motion the stick is let go on. */
@@ -68,6 +69,14 @@ function pulloutOnReleaseAt(phase: Phase, maxSeconds = 4): Pullout | null {
   // nothing. The probe was measuring a correct ceiling against a release. The
   // bug this file exists to pin lives at ramp height, not at the ceiling.
   bird.reset(64, terrain.heightAt(64) + 150);
+  // The probe must be at RUNNING SPEED, or it measures a state the tutorial
+  // never teaches. `reset` leaves vx at 11 m/s — a standing hop — and the
+  // release kick is scaled by speed, so at 11 m/s it collapses to its 0.25
+  // floor and an apex release "launches" the bird by 2.6 m/s. A real release
+  // happens at a ramp lip, measured at 48 m/s, where the same release hands
+  // back 10.95. The old probe was reading its own standstill back as a defect
+  // in the launch.
+  bird.vx = START_SPEED;
 
   const matches = (vy: number): boolean => {
     // "falling" means a DIVE, not a drift: -20 m/s is comfortably past the
@@ -132,7 +141,13 @@ describe("releasing always pulls out, whatever the bird is doing", () => {
     expect(p, "the probe never reached an apex").not.toBeNull();
     expect(p!.vyAtRelease, "sanity: the release really was made near the apex").toBeLessThan(1);
     expect(p!.vyAtRelease).toBeGreaterThan(-1);
-    expect(p!.peakVy, "an apex release must launch the bird, not merely nudge it").toBeGreaterThan(15);
+    // A launch, not a nudge. Deliberately NOT `RELEASE_KICK`: the kick is now
+    // scaled by the bird's speed, and at cruise that scale is
+    // 48/62 = 0.774, so the honest full contract is 11.6. This bar sits below
+    // that to tolerate glide-lift variation, and well above zero so that a
+    // release which does nothing at all still fails.
+    expect(p!.peakVy, "an apex release must launch the bird, not merely nudge it")
+      .toBeGreaterThan(RELEASE_KICK * 0.5);
   });
 
   it("leaves a rising bird alone — a brake arrests a fall, not a climb", () => {

@@ -22,7 +22,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     await app.expectNoOverlaps([".hero-sun-wrap", ".menu-mute"], '[data-ref="menuCard"]');
     await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeInViewport({ ratio: 1 });
     await expect(page.locator('details[data-ref="homeMore"]')).toHaveCount(0);
-    await expect(page.locator('[data-action="versus"]')).toBeVisible();
+    await expect(app.menuAction("versus")).toBeVisible();
     await page.screenshot({ path: info.outputPath(`home-${viewport.width}.png`) });
     await app.openMenu("open-settings", "Settings");
     await app.expectMenuFits();

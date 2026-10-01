@@ -70,7 +70,7 @@ test("local split-screen divider and controls follow phone and tablet rotation",
   const app = new SunbirdPage(page);
   await app.open();
   await app.ready();
-  await page.locator('[data-ref="menuCard"] [data-action="versus"]').click();
+  await app.menuAction("versus").click();
   const hud = page.locator(".play-hud.versus");
 
   for (const viewport of [
@@ -127,7 +127,7 @@ test("visual viewport changes cannot distort a fixed-size game host", async ({ p
   const app = new SunbirdPage(page);
   await app.open();
   await app.ready();
-  await page.locator('[data-ref="menuCard"] [data-action="versus"]').click();
+  await app.menuAction("versus").click();
   await expectViewportFits(page);
   await page.evaluate(() => {
     // Model the mobile keyboard/pinch-zoom case: visual viewport shrinks while

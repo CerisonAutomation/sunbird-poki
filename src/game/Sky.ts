@@ -1,14 +1,10 @@
 import * as THREE from "three";
-import {
-  TERRAIN_SKY_MIN_CONTRAST,
-  enforceMinContrast,
-  nightFillIntensity,
-} from "./legibility";
+import { nightFillIntensity } from "./legibility";
 import { saturate, smoothstep } from "./math";
 import { drawSunDisc } from "./Sunbird";
 import type { TerrainPalette } from "./TerrainSystem";
 
-type SkyStop = {
+export type SkyStop = {
   top: number;
   horizon: number;
   bottom: number;
@@ -21,6 +17,19 @@ type SkyStop = {
   waterDeep: number;
   hemiSky: number;
   hemiGround: number;
+  /**
+   * Height of the sun disc above the horizon, in world units. Negative means
+   * the sun is SET and only the moon is up. It lives in the palette rather than
+   * in a formula in `update` for one reason: the sun's height and the colours
+   * around it are the same fact. A run spends its daylight meter, so `t` falls
+   * 1 -> 0 as the player flies, and the run ends at the sunset that spends it.
+   * When the height was computed separately it had no way to know that, so it
+   * climbed with `t` and the sun was still 22 units up at the exact moment the
+   * run ended for running out of light — an entire sunset that never happened.
+   * Anchoring it here means a new stop cannot be added with a colour that
+   * disagrees with where its sun is.
+   */
+  sunElev: number;
 };
 
 /**
@@ -48,6 +57,7 @@ const STOPS: { t: number; s: SkyStop }[] = [
       waterDeep: 0x0a1428,
       hemiSky: 0x32385e,
       hemiGround: 0x161820,
+      sunElev: -20,
     },
   },
   {
@@ -65,13 +75,25 @@ const STOPS: { t: number; s: SkyStop }[] = [
       waterDeep: 0x142240,
       hemiSky: 0xe87850,
       hemiGround: 0x4a2838,
+      sunElev: 6,
     },
   },
   {
     t: 0.4,
     s: {
-      top: 0xe07038,
-      horizon: 0xffb888,
+      // Morning. The zenith was 0xe07038, an orange one, and that was the
+      // second half of the grey-sky problem: this stop sat between a violet
+      // dawn and a blue midday, so BOTH its zenith and its horizon had to
+      // cross from warm to cool, and a warm-to-cool crossing always passes
+      // through grey. A sky's zenith is blue and its horizon is warm; the two
+      // are on opposite sides of the dome, so keeping them that way here is
+      // what lets the stops either side stay saturated.
+      top: 0x4a86c8,
+      // Coral rather than the pale peach this was: a near-white endpoint
+      // cannot hold saturation against a blue one no matter what sits between
+      // them. Measured over the 0.4 -> 0.7 leg, the old pair bottomed out at
+      // 1.8% — a dead grey sky, and one a run flies straight through.
+      horizon: 0xe03829,
       bottom: 0xd06850,
       fog: 0xe8a070,
       sun: 0xffe0a0,
@@ -82,14 +104,18 @@ const STOPS: { t: number; s: SkyStop }[] = [
       waterDeep: 0x1a3a58,
       hemiSky: 0xffb080,
       hemiGround: 0x6a4030,
+      sunElev: 40,
     },
   },
   {
     t: 0.7,
     s: {
       top: 0x2e90e0,
-      // Deeper saturated blue — no more white-sky wash.
-      horizon: 0x50a8d8,
+      // Deeper saturated blue — no more white-sky wash. The horizon moves with
+      // it, to an azure that holds its chroma against the coral sunrise: this
+      // pair now keeps 31.5% saturation at the worst point of the leg, where
+      // the old pale-peach-to-cyan pair fell to 1.8%.
+      horizon: 0x3c7fdd,
       bottom: 0x58a8cc,
       fog: 0x48a0c4,
       sun: 0xfff6c8,
@@ -100,6 +126,7 @@ const STOPS: { t: number; s: SkyStop }[] = [
       waterDeep: 0x144e7e,
       hemiSky: 0x78c4f8,
       hemiGround: 0x4e7e44,
+      sunElev: 84,
     },
   },
   {
@@ -118,9 +145,46 @@ const STOPS: { t: number; s: SkyStop }[] = [
       waterDeep: 0x1e6088,
       hemiSky: 0xf0d8a0,
       hemiGround: 0x70a050,
+      sunElev: 30,
+    },
+  },
+  {
+    // This stop exists to solve one problem, and its colour is chosen for that
+    // reason rather than for how it looks on its own. Interpolating straight
+    // from the t=0.7 blue (0x50a8d8) to the t=1 cream (0xf0c080) MUST pass
+    // through grey: blue and cream are near-complements, so every blend on the
+    // line between them is desaturated. Measured across that leg, horizon
+    // saturation falls 63.0% -> 10.4% at t=0.88 — and the menu was pinned at
+    // t=0.86, so the main menu was rendered a hair away from a dead grey sky.
+    // A third stop on the far side of the wheel (rose, not a mid-grey) turns
+    // the path into the one a real sunset takes — blue, then rose, then gold —
+    // and the worst point on the leg rises to 33.7%.
+    t: 0.82,
+    s: {
+      top: 0x6a7ad8,
+      horizon: 0xc0509e,
+      bottom: 0xb068a0,
+      fog: 0x9c88bc,
+      sun: 0xffd0a0,
+      farA: 0x5f9a78,
+      farB: 0x7a7aa8,
+      farC: 0x8a5a90,
+      water: 0x3a78b4,
+      waterDeep: 0x2a3f7a,
+      hemiSky: 0xd89ab8,
+      hemiGround: 0x5a6a48,
+      // Low and red, because this is the part of the day the run ends on.
+      sunElev: 18,
     },
   },
 ];
+
+// Sorted on load, because the lookup below finds the FIRST bracket whose `t`
+// range contains the value and returns it. That makes a palette's CORRECTNESS
+// depend on the order it happens to be typed in: a stop inserted out of order
+// is silently never sampled, and the leg it was added to fix renders as if it
+// were not there at all. Sorting makes the lookup depend only on the numbers.
+STOPS.sort((x, y) => x.t - y.t);
 
 export class Sky {
   readonly group = new THREE.Group();
@@ -149,8 +213,6 @@ export class Sky {
   private readonly tmpB = new THREE.Color();
   // Scratch for the per-frame silhouette floor — reused so the legibility
   // pass never allocates inside the render loop.
-  private readonly floorFg = { r: 0, g: 0, b: 0 };
-  private readonly floorBg = { r: 0, g: 0, b: 0 };
   private readonly tmpC = new THREE.Color();
   private tintTop = 0xffffff;
   private tintHorizon = 0xffffff;
@@ -398,7 +460,13 @@ export class Sky {
     this.sunLight.shadow.camera.bottom = -80;
     this.sunLight.shadow.bias = -0.0006;
 
-    this.palette = { farA: new THREE.Color(), farB: new THREE.Color(), farC: new THREE.Color() };
+    this.palette = {
+      farA: new THREE.Color(),
+      farB: new THREE.Color(),
+      farC: new THREE.Color(),
+      skyHorizon: new THREE.Color(),
+      skyBottom: new THREE.Color(),
+    };
   }
 
   addLights(scene: THREE.Scene): void {
@@ -448,7 +516,11 @@ export class Sky {
     (this.skyMat.uniforms.time!.value as number) = time;
     (this.skyMat.uniforms.aurora!.value as number) = this.auroraIntensity;
     const t = saturate(daylight);
-    const { a, b, u } = sampleStops(t);
+    const { a, b, u } = skyStopsAt(t);
+    // Sampled here rather than at the disc because the key light, the sun's own
+    // height and its visibility all have to agree, and a second `sampleStops`
+    // call per frame for each of them is how they would stop agreeing.
+    const elev = a.sunElev + (b.sunElev - a.sunElev) * u;
     const top = this.topC.copy(this.mixHex(a.top, b.top, u));
     const horizon = this.horizonC.copy(this.mixHex(a.horizon, b.horizon, u));
     const bottom = this.bottomC.copy(this.mixHex(a.bottom, b.bottom, u));
@@ -472,7 +544,9 @@ export class Sky {
     this.hemi.groundColor.copy(this.mixHex(a.hemiGround, b.hemiGround, u));
     this.sunLight.color.copy(this.mixHex(a.sun, b.sun, u));
     // Balanced key light: bright enough for crisp terrain, not so hot it blows out.
-    this.sunLight.intensity = 0.38 + t * 0.60;
+    // On the sun's own fade rather than a second threshold of its own, so the
+    // light cannot outlive the disc that is supposed to be casting it.
+    this.sunLight.intensity = (0.38 + t * 0.60) * smoothstep(0, 14, elev);
     // Night fill: without it the near terrain crushes to a flat black mass
     // after dusk and the player loses the ground they are about to hit. It is
     // exactly zero above 55% daylight, so the daytime look is untouched, and
@@ -480,21 +554,38 @@ export class Sky {
     // switch being thrown. See src/game/legibility.ts.
     this.hemi.intensity = 0.72 + t * 0.40 + nightFillIntensity(t);
 
-    // Keep the full daylight disc in the upper sky instead of clipping its crown.
-    const elev = 22 + t * 64;
-    this.sun.position.set(36 + (1 - t) * 28, elev, -110);
+    // The sun's height comes from the palette (see `SkyStop.sunElev`), so the
+    // disc rises and sets as the run spends its daylight instead of hanging
+    // overhead for the whole flight. `t` falls 1 -> 0 across a run, so this arc
+    // is traversed backwards: a run launches out of the t=1 late afternoon at
+    // 30 units, climbs to the 84-unit midday peak, and comes down through the
+    // rose stop to below the horizon — the sunset the run's own clock is
+    // counting toward.
+    // It also TRAVELS. A disc that only changes height reads as a sprite
+    // sliding on a rail; a low sun that has moved is a sun that is going down.
+    const sunX = 30 + (1 - t) * 30;
+    this.sun.position.set(sunX, elev, -110);
     this.sunGlow.position.copy(this.sun.position);
     (this.sun.material as THREE.SpriteMaterial).color.copy(this.mixHex(a.sun, b.sun, u));
-    this.sun.scale.setScalar((0.7 + t * 0.3) * 20);
+    // The disc also swells as it nears the horizon, which is what sells the
+    // last part of the descent — at 20 units the sprite is a hard bright dot.
+    this.sun.scale.setScalar((0.7 + t * 0.3) * (1 + (1 - saturate(elev / 84)) * 0.5) * 20);
     // The glow sprite's opacity was never set, so it sat at 1.0 all day. Half
     // strength keeps a warm halo while letting the sky and terrain stay legible.
-    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.45 + t * 0.12;
+    // It fades with the disc so the halo does not survive the sunset.
+    const bodies = skyBodies(elev);
+    (this.sunGlow.material as THREE.SpriteMaterial).opacity = (0.45 + t * 0.12) * bodies.sun;
+    this.sun.visible = this.sunGlow.visible = bodies.sun > 0;
 
+    // The moon is up only once the sun has gone down. It used to be gated on
+    // `1 - t > 0.15`, which is true for most of a run, so a moon sat in the
+    // sky beside a sun that was itself never setting. Two bodies at once is
+    // not a lighting choice, it is the sky contradicting itself.
     this.moon.position.set(-8, 20 + (1 - t) * 68, -120);
     this.moonGlow.position.copy(this.moon.position);
     const night = 1 - t;
-    this.moon.visible = night > 0.15;
-    this.moonGlow.material.opacity = night * 0.55;
+    this.moon.visible = this.moonGlow.visible = bodies.moon > 0;
+    this.moonGlow.material.opacity = night * 0.55 * bodies.moon;
 
     // Space scenery fades in with altitude (the stratosphere opens out) and is
     // also present at night, so a midnight coast shows the full deep sky.
@@ -562,7 +653,13 @@ export class Sky {
     }
 
     this.group.position.set(camX, 0, 0);
-    this.sunLight.position.set(camX + 48, 72, 36);
+    // Track the sun's height, so a low sun means long shadows and a set sun
+    // means no direct light at all — the terrain currently stays lit from a
+    // fixed 72-unit key all night, which is most of why dusk never reads as
+    // dusk. The floor keeps the shadow camera's ortho box bounded: a light at
+    // true horizon level throws shadows tens of islands long, and they get
+    // clipped by the 160-unit box instead of lengthening.
+    this.sunLight.position.set(camX + 48, Math.max(24, elev * 1.15), 36);
     this.sunLight.target.position.set(camX + 8, 10, 0);
     this.sunLight.target.updateMatrixWorld();
 
@@ -576,15 +673,14 @@ export class Sky {
     this.palette.farB.copy(this.mixHex(a.farB, b.farB, u));
     this.palette.farC.copy(this.mixHex(a.farC, b.farC, u));
     // Silhouette floor. The distant hill bands are read against the sky
-    // immediately behind them, and at dusk the authored palette let the two
-    // converge to within a couple of percent luminance — the frame where the
-    // world stopped being playable. The floor is a no-op for most of the
-    // cycle (the check is a comparison, not a grade) and only lifts or drops
-    // a band in the window where it had become invisible. Hue is preserved,
-    // so a teal hill becomes a lighter teal hill, never grey.
-    this.applyContrastFloor(this.palette.farA, horizon);
-    this.applyContrastFloor(this.palette.farB, horizon);
-    this.applyContrastFloor(this.palette.farC, bottom);
+    // The silhouette floor used to live here, on `farA`/`farB`/`farC`. It is
+    // applied by `TerrainSystem.setPalette` instead, because that is the last
+    // hand to touch these colours: it blends them 55% toward the biome's own
+    // band, and grading them beforehand meant most of the work was blended away
+    // again. The sky travels on the palette so the floor can be applied to
+    // what is actually rendered.
+    this.palette.skyHorizon.copy(horizon);
+    this.palette.skyBottom.copy(bottom);
     return this.palette;
   }
 
@@ -605,22 +701,6 @@ export class Sky {
 
   private mixHex(ha: number, hb: number, t: number): THREE.Color {
     return this.tmpA.setHex(ha).lerp(this.tmpB.setHex(hb), t);
-  }
-
-  /** Push a terrain band away from the sky behind it, in place, only if it
-   *  has fallen under the silhouette floor. Allocation-free: this runs every
-   *  frame. */
-  private applyContrastFloor(band: THREE.Color, sky: THREE.Color): void {
-    // Read and write through sRGB explicitly. THREE.Color's own components
-    // live in the renderer's working space, which is linear when colour
-    // management is on — WCAG luminance is defined on sRGB, so converting
-    // here keeps the floor meaning the same thing regardless of how the
-    // renderer is configured.
-    band.getRGB(this.floorFg, THREE.SRGBColorSpace);
-    sky.getRGB(this.floorBg, THREE.SRGBColorSpace);
-    const out = enforceMinContrast(this.floorFg, this.floorBg, TERRAIN_SKY_MIN_CONTRAST);
-    if (out === this.floorFg) return;
-    band.setRGB(out.r, out.g, out.b, THREE.SRGBColorSpace);
   }
 
   /** A single distant planet — optionally ringed — with a soft glow halo. */
@@ -665,18 +745,55 @@ export class Sky {
 
 }
 
-function sampleStops(daylight: number): { a: SkyStop; b: SkyStop; u: number } {
+/**
+ * How lit the sun and the moon are at a given sun height, each in 0..1.
+ *
+ * There is deliberately ONE threshold, at the horizon, with the two fades on
+ * opposite sides of it. The gates used to be `smoothstep(-9, 5, elev)` for the
+ * sun and `elev < 6` for the moon, whose visibilities overlapped across eight
+ * units of elevation — a moon in the sky beside a sun that had not set, for a
+ * measurable slice of every run. Splitting one threshold means the two can
+ * never both be lit and can never both be dark, and the handoff is where the
+ * eye expects it: the sun touching the horizon.
+ */
+/**
+ * The palette table itself, in lookup order. Exported so "is every stop
+ * actually reachable" is answerable: a stop no bracket can ever start is a
+ * colour nobody will ever see, and nothing else in the type system says so.
+ */
+export function skyStops(): { t: number; s: SkyStop }[] {
+  return STOPS;
+}
+
+export function skyBodies(elev: number): { sun: number; moon: number } {
+  return { sun: smoothstep(0, 7, elev), moon: smoothstep(0, -7, elev) };
+}
+
+/**
+ * Resolve the palette for a daylight level. Exported because the sky's colour
+ * and elevation model is pure data, and the properties worth holding it to —
+ * that the sun sets, that the sky never goes grey between two stops, that two
+ * bodies are never both up — are all checkable without a WebGL context, which
+ * a jsdom test does not have.
+ */
+export function skyStopsAt(daylight: number): {
+  a: SkyStop;
+  b: SkyStop;
+  u: number;
+  ta: number;
+  tb: number;
+} {
   const t = saturate(daylight);
   for (let i = 0; i < STOPS.length - 1; i++) {
     const cur = STOPS[i]!;
     const next = STOPS[i + 1]!;
     if (t >= cur.t && t <= next.t) {
       const u = (t - cur.t) / (next.t - cur.t);
-      return { a: cur.s, b: next.s, u };
+      return { a: cur.s, b: next.s, u, ta: cur.t, tb: next.t };
     }
   }
   const last = STOPS[STOPS.length - 1]!;
-  return { a: last.s, b: last.s, u: 0 };
+  return { a: last.s, b: last.s, u: 0, ta: last.t, tb: last.t };
 }
 
 function makeMilkyWayTexture(): THREE.CanvasTexture {

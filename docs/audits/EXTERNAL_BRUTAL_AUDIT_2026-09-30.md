@@ -1,5 +1,7 @@
 # Sunbird — External Brutal Audit, QA & Design Critique
 
+> **Status:** fixes tracked in `OMNIFIX_LOG_2026-09-30.md`.
+
 **Date:** 2026-09-30 · **Commit:** `cbf6950` · **Branch:** `arena/01a0f277-sunbird-poki`
 **Scope:** game design, mechanics & balance, mobile/UX, rendering & performance, architecture, QA & test strategy, build & release engineering, Poki platform compliance, economy & monetisation, live-ops/backend, security & trust, accessibility, localisation, audio, information architecture, docs & process.
 **Stance:** adversarial. I am reviewing this as if I were the external QA vendor + publisher's product lead who has to sign the release. Nothing here is softened.

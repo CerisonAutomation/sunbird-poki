@@ -1,5 +1,6 @@
 # OMNIFIX — fix log against `EXTERNAL_BRUTAL_AUDIT_2026-09-30.md`
 
+> **Status:** fix log, closed — see `EXTERNAL_BRUTAL_AUDIT_2026-09-30.md`.
 Pass 1 (P0 / ship-blocking). Every entry below is landed on
 `arena/01a0f277-sunbird-poki`, and the full gate is green after it:
 `lint --max-warnings 0` · `typecheck` · `test` (2 662 passing) · `circular:check` ·

@@ -234,13 +234,29 @@
   text-align: left;
 }
 
-/* Portrait phones have no lower-left to spare — the altitude ribbon and the
-   strip would collide — so there it tucks under the top bar instead, still
-   out of the descent line. */
+/* Portrait phones: the goal strip tucks under the top bar, out of the descent
+   line.
+
+   It used to be positioned with `top: calc(104px + safe-area)` against a HEADER
+   that measures 95 px at 390x844 but 116 px at 320x568. Measured at 390x844:
+   the strip occupied y 104..219 while `.flight-messages` — which carries the
+   coaching sentence — started at y 99, so "HOLD to dive down the hill" was
+   printed straight across the top edge of the "Climb to 40 m" card. At 320x568
+   the strip started 12 px ABOVE the header bottom and covered the island chip.
+
+   The deeper fault is the value this fed: with the strip at the top,
+   `hudRect.bottom - footer.top` returned most of the viewport, publishing a
+   740 px `--hud-footer-height` (should be ~115). That bogus number is what
+   clamped the altitude gauge to its floor and pushed the toast lane to
+   `top: -15px`, half off-screen.
+
+   So the strip is offset by the MEASURED header height, and padded: the
+   measured variable is then a real height again and every clamp downstream
+   starts working. */
 @media (max-aspect-ratio: 3/4) {
   .hud-root[data-flying="true"] .flight-footer {
     bottom: auto;
-    top: calc(104px + env(safe-area-inset-top));
+    top: calc(var(--hud-header-height, 104px) + 8px + env(safe-area-inset-top));
     left: clamp(8px, 3vw, 16px);
     width: min(340px, 74vw);
   }

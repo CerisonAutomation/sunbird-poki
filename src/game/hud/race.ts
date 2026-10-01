@@ -360,7 +360,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   const clubChat = SQUAD_CHAT && myClub
     ? `
     <div class="club-chat">
-      <div class="chat-box" data-scroll-memory="squad-chat" data-stick-bottom role="log" aria-label="Club chat history">
+      <div class="chat-box" data-scroll-memory="squad-chat" data-stick-bottom role="log" aria-label="${t("hud.aria.clubChat", undefined, "Club chat history")}">
         ${sq.chat.length
           ? sq.chat.map((m) => `<div class="chat-line"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(m.text)}</span></div>`).join("")
           : `<div class="empty-note">${t("hud.renderCampaign.SHelloClubMessagesStayBetweenMembers", undefined, "Say hello to your club — messages stay between members.")}</div>`}

@@ -227,12 +227,22 @@ describe("the stylesheet really does close the lane for these feedback slots", (
   // list of slots that can trigger it.
   const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
 
-  it("hides .toasts for the countdown, launch and finish slots", () => {
+  it("hides .toasts for the launch and finish slots", () => {
     // The rule the wait exists to survive, asserted against the selector
     // rather than a copy of it.
-    expect(css).toMatch(/\.hud-root\[data-feedback="countdown"\]\s*\.toasts/);
+    //
+    // `countdown` is deliberately NOT in this list. It used to be, and that was
+    // the worse bug: `resetRun` raises the run's objective toast, the countdown
+    // hides the lane for its full 3 s, and the message therefore popped in at
+    // 3.1 s — on top of the coaching sentence, after the moment it was meant to
+    // explain. Countdown is frozen physics, so it is the one feedback slot with
+    // nothing competing for the lane, and the toast belongs on screen there.
+    // The wait is unaffected: it measures the lane rather than assuming which
+    // slots close it, so a countdown toast is read immediately instead of after
+    // a wait it no longer needs.
     expect(css).toMatch(/\.hud-root\[data-feedback="launch"\]\s*\.toasts/);
     expect(css).toMatch(/\.hud-root\[data-feedback="finish"\]\s*\.toasts/);
+    expect(css).not.toMatch(/\.hud-root\[data-feedback="countdown"\]\s*\.toasts/);
   });
 
   it("reaches every slot that can hide the lane", () => {

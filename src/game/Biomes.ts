@@ -617,6 +617,22 @@ function islandScaleFor(island: number): number {
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
+/**
+ * Drop the cached prefix table so the next `islandTemplate` call re-derives it.
+ *
+ * Only the dev tuning panel has a reason to call this: `ISLAND_PERIOD` is a
+ * live binding, but every island boundary below `LAYOUT_LIMIT` was baked out of
+ * it once and never re-read, so a retuned period would otherwise change the
+ * start line in Game.ts and nothing else — the world would silently stop
+ * matching itself. The one-entry island cache in `islandIndexFor` has to go
+ * with it, or a stale `lastStart` survives the rebuild.
+ */
+export function resetIslandLayout(): void {
+  layoutStarts = null;
+  lastIndex = -1;
+  lastStart = 0;
+}
+
 /** The mean island length, used past the end of the exact table. */
 function averagePeriod(): number {
   const starts = ensureLayout();

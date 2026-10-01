@@ -84,10 +84,20 @@ describe("the break overlay", () => {
     expect(card!.querySelector('[data-action="ad-skip"]'), "a portal break must not be skippable").toBeNull();
   });
 
-  it("gives the direct build a real countdown and a way out, because there it is our own break", async () => {
+  it("gives the direct build a real countdown — and no way to cut it short", async () => {
+    // Was: "our own break has to end somehow", asserting an `ad-skip` button.
+    // It did have to end somehow, and the somehow was the player skipping it,
+    // because the game never ended a placeholder break by itself. It does now
+    // (Game.fixedUpdate, the moment adTimer lands), so the panel shows a
+    // read-only countdown chip and there is no control to press.
     const root = await render({ state: "ad", portalName: "none", adSkippable: true, adTimer: 3, adTotal: 4 });
     const card = root.querySelector('[data-ref="adCard"]')!;
-    expect(card.querySelector('[data-action="ad-skip"]'), "our own break has to end somehow").not.toBeNull();
+    expect(card.querySelector('[data-action="ad-skip"]'), "a placeholder break must not be skippable either").toBeNull();
+    const chip = card.querySelector(".ad-countdown");
+    expect(chip, "the player still gets to see how long is left").not.toBeNull();
+    expect(chip?.getAttribute("role")).toBe("status");
+    expect(chip?.querySelector("svg"), "every countdown wears a clock").not.toBeNull();
+    expect(chip?.innerHTML ?? "", "and it is the shared timer glyph").toContain("timer-glyph");
     expect(card.textContent ?? "").toMatch(/Continues in/i);
   });
 
@@ -118,7 +128,16 @@ describe("the break overlay", () => {
     hud.update(snap as unknown as HudSnapshot);
     expect(card.querySelector('[data-live="adBar"]')?.getAttribute("style") ?? "", "a finished break is a full bar, not an empty one").toMatch(/width:\s*100%/);
     expect(card.querySelector(".portal-ad-wait h3")?.textContent ?? "", "the header must stop claiming the ad is still loading").not.toMatch(/loading/i);
-    expect((card.querySelector('[data-live="adSkip"]') as HTMLButtonElement).disabled, "the way out is enabled once it is actually done").toBe(false);
+    // There is no longer a "way out" to enable: the break ends itself the
+    // moment the countdown lands. What must still be true is that the chip
+    // stops counting and says so, and that it keeps its clock through the
+    // live-sync path — which is where the icon was being wiped, because the
+    // updater rewrote the element's whole textContent every frame.
+    const chip = card.querySelector('[data-live="adSkip"]')!;
+    expect(chip.tagName, "the countdown is a status chip, not a control").not.toBe("BUTTON");
+    expect(chip.classList.contains("done"), "a finished break says so").toBe(true);
+    expect(chip.querySelector("b")?.textContent, "the countdown lands on zero, never negative").toBe("0");
+    expect(chip.querySelector("svg"), "the clock survives the live update").not.toBeNull();
   });
 
   it("never offers to remove breaks on the portal edition (REQ-20)", async () => {

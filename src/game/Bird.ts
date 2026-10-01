@@ -21,7 +21,9 @@ import {
   GROUND_FRICTION_DIVE,
   GROUND_G_DIVE,
   GROUND_G_GLIDE,
+  GROUND_G_GLIDE_DOWN,
   GROUND_STICK_DIVE,
+  GROUND_STICK_FLAT_SLOPE,
   GROUND_STICK_GLIDE,
   LAND_BAD_MIN_KEEP,
   LAND_FEATHER_FLOOR,
@@ -29,6 +31,9 @@ import {
   LAND_GOOD_KEEP,
   LAND_PERFECT,
   LAND_PERFECT_GAIN,
+  LAND_TUCK_BONUS,
+  LAUNCH_POP_MAX,
+  LAUNCH_POP_SPEED,
   MAX_SPEED,
   MAX_SPEED_FEVER,
   MIN_KEEP_SPEED,
@@ -39,6 +44,10 @@ import {
   SUNFLOWER_VY,
   WATER_Y,
 } from "./constants";
+import {
+  launchPopQuality,
+  shouldLeaveGround,
+} from "./launchPop";
 import { clamp, lerp, lerpAngle } from "./math";
 import type { TerrainSystem } from "./TerrainSystem";
 
@@ -108,6 +117,55 @@ export const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions
   ember: { span: 1.12, tail: 1.28, beak: 0.78, beakWidth: 0.86, bulk: 0.98, crest: true },
   comet: { span: 1.05, tail: 1.85, beak: 0.66, beakWidth: 0.78, bulk: 0.88, crest: true },
 };
+
+/**
+ * Shared geometry for every bird in the world.
+ *
+ * A bird is ~20 meshes, and `new Bird()` used to allocate a fresh
+ * `SphereGeometry`/`ConeGeometry` for every one of them. `MassRace` builds up
+ * to **40 rivals**, so a busy race uploaded on the order of 800 buffer
+ * geometries to the GPU — every one of them a duplicate of a geometry already
+ * resident, differing only in the `mesh.scale` applied afterwards. That is
+ * pure cost: VRAM, upload stalls at the start of a race, and 800 objects for
+ * the renderer to sort and for three.js to track.
+ *
+ * The shapes are safe to share because nothing in this file ever mutates a
+ * geometry — every species proportion, every squash and stretch, is applied to
+ * `mesh.scale` or to a parent transform (see the "Scaling rather than
+ * rebuilding" note on `applyShape`). So the cache is keyed by the constructor
+ * arguments and handed out by reference.
+ *
+ * Poki's technical bar is "a solid 30 fps minimum, 60 fps target, on mid-range
+ * phones from the last three years". Forty birds' worth of redundant geometry
+ * is the kind of thing that is invisible on a desktop and decides whether a
+ * phone holds frame.
+ */
+const SHARED_GEOMETRY = new Map<string, THREE.BufferGeometry>();
+
+function sharedGeometry(key: string, build: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  let geo = SHARED_GEOMETRY.get(key);
+  if (!geo) {
+    geo = build();
+    SHARED_GEOMETRY.set(key, geo);
+  }
+  return geo;
+}
+
+const sharedSphere = (r: number, w: number, h: number): THREE.BufferGeometry =>
+  sharedGeometry(`s:${r}:${w}:${h}`, () => new THREE.SphereGeometry(r, w, h));
+
+const sharedCone = (r: number, h: number, seg: number): THREE.BufferGeometry =>
+  sharedGeometry(`c:${r}:${h}:${seg}`, () => new THREE.ConeGeometry(r, h, seg));
+
+/**
+ * Release every shared bird geometry. Only for teardown of the whole scene —
+ * an individual `Bird.dispose()` must NOT touch these, because the other 39
+ * birds are still drawing them.
+ */
+export function disposeSharedBirdGeometry(): void {
+  for (const geo of SHARED_GEOMETRY.values()) geo.dispose();
+  SHARED_GEOMETRY.clear();
+}
 
 export class Bird {
   private readonly terrainNormal = { nx: 0, ny: 1, tx: 1, ty: 0 };
@@ -212,6 +270,13 @@ export class Bird {
   private flareTimer = 0;
   /** Seconds during which a release is still "live" and can spend the flare. */
   private releaseBuffer = 0;
+  /** Seconds since the stick was released; Infinity while it is held. Drives
+   * the crest pop (see LAUNCH_POP_WINDOW) — kept separate from
+   * `releaseBuffer`, which the flare consumes. */
+  private releaseAge = Number.POSITIVE_INFINITY;
+  /** 0..1 — how well the last crest launch was timed. Read by the Game for
+   * feedback (callout, sound, particles); 0 means the stick was held. */
+  popQuality = 0;
   /**
    * Render interpolation: the state as of the PREVIOUS physics step.
    *
@@ -268,27 +333,27 @@ export class Bird {
 
     this.squash.add(this.makeBody());
 
-    this.lidL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), this.lidMat);
-    this.lidR = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), this.lidMat);
+    this.lidL = new THREE.Mesh(sharedSphere(0.16, 8, 6), this.lidMat);
+    this.lidR = new THREE.Mesh(sharedSphere(0.16, 8, 6), this.lidMat);
     this.lidL.position.set(0.42, 0.42, 0.38);
     this.lidR.position.set(0.42, 0.42, -0.38);
     this.lidL.scale.set(1, 0.08, 1);
     this.lidR.scale.set(1, 0.08, 1);
     this.squash.add(this.lidL, this.lidR);
 
-    const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), eyeW);
-    const eyeWhiteR = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), eyeW);
+    const eyeWhiteL = new THREE.Mesh(sharedSphere(0.18, 10, 8), eyeW);
+    const eyeWhiteR = new THREE.Mesh(sharedSphere(0.18, 10, 8), eyeW);
     eyeWhiteL.position.set(0.42, 0.38, 0.38);
     eyeWhiteR.position.set(0.42, 0.38, -0.38);
-    this.pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeP);
-    this.pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), eyeP);
+    this.pupilL = new THREE.Mesh(sharedSphere(0.09, 8, 8), eyeP);
+    this.pupilR = new THREE.Mesh(sharedSphere(0.09, 8, 8), eyeP);
     this.pupilL.position.set(0.12, 0.02, 0.04);
     this.pupilR.position.set(0.12, 0.02, -0.04);
     eyeWhiteL.add(this.pupilL);
     eyeWhiteR.add(this.pupilR);
     this.squash.add(eyeWhiteL, eyeWhiteR);
 
-    this.beak = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 6), this.beakMat);
+    this.beak = new THREE.Mesh(sharedCone(0.16, 0.42, 6), this.beakMat);
     this.beak.rotation.z = -Math.PI / 2;
     this.beak.position.set(0.78, 0.18, 0);
     this.squash.add(this.beak);
@@ -301,7 +366,7 @@ export class Bird {
     // Held on `this.crests` so `setShape` can take them off a species that does
     // not wear one — an owl with a sunbird crest is not an owl.
     for (let i = 0; i < 3; i++) {
-      const crest = new THREE.Mesh(new THREE.ConeGeometry(0.09 - i * 0.015, 0.42 - i * 0.06, 5), this.wingMat);
+      const crest = new THREE.Mesh(sharedCone(0.09 - i * 0.015, 0.42 - i * 0.06, 5), this.wingMat);
       crest.position.set(0.18 - i * 0.17, 0.62 + i * 0.03, 0);
       crest.rotation.z = 0.55 + i * 0.35;
       this.squash.add(crest);
@@ -309,12 +374,12 @@ export class Bird {
     }
 
     // Fanned three-feather tail reads far better in 3/4 view than one cone.
-    this.tail = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.62, 5), this.wingMat);
+    this.tail = new THREE.Mesh(sharedCone(0.2, 0.62, 5), this.wingMat);
     this.tail.rotation.z = Math.PI / 2.4;
     this.tail.position.set(-0.7, 0.05, 0);
     this.squash.add(this.tail);
     for (const side of [-1, 1]) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.5, 5), this.wingMat);
+      const f = new THREE.Mesh(sharedCone(0.15, 0.5, 5), this.wingMat);
       f.rotation.z = Math.PI / 2.55;
       f.rotation.y = 0.35 * side;
       f.position.set(-0.64, 0.02, 0.16 * side);
@@ -349,7 +414,7 @@ export class Bird {
     this.root.add(this.glow);
     this.root.scale.setScalar(BIRD_BASE_SCALE);
 
-    const shadowGeo = Bird.makeShadowGeometry();
+    const shadowGeo = sharedGeometry("bird-shadow", () => Bird.makeShadowGeometry());
     const shadowMat = new THREE.MeshBasicMaterial({
       color: 0x1a1020,
       transparent: true,
@@ -645,9 +710,13 @@ export class Bird {
     // Latch the release here — after `diving` resolves, and crucially BEFORE
     // the grounded/ballistic branch below, so a release while the bird is still
     // on the ground is recorded rather than discarded.
-    if (this.wasDiving && !diving) this.releaseBuffer = FLARE_BUFFER;
+    if (this.wasDiving && !diving) {
+      this.releaseBuffer = FLARE_BUFFER;
+      this.releaseAge = 0;
+    }
     this.wasDiving = diving;
     this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
+    this.releaseAge = diving ? Number.POSITIVE_INFINITY : this.releaseAge + dt;
     const gMult = opts.gravityMult ?? 1;
     const cap =
           (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult +
@@ -660,28 +729,46 @@ export class Bird {
       let vt = this.vx * n.tx + this.vy * n.ty;
 
       // Gravity along the slope: downhill (ty<0) accelerates, uphill decelerates.
-      const gGround = diving ? GROUND_G_DIVE : GROUND_G_GLIDE;
-      // ...but downhill-only, with a floor in BOTH states, so that flat ground is
-      // not a place where the input does nothing. Uphill keeps the full slope
-      // penalty in both states — the climb is still the thing the run is about.
+      // Uphill and downhill are separate constants while gliding. They used
+      // to be one, so lowering it to soften uphill climbs also halved how
+      // fast a RELEASED bird accelerates down a hill — the exact "release is
+      // less responsive" the player reported. See GROUND_G_GLIDE_DOWN.
+      const gGround = diving
+        ? GROUND_G_DIVE
+        : n.ty < 0
+          ? GROUND_G_GLIDE_DOWN
+          : GROUND_G_GLIDE;
+      // ...but downhill-only, with a floor on DEAD FLAT GROUND, so that flat
+      // ground is not a place where the input does nothing.
       //
-      // The glide floor is new, and it is what makes the run loop at all. Holding
-      // has had a floor since GROUND_STICK_DIVE; releasing had none, so a gliding
-      // bird on the ground had `accel = 14 * slope` fighting `0.05 * v` and settled
-      // onto the MIN_KEEP_SPEED conveyor (12 m/s) the moment it hit flat or uphill
-      // ground. That was terminal, not a slow patch: the launch gate needs
-      // `v^2 * curvature > gravity + STICK_ACCEL_GLIDE`, so at 12 m/s the terrain
-      // would have to curve away at 0.20/m to let go — which 0.7% of sampled
-      // positions on a real island do. Measured over a full passive minute the bird
-      // spent 68% of the run grounded and hit exactly 12.0 m/s four separate times,
-      // and the climb goal never left 0.
+      // The slope gate is not cosmetic. Applied everywhere,
+      // `Math.max(slopeAccel, FLOOR)` turns an uphill into a positive
+      // accelerator — `max(negative, 11)` is +11 m/s² — and makes "hold
+      // forever" strictly optimal, which is the opposite of a one-button game
+      // with a skill ceiling. Measured over 60 s runs on three seeds before
+      // GROUND_STICK_FLAT_SLOPE: hold 2.23/2.49/2.17 km versus 2.16/1.91/2.23 km
+      // for a policy that actually reads the terrain. Playing well was worse
+      // than playing with a brick on the button.
       //
-      // The floor is deliberately ~2.5x weaker than the diver's. Holding must stay
-      // the stronger gesture — it is 11 against this, with `GROUND_G_GLIDE` (14)
-      // supplying far less than `GROUND_G_DIVE` (88) on the same slope — so the
-      // choice stays a trade: dive for speed and stay glued, release for lift.
+      // The floor now applies in BOTH stick states, and the glide half is new.
+      // Holding has had one since GROUND_STICK_DIVE; releasing had none, so a
+      // gliding bird on the ground settled onto the MIN_KEEP_SPEED conveyor
+      // (12 m/s) the moment it met flat or uphill ground. That was terminal,
+      // not a slow patch: the launch gate needs `v^2 * curvature > gravity +
+      // STICK_ACCEL_GLIDE`, so at 12 m/s the terrain must curve away at 0.20/m
+      // to let go, and 0.7% of sampled positions on a real island do. Measured
+      // over a passive minute the bird spent 68% of the run grounded, hit
+      // exactly 12.0 m/s four separate times, and the climb goal never left 0.
+      //
+      // GROUND_STICK_GLIDE is deliberately ~2.4x weaker than the diver's, so
+      // holding stays the stronger gesture and the choice survives as a trade:
+      // dive for speed and stay glued, release for lift.
       const downhill = -n.ty;
-      const accel = Math.max(gGround * downhill, diving ? GROUND_STICK_DIVE : GROUND_STICK_GLIDE);
+      const slopeAccel = gGround * downhill;
+      const accel =
+        Math.abs(downhill) <= GROUND_STICK_FLAT_SLOPE
+          ? Math.max(slopeAccel, diving ? GROUND_STICK_DIVE : GROUND_STICK_GLIDE)
+          : slopeAccel;
       vt += accel * dt;
 
       const fr = diving ? GROUND_FRICTION_DIVE : GROUND_FRICTION;
@@ -707,32 +794,36 @@ export class Bird {
       // terrain noise alone can spike it positive with no real lip underfoot.
       // Gate on the same crest-prominence rule the AI's distanceToCrest()
       // cache uses, so a launch only fires off a genuine climb-then-drop.
-      if (curv > 0 && terrain.hasCrestProminence(this.x)) {
+      if (curv > 0) {
         const needed = vt * vt * curv; // centripetal pull required to stay glued
-        // The downward acceleration actually holding the bird down — which is NOT
-        // full gravity while gliding.
+        // The downward acceleration actually holding the bird down — which is
+        // NOT full gravity while gliding.
         //
         // The ballistic branch cancels up to `GLIDE_LIFT_MAX` (55%) of gravity
-        // with speed-borne lift, so a bird at 62 m/s experiences 7.2 m/s², not 16.
-        // The launch test below was charging it the full 16 anyway. That made the
-        // ground a strictly harsher place to be than the air at the same speed: the
-        // bird could soar indefinitely once it was up, but had to beat 29 m/s² of
-        // downward pull to get up in the first place, against 19.4 in the air.
+        // with speed-borne lift, so a bird at 62 m/s experiences 7.2 m/s², not
+        // 16. This test was charging it the full 16 anyway, which made the
+        // ground a strictly harsher place to be than the air at the same speed:
+        // the bird could soar indefinitely once it was up, but had to beat 29
+        // m/s² of pull to get there, against 19.4 in the air. At the 45 m/s where
+        // a crest could otherwise throw it, the full-gravity gate needs curvature
+        // above 0.0143/m while only 14% of positions are crest-prominent at all.
         //
-        // Measured over 3900 m of a real island, that gap is the whole run. At the
-        // 45 m/s where a crest could otherwise throw it, the full-gravity gate needs
-        // curvature above 0.0143/m and only 14% of positions are crest-prominent at
-        // all — so the bird sat on the ground for 68% of a passive minute and the
-        // climb goal never left 0. Lift is a function of speed, and the gate already
-        // scales by speed, so charging the lift it is about to enjoy was simply
-        // charging the bird for a wing it already has.
+        // Lift is a function of speed and this gate already scales by speed, so
+        // charging the lift the bird is about to enjoy was charging it for a
+        // wing it already has.
         const liftNow = diving
           ? 0
           : Math.min(0.85, GLIDE_LIFT_MAX * clamp(vt / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1) * biome.liftMult);
         const available =
           (diving ? GRAVITY_DIVE : GRAVITY_GLIDE * (1 - liftNow)) * gMult * n2.ny +
           (diving ? STICK_ACCEL_DIVE : STICK_ACCEL_GLIDE);
-        if (needed > available) launched = true;
+        // The prominence check is an anti-noise FILTER, not a veto. It used to
+        // be `curv > 0 && hasCrestProminence(x)`, which let a strict terrain
+        // probe overrule the physics: on the last ramp of an island the far side
+        // has not started descending yet, so the gate returned false and the
+        // launch never happened however well the player released. See
+        // shouldLeaveGround() for the full archaeology.
+        if (shouldLeaveGround(needed, available, terrain.hasCrestProminence(this.x))) launched = true;
       }
       if (launched) {
         this.grounded = false;
@@ -743,6 +834,30 @@ export class Bird {
         this.apexY = this.y;
         this.vx = vt * n2.tx;
         this.vy = vt * n2.ty;
+
+        // THE POP. Releasing the stick just before the lip converts speed into
+        // height. See LAUNCH_POP_WINDOW for why this exists at all: without it
+        // nothing in the game rewards letting go, and holding forever is the
+        // optimal strategy. Timing quality decays linearly across the window,
+        // so this is a skill the player can be measurably better at, and it
+        // scales with launch speed so it multiplies good flying rather than
+        // replacing it.
+        // The window used to be measured from the wrong end: 0.45 s, evaluated
+        // when the bird leaves the ground, means "the lip must arrive within
+        // 0.45 s of your release" — so on any ramp longer than half a second
+        // of travel the correct input scored exactly zero and the release did
+        // nothing at all. See launchPop.ts. The curve now has a floor, so a
+        // release is never worth nothing, and precision is still worth ~2.5x.
+        const timing = launchPopQuality(this.releaseAge);
+        this.popQuality = timing;
+        if (timing > 0) {
+          const speedFactor = clamp(Math.abs(vt) / LAUNCH_POP_SPEED, 0, 1);
+          this.vy += LAUNCH_POP_MAX * timing * speedFactor;
+          // Spent: one pop per release, so a release cannot also flare into
+          // the same take-off and cannot pop twice off a double lip.
+          this.releaseAge = Number.POSITIVE_INFINITY;
+          this.releaseBuffer = 0;
+        }
       } else {
         this.grounded = true;
         this.vx = vt * n2.tx;
@@ -823,6 +938,16 @@ export class Bird {
       if (this.releaseBuffer > 0 && !diving) {
         this.releaseBuffer = 0;
         this.flareTimer = FLARE_DURATION;
+        // Airborne release. main's RELEASE_KICK supersedes the coyote pop that
+        // stood here on this branch: both existed to make a release in the air
+        // produce lift, but the kick is constant, measured off a real Bird
+        // (flat -0.07 -> +21.84, ramp p50 +10.2 -> +32.14) and carries its own
+        // cooldown, where the coyote pop was a decaying fraction of the crest
+        // pop with no rate limit. Keeping both would pay the same gesture
+        // twice. The crest-gate fix and the grounded pop floor from this
+        // branch are untouched — they solve a different failure (the launch
+        // not firing at all, and the GROUNDED pop scoring zero on a long ramp)
+        // and sit upstream of this branch.
         this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown);
         this.vy = applyReleaseKick(this.vy, this.kickCooldown);
         this.kickCooldown = RELEASE_KICK_COOLDOWN;
@@ -911,7 +1036,10 @@ export class Bird {
         // Tucking absorbs the impact — holding through a landing is how you
         // keep momentum, which is exactly the technique we want to teach.
         let floor = opts.feather ? LAND_FEATHER_FLOOR : LAND_BAD_MIN_KEEP;
-        if (diving) floor = Math.max(floor, 0.86);
+        // A tuck is a bonus on the floor, never a floor of its own. See
+        // LAND_TUCK_BONUS: as a floor it made holding the button immune to
+        // bad landings and erased the alignment skill entirely.
+        if (diving) floor = Math.min(LAND_GOOD_KEEP, floor + LAND_TUCK_BONUS);
         let keep: number;
         if (align >= LAND_PERFECT) keep = LAND_PERFECT_GAIN;
         else if (align >= LAND_GOOD) keep = LAND_GOOD_KEEP;
@@ -1151,24 +1279,55 @@ export class Bird {
     this.root.scale.setScalar(BIRD_BASE_SCALE * (1 + behind * 0.95));
   }
 
+  /**
+   * Whether this bird's meshes are drawn into the shadow map.
+   *
+   * Every mesh of every bird was an unconditional shadow caster AND receiver.
+   * A bird is ~20 meshes and `MassRace` fields up to 40 rivals, so on any
+   * device where `renderer.shadowMap.enabled` is true the depth pass was
+   * re-rendering ~800 extra meshes every frame — a second full scene draw,
+   * spent on rivals that are a few dozen pixels tall in a pack.
+   *
+   * Turning it off for rivals is close to invisible and not a loss of
+   * grounding, because each bird also carries its own blob shadow (the
+   * `shadow` ellipse below), which is what actually reads as "this bird is
+   * above that hill" at race distances. The player's own bird keeps real
+   * shadows — it is the one the camera is on.
+   */
+  setShadowCasting(enabled: boolean): void {
+    this.squash.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = enabled;
+        o.receiveShadow = enabled;
+      }
+    });
+  }
+
   dispose(): void {
+    // Materials are per-bird (they carry the skin's tint) and are disposed
+    // here. Geometries are NOT: every bird draws the same cached shapes, so
+    // disposing one bird's would blank the other thirty-nine mid-race. This
+    // used to call `obj.geometry.dispose()` on everything — harmless only
+    // because every bird also allocated its own copy, which was the actual
+    // problem. `disposeSharedBirdGeometry()` handles scene teardown.
+    const shared = new Set(SHARED_GEOMETRY.values());
     this.root.traverse((obj) => {
       if (obj instanceof THREE.Mesh) {
-        obj.geometry.dispose();
+        if (!shared.has(obj.geometry)) obj.geometry.dispose();
         const mat = obj.material;
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
         else mat.dispose();
       }
     });
-    this.shadow.geometry.dispose();
+    if (!shared.has(this.shadow.geometry)) this.shadow.geometry.dispose();
     (this.shadow.material as THREE.Material).dispose();
   }
 
   private makeBody(): THREE.Mesh {
-    const geo = new THREE.SphereGeometry(0.62, 12, 10);
+    const geo = sharedSphere(0.62, 12, 10);
     const body = new THREE.Mesh(geo, this.bodyMat);
     body.scale.set(1.15, 0.92, 0.92);
-    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), this.bellyMat);
+    const belly = new THREE.Mesh(sharedSphere(0.42, 10, 8), this.bellyMat);
     belly.position.set(0.08, -0.18, 0);
     belly.scale.set(1.05, 0.8, 0.9);
     body.add(belly);
@@ -1178,15 +1337,15 @@ export class Bird {
   private buildWing(group: THREE.Group, side: number): void {
     // Two-layer wing: broad primary + darker secondary layer underneath,
     // plus three feather tips so the flap reads with depth from any angle.
-    const wing = new THREE.Mesh(new THREE.SphereGeometry(0.48, 10, 8), this.wingMat);
+    const wing = new THREE.Mesh(sharedSphere(0.48, 10, 8), this.wingMat);
     wing.scale.set(0.95, 0.18, 0.55);
     group.add(wing);
-    const under = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 6), this.bodyMat);
+    const under = new THREE.Mesh(sharedSphere(0.4, 8, 6), this.bodyMat);
     under.scale.set(0.85, 0.14, 0.48);
     under.position.set(-0.08, -0.05, 0.05 * side);
     group.add(under);
     for (let i = 0; i < 3; i++) {
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.38, 4), this.wingMat);
+      const tip = new THREE.Mesh(sharedCone(0.09, 0.38, 4), this.wingMat);
       tip.rotation.x = (Math.PI / 2) * side;
       tip.rotation.z = -0.25 - i * 0.18;
       tip.position.set(-0.28 - i * 0.14, -0.02, (0.34 + i * 0.05) * side);

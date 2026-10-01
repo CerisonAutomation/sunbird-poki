@@ -276,15 +276,27 @@ describe("the input has to be worth something", () => {
     const from = tpl.start + bestX;
     const released = accelOn(terrain, from, 0.4, false);
     const held = accelOn(terrain, from, 0.4, true);
-    // The climb must still COST. The floor is a floor on downhill acceleration;
-    // it is not a launch button, and a steep climb has to stay the thing the
-    // run is about. (Holding should still lose LESS than releasing — the dive
-    // grip bites, and its friction term is the lower one. That is correct: a
-    // climb is cheaper to claw up than to coast up, which is the whole point of
-    // wanting to be over the crest when you release.)
+    // The climb must still COST, and it must cost MORE with the stick held.
+    //
+    // This assertion used to read `held > released` — "a dive should grip
+    // harder than a coast" — and it passed for the wrong reason: the stick
+    // floor was applied on every slope, not only on flats, so
+    // `Math.max(GROUND_G_DIVE * downhill, GROUND_STICK_DIVE)` on an uphill
+    // returned +11 m/s² and a held stick literally accelerated the bird up
+    // the hill. The test's own preamble said "uphill keeps the full slope
+    // penalty" while the assertion it made pinned the opposite, and the
+    // consequence was that holding the button forever was the optimal way to
+    // play the entire game (measured: hold 2.23 km vs 2.16 km for a policy
+    // that read the terrain over 60 s).
+    //
+    // The corrected model is the one the rest of the game is written for:
+    // GROUND_G_DIVE (88) is six times GROUND_G_GLIDE (14), so diving into a
+    // climb scrubs speed hard and coasting up it is cheap. That is what makes
+    // "release before the climb, hold into the drop" the right read, and it is
+    // what the crest pop (LAUNCH_POP_WINDOW) then pays out on.
     expect(released, "climbing should cost speed").toBeLessThan(0);
     expect(held, "the stick must not make a steep climb free").toBeLessThan(0);
-    expect(held, "a dive should grip harder than a coast").toBeGreaterThan(released);
+    expect(held, "diving into a climb has to cost more than coasting up it").toBeLessThan(released);
     terrain.dispose();
   });
 });

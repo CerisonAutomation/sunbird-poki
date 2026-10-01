@@ -24,10 +24,10 @@ import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Mom
 import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
 import type { Fx } from "./Fx";
-import { DPR_COOLDOWN_SECONDS, EFFECT_UP_FRAME_SECONDS, nextBloomBudget, nextDpr, QUALITY_WINDOW_SECONDS } from "./quality";
+import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
-import { adBreakAllowsAction, adBreakCanEnd } from "./adGate";
+import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
 import { MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, makeRoomCode, type AnyRealtimeClient } from "./Realtime";
@@ -367,6 +367,16 @@ export class Game {
   private renderDpr = 0;
   private dustCooldown = 0;
   private particleBudget = 1;
+  /** The particle density this device is configured for — what the adaptive
+   * ladder may climb back to, which is not always 1 (mobile defaults to 0.5,
+   * "low" quality pins 0.3). */
+  private particleCeiling = 1;
+  /** Soft-shadow + particle state for the two-way adaptive policy. Mirrors
+   * `renderer.shadowMap.enabled` and `particleBudget`; see `nextEffectBudget`. */
+  private effectBudget: EffectBudget = { shadows: true, particles: 1, goodWindows: 0 };
+  /** True when the WebGL context fell back to a software rasteriser: shadows
+   * are never affordable there, so they must not be "restored" either. */
+  private softwareMode = false;
   private deferredInstall: BeforeInstallPromptEvent | null = null;
   private readonly onBeforeInstall: (e: Event) => void;
   private readonly onInstalled: () => void;
@@ -851,7 +861,9 @@ export class Game {
     // Software renderer: disable shadows and cap pixel ratio to keep it usable.
     // The device baseline does the same for measured-lite hardware (≤2 cores,
     // ≤2 GB, no WebGL) — DEV-03 is "pick tiers from the probe", not from taste.
+    this.softwareMode = softwareMode;
     this.renderer.shadowMap.enabled = !softwareMode && this.deviceProfile.tier !== "lite";
+    this.effectBudget = { shadows: this.renderer.shadowMap.enabled, particles: this.particleBudget, goodWindows: 0 };
     // PCFSoftShadowMap was removed in three r165+ — PCF with a slightly larger
     // shadow map is the soft look without the console warning every load.
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -1538,6 +1550,16 @@ export class Game {
         break;
       case "ad":
         this.adTimer -= raw;
+        // A placeholder break now COMPLETES ITSELF the instant its countdown
+        // lands. It never did: the only exit was the player pressing
+        // `ad-skip`, which made skipping the intended way out of every break
+        // on a non-portal build — the exact opposite of the contract the rest
+        // of adGate.ts enforces. The break plays in full and then ends, with
+        // no control to press and nothing to skip.
+        if (!this.portalEnabled() && this.adTimer <= 0) {
+          this.endAd();
+          break;
+        }
         // Safety valve: the ad state is exit-blocked by design, so a platform
         // ad whose promise never settles must not be allowed to trap the game.
         // Generous on purpose — every real break resolves long before this, so
@@ -5866,20 +5888,33 @@ export class Game {
         if (this.state === "continue") this.finishRun();
         return true;
       case "ad-stuck":
-        // The ad screen could render with ZERO buttons on a portal build (both
-        // ad-skip and ad-gold are false there) and a frozen bar for the whole
-        // 60 s safety window. This returns the run. Deliberately not the same
-        // path as the automatic valve, so the skip is attributable.
+        // The ad screen would otherwise render with ZERO buttons on a portal
+        // build (both ad-skip and ad-gold are false there) and a frozen bar for
+        // the whole safety window. This returns the run — but ONLY once the
+        // break has demonstrably failed.
+        //
+        // It used to fire on the first frame of every break, which made it a
+        // one-click skip of a real portal ad: the game tore down its own ad
+        // state while the portal's ad was still on screen. The guard is
+        // duplicated here rather than trusted to the disabled attribute in the
+        // view, because a disabled button is a rendering detail and an action
+        // handler is the contract. Nothing is granted on this path either way.
+        if (!adEscapeArmed(this.adWallClock, AD_SAFETY_SECONDS)) return true;
+        this.telemetry.track("ad_escape_hatch", { reason: this.adReason, portal: this.platform?.name ?? "none" });
         this.endPortalAd();
         this.hud.toast("Returned to your flight", "info");
         return true;
       case "ad-skip":
-        // Placeholder ads only. A portal-served break is ended by the SDK's own
-        // completion callback, never by a game button: on that path adTimer is
-        // left at 0, so an unguarded `adTimer <= 0` test was already true and
-        // the button rendered enabled during a real ad — clicking it skipped
-        // the break AND paid out the reward.
-        if (this.state === "ad" && adBreakCanEnd(this.portalEnabled(), this.adTimer)) this.endAd();
+        // Retained as an explicit no-op, not deleted.
+        //
+        // There is no longer any surface that dispatches this: the placeholder
+        // panel renders a read-only countdown chip, and a placeholder break
+        // ends itself the moment its timer lands (see fixedUpdate). Keeping
+        // the case means a stray dispatch — a cached view, a deep link, a
+        // console call, a future refactor that re-adds the button — is
+        // swallowed here rather than falling through to whatever `default`
+        // does next year. A portal break was never endable this way and still
+        // is not.
         return true;
       case "ad-gold":
         // The upsell must not be an ad-skip. This button used to end the break
@@ -5912,6 +5947,16 @@ export class Game {
   }
 
   private handleHotkeys(): void {
+    // A live break owns the screen. Keyboard is a separate path from
+    // handleAction, so adBreakAllowsAction never saw these: ESC/P and R had
+    // their own route into backScreen()/replayRun() that did not go past the
+    // ad gate. Mute and fullscreen are deliberately still allowed — neither
+    // shortens the break, and Poki expects a player to be able to silence a
+    // game at any time.
+    if (this.state === "ad") {
+      this.input.consumePause();
+      this.input.consumeRestart();
+    }
     if (this.input.consumePause()) {
       if (this.hud.dismissCopy()) return;
       if (this.mmOpts) { this.cancelMatchmaking(); return; }
@@ -6580,12 +6625,16 @@ export class Game {
     // events still render because critical emitters are short-lived and the
     // adaptive quality loop can shed more work under sustained load.
     this.particleBudget = s.quality === "low" ? 0.3 : this.isMobile ? 0.5 : 1;
+    this.particleCeiling = this.particleBudget;
     this.particles.setBudget(this.particleBudget);
     // Soft shadows are the single priciest feature on mobile GPUs — keep them
     // only when the user asked for high quality (auto tiers shed them first).
     const wantShadows =
       this.deviceProfile.tier !== "lite" && !this.isMobile && (s.quality === "high" || (s.quality === "auto" && this.frameEma < 1 / 30));
     if (this.renderer.shadowMap.enabled !== wantShadows) this.renderer.shadowMap.enabled = wantShadows;
+    // Settings are an explicit instruction, so they reset the adaptive state
+    // rather than fighting it: the ladder starts again from what was chosen.
+    this.effectBudget = { shadows: wantShadows, particles: this.particleBudget, goodWindows: 0 };
     this.resize();
     this.bump();
   }
@@ -6652,25 +6701,23 @@ export class Game {
       });
     }
 
-    if (this.frameEma > 1 / 40) {
-      // At the floor resolution already? Kill soft shadows for the frame budget.
-      if (this.renderer.shadowMap.enabled) {
-        this.renderer.shadowMap.enabled = false;
-        this.telemetry.track("shadows_disabled", {});
-      }
-      if (this.particleBudget > 0.3) {
-        this.particleBudget = Math.max(0.3, this.particleBudget - 0.2);
-        this.particles.setBudget(this.particleBudget);
-      }
-    } else if (
-      this.frameEma < EFFECT_UP_FRAME_SECONDS &&
-      !this.isMobile &&
-      this.deviceProfile.tier !== "lite" &&
-      this.renderer.shadowMap.enabled === false
-    ) {
-      // Headroom is back — restore soft shadows (they were only shed under load).
-      this.renderer.shadowMap.enabled = true;
-      this.particleBudget = Math.min(1, this.particleBudget + 0.2);
+    // Soft shadows and particle density, through the same two-way policy the
+    // resolution uses. This used to be an inline one-way ratchet whose
+    // recovery branch was gated on `!this.isMobile` — so on a phone, one slow
+    // window shed the shadows and 20% of the particles for the rest of the
+    // session. See `nextEffectBudget`.
+    const shadowsAllowed = !this.softwareMode && this.deviceProfile.tier !== "lite";
+    const beforeEffects = this.effectBudget;
+    this.effectBudget = nextEffectBudget(beforeEffects, this.frameEma, {
+      shadowsAllowed,
+      particleCeiling: this.particleCeiling,
+    });
+    if (this.effectBudget.shadows !== beforeEffects.shadows) {
+      this.renderer.shadowMap.enabled = this.effectBudget.shadows;
+      this.telemetry.track(this.effectBudget.shadows ? "shadows_restored" : "shadows_disabled", {});
+    }
+    if (this.effectBudget.particles !== beforeEffects.particles) {
+      this.particleBudget = this.effectBudget.particles;
       this.particles.setBudget(this.particleBudget);
     }
   }
@@ -8027,6 +8074,10 @@ export class Game {
     adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
     adTimer: this.adTimer,
     adSkippable: !this.portalEnabled(),
+    // Wall-clock age of the live break, so the escape hatch can render an
+    // honest countdown instead of an enabled button that skips a real ad.
+    adElapsed: this.adWallClock,
+    adSafetySeconds: AD_SAFETY_SECONDS,
     adTotal: this.ads.duration,
     adReason: this.adReason,
     seedLabel: this.seedLabel(),

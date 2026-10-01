@@ -92,8 +92,15 @@ describe("progressive, bounded difficulty", () => {
       const next = flightProgression(island);
       expect(next.hillScale).toBeGreaterThanOrEqual(previous.hillScale);
       expect(next.hillScale - previous.hillScale).toBeLessThan(0.03);
-      expect(next.hillScale).toBeLessThanOrEqual(1.32);
-      expect(next.rhythmScale).toBeLessThanOrEqual(1.24);
+      // Raised from 1.32 deliberately, not to make a failure go away.
+      // 1.32 was the old asymptote — a third more arch height across an
+      // entire career, which is why late islands stopped feeling like
+      // progress. The ceiling is now 1.55 (worldProgression.HILL_SCALE_MAX).
+      // The bound that actually protects the player is the per-island STEP
+      // asserted just above, and that is unchanged at 0.03: the destination
+      // is further away, the road to it is not steeper.
+      expect(next.hillScale).toBeLessThanOrEqual(1.56);
+      expect(next.rhythmScale).toBeLessThanOrEqual(1.41);
       expect(endlessSpeedScale(island, island * 60)).toBeLessThanOrEqual(1.55);
       previous = next;
     }

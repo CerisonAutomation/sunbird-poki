@@ -123,6 +123,81 @@ const tmpBellyColor = new THREE.Color();
 const tmpWingColor = new THREE.Color();
 const tmpTailColor = new THREE.Color();
 
+/**
+ * A rival's ability is ONE number, and everything else follows from it.
+ *
+ * `spawn()` derived `lead`, `wobbleAmp` and `reaction` from `skill` inline,
+ * and every other path that changed a rival's skill — `shuffle()`,
+ * `setFieldSkill()` — changed the number and left the behaviour behind. The
+ * result was rivals whose rating and flying contradicted each other: a 0.95
+ * pilot on the leaderboard drifting with a tail-pack wobble and a tail-pack
+ * reaction time, or a 0.2 pilot holding a perfect racing line. In a race whose
+ * only feedback is "who is ahead of me", an opponent that does not fly like
+ * its rating is indistinguishable from an opponent that cheats.
+ *
+ * These three functions are now the single definition, called from every path
+ * that sets a skill. `massrace-ai-coherence.test.ts` asserts no path escapes.
+ */
+
+/**
+ * The band a pilot of this ability may aim within. Exported so the envelope
+ * is defined once: a test that re-derived these bounds by hand would be
+ * asserting against a copy of the formula rather than against the formula.
+ */
+export function leadRangeForSkill(skill: number): [number, number] {
+  const errorSpread = (1 - skill) * 38;
+  return [clamp(OPTIMAL_LEAD - errorSpread, 18, 125), clamp(OPTIMAL_LEAD + errorSpread, 18, 125)];
+}
+
+/** How far ahead of the ideal line this pilot aims. Better pilots, tighter. */
+export function leadForSkill(skill: number, rng: SeededRandom): number {
+  const errorSpread = (1 - skill) * 38;
+  return clamp(OPTIMAL_LEAD + rng.range(-errorSpread, errorSpread), 18, 125);
+}
+
+/** How much this pilot's line wanders. Better pilots, steadier. */
+export function wobbleForSkill(skill: number): number {
+  return (1 - skill) * 15 + 1.5;
+}
+
+/**
+ * Reaction latency in seconds. Apex and tactician run tighter loops;
+ * daredevil is reckless-fast. Lower is better, so this falls as skill rises.
+ */
+export function reactionForSkill(skill: number, archetype: AIArchetype, rng: SeededRandom): number {
+  const [base, jitter] = REACTION_SHAPE[archetype] ?? REACTION_SHAPE.default;
+  return base(skill) + rng.range(0, jitter);
+}
+
+/** The reaction band a pilot of this ability and archetype may land in. */
+export function reactionRangeForSkill(skill: number, archetype: AIArchetype): [number, number] {
+  const [base, jitter] = REACTION_SHAPE[archetype] ?? REACTION_SHAPE.default;
+  return [base(skill), base(skill) + jitter];
+}
+
+const REACTION_SHAPE: Record<string, [(skill: number) => number, number]> = {
+  apex: [(s) => 0.06 - s * 0.04, 0.02],
+  tactician: [(s) => 0.09 - s * 0.05, 0.03],
+  daredevil: [(s) => 0.08 - s * 0.05, 0.04],
+  default: [(s) => 0.14 - s * 0.1, 0.04],
+};
+
+/**
+ * The field's three-tier ability curve: the top 15% are elites, the next 25%
+ * are strong, the lower 60% are the approachable mid-to-tail field.
+ *
+ * Shared between `spawn()` and `shuffle()` because a reshuffle that replaced
+ * it with uniform noise did not reshuffle the race, it flattened it — see
+ * `shuffle()`.
+ */
+export function tieredSkill(tierRank: number, rng: SeededRandom): number {
+  const base =
+    tierRank < 0.15 ? 0.88 + rng.range(0, 0.11)
+    : tierRank < 0.4 ? 0.70 + rng.range(0, 0.14)
+    : 0.34 + rng.range(0, 0.32);
+  return clamp(base, 0.22, 1.0);
+}
+
 export class MassRace {
   readonly group = new THREE.Group();
   rivals: Rival[] = [];
@@ -254,15 +329,15 @@ export class MassRace {
 
     for (let i = 0; i < n; i++) {
       const bird = new Bird();
+      // Rivals do not draw into the shadow map. 40 rivals x ~20 meshes is
+      // ~800 extra meshes in the depth pass every frame — a second full scene
+      // draw for birds a few dozen pixels tall. Their blob shadows still land
+      // on the terrain, which is what actually reads at race distance. See
+      // `Bird.setShadowCasting`.
+      bird.setShadowCasting(false);
       bird.reset(startX, terrain.heightAt(startX) + BIRD_RADIUS);
       const tierRank = i / Math.max(1, n);
-      // Three-tier skill distribution: top 15% are elites, next 25% are strong,
-      // the lower 60% are the approachable mid-to-tail field.
-      const baseSkill =
-        tierRank < 0.15 ? 0.88 + nameRng.range(0, 0.11)
-        : tierRank < 0.4  ? 0.70 + nameRng.range(0, 0.14)
-        :                    0.34 + nameRng.range(0, 0.32);
-      const skill = clamp(baseSkill, 0.22, 1.0);
+      const skill = tieredSkill(tierRank, nameRng);
 
       // Elite slots bias toward apex/berserker/tactician; tail toward pacer.
       let archetype: AIArchetype;
@@ -272,8 +347,7 @@ export class MassRace {
         archetype = ARCHETYPES[i % ARCHETYPES.length]!;
       }
 
-      const errorSpread = (1 - skill) * 38;
-      const lead = clamp(OPTIMAL_LEAD + nameRng.range(-errorSpread, errorSpread), 18, 125);
+      const lead = leadForSkill(skill, nameRng);
 
       // Generate a unique pilot name.
       let pilotName: string;
@@ -293,15 +367,10 @@ export class MassRace {
         prevX: bird.x,
         prevY: bird.y,
         lead,
-        wobbleAmp: (1 - skill) * 15 + 1.5,
+        wobbleAmp: wobbleForSkill(skill),
         wobbleRate: nameRng.range(0.30, 1.30),
         wobblePhase: nameRng.range(0, Math.PI * 2),
-        // Apex and tactician have tighter reaction loops; daredevil is reckless-fast.
-        reaction:
-          archetype === "apex" ? 0.06 - skill * 0.04 + nameRng.range(0, 0.02)
-          : archetype === "tactician" ? 0.09 - skill * 0.05 + nameRng.range(0, 0.03)
-          : archetype === "daredevil" ? 0.08 - skill * 0.05 + nameRng.range(0, 0.04)
-          : 0.14 - skill * 0.10 + nameRng.range(0, 0.04),
+        reaction: reactionForSkill(skill, archetype, nameRng),
         reactionT: nameRng.range(0, 0.14),
         diving: false,
         skill,
@@ -334,19 +403,80 @@ export class MassRace {
     return true;
   }
 
+  /**
+   * Re-roll the field: new names, new colours, a new draw of the ability
+   * curve. Same race, different opponents.
+   *
+   * Three things were wrong with this, all of which a player feels:
+   *
+   * 1. **It was not deterministic.** The seed was
+   *    `` `${seed}:shuffle:${Date.now() % 100000}` `` — a wall-clock term
+   *    inside a seeded RNG. So the same `seed` produced a different field on
+   *    every call, which defeats the entire point of seeding: two players
+   *    given the same race seed met different opponents, a replay could not
+   *    reproduce its own race, and a ghost recorded against one field was
+   *    played back against another. Every other RNG in this file is seeded
+   *    properly; this one quietly was not.
+   *
+   * 2. **`sort(() => rng.next() - 0.5)` is not a shuffle.** It is the classic
+   *    broken one: the comparator is inconsistent (it can claim a < b and
+   *    b < a), so the result is neither uniform nor, strictly, defined —
+   *    V8's TimSort leaves short arrays nearly in place, which is why the
+   *    same few names kept turning up at the front of the grid. Fisher–Yates
+   *    now, off the same seeded stream.
+   *
+   * 3. **It flattened the race.** `spawn()` builds a deliberate three-tier
+   *    field — 15% elites, 25% strong, 60% approachable — and this replaced
+   *    it with `rng.next() * 0.9 + 0.1`, uniform noise. A reshuffled race had
+   *    no top end to chase and no tail to overtake: forty pilots of
+   *    indistinguishable middling ability. It also left `lead`, `wobbleAmp`
+   *    and `reaction` untouched, so a rival could be rated 0.95 and still fly
+   *    with a tail-pack wobble. `tieredSkill` and the `…ForSkill` helpers fix
+   *    both halves: the curve is preserved and the flying follows the number.
+   */
   shuffle(seed: string): void {
     const n = this.rivals.length;
     if (!n) return;
-    const rng = new SeededRandom(`${seed}:shuffle:${Date.now() % 100000}`);
-    const names = [...NAMES].sort(() => rng.next() - 0.5);
-    for (let i = 0; i < this.rivals.length; i++) {
+    const rng = new SeededRandom(`${seed}:shuffle`);
+
+    // Fisher-Yates over a copy of the name pool.
+    const names = [...NAMES];
+    for (let i = names.length - 1; i > 0; i--) {
+      const j = Math.floor(rng.next() * (i + 1));
+      [names[i], names[j]] = [names[j]!, names[i]!];
+    }
+
+    // Re-draw the ability curve, then shuffle WHICH rival gets which rung, so
+    // the elites are not always the same grid slots run after run.
+    const ladder = Array.from({ length: n }, (_, i) => tieredSkill(i / Math.max(1, n), rng));
+    for (let i = ladder.length - 1; i > 0; i--) {
+      const j = Math.floor(rng.next() * (i + 1));
+      [ladder[i], ladder[j]] = [ladder[j]!, ladder[i]!];
+    }
+
+    for (let i = 0; i < n; i++) {
       const r = this.rivals[i]!;
       r.name = names[i % names.length]!;
-      r.skill = Math.min(1, Math.max(0.12, rng.next() * 0.9 + 0.1));
       r.hue = rng.next();
       r.finished = false;
       r.finishTime = 0;
+      this.applySkill(r, ladder[i]!, rng);
     }
+  }
+
+  /**
+   * Set a rival's ability and bring its flying with it.
+   *
+   * The one place skill is allowed to change. Everything that makes a rival
+   * *look* like its rating — how tight a line it holds, how much it wanders,
+   * how fast it reacts — is re-derived here, so the number on the leaderboard
+   * and the bird in the sky can never disagree again.
+   */
+  private applySkill(r: Rival, skill: number, rng: SeededRandom): void {
+    r.skill = clamp(skill, 0.1, 1);
+    r.lead = leadForSkill(r.skill, rng);
+    r.wobbleAmp = wobbleForSkill(r.skill);
+    r.reaction = reactionForSkill(r.skill, r.archetype, rng);
   }
 
   applyGhosts(rows: { name: string; distance: number }[], gate: number): number {
@@ -390,11 +520,20 @@ export class MassRace {
     this.packIntensity = clamp(mult, 0.5, 1.6);
   }
 
+  /**
+   * Scale the whole field's ability — the difficulty dial.
+   *
+   * This used to scale `skill` and then nudge `lead` by a flat +/-6, leaving
+   * `wobbleAmp` and `reaction` frozen at whatever the rival spawned with. So
+   * turning the difficulty up produced rivals that were *rated* harder while
+   * still wandering and reacting exactly as slowly as before: the standings
+   * moved, the racing did not. It routes through `applySkill` now, so the
+   * dial moves the actual flying.
+   */
   setFieldSkill(mult: number): void {
-    for (const r of this.rivals) {
-      r.skill = Math.min(1, Math.max(0.1, r.skill * mult));
-      r.lead = Math.min(132, Math.max(18, r.lead + (mult > 1 ? 6 : -6)));
-    }
+    // Seeded off the multiplier so a given difficulty setting is reproducible.
+    const rng = new SeededRandom(`field-skill:${mult}`);
+    for (const r of this.rivals) this.applySkill(r, r.skill * mult, rng);
   }
 
   get fieldSize(): number {

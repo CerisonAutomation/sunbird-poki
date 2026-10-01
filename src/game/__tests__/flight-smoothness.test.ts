@@ -98,19 +98,22 @@ describe("the physics history a render interpolates against exists", () => {
     const stepAt = src.indexOf("  step(");
     expect(stepAt, "Bird.step was not found").toBeGreaterThan(-1);
 
-    // Extract the REAL method body by brace matching, comment-stripped.
+    // Extract the REAL method body: brace-matched, with comments stripped first.
     //
     // This used to slice a fixed 4 kB window, on the stated assumption that 4 kB
-    // "is the whole of step()". It is not: step() is ~20 kB, so the window
-    // covered a fifth of the method and the check silently passed while examining
-    // almost none of it. It then failed for the opposite reason the moment a
-    // comment grew the method past the cutoff and pushed the earliest `this.vx =`
-    // out of range — the assertion was right and the window was the bug.
+    // "is the whole of step()". It is not — step() is ~20 kB — so the window
+    // covered a fifth of the method and the check passed while examining almost
+    // none of it. It then failed for the opposite reason the moment a comment
+    // grew the method past the cutoff and pushed the earliest `this.vx =` out of
+    // range, reporting "step() never writes this.vx" about a method that plainly
+    // does. Both this branch and the arena branch hit that cliff independently;
+    // the assertion was right in both cases and the window was the bug.
     //
     // Brace matching removes the failure mode instead of moving the cliff: the
-    // window is now the method, so it cannot go stale. Comments are stripped
-    // first so a `this.vx =` mentioned in prose cannot satisfy the check, and so
-    // braces inside comments cannot unbalance the count.
+    // window IS the method, so it cannot go stale. Comments are stripped first so
+    // that a `this.vx =` mentioned in prose cannot satisfy the check, and so
+    // braces inside comments cannot unbalance the count — neither of which the
+    // regex-scan alternative guards against.
     const stepBody = extractMethodBody(src, stepAt);
 
     const snapVx = stepBody.indexOf("this.prevVx = this.vx;");

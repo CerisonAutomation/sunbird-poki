@@ -1,11 +1,14 @@
 import { biomeForIsland } from "./Biomes";
+import { flightProgressionAt } from "./worldProgression";
 import { clamp } from "./math";
 
 /** Monotonic, bounded challenge envelope. Biomes vary the feel inside it;
  * neither speed nor slope can grow without limit during a long flight. */
 export function flightProgression(island: number): { hillScale: number; rhythmScale: number } {
-  const progress = 1 - Math.exp(-Math.max(0, island) / 12);
-  return { hillScale: 1 + progress * 0.32, rhythmScale: 1 + progress * 0.24 };
+  // Delegated to worldProgression so the escalation curve lives next to the
+  // gap curve it has to stay in proportion with. The ranges were 0.32/0.24 —
+  // a third more arch height across an entire career, which is not a career.
+  return flightProgressionAt(island);
 }
 
 /**

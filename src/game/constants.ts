@@ -22,7 +22,28 @@ export const MAX_CATCHUP_STEPS = 20;
 export const GRAVITY_GLIDE = 16;
 export const GRAVITY_DIVE = 96;
 /** Gravity along the slope while carving the ground. */
-export const GROUND_G_GLIDE = 14;  // reduced: less deceleration on uphill slopes
+/**
+ * Along-slope gravity while GLIDING (stick released), UPHILL.
+ *
+ * Was 30 in the first build and lowered to 14 to soften uphill deceleration —
+ * see the original comment, "reduced: less deceleration on uphill slopes".
+ * The intent was right and the instrument was wrong: one constant governed
+ * both the uphill penalty AND the downhill acceleration, so halving it to fix
+ * climbing also halved how fast a released bird builds speed running DOWN a
+ * hill. That is the single input the player makes, and it lost more than half
+ * its effect as a side effect of an unrelated tuning pass.
+ *
+ * The two are now separate constants, so uphill stays forgiving at 14 and
+ * downhill gets its original response back.
+ */
+export const GROUND_G_GLIDE = 14;
+/**
+ * Along-slope gravity while GLIDING, DOWNHILL. Restored to the first build's
+ * 30: this is what "the bird was more responsive when released" was made of.
+ * Diving is still faster (GROUND_G_DIVE 88), so committing to a dive remains
+ * the stronger play and the skill ceiling from 457ff35 is untouched.
+ */
+export const GROUND_G_GLIDE_DOWN = 30;
 export const GROUND_G_DIVE = 88;
 
 /**
@@ -46,6 +67,28 @@ export const GROUND_G_DIVE = 88;
  */
 export const GROUND_STICK_DIVE = 11;
 /**
+ * The slope below which ground counts as "dead flat" for the purposes of
+ * GROUND_STICK_DIVE above.
+ *
+ * This exists because the floor was applied *everywhere*, not only on flats.
+ * `Math.max(GROUND_G_DIVE * downhill, GROUND_STICK_DIVE)` on an uphill gives
+ * `max(negative, 11)` = **+11 m/s², i.e. a held stick accelerated the bird up
+ * the hill**, which is the exact opposite of the "uphill deceleration is
+ * untouched, the game is still built on climbs costing you" the comment above
+ * promises. The consequence was not subtle: it made HOLD THE BUTTON FOREVER
+ * the optimal strategy for the entire game. Measured over 60 s runs on three
+ * seeds before this fix — hold 2.23/2.49/2.17 km, versus 2.16/1.91/2.23 km for
+ * a policy that actually reads the terrain. Playing well was *worse* than
+ * playing with a brick on the button, and the skill ceiling of a one-button
+ * game is the whole game.
+ *
+ * 0.12 is the "flatter than about 1:10" the comment above already describes —
+ * so the floor now covers exactly the dead ground it was written for, and a
+ * climb costs speed again whether or not the stick is held.
+ */
+export const GROUND_STICK_FLAT_SLOPE = 0.12;
+
+/**
  * The same floor for a bird that has RELEASED.
  *
  * `GROUND_STICK_DIVE` exists because a held stick used to do nothing on flat
@@ -61,11 +104,33 @@ export const GROUND_STICK_DIVE = 11;
  * terrain for the rest of the run — measured at 68% of a passive minute spent
  * grounded, the altitude gauge reading a flat 0 m, and the climb goal stuck on 0.
  *
- * Deliberately under half the diver's value, so the trade survives: hold for speed
- * and stay glued, release for lift. `GROUND_G_GLIDE` (14) against `GROUND_G_DIVE`
- * (88) keeps the same slope gap, so this only adds drive where there was none.
+ * Kept deliberately small — 1.5, against the diver's 11 — for two measured
+ * reasons.
+ *
+ * The trade must survive: hold for speed and stay glued, release for lift.
+ * A floor anywhere near the diver's erases it. `GROUND_STICK_GLIDE` at 4.5
+ * measured hold/coast at 1.256x, under the 1.3x the skill-ceiling guard
+ * requires, because a bird that never touches the button closes most of the
+ * gap by accelerating for free on flat ground. At 1.5 the ratio is 1.381x:
+ * the button still clearly matters, which is the entire premise of a
+ * one-button game.
+ *
+ * The other half of the fix did not need this constant at all. Releasing used
+ * to be welded, but the weld is really two other things: the launch gate
+ * charged full gravity while the same bird airborne gets 55% of it cancelled
+ * by speed-borne lift (fixed in `Bird.step`), and a released bird had no
+ * downhill term to speak of (fixed by `GROUND_G_GLIDE_DOWN`). With both of
+ * those in place a coasting bird launches 15.8 times a minute even at zero.
+ * This constant is the margin on top: enough that a bird which settles onto
+ * dead flat ground can still accelerate off `MIN_KEEP_SPEED` instead of riding
+ * it, and not enough to hand the run to a player who never presses anything.
+ *
+ * Swept 0 / 0.5 / 1 / 1.5 / 2 / 2.5 / 3 / 4.5 against both constraints at once.
+ * 1.5 gave the highest launch count of the sweep (17.8/min) as well as the
+ * design margin, so it wins on the thing this constant is actually for.
  */
-export const GROUND_STICK_GLIDE = 4.5;
+export const GROUND_STICK_GLIDE = 1.5;
+
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;
@@ -127,6 +192,7 @@ export const FLARE_DURATION = 0.42;
 export const MAX_MODE_SPEED_BONUS = 18;
 /** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
 export const FLARE_MAX_RISE = -14;
+
 /**
  * Where a run begins: already flying, not parked on the tarmac.
  *
@@ -148,6 +214,7 @@ export const FLARE_MAX_RISE = -14;
  */
 export const START_ALTITUDE = 14;
 export const START_SPEED = 48;
+
 /** How long a release stays live and can still spend the flare.
  *
  *  Without this the pull-out depended on the player letting go during one
@@ -157,6 +224,54 @@ export const START_SPEED = 48;
  *  player who lets go and immediately presses again gets a free brake.
  */
 export const FLARE_BUFFER = 0.18;
+
+/* ---------------- the pop: timing the release at a crest ----------------
+ *
+ * The one thing a one-button glider must have is a reason to let go, and this
+ * game did not have one. Releasing was pure cost: lighter gravity, more air
+ * drag, a braking flare. So "hold the button for the entire run" was not just
+ * viable, it was optimal — measured at 2.23 km against 2.16 km for a policy
+ * that read the terrain. A game whose optimal strategy is a brick on the
+ * button has no skill ceiling, and Poki's own quality bar is built on session
+ * length and return rate, both of which come from there being something to get
+ * better at.
+ *
+ * The pop is that reason. Release the stick just before the bird leaves a
+ * crest and the take-off converts speed into height: the same gesture Tiny
+ * Wings is built on, and the one FirstFlight already coaches with "RELEASE at
+ * the top to launch" — an instruction the physics previously ignored.
+ *
+ * It is bounded so it stays a skill expression and not a flight mode:
+ *   · it only fires on a genuine crest launch (curvature + prominence), which
+ *     is terrain the player has to find;
+ *   · quality decays linearly over LAUNCH_POP_WINDOW, so an early release is
+ *     worth a fraction and a held stick is worth nothing;
+ *   · it scales with the speed you brought into the lip, so it cannot rescue a
+ *     slow run — it multiplies good play instead of substituting for it;
+ *   · LAUNCH_POP_MAX caps the vertical gain at roughly a third of the launch
+ *     speed, so it is a hop with a long tail, not a jump jet.
+ */
+/** Seconds before the lip within which a release still counts. */
+export const LAUNCH_POP_WINDOW = 0.45;
+/**
+ * Peak upward velocity (m/s) added by a perfectly timed release.
+ *
+ * Deliberately in proportion with the rating layer rather than on top of it.
+ * `LaunchSystem` already pays a perfect lip `LAUNCH_BOOST_PERFECT` (1.145x)
+ * plus `vy + 7`; 26 at full timing and full speed is the *physics* half of the
+ * same gesture, and the two together read as one payoff rather than two. 44
+ * measured slightly better on the fitness harness (1.77x vs 1.73x against a
+ * masher) and was rejected for feel: a +38 m/s vertical kick next to a +7
+ * rating bonus stops being a glider.
+ *
+ * Note the two windows are intentionally different lengths. The rating window
+ * (LAUNCH_RELEASE_WINDOW, 1.35 s) is generous because it drives praise, and
+ * praise should be easy to earn. The pop window (0.45 s) is tight because it
+ * drives distance, and distance is what the leaderboard sorts on.
+ */
+export const LAUNCH_POP_MAX = 26;
+/** Launch speed at which the pop reaches full strength. */
+export const LAUNCH_POP_SPEED = 70;
 /** Rolling resistance while on the ground. */
 export const GROUND_FRICTION = 0.05;
 export const GROUND_FRICTION_DIVE = 0.018;
@@ -192,6 +307,22 @@ export const LAND_GOOD = 0.94;
 export const LAND_PERFECT_GAIN = 1.03;
 export const LAND_GOOD_KEEP = 1.0;
 export const LAND_BAD_MIN_KEEP = 0.55;
+/**
+ * How much a tuck (stick held through touchdown) softens a bad landing.
+ *
+ * This used to be `if (diving) floor = Math.max(floor, 0.86)` — a *floor*, not
+ * a bonus. It meant that holding the button turned the worst possible landing
+ * in the game, a dead-vertical slam, into a 14% speed loss, versus 45% for the
+ * same slam with the stick released. Landing alignment is one of the two skill
+ * dimensions this game has, and holding the button deleted it: there was no
+ * touchdown bad enough to punish a player who simply never let go.
+ *
+ * A tuck is now worth a fixed, modest amount on top of the same floor everyone
+ * else gets. Absorbing an impact still rewards the player who commits to it,
+ * but a slam is still a slam, and a tangential kiss (LAND_PERFECT_GAIN) is
+ * still worth roughly half a run more than a crash.
+ */
+export const LAND_TUCK_BONUS = 0.08;
 export const LAND_FEATHER_FLOOR = 0.88;
 
 /* ---------------- launch rating ---------------- */
@@ -229,8 +360,25 @@ export const ALT_HIGH = 135;
  * camera's range instead of leaving the world. Damping rather than a hard wall:
  * a hard clamp at the ceiling reads as an invisible lid.
  */
-export const ALT_CEILING = 230;
-export const ALT_CEILING_FADE = 20;
+export const ALT_CEILING = 260;
+/**
+ * Depth of the soft band below ALT_CEILING over which a climb is damped out.
+ *
+ * Was 50 in the first build against a 260 ceiling — a fade from 210 to 260.
+ * It became 20 against a 230 ceiling, i.e. 210 to 230: the same start, two
+ * and a half times sharper, and a hard stop 30 m lower. At 220 m a climb now
+ * lost 50% where it used to lose 20%, and at 230 it lost everything.
+ *
+ * That is a wall, and the player's own screenshot shows them pinned against
+ * it: "229 m peak" against a 230 m ceiling. A good launch did not feel like a
+ * good launch because the game deleted the top of it.
+ *
+ * Restored to the first build's pairing, 260 ceiling with a 50 fade: the two
+ * were tuned together and moving only one pushes the damp band's start down
+ * onto the Star Wish band, which flight-ceiling.test.ts correctly refuses
+ * (stars top out at 207; the band must start above them, at 210).
+ */
+export const ALT_CEILING_FADE = 50;
 /**
  * Upward speed the Zenith mode's ascent thermal may reach, in m/s.
  *

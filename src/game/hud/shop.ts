@@ -243,38 +243,12 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     </div>
     <p class="shop-rules">Bird perks are for solo play. Live races use equal flight equipment; your appearance stays yours.</p>
 
-    <div class="pc pc--blue">
-      <div class="pc-header">
-        <span class="pc-badge">${menuIconSm("crate")} ACE PILOT CRATE · SAVE 73%</span>
-        <span class="pc-label">${t("hud.renderShop.VPack", undefined, "Value Pack")}</span>
-      </div>
-      <div class="pc-row" style="margin-bottom:10px;">
-        <span class="pc-icon">${menuIconSm("takeoff")}</span>
-        <div class="pc-body">
-          <b>${t("hud.renderShop.AWingmanBundle", undefined, "Ace Wingman Bundle")}</b>
-          <span>3 Boosts · Tideglass Trail · +${DAILY_STIPEND} Coins</span>
-        </div>
-      </div>
-      ${s.wingmanBundle
-        ? `<span class="pc-claimed" style="justify-content:center;">✓ Unlocked</span>`
-        : s.wallet >= 240
-          ? `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman">Claim · ● 240</button>`
-          : `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman" disabled>Need ● ${240 - s.wallet} more</button>`
-      }
-    </div>
-
-    <div class="pc pc--vault pc-row">
-      <span class="pc-icon">${menuIconSm("egg")}</span>
-      <div class="pc-body">
-        <b>${t("hud.renderShop.GMysteryVault", undefined, "Golden Mystery Vault")}</b>
-        <span>35% Bird Skin · 35% Radiant Trail · 30% Coin Jackpot</span>
-      </div>
-      ${s.wallet >= 150
-        ? `<button class="primary-btn gold" data-ui data-action="buy-vault">Open · ● 150</button>`
-        : `<span class="tag need">Need ● ${150 - s.wallet}</span>`
-      }
-    </div>
-
+    <!-- Catalog first. The birds used to sit below the stipend, the flash
+         sale, the hero preview, the Ace Pilot Crate and the Vault — five
+         panels deep in a shop whose own headline is "Find your wings. Make
+         them yours." 69 bird cards render correctly and always did; the
+         player simply never reached them, which reads as "I can't select
+         the bird". The promos now follow the thing they are promoting. -->
     <div class="section-title shop-catalog-divider">${t("hud.renderShop.BCatalog", undefined, "Browse catalog ")}<small>${t("hud.renderShop.BBoostsTrails", undefined, "Birds · Boosts · Trails")}</small></div>
     <nav class="shop-jumps" aria-label="${t("hud.renderPaywall.SSections", undefined, "Shop sections")}">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
 
@@ -308,6 +282,40 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     <details class="shop-section" data-ref="shopTrails"><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>${t("hud.renderShop.CYoursForever", undefined, "Cosmetic · yours forever")}</span></summary>
       <div class="trail-list">${s.shopTrails.map((t) => renderTrailCard(t, s.wallet)).join("")}</div>
     </details>
+
+    <!-- Bundles, after the catalog they upsell. -->
+    <div class="pc pc--blue">
+      <div class="pc-header">
+        <span class="pc-badge">${menuIconSm("crate")} ACE PILOT CRATE · SAVE 73%</span>
+        <span class="pc-label">${t("hud.renderShop.VPack", undefined, "Value Pack")}</span>
+      </div>
+      <div class="pc-row" style="margin-bottom:10px;">
+        <span class="pc-icon">${menuIconSm("takeoff")}</span>
+        <div class="pc-body">
+          <b>${t("hud.renderShop.AWingmanBundle", undefined, "Ace Wingman Bundle")}</b>
+          <span>3 Boosts · Tideglass Trail · +${DAILY_STIPEND} Coins</span>
+        </div>
+      </div>
+      ${s.wingmanBundle
+        ? `<span class="pc-claimed" style="justify-content:center;">✓ Unlocked</span>`
+        : s.wallet >= 240
+          ? `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman">Claim · ● 240</button>`
+          : `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman" disabled>Need ● ${240 - s.wallet} more</button>`
+      }
+    </div>
+
+    <div class="pc pc--vault pc-row">
+      <span class="pc-icon">${menuIconSm("egg")}</span>
+      <div class="pc-body">
+        <b>${t("hud.renderShop.GMysteryVault", undefined, "Golden Mystery Vault")}</b>
+        <span>35% Bird Skin · 35% Radiant Trail · 30% Coin Jackpot</span>
+      </div>
+      ${s.wallet >= 150
+        ? `<button class="primary-btn gold" data-ui data-action="buy-vault">Open · ● 150</button>`
+        : `<span class="tag need">Need ● ${150 - s.wallet}</span>`
+      }
+    </div>
+
 
     ${s.portalName === "none" && !(s.gold && s.vip) ? upsellStrip() : ""}
     <p class="fineprint">${t("hud.renderShop.ECoinsByFlyingDailyQuestsStreaksNestPass", undefined, "Earn coins by flying, daily quests, streaks and the Nest Pass.")}</p>

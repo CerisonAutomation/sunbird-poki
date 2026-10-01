@@ -6,10 +6,11 @@
  * is the widest reader in the HUD (60 of the snapshot's 227 fields), the one
  * screen that legitimately needs most of the state.
  */
+import { adEscapeArmed, adEscapeCountdown } from "../adGate";
 import { formatNumberLocalized, t } from "../../i18n";
 import { flightTakeaway } from "../FlightGuidance";
 import { growthLedger } from "../GrowthLedger";
-import { menuIcon, menuIconSm } from "../MenuIcons";
+import { clockSvg, iconGlyph, menuIcon, menuIconSm } from "../MenuIcons";
 import { type CelebrationView } from "../ProgressBeats";
 import { type RacerStats } from "../Racer";
 import { nextBird } from "../ShopBrowse";
@@ -203,7 +204,15 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
     // caption in place of its picture: "egg Nest upgraded!", "trophy Trophy:
     // Cloud Nine". `menuIconSm` draws the SVG; an unknown name draws nothing,
     // and can no longer become a word (see MenuIcons).
-    return `<div class="${cls}" role="listitem"${delay}><i class="beat-icon" aria-hidden="true">${menuIconSm(b.icon)}</i><span class="beat-text">${escapeHtml(text)}</span></div>`;
+    //
+    // Merge note: main's markup (the .beat-icon / .beat-text hooks) is kept
+    // because the icon needs a sized slot of its own — a bare <i> in the text
+    // flow is part of why these rows collided. The arena branch's glyph
+    // fallback is kept too: several beat names have a text glyph but no
+    // authored artwork, and under main's contract `iconGlyph` returns "" for
+    // anything unknown, so this degrades to empty rather than to a word.
+    const mark = menuIconSm(b.icon) || escapeHtml(iconGlyph(b.icon));
+    return `<div class="${cls}" role="listitem"${delay}><i class="beat-icon" aria-hidden="true">${mark}</i><span class="beat-text">${escapeHtml(text)}</span></div>`;
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");
@@ -342,8 +351,8 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button></div>`
-      : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
+      : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
       <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
@@ -353,7 +362,7 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   `;
 }
 
-export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
+export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafetySeconds" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
   const portal = s.portalName !== "none";
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
@@ -372,12 +381,29 @@ export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTi
     <div class="ad-actions">
       ${
         s.adSkippable
-          ? `<button class="mini-btn" data-ui data-action="ad-skip" data-live="adSkip" disabled>Continues in ${Math.ceil(s.adTimer)}</button>`
-          // Never render an empty .ad-actions. On Poki BOTH branches above are
-          // false, so the panel was a frozen bar and "Your run is paused" for up
-          // to 60 s with nothing to press. After the safety window the run is
-          // returned to, and the button says so.
-          : `<button class="mini-btn" data-ui data-action="ad-stuck">${s.adTimer > 0 ? `Taking longer than usual — return (${Math.ceil(s.adTimer)})` : "Return to flight"}</button>`
+          // A placeholder break is NOT skippable either. This used to be a
+          // `ad-skip` button that unlocked at zero — and since the game never
+          // ended a placeholder break by itself, clicking it was the only way
+          // out, which made "skip" the intended exit. The break now completes
+          // on its own the instant the countdown lands (see Game.fixedUpdate),
+          // so there is nothing here to press: this is a read-only status
+          // chip, not a control.
+          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>Continues in <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
+          // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
+          // so this used to render enabled with a flat "Return to flight" from
+          // the first frame of every break — one click skipped a real ad. It is
+          // now inert until the break has demonstrably failed, with an honest
+          // countdown so the control is never dead without saying why.
+          // `Game.handleAction` enforces the same window independently.
+          : (() => {
+              const armed = adEscapeArmed(s.adElapsed, s.adSafetySeconds);
+              const left = adEscapeCountdown(s.adElapsed, s.adSafetySeconds);
+              return `<button class="mini-btn" data-ui data-action="ad-stuck"${armed ? "" : " disabled"}>${
+                armed
+                  ? "Return to flight"
+                  : `${clockSvg()}<span>Break in progress — return in <b>${left}</b>s</span>`
+              }</button>`;
+            })()
       }
       ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
     </div>

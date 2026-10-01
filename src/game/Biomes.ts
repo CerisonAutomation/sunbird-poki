@@ -1,4 +1,5 @@
 import { DROP_BLEND_START, DROP_START, GAP_START, ISLAND_PERIOD, RAMP_START } from "./constants";
+import { islandGap } from "./worldProgression";
 import type { BiomeMusicStyle } from "./Music";
 
 export type DecoKind = "tree" | "palm" | "pine" | "spire" | "crystal" | "cactus";
@@ -593,8 +594,6 @@ export type IslandTemplate = {
 
 /** How much of an island is kept as a landing shelf, scaled with the island. */
 const SHELF = 32;
-const GAP_BASE = 218;
-const GAP_PER_ISLAND = 4;
 
 /** How many islands the exact layout table covers before extrapolating. */
 const LAYOUT_LIMIT = 2048;
@@ -682,7 +681,9 @@ export function islandTemplate(island: number): IslandTemplate {
     dropStart: DROP_START * scale,
     rampStart: RAMP_START * scale,
     gapStart,
-    gapEnd: Math.min(period - SHELF * scale, gapStart + (GAP_BASE + Math.max(0, index) * GAP_PER_ISLAND) * scale),
+    // Saturating gap, not a 4-units-per-island linear crawl that left island
+    // 10 only 18% wider than island 0. See worldProgression.islandGap.
+    gapEnd: Math.min(period - SHELF * scale, gapStart + islandGap(index) * scale),
   };
 }
 

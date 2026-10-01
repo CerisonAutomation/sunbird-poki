@@ -1,0 +1,684 @@
+/* =====================================================================
+   Design polish — the layer that answers the in-browser visual QA.
+
+   Loaded last, deliberately additive, and scoped so nothing here can reach
+   into the flight renderer. Every block below is traceable to a numbered
+   finding in docs/audits/DESIGN_CRITIQUE_10_EXPERTS.md; the finding id is in
+   the heading so a future reader can tell intent from accident.
+
+   House rules for this file:
+     - 4 px spacing grid. No 5s, no 7s, no 13s.
+     - Nothing is sized in bare px where it has to survive 640x360 -> 1440p;
+       use clamp() against the viewport so the same rule is pixel-correct at
+       both ends instead of correct at one and approximate at the other.
+     - No new colours invented. Everything reuses the existing warm-paper
+       palette so the polish reads as the same game, better made.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   D-1  The 48 px unscrollable clip.
+
+   `.overlay.menu` measured scrollHeight 768 against clientHeight 720 at
+   1280x720 with `overflow: hidden` — 48 px of the overlay sheared off and
+   unreachable, because the menu's extra bottom padding was added on top of a
+   child already claiming the full height. Pinning box-sizing and letting the
+   card resolve against the padding box removes the overflow instead of
+   hiding it.
+   --------------------------------------------------------------------- */
+.hud-root .overlay,
+.hud-root .overlay > .paper-card {
+  box-sizing: border-box;
+}
+.hud-root .overlay.menu {
+  /* Was `padding-bottom: calc(68px + safe-area)` fighting a `max-height:100%`
+     child. min-height:0 lets the flex child actually shrink to fit. */
+  min-height: 0;
+}
+/* `max-height: 100%` was the bug, not the fix: on a flex row whose container
+   carries asymmetric padding the percentage did not resolve against the
+   content box, so the card measured 688 px inside a 640 px well and pushed
+   48 px past the overlay's `overflow: hidden` edge. Sizing against the
+   viewport minus the *known* reserve is unambiguous. The 80 px is the
+   overlay's own 12 px top + 68 px bottom reserve, and the bottom reserve
+   exists to keep the menu clear of the toast strip — so it is kept, just
+   honoured properly now.
+
+   The selector list is not redundant: menu-polish.css:381 sets
+   `max-height: calc(100vh - 32px)` on `.hud-root .overlay.menu > .menu-hero`,
+   which is four classes and therefore outranks the three-class generic rule.
+   Matching its specificity is how this is corrected without reaching for
+   `!important` — and keeping this sheet at zero `!important` is a hard house
+   rule (see AI_RULES.md; index.css and ui.css are both at their cap). */
+.hud-root .overlay > .paper-card,
+.hud-root .overlay.menu > .paper-card.menu-hero,
+.hud-root .overlay.menu.pause-submenu > .paper-card {
+  max-height: calc(100dvh - 80px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 0;
+}
+@supports not (height: 100dvh) {
+  .hud-root .overlay > .paper-card,
+  .hud-root .overlay.menu > .paper-card.menu-hero,
+  .hud-root .overlay.menu.pause-submenu > .paper-card {
+    max-height: calc(100vh - 80px);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-2  Scroll affordance.
+
+   The panels always did scroll — the inner `.paper-card` is the scroller and
+   the wheel works — but every capture at every viewport showed the card
+   simply shorn off mid-row with nothing indicating there was more. At
+   1280x720 that hid nine PvP circuits, AI PvP and split-screen below the
+   fold. Two cues, both cheap:
+
+     1. A gradient mask that fades the last 28 px of a scrollable card, so a
+        cut-off row reads as "continues" rather than "ends". `mask-image` is
+        used rather than an overlaid pseudo-element so it works over the
+        card's own gradient background without needing a matching opaque
+        colour, and it costs no extra layer.
+     2. A scrollbar that is actually visible. The existing 6 px thumb on a
+        transparent track is invisible against warm paper until you are
+        already scrolling — which is too late to tell you that you can.
+
+   `animation-timeline: scroll()` removes the fade once the player reaches
+   the bottom, in browsers that support it; elsewhere the fade is static,
+   which is the safe direction to fail. --------------------------------- */
+@supports (mask-image: linear-gradient(rgb(0 0 0), rgb(0 0 0))) {
+  .hud-root .overlay > .paper-card {
+    mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+  }
+  /* The fade is a lie on a card that does not scroll, and on a card scrolled
+     to its end. Both are switched off where the browser can tell. */
+  .hud-root .overlay > .paper-card:not(:has(> *)),
+  .hud-root .overlay > .paper-card.no-fade {
+    mask-image: none;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  @keyframes sb-scroll-fade {
+    from {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    }
+    99% {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) calc(100% - 28px), rgb(0 0 0 / 12%) 100%);
+    }
+    to {
+      mask-image: linear-gradient(to bottom, rgb(0 0 0) 100%, rgb(0 0 0) 100%);
+    }
+  }
+  .hud-root .overlay > .paper-card {
+    animation: sb-scroll-fade linear both;
+    animation-timeline: scroll(self block);
+  }
+}
+
+.hud-root .overlay > .paper-card {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 74, 46, 0.34) rgba(107, 74, 46, 0.08);
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar {
+  width: 8px;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-track {
+  background: rgba(107, 74, 46, 0.08);
+  border-radius: 999px;
+  margin: 8px 0;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-thumb {
+  background: rgba(107, 74, 46, 0.34);
+  border-radius: 999px;
+}
+.hud-root .overlay > .paper-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 74, 46, 0.52);
+}
+
+/* ---------------------------------------------------------------------
+   D-3  Stop wasting two thirds of a landscape screen.
+
+   At 1280x720 a 440 px column floated over ~840 px of unused backdrop while
+   its own content needed 2.9 screens of scrolling. The content is short rows;
+   the screen is wide. Above 900 px of landscape the destination lists go two
+   columns, which roughly halves the scroll depth on exactly the viewports
+   where the scrolling was worst, and the card itself widens toward the
+   content rather than staying a strip.
+
+   Scoped to lists of tiles (`.destination`, `.home-board`, mode rows) —
+   never to prose, sliders or single primary actions, which must stay one
+   per line to keep their reading order obvious. -------------------------- */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .hud-root .overlay.menu > .paper-card.menu-hero {
+    width: min(760px, 62vw);
+  }
+  .hud-root .overlay > .paper-card .destination-grid,
+  .hud-root .overlay > .paper-card .home-board-grid,
+  .hud-root .overlay > .paper-card .mode-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+  /* A primary call to action never shares its row. */
+  .hud-root .overlay > .paper-card .primary-btn,
+  .hud-root .overlay > .paper-card .home-launch,
+  .hud-root .overlay > .paper-card .screen-head,
+  .hud-root .overlay > .paper-card .full-row {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-4  Hero art must not eat the panel.
+
+   At 640x360 — Poki's mandated floor — the AI PvP screen rendered as one
+   enormous bird overflowing its card with the actual content pushed off
+   screen. The illustration is authored for a desktop card and was never
+   constrained. Cap it against viewport height, and drop it entirely when
+   there is not enough room for art *and* content, because at that point the
+   art is not decoration, it is an obstruction. ------------------------- */
+.hud-root .overlay .menu-illustration,
+.hud-root .overlay .hero-art,
+.hud-root .overlay .screen-art {
+  max-height: min(30vh, 160px);
+  width: auto;
+  object-fit: contain;
+}
+@media (max-height: 460px) {
+  .hud-root .overlay .hero-art,
+  .hud-root .overlay .screen-art,
+  .hud-root .overlay .paper-card > .menu-illustration {
+    display: none;
+  }
+  /* Reclaim the space rather than leaving a gap where the art was. */
+  .hud-root .overlay > .paper-card {
+    padding: 12px 16px;
+  }
+  .hud-root .overlay .screen-head {
+    margin-bottom: 8px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-5  Clear the flight corridor.
+
+   During flight the lower-centre of the screen carried two stacked objective
+   cards, directly over the airspace the bird descends into, while a toast, a
+   pill and a progress bar competed elsewhere — five notification channels and
+   17 live text readouts, in a one-button game.
+
+   The persistent objectives move to the lower-left, above the altitude
+   ribbon, where nothing is ever flown. Lower-centre is left empty on purpose:
+   it is the only part of the screen the player is actually looking at.
+
+   The strip is *moved*, never hidden. flight-goal-strip.test.ts guards that
+   distinction by name and it is the right guard: a progress bar nobody can
+   see is not a bar. The complaint was never that the strip exists, it is
+   where it was parked. -------------------------------------------------- */
+.hud-root[data-flying="true"] .flight-footer {
+  left: clamp(12px, 2.5vw, 28px);
+  right: auto;
+  transform: none;
+  margin-left: 0;
+  margin-right: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: min(340px, 40vw);
+  max-width: 340px;
+  align-items: flex-start;
+  text-align: left;
+}
+.hud-root[data-flying="true"] .flight-footer .goal-strip,
+.hud-root[data-flying="true"] .flight-footer .gs {
+  width: 100%;
+  text-align: left;
+}
+
+/* Portrait phones have no lower-left to spare — the altitude ribbon and the
+   strip would collide — so there it tucks under the top bar instead, still
+   out of the descent line. */
+@media (max-aspect-ratio: 3/4) {
+  .hud-root[data-flying="true"] .flight-footer {
+    bottom: auto;
+    top: calc(104px + env(safe-area-inset-top));
+    left: clamp(8px, 3vw, 16px);
+    width: min(340px, 74vw);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-6  The daylight meter sits under the sun sprite.
+
+   The centre-top meter and its label were being overdrawn by the rendered sun
+   disc at 1280x720. The meter is the clock for the entire run; it outranks a
+   background sprite. Lifting it above the scene and giving it a legibility
+   plate fixes it without touching the renderer. ------------------------ */
+.hud-root .sun-meter {
+  position: relative;
+  z-index: 14;
+}
+.hud-root .sun-meter .sun-track {
+  box-shadow:
+    0 0 0 1px rgba(28, 20, 16, 0.18),
+    0 2px 12px rgba(16, 24, 32, 0.28);
+}
+.hud-root .sun-meter > .stat-label,
+.hud-root .sun-meter figcaption,
+.hud-root .sun-meter small {
+  text-shadow: 0 1px 3px rgba(12, 18, 24, 0.75);
+}
+
+/* ---------------------------------------------------------------------
+   D-7  Reward pills must not be green.
+
+   Poki's ads guidance is explicit that rewarded controls are not green, and
+   reviewers pattern-match on green reward-shaped pills in the top-right
+   regardless of whether an ad is behind them. "Goal complete +40" was exactly
+   that shape in exactly that corner. Recoloured to the game's own gold, which
+   is also the colour of every other reward in the economy — so it is more
+   consistent, not just more compliant. ---------------------------------- */
+.hud-root .goal-pill,
+.hud-root .reward-pill,
+.hud-root .objective-complete {
+  background: linear-gradient(180deg, var(--gold), var(--gold-muted));
+  color: var(--espresso);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 10px rgba(120, 70, 12, 0.32);
+}
+
+/* ---------------------------------------------------------------------
+   D-8  Chrome glyphs are vectors now.
+
+   Pairs with pauseSvg() / closeSvg() / backSvg() in MenuIcons.ts, which
+   replaced U+2759 and U+2715 after an in-browser capture caught the pause
+   button rendering as two empty boxes. The SVG inherits currentColor, so it
+   needs a size and an optical alignment and nothing else. ---------------- */
+.chrome-glyph {
+  width: 1.15em;
+  height: 1.15em;
+  display: block;
+  margin: auto;
+  flex: none;
+}
+.hud-root .icon-btn .chrome-glyph {
+  width: 20px;
+  height: 20px;
+}
+.hud-root .back-btn .chrome-glyph {
+  width: 22px;
+  height: 22px;
+  /* A chevron's optical centre is right of its bounding box centre. */
+  margin-right: 0.12em;
+}
+.hud-root .mini-btn.ghost .chrome-glyph {
+  width: 15px;
+  height: 15px;
+  opacity: 0.72;
+}
+.hud-root .mini-btn.ghost:hover .chrome-glyph {
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------------
+   D-9  Optical rhythm.
+
+   Small, cheap typographic corrections that make the panels read as designed
+   rather than assembled: tabular figures so live counters stop jittering
+   their own width, tightened tracking on large display type, and a consistent
+   optical size for the two-line tile labels that make up most of the menu.
+   --------------------------------------------------------------------- */
+.hud-root .stat-value,
+.hud-root .stat-sub,
+.hud-root .coin-count,
+.hud-root [data-ref="distance"],
+.hud-root [data-ref="coins"],
+.hud-root [data-ref="best"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.hud-root .overlay h1 {
+  letter-spacing: -0.03em;
+}
+.hud-root .overlay .destination,
+.hud-root .overlay .home-board {
+  line-height: 1.35;
+}
+/* Rows in a list should share a baseline grid; ad-hoc padding broke it. */
+.hud-root .overlay .destination,
+.hud-root .overlay .home-board {
+  padding: 12px;
+  border-radius: 16px;
+}
+
+/* ---------------------------------------------------------------------
+   D-11  The ad break must look like an ad break, not a dialog.
+
+   Pairs with the escape-hatch fix in adGate.ts. A break's controls are not
+   ordinary buttons and must not be dressed as them: a disabled escape hatch
+   that still looks pressable invites the click that the logic then refuses,
+   which reads as a broken game rather than as a running ad.
+
+   So: the disabled hatch is visually and semantically inert (no hover, no
+   pointer, no active transform, `cursor: not-allowed`), while the progress
+   bar keeps full contrast so the player can see that something is in fact
+   happening. Nothing here can end a break — this is the honest-signalling
+   half of "you should not be able to skip ads". ------------------------- */
+.hud-root .ad-actions .mini-btn[disabled] {
+  opacity: 0.58;
+  cursor: not-allowed;
+  pointer-events: none;
+  filter: saturate(0.6);
+}
+.hud-root .ad-actions .mini-btn[disabled]:hover,
+.hud-root .ad-actions .mini-btn[disabled]:active {
+  transform: none;
+  box-shadow: none;
+}
+.hud-root .ad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+/* The bar is the only honest progress signal on the panel; it keeps its
+   contrast while the controls recede. */
+.hud-root .ad-bar {
+  overflow: hidden;
+  border-radius: 999px;
+}
+.hud-root .ad-bar > i {
+  display: block;
+  height: 100%;
+  transition: width var(--transition-normal, 0.1s) linear;
+}
+
+/* ---------------------------------------------------------------------
+   D-15  The results card, from the player's screenshot.
+
+   Four separate defects in one frame, all visible without measuring:
+
+   a) The celebration rows read "egg Nest upgraded!", "badge Nest Pass Lv.2",
+      "trophy Trophy: Cloud Nine" — the icon NAME printed as italic text
+      (fixed in hud/run.ts; this is the layout half). The <i> is an icon
+      slot, so give it a fixed square and centre it instead of letting it
+      sit in the text flow at whatever width its content happens to be.
+
+   b) The MIGRATION and TROPHIES tiles were two-thirds empty: a label, a
+      number, and then several hundred pixels of nothing, because the row
+      stretches every tile to match the tallest — and the tallest is the
+      Nest Pass tile with its ticket illustration. Tiles now size to their
+      own content and align to the top of the row.
+
+   c) "WHAT THIS FLIGHT GREW" sat on a flat grey panel that belongs to no
+      other surface in the game, at a contrast that made its own heading
+      the least legible text on the card. It takes the card's paper.
+
+   d) The header clipped: "just flew" was sheared by the card's top edge
+      because the scroll container began above it.
+   --------------------------------------------------------------------- */
+.hud-root .beat,
+.hud-root .gl-row dt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hud-root .beat > i,
+.hud-root .gl-row dt > i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45em;
+  min-width: 1.45em;
+  height: 1.45em;
+  flex: none;
+  font-style: normal;
+  line-height: 1;
+}
+/* The miniature artwork is drawn on a 20-unit grid; let it fill the slot
+   rather than inheriting a text-sized em box. */
+.hud-root :is(.beat, .gl-row dt) > i > svg.icon-sm {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Tiles size to their content; the row aligns them, it does not stretch
+   them. Stretch is what produced two tiles of mostly air. */
+.hud-root .result-tiles,
+.hud-root .summary-tiles {
+  align-items: start;
+}
+.hud-root :is(.result-tiles, .summary-tiles) > * {
+  align-self: start;
+  min-height: 0;
+}
+
+/* The growth panel joins the card instead of interrupting it. */
+.hud-root .growth-ledger {
+  background: rgb(255 255 255 / 55%);
+  border: 1px solid rgb(0 0 0 / 7%);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.hud-root .growth-ledger .gl-title {
+  color: var(--ink);
+  opacity: 0.72;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+.hud-root .growth-ledger .gl-row dt {
+  color: var(--ink);
+}
+/* Progress bars were 3 px of pastel on grey — under the 3:1 floor a
+   non-text indicator needs to carry meaning at all. */
+.hud-root .growth-ledger .gl-bar {
+  background: rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.hud-root .growth-ledger .gl-bar > b {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* Nothing may be sheared by the top edge of a scrolling card. */
+.hud-root .overlay > .paper-card {
+  scroll-padding-top: 12px;
+}
+.hud-root .overlay > .paper-card > :first-child {
+  margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------
+   D-14  Every timer wears a clock.
+
+   Countdowns were bare text ("Continues in 7", "Second wind closes in 9s")
+   or the emoji hourglass U+23F3 — same family as the glyphs already caught
+   rendering as tofu, and on a timer of all things. A number with no icon
+   also reads as a label rather than as something *counting*: the player has
+   to re-read it to notice it moved.
+
+   One vector clock (clockSvg) marks every value that counts down, so "there
+   is time on this" is a shape the eye learns once. The glyph is optically
+   aligned to the digits rather than the line box, and the numerals are
+   tabular so a 10 -> 9 transition does not shuffle the words after it.
+   --------------------------------------------------------------------- */
+.hud-root .timer-glyph {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+  /* Cap-height alignment: a circular glyph on a text baseline sits high. */
+  transform: translateY(0.06em);
+  opacity: 0.9;
+}
+.hud-root :is(.ad-countdown, .reward-strip, .wake-strip) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.hud-root :is(.ad-countdown, .reward-strip) b {
+  font-variant-numeric: tabular-nums;
+  /* Two digits of reserved width so 60 -> 9 does not jump the label. */
+  min-width: 2ch;
+  display: inline-block;
+  text-align: right;
+}
+
+/* The placeholder break's countdown is a read-only status chip, not a
+   control. It must not look like one: no border, no shadow, no pointer. */
+.hud-root .ad-countdown {
+  padding: 10px 16px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 22%);
+  color: var(--text-on-sky);
+  font-weight: 600;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The escape hatch keeps its clock while disabled, and loses it when it
+   finally arms — at that point it is an action, not a countdown. */
+.hud-root .ad-actions .mini-btn[disabled] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   D-12  Focus is visible everywhere, not just in the menu.
+
+   menu-polish.css gives `.overlay` controls a 3 px focus ring. The flight
+   HUD's own controls — pause, mute, emote — had none, so a keyboard or
+   switch-control player flying the game could not see what they were about
+   to press. Same ring, same colour, extended to the HUD chrome. --------- */
+.hud-root :is(button, a, summary, [role="button"]):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: inherit;
+}
+
+/* ---------------------------------------------------------------------
+   D-13  Hit targets keep their 44 px even when the art shrinks.
+
+   D-4 caps illustration size at short viewports. That must not drag the
+   button down with it: an icon may shrink, a target may not. --------- */
+.hud-root .icon-btn,
+.hud-root .back-btn,
+.hud-root .ad-actions .mini-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------------------------------------------------------------------
+   D-10  Motion honesty.
+
+   Everything added here is either static or a scroll-driven fade, and the
+   scroll-driven fade is the one thing a motion-sensitive player could object
+   to. Honour the OS preference rather than assuming.
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .hud-root .overlay > .paper-card {
+    animation: none;
+    scroll-behavior: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-16  Stop text colliding with text.
+
+   Measured in the shop: eight pairs of leaf text nodes overlapping by more
+   than 6 px in both axes at 1280x800 — a bird's perk line sitting on top of
+   the next collection's title, a rarity tag over a name, an action button
+   over a blurb. The causes are all the same shape: absolutely positioned
+   tags that reserve no space, flex/grid children that refuse to shrink
+   (`min-width` defaults to auto, so a long name pushes a sibling out of the
+   box rather than wrapping), and cards clipped with `overflow: hidden` so
+   the collision is invisible to the author but not to the player.
+
+   This is a safety net, not a redesign: reserve the space a floating tag
+   occupies, let text actually wrap, and stop grid rows from collapsing into
+   one another. --------------------------------------------------------- */
+.hud-root :is(.skin-card, .trail-card, .boost-row, .pc, .collection) {
+  min-width: 0;
+}
+/* A flex/grid child defaults to min-width:auto and will not shrink below
+   its content — the single most common cause of two labels sharing pixels. */
+.hud-root :is(.skin-card, .trail-card, .boost-row, .pc) :is(b, em, small, span, div, p) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Floating rarity/deal tags: reserve their band so the name never runs
+   under them. */
+.hud-root .skin-card {
+  padding-top: 26px;
+  position: relative;
+}
+.hud-root .skin-card :is(.deal-tag, .tag, [class*="rarity"]) {
+  max-width: calc(100% - 12px);
+}
+/* Grids must lay rows out, not stack them. */
+.hud-root :is(.skin-grid, .trail-list) {
+  align-items: start;
+  align-content: start;
+}
+.hud-root :is(.skin-grid, .trail-list) > * {
+  align-self: start;
+}
+/* The shop hero's name sat inside a bordered box with no padding, so the
+   descenders touched the rule. */
+.hud-root .shop-hero-name {
+  padding: 2px 8px;
+  line-height: 1.25;
+}
+/* "Hold to dive" style cue rows: the icon and the words were laid on the
+   same line box with no gap, so a wide glyph overlapped the first word. */
+.hud-root :is(.hint, .cue, .coach-line, .shop-rules) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hud-root :is(.hint, .cue, .coach-line) > svg {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------------
+   D-17  Bird cards need room to be cards.
+
+   Measured at 1280x800: `.skin-grid` resolved to FIVE columns of 105 px.
+   Into 105 px the card puts a name, a perk line, a stats block, a price and
+   a Preview button, then clips the result with `overflow: hidden`. That is
+   the source of the overlapping text in the shop — not a stray absolute
+   position, just far too little width, with the clip hiding the damage from
+   whoever authored it.
+
+   The base rule asks for `repeat(3, minmax(0, 1fr))` and something later
+   widened it to five; rather than fight over the count, ask for a width.
+   `auto-fill` + a real minimum means the column count follows the space
+   available and a card is never narrower than its content needs, at any
+   viewport, including the two-column menu layout from D-3. ------------- */
+.hud-root .skin-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .hud-root .skin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  }
+}
+/* With room to breathe the card no longer needs to clip itself, which is
+   what made the collisions invisible during authoring. */
+.hud-root .skin-card {
+  overflow: visible;
+}

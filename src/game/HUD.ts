@@ -1,6 +1,6 @@
 import { newShopBrowse } from "./ShopBrowse";
 
-import { menuIcon, menuIconSm, menuHorizon, arrowUpRightSvg, arrowRightSvg, iconGlyph, type SmIconName } from "./MenuIcons";
+import { menuIcon, menuIconSm, menuHorizon, arrowUpRightSvg, arrowRightSvg, pauseSvg, closeSvg, iconGlyph, type SmIconName } from "./MenuIcons";
 
 import { flockLoadingMark } from "./FlockLoading";
 // Only what the home menu actually renders. `renderMain` lays every section
@@ -35,6 +35,7 @@ import { streakOpacity } from "./SpeedFeel";
 import { TOAST_OBSCURE_POLL_MS, TOAST_OBSCURE_WAIT_MS, messageHoldMs } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
+import { TOAST_MIN_VISIBLE_MS, decideToast } from "./toastFloor";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
 import { renderCheckout, renderPaywall, renderShop } from "./hud/shop";
 import { renderLoadout } from "./hud/loadout";
@@ -147,6 +148,7 @@ export class HUD {
   private distanceEl!: HTMLElement;
   private coinsEl!: HTMLElement;
   private bestEl!: HTMLElement;
+  private bestRowEl!: HTMLElement;
   /** Live medal line under the distance block. */
   private medalLine!: HTMLElement;
   private lastMedalKey = "";
@@ -192,6 +194,13 @@ export class HUD {
   private overEl!: HTMLElement;
   private overCard!: HTMLElement;
   private toastLayer!: HTMLElement;
+  /** Pills that have now been on screen long enough to be replaced. Driven
+   *  by a timer rather than a wall clock so it behaves identically under
+   *  fake timers, and so there is one source of truth for "has been seen". */
+  private readonly toastSeen = new WeakSet<HTMLElement>();
+  /** Toasts waiting for the incumbent to finish being readable. */
+  private readonly toastQueue: { text: string; kind: string }[] = [];
+  private toastDrainTimer: number | null = null;
   private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number }>();
   private flashEl!: HTMLElement;
   private comboEl!: HTMLElement;
@@ -297,7 +306,8 @@ export class HUD {
   }
   private contTimerEl: HTMLElement | null = null;
   private adBarEl: HTMLElement | null = null;
-  private adSkipEl: HTMLButtonElement | null = null;
+  private adSkipEl: HTMLElement | null = null;
+  private adSkipCountEl: HTMLElement | null = null;
   private adHeaderEl: HTMLElement | null = null;
   private adLabelEl: HTMLElement | null = null;
   private lastKey = "";
@@ -324,7 +334,12 @@ export class HUD {
           <div class="stat-block">
             <div class="stat-label">${menuIconSm("ruler")}<span>${t("hud.stat.distance", undefined, "Distance")}</span></div>
             <div class="stat-value" data-ref="distance">0 m</div>
-            <div class="stat-sub">${menuIconSm("trophy")}<span>best</span> <span data-ref="best">0</span></div>
+            <!-- Merge: main's trophy icon plus this branch's hidden attribute.
+                 A fresh save showed "best 0" beside a 1.65 km run for the whole
+                 of a record-setting flight, which reads as a bug rather than an
+                 empty state; the row stays out of the layout until a real
+                 record exists, and then never disappears mid-run. -->
+            <div class="stat-sub" data-ref="bestRow" hidden>${menuIconSm("trophy")}<span>best</span> <span data-ref="best">0</span></div>
             <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
@@ -402,7 +417,7 @@ export class HUD {
           <div class="fever-bar"><div class="fever-fill" data-ref="feverFill"></div></div>
         </div>
         <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
-        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">❙❙</button>
+        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">${pauseSvg()}</button>
         <div class="combo" data-ref="combo"></div>
         <div class="coach-steps hidden" data-ref="coachSteps" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-label="Coach progress"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -946,7 +961,14 @@ export class HUD {
     if (inPlay) {
       this.setText(this.distanceEl, "dist", distanceText(s.distance));
       this.setText(this.coinsEl, "coins", formatNumberLocalized(s.coins));
-      this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      // A fresh save has no best yet, and "1.65 km / best 0 m" reads as a bug
+      // rather than as an empty state. The row stays out of the layout until
+      // there is a real record to beat; once there is, it never disappears
+      // again mid-run, so the HUD does not reflow under the player.
+      if (s.bestDistance > 0) {
+        if (this.bestRowEl?.hidden) this.bestRowEl.hidden = false;
+        this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      }
       // The medal ladder, shown WHILE flying rather than only at the end.
       //
       // "340 m, best 340 m" tells a player where they are and nothing about
@@ -1464,10 +1486,21 @@ export class HUD {
       // and started over" right when the player was about to be let out.
       const p = done ? 1 : 1 - Math.max(0, s.adTimer) / Math.max(0.01, s.adTotal);
       if (this.adBarEl) this.adBarEl.style.width = `${p * 100}%`;
-      if (this.adSkipEl && s.adSkippable) {
-        this.adSkipEl.disabled = !done;
-        const txt = done ? (s.adReason === "continue" ? "Wake up ▶" : "Continue ▶") : `Continues in ${Math.ceil(s.adTimer)}`;
-        if (this.adSkipEl.textContent !== txt) this.adSkipEl.textContent = txt;
+      if (this.adSkipCountEl) {
+        // Only the NUMBER is live. This used to rewrite the whole element's
+        // textContent every frame, which is fine for a bare label and fatal
+        // for one containing an icon — it wiped the clock on the first tick
+        // after render. The countdown now lives in its own <b>, and the
+        // surrounding words and the glyph are written once.
+        const left = String(Math.ceil(Math.max(0, s.adTimer)));
+        if (this.adSkipCountEl.textContent !== left) this.adSkipCountEl.textContent = left;
+      }
+      if (this.adSkipEl) {
+        // The chip is a status readout, not a control, so there is no disabled
+        // state to drive and nothing to press when the countdown lands — the
+        // break ends itself (Game.fixedUpdate). `done` only changes how the
+        // chip reads.
+        this.adSkipEl.classList.toggle("done", done);
       }
       // The header/label are baked into the initial render and, unlike the bar
       // and skip button above, were never touched again — so a placeholder
@@ -1521,6 +1554,30 @@ export class HUD {
     }
     // One readable pill in flight, at most two on menu screens.
     const cap = this.root.dataset.flying === "true" ? 1 : 2;
+
+    // Eviction used to be unconditional and immediate: a new toast killed the
+    // incumbent no matter how long it had been up. In flight, where the game
+    // emits a near-continuous stream of system messages, that meant a pill
+    // could be born and destroyed inside the same 100 ms — which is why the
+    // flavour lines never appeared. They were all firing; almost none of them
+    // survived to be read. See toastFloor.ts.
+    const decision = decideToast(
+      this.toastLayer.children.length,
+      cap,
+      this.oldestToastAgeMs(),
+      this.toastQueue.length,
+    );
+    if (decision.action === "drop") return;
+    if (decision.action === "defer") {
+      this.toastQueue.push({ text, kind });
+      if (this.toastDrainTimer === null) {
+        this.toastDrainTimer = this.after(() => {
+          this.toastDrainTimer = null;
+          this.drainToastQueue();
+        }, decision.waitMs);
+      }
+      return;
+    }
     while (this.toastLayer.children.length >= cap) {
       const oldest = this.toastLayer.firstElementChild;
       if (!oldest) break;
@@ -1535,9 +1592,39 @@ export class HUD {
     el.textContent = text;
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
+    // Merge: main's obscured-lane callback plus this branch's readability
+    // floor. They solve different halves of the same complaint — main stops
+    // a toast expiring while something is covering it, this stops a toast
+    // being evicted by the next one before it has been on screen at all.
     const timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured());
+    this.after(() => this.toastSeen.add(el), TOAST_MIN_VISIBLE_MS);
     this.liveToasts.set(text, { el, count: 1, timer });
   }
+
+  /** Effective age of the longest-standing pill, as the floor policy sees
+   *  it: either "has been readable" or "has not". */
+  private oldestToastAgeMs(): number {
+    const oldest = this.toastLayer.firstElementChild as HTMLElement | null;
+    if (!oldest) return Number.POSITIVE_INFINITY;
+    return this.toastSeen.has(oldest) ? Number.POSITIVE_INFINITY : 0;
+  }
+
+  /** Replay the deferred backlog once the incumbent has had its look. */
+  private drainToastQueue(): void {
+    const next = this.toastQueue.shift();
+    if (!next) return;
+    this.toast(next.text, next.kind);
+    // `toast` re-queues if the floor still is not met, so this terminates:
+    // each pass either shows one or re-defers with a strictly shorter wait.
+    if (this.toastQueue.length > 0 && this.toastDrainTimer === null) {
+      this.toastDrainTimer = this.after(() => {
+        this.toastDrainTimer = null;
+        this.drainToastQueue();
+      }, TOAST_MIN_VISIBLE_MS);
+    }
+  }
+
+
 
   /**
    * Is the toast lane currently unable to be read?
@@ -1704,6 +1791,7 @@ export class HUD {
       this.adCard.innerHTML = renderCoins(renderAd(s));
       this.adBarEl = this.adCard.querySelector('[data-live="adBar"]');
       this.adSkipEl = this.adCard.querySelector('[data-live="adSkip"]');
+      this.adSkipCountEl = this.adSkipEl?.querySelector("b") ?? null;
       this.adHeaderEl = this.adCard.querySelector(".portal-ad-wait h3");
       this.adLabelEl = this.adCard.querySelector(".ad-label");
     }
@@ -1767,6 +1855,7 @@ export class HUD {
     this.distanceEl = grab("distance");
     this.coinsEl = grab("coins");
     this.bestEl = grab("best");
+    this.bestRowEl = grab("bestRow");
     this.medalLine = grab("medalLine");
     this.islandEl = grab("island");
     this.multEl = grab("mult");
@@ -2328,7 +2417,7 @@ function renderDailyRitualBanner(s: HudSnapshot): string {
     <span class="pc-icon">${menuIconSm("sun")}</span>
     <div class="pc-body"><b>${t("hud.renderDailyRitualBanner.DChallengeReady", undefined, "Daily Challenge ready!")}</b><span>+${s.daily.reward} coins waiting — open ›</span></div>
     </button>
-    <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="${t("hud.aria.dismiss", undefined, "Dismiss")}">✕</button>
+    <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="${t("hud.aria.dismiss", undefined, "Dismiss")}">${closeSvg()}</button>
   </div>`;
 }
 
@@ -2438,7 +2527,7 @@ function renderOnboardingRoute(s: HudSnapshot): string {
     ? t("onboarding.allDone", undefined, "You know the ropes")
     : t("onboarding.startSubtitle", undefined, "five things worth knowing");
   return `<section class="onboarding-route" aria-label="${escapeHtml(t("onboarding.routeLabel", undefined, "Your first flight plan"))}">
-      <div class="onboarding-route-head"><span>✦ ${allDone ? escapeHtml(t("onboarding.routeDone", undefined, "FLIGHT PLAN")) : escapeHtml(t("onboarding.startHere", undefined, "START HERE"))}</span><small>${escapeHtml(head)}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">✕</button></div>
+      <div class="onboarding-route-head"><span>✦ ${allDone ? escapeHtml(t("onboarding.routeDone", undefined, "FLIGHT PLAN")) : escapeHtml(t("onboarding.startHere", undefined, "START HERE"))}</span><small>${escapeHtml(head)}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">${closeSvg()}</button></div>
       <ol class="onboarding-route-steps">
         ${steps.map((step, i) => `<li><button class="onboarding-route-step${step.done ? " done" : ""}${i === nextIndex ? " active" : ""}" data-ui data-action="${step.action}"${step.done ? " disabled" : ""}><b>${step.done ? escapeHtml(t("onboarding.stepDoneMark", undefined, "✓")) : step.n}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.sub)}</small></span><i>${escapeHtml(step.go)}</i></button></li>`).join("")}
       </ol>

@@ -1,4 +1,5 @@
 import { RESERVED_PILOT_NAMES } from "./edition";
+import { POKI_BAD_WORDS, POKI_LIST_EXCEPTIONS } from "./pokiBadWords";
 /**
  * Pilot-name moderation.
  *
@@ -41,7 +42,7 @@ export const PILOT_NAME_MIN = 3;
 /** Hard profanity, sexual terms and hate speech — the categories a platform
  * moderation check actually action. Stored pre-normalised (lowercase, no
  * separators) because they are matched against the squashed key. */
-const BLOCKED = [
+const OWN_BLOCKED = [
   // hate / slurs
   "nigger", "nigga", "nigg", "faggot", "fagot", "fag", "dyke", "tranny",
   "retard", "spastic", "chink", "kike", "wetback", "gook", "coon", "raghead",
@@ -71,6 +72,57 @@ const BLOCKED = [
   "meth", "heroin", "cocaine", "cannabis", "marijuana", "fentanyl", "opioid",
   "mdma", "ecstasy", "ketamine", "xanax", "adderall", "weed", "crack",
   "terrorist", "jihad", "rapist", "incest", "bestiality", "necrophil",
+
+  // ——— NON-ENGLISH ———————————————————————————————————————————————
+  // Poki serves a global audience and localises the portal into ~30
+  // languages; this game ships 12 locales. A blocklist that only knows
+  // English is not a moderation filter, it is a filter against *English
+  // speakers* — a Polish or Brazilian player types the worst word they know
+  // and it lands, unfiltered, on a public leaderboard and on in-world name
+  // tags, which is precisely the failure mode that gets a build rejected.
+  //
+  // Selection rule, applied to every entry below: hard profanity, slurs and
+  // sexual terms only (not mild swears), and only strings that cannot appear
+  // inside the game's own aviation/nature vocabulary once the key is squashed
+  // to letters with no word boundaries. Entries were dropped rather than
+  // risked where they collided: French "pute" (inside "computer"), Dutch
+  // "lul" (inside "lullaby"), Italian "pic"/Turkish "piç" (inside "epic"),
+  // Spanish "pene" (inside "penelope"), "cono" and "culo" (too short and too
+  // mild to be worth the false positives). Cyrillic and Greek spellings are
+  // handled by the HOMOGLYPH fold plus the transliterations listed here.
+  // es / pt
+  "puta", "putas", "puto", "mierda", "joder", "pendejo", "cabron", "chingar",
+  "chinga", "maricon", "gilipollas", "hijueputa",
+  "caralho", "porra", "buceta", "viado", "foda", "fodase", "merda", "piroca",
+  "corno", "arrombado", "filhadaputa",
+  // fr
+  "putain", "salope", "connard", "conasse", "encule", "niquer",
+  "foutre", "branleur", "pedale",
+  // de / nl
+  "arschloch", "wichser", "fotze", "hurensohn", "schlampe", "nutte",
+  "scheisse", "schwuchtel", "judensau", "siegheil",
+  "kanker", "kutwijf", "kutje", "klootzak", "hoerenjong", "flikker",
+  // it
+  "cazzo", "stronzo", "vaffanculo", "coglione", "troia", "puttana", "minchia",
+  // pl / ru / uk (transliterated; Cyrillic input folds into these)
+  "kurwa", "chuj", "jebac", "jebany", "pierdol", "skurwysyn",
+  "suka", "blyat", "blyad", "pizda", "pizdec", "khuy", "khuj", "yebat",
+  "mudak", "gandon", "ebanko",
+  // tr
+  "orospu", "amcik", "sikeyim", "sikerim", "yarrak", "gavat", "pezevenk",
+  // el
+  "malaka", "malakas", "gamoto", "poutana",
+  // ar / fa (transliterated)
+  "sharmuta", "kusomak", "kusommak", "gahba", "koskesh", "kirimbik",
+  // id / ms / tl / vi
+  "kontol", "memek", "bangsat", "ngentot", "putangina", "tangina",
+  "gagoyou", "ditme", "dumemay",
+  // hi / ur (transliterated)
+  "chutiya", "chutiye", "madarchod", "behenchod", "bhosdike", "randi",
+  "gandu", "harami",
+  // ja / ko / zh (romanised)
+  "chinko", "manko", "omanko", "shibal", "sibal", "gaesaekki",
+  "caonima", "shabi", "biaozi",
 ];
 
 /**
@@ -115,6 +167,16 @@ const SAFE_WORDS = [
   "pakistan", "pakistani",
   // …contain "semen" / "rapist" / "milf" — the classic Scunthorpe traps
   "basement", "debasement", "therapist", "milford",
+  // …contain a non-English entry added above. "brandi"/"brandy" contain
+  // "randi", "amputate" contains "puta", "suka" hides in "tsukasa", and
+  // "cornoravioli" jokes aside, "corno" sits inside "cornoate"-style coinages
+  // — these are the real names a filter must not eat.
+  "brandi", "brandy", "amputate", "amputation", "computer", "tsukasa",
+  // …collide with an entry from Poki's mandated list (see pokiBadWords.ts).
+  "woodpecker", "cox", "coxswain", "cocktail", "hitchcock", "shuttlecock",
+  "reputation", "reputable", "disputation", "putative", "deputation",
+  "cornelia", "cornelius", "cornice", "cornfield", "cornflower", "unicorn",
+  "capricorn", "cornet", "cornerstone", "corner",
 ];
 
 const LEET: Record<string, string> = {
@@ -229,6 +291,40 @@ function coveredBySafeWord(key: string, start: number, end: number, list: string
   }
   return false;
 }
+
+/**
+ * The list that is actually matched: Poki's mandated list plus this game's own
+ * 22-language extension, both squashed into the same key space.
+ *
+ * Poki's Requirements page mandates the upstream list for any game with
+ * username input and adds "expand it further for your games" — so the
+ * requirement is met by construction here, and `POKI_LIST_EXCEPTIONS` (in
+ * `pokiBadWords.ts`) is the auditable record of the handful of entries we
+ * decline, each with a reason. Entries are run through the same normaliser the
+ * player's input goes through, so leetspelled entries like "5h1t" and spaced
+ * ones like "f u c k" collapse onto the entries they duplicate instead of
+ * sitting in the list as dead weight.
+ *
+ * Entries shorter than 3 characters are dropped: on a boundary-free key they
+ * match almost everything, and every one of them on the upstream list is
+ * already covered by a longer entry.
+ */
+const BLOCKED: readonly string[] = (() => {
+  // Except by KEY, not by spelling. "ass", "a55" and "a_s_s" are three
+  // entries on the upstream list and one word after normalisation; excepting
+  // the first has to except all three, or the exception silently does nothing
+  // and "Cassandra" is refused by the leet spelling instead of the plain one.
+  const excepted = new Set(
+    Object.keys(POKI_LIST_EXCEPTIONS).map((w) => squashPilotName(normalizePilotName(w))),
+  );
+  const merged = new Set<string>(OWN_BLOCKED);
+  for (const raw of POKI_BAD_WORDS) {
+    const key = squashPilotName(normalizePilotName(raw));
+    if (key.length < 3 || excepted.has(key)) continue;
+    merged.add(key);
+  }
+  return [...merged];
+})();
 
 function blockedHitIn(key: string, foldSafeWords: boolean): string | null {
   const safe = foldSafeWords ? SAFE_WORDS.map(phoneticPilotName) : SAFE_WORDS;

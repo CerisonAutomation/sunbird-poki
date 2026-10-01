@@ -55,6 +55,9 @@
   --bark-deep: #4a3620;
   --toffee: #6b4c2a;
   --shadow: rgba(42, 28, 40, 0.18);
+  /* Focus ring. Was a magic number duplicated in menu-polish.css; the flight
+     HUD needed the same one, and a third copy is a token asking to exist. */
+  --focus-ring: #176979;
   /* Display face for titles/numerals/buttons; Atkinson Hyperlegible for readable body text. */
   --display: Fredoka, "Trebuchet MS", "Segoe UI", sans-serif;
   --body: "Atkinson Hyperlegible", "Trebuchet MS", "Segoe UI", sans-serif;

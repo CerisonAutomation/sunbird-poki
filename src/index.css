@@ -2658,13 +2658,17 @@ fieldset.squad-fields {
    Playwright reported "element is outside of the viewport" after scrolling,
    because the overflow was inside the wheel rather than the page.
 
-   Wrapping is the fix, and it stays IN FLOW on purpose. Lifting it out of the
-   flow (`position: absolute; bottom: 100%`) also made the buttons reachable,
-   but it then hung the picker in the one corridor the HUD measures for the
-   coaching band — at 568x320 the band and the footer overlapped by 191x11px
-   the moment the picker opened. A footer that grows is a footer the HUD can
-   measure and the band can be placed against; a popup floating over the band
-   is not. So: wrap inside the flow, and let the band move. */
+   Wrapping is not the fix either: it made the footer 364px tall in a 320px
+   window, so it grew *upward* off the top of the screen (`.flight-footer` at
+   y-56) and the header ended up inside it. A picker that cannot fit is not a
+   picker that should reflow the thing it is measuring against.
+
+   So on a short screen the picker is a compact one-row strip: 11px labels, no
+   minimum width, tight padding. Six of those measure ~366px against a 400px
+   footer, so it fits on one line and the footer grows by ~30px instead of
+   110px. The `aria-label` on every button still carries "Send Wave" etc., so
+   nothing is lost for a screen reader or for the test that finds the button by
+   its accessible name. */
 .flight-footer .emote-options {
   display: flex;
   flex-wrap: wrap;
@@ -2677,6 +2681,17 @@ fieldset.squad-fields {
   padding: 4px 6px;
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.18);
+}
+@media (max-height: 360px) {
+  .flight-footer .emote-options { gap: 4px; padding: 3px 4px; }
+  .flight-footer .emote-options button {
+    min-width: 0;
+    min-height: 30px;
+    height: 30px;
+    padding: 0 6px;
+    border-radius: 15px;
+    font-size: 11px;
+  }
 }
 .flight-footer .emote-options button {
   min-width: 44px;

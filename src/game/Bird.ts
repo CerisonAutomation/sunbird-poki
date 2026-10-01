@@ -709,7 +709,29 @@ export class Bird {
       // cache uses, so a launch only fires off a genuine climb-then-drop.
       if (curv > 0 && terrain.hasCrestProminence(this.x)) {
         const needed = vt * vt * curv; // centripetal pull required to stay glued
-        const available = (diving ? GRAVITY_DIVE : GRAVITY_GLIDE) * gMult * n2.ny + (diving ? STICK_ACCEL_DIVE : STICK_ACCEL_GLIDE);
+        // The downward acceleration actually holding the bird down — which is NOT
+        // full gravity while gliding.
+        //
+        // The ballistic branch cancels up to `GLIDE_LIFT_MAX` (55%) of gravity
+        // with speed-borne lift, so a bird at 62 m/s experiences 7.2 m/s², not 16.
+        // The launch test below was charging it the full 16 anyway. That made the
+        // ground a strictly harsher place to be than the air at the same speed: the
+        // bird could soar indefinitely once it was up, but had to beat 29 m/s² of
+        // downward pull to get up in the first place, against 19.4 in the air.
+        //
+        // Measured over 3900 m of a real island, that gap is the whole run. At the
+        // 45 m/s where a crest could otherwise throw it, the full-gravity gate needs
+        // curvature above 0.0143/m and only 14% of positions are crest-prominent at
+        // all — so the bird sat on the ground for 68% of a passive minute and the
+        // climb goal never left 0. Lift is a function of speed, and the gate already
+        // scales by speed, so charging the lift it is about to enjoy was simply
+        // charging the bird for a wing it already has.
+        const liftNow = diving
+          ? 0
+          : Math.min(0.85, GLIDE_LIFT_MAX * clamp(vt / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1) * biome.liftMult);
+        const available =
+          (diving ? GRAVITY_DIVE : GRAVITY_GLIDE * (1 - liftNow)) * gMult * n2.ny +
+          (diving ? STICK_ACCEL_DIVE : STICK_ACCEL_GLIDE);
         if (needed > available) launched = true;
       }
       if (launched) {

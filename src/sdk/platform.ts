@@ -452,13 +452,25 @@ function ensureSdk(): Promise<PlatformName> {
     // the published typings) ended up typed twice by hand.
     const getPoki = pokiSdk;
     loadPromise = new Promise((resolve) => {
-      // Poki Inspector injects the SDK before the bundle loads; wait up to
-      // 2 s, then fall back to loading from the Poki CDN.
+      // The packaged portal build carries the SDK tag in its own <head>
+      // (Poki's HTML5 guide step 1 — `scripts/package-portal.mjs` injects it,
+      // and only for the Poki target, because no other edition may load it).
+      // So the usual path is: the tag is already in flight, this poll sees
+      // `window.PokiSDK` the moment it lands, and `loadCdn()` never runs.
+      //
+      // The poll still exists because a host (the Inspector, an embedder) may
+      // install its own SDK before the bundle evaluates — but the window is
+      // now 800 ms, not 2 s. The old 2 s was the delay before the download
+      // even STARTED, which on a cold mobile load was two seconds of nothing
+      // happening, spent waiting for a script nobody had asked for yet.
+      // `loadCdn()` is now the recovery path for a tag that failed, not the
+      // normal path, and it attaches to the static tag rather than duplicating
+      // it (`data-sunbird-sdk="poki"`).
       let waited = 0;
       const check = window.setInterval(() => {
         if (getPoki()) { window.clearInterval(check); resolve("poki"); return; }
         waited += 100;
-        if (waited >= 2000) { window.clearInterval(check); loadCdn(); }
+        if (waited >= 800) { window.clearInterval(check); loadCdn(); }
       }, 100);
 
       function loadCdn() {

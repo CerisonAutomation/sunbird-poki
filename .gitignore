@@ -97,3 +97,6 @@ hallways.json
 # nested copy of src/ and api/ under worktrees/. Same hazard as hive/ above.
 worktrees/
 .dyad/
+
+# QA screenshot captures
+shots/

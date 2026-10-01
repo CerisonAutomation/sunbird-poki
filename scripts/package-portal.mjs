@@ -13,7 +13,6 @@
  * The staged bundle is deliberately minimal and self-contained:
  *   index.html   the whole game (JS + CSS + fonts inlined by vite-singlefile)
  *   icons/       favicons / apple-touch-icon (referenced by the head)
- *   fonts/       self-hosted woff2 (kept for host-side/offline tooling)
  *
  * `i18n/` used to ride along "for host-side tooling". Nothing fetched it: the
  * runtime lazy-loads per-locale packs that vite-singlefile inlines into
@@ -83,7 +82,21 @@ function stageHtml() {
     );
   }
 
-  let html = source
+  // Poki, Requirements → Technical standards: "Clean build: remove all
+  // development tools, debug code, and testing artifacts before publication."
+  // `index.html` carries ~1.4 KB of engineering commentary in its <head> —
+  // rationale for the boot shell, for the font strategy, for the viewport
+  // meta. Useful in the repository, not something to hand a portal inside the
+  // shipped artifact. Scoped to the head deliberately: the body holds the
+  // inlined bundle, and a regex for `<!-- … -->` across two megabytes of
+  // minified JavaScript is a way to corrupt a build, not to clean one.
+  const bodyAt = source.indexOf("<body");
+  const stripped =
+    bodyAt > 0
+      ? source.slice(0, bodyAt).replace(/\n?\s*<!--[\s\S]*?-->/g, "") + source.slice(bodyAt)
+      : source;
+
+  let html = stripped
     .replace(/^\s*<link rel="manifest"[^>]*>\n?/m, "")
     .replace(/^\s*<meta property="og:url"[^>]*>\s*\n?/m, "")
     // Cosmetic last line of defence, kept because it costs nothing: should a
@@ -102,12 +115,17 @@ function stageHtml() {
   if (portal === "poki") {
     // Match the TAG, not the hostname: the bundled adapter also contains the
     // CDN URL as a string (it is the fallback loader).
-    const SDK_TAG = '<script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
+    //
+    // `data-sunbird-sdk="poki"` is not decoration. `loadCdn()` in
+    // `src/sdk/platform.ts` looks for exactly that attribute before it injects
+    // a tag of its own; without it, a cold load where `ensureSdk()`'s poll
+    // expires before this script finishes downloading ends with TWO
+    // `poki-sdk.js` script tags in the document. The attribute makes the
+    // adapter adopt this tag instead.
+    const SDK_TAG =
+      '<script data-sunbird-sdk="poki" src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
     if (html.includes(SDK_TAG)) throw new Error("Poki SDK tag already staged");
-    html = html.replace(
-      /<head>/i,
-      '<head>\n    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>',
-    );
+    html = html.replace(/<head>/i, `<head>\n    ${SDK_TAG}`);
     if (!html.includes(SDK_TAG)) {
       throw new Error("Poki SDK tag injection failed — the head tag shape changed");
     }
@@ -127,7 +145,7 @@ function stageHtml() {
  * into every build; `pnpm gen-icons` still generates it there for hand-submission
  * to a portal, it just does not ship inside the game package any more.
  */
-const ENTRY_DIRS = ["icons", "fonts", "i18n"];
+const ENTRY_DIRS = ["icons", "i18n"];
 const ENTRIES = ["index.html", ...ENTRY_DIRS];
 
 /**

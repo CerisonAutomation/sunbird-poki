@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import {
+  TERRAIN_SKY_MIN_CONTRAST,
+  enforceMinContrast,
+  nightFillIntensity,
+} from "./legibility";
 import { saturate, smoothstep } from "./math";
 import { drawSunDisc } from "./Sunbird";
 import type { TerrainPalette } from "./TerrainSystem";
@@ -142,6 +147,10 @@ export class Sky {
   private readonly palette: TerrainPalette;
   private readonly tmpA = new THREE.Color();
   private readonly tmpB = new THREE.Color();
+  // Scratch for the per-frame silhouette floor — reused so the legibility
+  // pass never allocates inside the render loop.
+  private readonly floorFg = { r: 0, g: 0, b: 0 };
+  private readonly floorBg = { r: 0, g: 0, b: 0 };
   private readonly tmpC = new THREE.Color();
   private tintTop = 0xffffff;
   private tintHorizon = 0xffffff;
@@ -464,7 +473,12 @@ export class Sky {
     this.sunLight.color.copy(this.mixHex(a.sun, b.sun, u));
     // Balanced key light: bright enough for crisp terrain, not so hot it blows out.
     this.sunLight.intensity = 0.38 + t * 0.60;
-    this.hemi.intensity = 0.72 + t * 0.40;
+    // Night fill: without it the near terrain crushes to a flat black mass
+    // after dusk and the player loses the ground they are about to hit. It is
+    // exactly zero above 55% daylight, so the daytime look is untouched, and
+    // it eases rather than ramps so the transition never reads as a light
+    // switch being thrown. See src/game/legibility.ts.
+    this.hemi.intensity = 0.72 + t * 0.40 + nightFillIntensity(t);
 
     // Keep the full daylight disc in the upper sky instead of clipping its crown.
     const elev = 22 + t * 64;
@@ -561,6 +575,16 @@ export class Sky {
     this.palette.farA.copy(this.mixHex(a.farA, b.farA, u));
     this.palette.farB.copy(this.mixHex(a.farB, b.farB, u));
     this.palette.farC.copy(this.mixHex(a.farC, b.farC, u));
+    // Silhouette floor. The distant hill bands are read against the sky
+    // immediately behind them, and at dusk the authored palette let the two
+    // converge to within a couple of percent luminance — the frame where the
+    // world stopped being playable. The floor is a no-op for most of the
+    // cycle (the check is a comparison, not a grade) and only lifts or drops
+    // a band in the window where it had become invisible. Hue is preserved,
+    // so a teal hill becomes a lighter teal hill, never grey.
+    this.applyContrastFloor(this.palette.farA, horizon);
+    this.applyContrastFloor(this.palette.farB, horizon);
+    this.applyContrastFloor(this.palette.farC, bottom);
     return this.palette;
   }
 
@@ -581,6 +605,22 @@ export class Sky {
 
   private mixHex(ha: number, hb: number, t: number): THREE.Color {
     return this.tmpA.setHex(ha).lerp(this.tmpB.setHex(hb), t);
+  }
+
+  /** Push a terrain band away from the sky behind it, in place, only if it
+   *  has fallen under the silhouette floor. Allocation-free: this runs every
+   *  frame. */
+  private applyContrastFloor(band: THREE.Color, sky: THREE.Color): void {
+    // Read and write through sRGB explicitly. THREE.Color's own components
+    // live in the renderer's working space, which is linear when colour
+    // management is on — WCAG luminance is defined on sRGB, so converting
+    // here keeps the floor meaning the same thing regardless of how the
+    // renderer is configured.
+    band.getRGB(this.floorFg, THREE.SRGBColorSpace);
+    sky.getRGB(this.floorBg, THREE.SRGBColorSpace);
+    const out = enforceMinContrast(this.floorFg, this.floorBg, TERRAIN_SKY_MIN_CONTRAST);
+    if (out === this.floorFg) return;
+    band.setRGB(out.r, out.g, out.b, THREE.SRGBColorSpace);
   }
 
   /** A single distant planet — optionally ringed — with a soft glow halo. */

@@ -2,6 +2,12 @@ import "./boot";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
+// Last sheet in the cascade, on purpose. An `@import` at the foot of
+// index.css does not work: CSS hoists @import to the top of the file, which
+// would put this first and lose every specificity tie. Importing it here,
+// after index.css, is the only way a sheet with zero `!important`
+// declarations can win — and adding none was the point.
+import "./game/design-polish.css";
 import App from "./App";
 import { preloadPortalSdk } from "./sdk/platform";
 

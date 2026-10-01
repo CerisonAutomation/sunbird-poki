@@ -210,6 +210,10 @@ export type HudSnapshot = {
    * cut it short and still award the reward.
    */
   adSkippable: boolean;
+  /** Wall-clock seconds the live break has been open. */
+  adElapsed: number;
+  /** Seconds before the escape hatch arms — never a player-facing skip. */
+  adSafetySeconds: number;
   seedLabel: string;
   /** Career wings: lifetime-distance rank shown on the title screen. */
   wings: { icon: string; name: string; progress: number; nextName: string; nextNeeded: number; lifetime: number };

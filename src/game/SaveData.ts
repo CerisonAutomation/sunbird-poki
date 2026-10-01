@@ -276,10 +276,20 @@ export type ChallengeState = {
  * Deliberately initial-only: once a value is in the save, the player's own
  * choice in Settings wins, including if they turn motion back on.
  */
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    : false;
+export function prefersReducedMotion(): boolean {
+  // Read defensively. This module is imported by tests and by tooling with no
+  // `window` at all, and `matchMedia` itself can throw in hardened or
+  // privacy-shielded browsers — where it throws, it throws on a media query
+  // about accessibility, which would take the entire save with it on the one
+  // path that exists to help people. A failure to detect the preference is
+  // "no preference stated", never a crash.
+  try {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+  } catch {
+    return false;
+  }
 }
 
 const DEFAULT_SETTINGS: Settings = {

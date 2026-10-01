@@ -76,8 +76,17 @@ describe("the physics history a render interpolates against exists", () => {
     const src = readFileSync(join(process.cwd(), "src/game/Bird.ts"), "utf8");
     const stepAt = src.indexOf("  step(");
     expect(stepAt, "Bird.step was not found").toBeGreaterThan(-1);
-    // 4 kB is the whole of step(); the next member declaration is well inside it.
-    const stepBody = src.slice(stepAt, stepAt + 4000);
+    // Was `src.slice(stepAt, stepAt + 4000)`. A fixed byte window is a proxy
+    // for "the whole of step()", and it stopped being one the moment the
+    // method grew: after the merge with the arena branch the integration sits
+    // past 4 kB, so the window contained the snapshots but not the writes they
+    // must precede, and the test failed claiming "step() never writes this.vx"
+    // about a method that plainly does. Scan to the real end of the method —
+    // the next member declared at class indentation — so the assertion tracks
+    // the code rather than its length.
+    const afterStep = src.slice(stepAt + "  step(".length);
+    const nextMember = afterStep.search(/\n {2}(?:\/\*\*|(?:private |protected |public |readonly |static )*[A-Za-z_$][\w$]*\s*[(:=])/);
+    const stepBody = src.slice(stepAt, nextMember === -1 ? src.length : stepAt + "  step(".length + nextMember);
 
     const snapVx = stepBody.indexOf("this.prevVx = this.vx;");
     const snapVy = stepBody.indexOf("this.prevVy = this.vy;");

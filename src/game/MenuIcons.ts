@@ -354,3 +354,58 @@ export function arrowRightSvg(): string {
 export function menuHorizon(): string {
   return '<svg class="menu-horizon" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 141Q65 83 145 125T300 117T456 115T600 85V200H0Z" fill="#ced8ba"/><path d="M0 163Q85 108 180 153T366 143T600 138V200H0Z" fill="#a2be9f"/><path d="M0 184Q90 160 190 181T400 171T600 180V200H0Z" fill="#749d87"/><path d="M0 179Q96 155 195 177T400 167T600 176" fill="none" stroke="#eaf0d2" stroke-width="2" opacity=".65"/></svg>';
 }
+
+/* ------------------------------------------------------------------ chrome
+ * Vector replacements for the functional chrome glyphs.
+ *
+ * Kept from the arena branch through the merge with main: main's rewrite of
+ * the icon LOOKUP (own-key `Set.has`, so `smArtwork["constructor"]` can no
+ * longer resolve up the prototype chain into markup) is strictly better and
+ * is what this file now uses, but that rewrite does not contain these four
+ * functions and every call site in HUD.ts and hud/run.ts imports them.
+ *
+ * They exist because U+2759, U+2715 and the U+2B00-block arrows are absent
+ * from lean Android WebViews and stripped Linux font sets, so the pause
+ * button shipped as two empty boxes and every countdown as bare text.
+ * ------------------------------------------------------------------------ */
+
+/** Countdown / duration marker.
+ *
+ * Every timer in the game was bare text ("Continues in 7", "Second wind
+ * closes in 9s") or, worse, `⏳` U+23F3 — an emoji-presentation code point
+ * from the same family as the glyphs that were already caught rendering as
+ * tofu. A number with no icon also reads as a label rather than as something
+ * counting: the player has to re-read it to notice it changed.
+ *
+ * One vector clock, `currentColor`, used everywhere a value counts down, so
+ * "there is time on this" is a shape the eye learns once. The hands sit at
+ * 10-past so the glyph is legible at 14 px, where a vertical minute hand
+ * disappears into the face's stroke. */
+export function clockSvg(): string {
+  return '<svg class="chrome-glyph timer-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12.5" r="8"/><path d="M12 8v4.5l3 1.8"/><path d="M9 2.6h6"/></svg>';
+}
+
+/** Functional chrome controls — pause, dismiss, back.
+ *
+ * These were text glyphs (`❙❙` U+2759, `✕` U+2715, `‹` U+2039). The arrows
+ * above were already converted for exactly this reason and these are the same
+ * bug with higher stakes: U+2759 and U+2715 are absent from the base font set
+ * of lean Android WebViews, several Linux distributions and stripped
+ * Chromebook images, and an in-browser capture reproduced the **pause button
+ * rendering as two empty boxes**. A player who cannot find pause cannot stop
+ * playing, and Poki's quality bar calls out pause handling by name.
+ *
+ * Drawn as strokes on a 24-unit grid with `currentColor`, so they inherit the
+ * button's colour and hover state, scale without hinting artefacts, and are
+ * pixel-aligned at the 44 px control size the HUD uses. */
+export function pauseSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="7" y="5" width="3.6" height="14" rx="1.6"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.6"/></svg>';
+}
+
+export function closeSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+}
+
+export function backSvg(): string {
+  return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14.5 5-7 7 7 7"/></svg>';
+}

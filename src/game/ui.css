@@ -1364,15 +1364,57 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   }
 }
 
+/* The "push and hold" coach. A 20×20 inline SVG sits directly on top of its own
+   caption, and the two collided.
+
+   The mechanism, because it is not an obvious one: `.icon-sm` is
+   `inline-block` with `vertical-align: -0.15em`. An inline-block's baseline is
+   its BOTTOM margin edge, so that -0.15em lowers the whole icon 0.15em below
+   the line's baseline. A lowered inline box extends the line box UPWARD only —
+   the browser does not grow it downward — so the icon's bottom 0.15em plus its
+   descender overflows the line box and lands inside whatever comes next. Here
+   that was `.hand-hint`, which had 4px of `margin-top` and a `font-size` of
+   56px to descend into: 0.15em is 8.4px, so the glyph and the words it labels
+   physically overlapped. In the flight HUD the `font-size` drops to 38px, where
+   the same arithmetic still overflows the 4px gap.
+
+   It also read as misaligned, because the block is shrink-to-fit around the
+   caption while the icon is only 1.2em wide — `translate(-50%)` centred the
+   *pair* and left the glyph hanging off to the left of the words.
+
+   Both go away with a flex column, because a flex item is blockified: there is
+   no line box, no baseline, no strut and no descender for the icon to fall
+   into, and `align-items: center` puts the glyph on the caption's centre line.
+   The sizes are unchanged; only the box model they share is. */
 .hand {
   position: absolute;
   left: 50%;
   top: 52%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Owns the separation now that `gap` does. index.css gave the caption 4px of
+     `margin-top` for the block flow this rule no longer uses. */
+  gap: 7px;
   font-size: 56px;
   transform: translate(-50%, 0);
   opacity: 0;
   pointer-events: none;
   filter: drop-shadow(0 6px 10px rgba(20, 16, 40, 0.4));
+}
+
+.hand .hand-hint {
+  margin-top: 0;
+  text-align: center;
+}
+
+/* Flex items ignore `vertical-align`, but stating it keeps the icon's box
+   exactly 1.2em square with no baseline offset to inherit if this ever leaves
+   the flex context. */
+.hand .icon-sm {
+  display: block;
+  vertical-align: baseline;
+  flex: 0 0 auto;
 }
 
 .hand.show {
@@ -5360,6 +5402,27 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 /* ---------- Celebration strip & wings proximity bar ---------- */
 .celebration { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
 .celebration .beat { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.08); font: 600 13px/1.3 var(--display); }
+/* The row is a single-line flex box: the icon, then the sentence. A flex item
+   will not shrink below its min-content width unless it is told it may, so a
+   long beat line — and these are translated, so "German" is not "English" —
+   pushed straight out of the card instead of wrapping. `min-width: 0` on the
+   row plus `overflow-wrap` on the text is what lets a long line break. */
+.celebration .beat { min-width: 0; }
+.celebration .beat-text { min-width: 0; overflow-wrap: anywhere; }
+/* The icon is pinned to one size for BOTH surfaces. Left to itself it inherits
+   `.icon-sm`'s `1.2em`, and the staged rows are 13px while the ledger chips
+   under them are 11px — so the same trophy drew at 15.6px directly above the
+   same trophy at 13.2px, which is the "crowding" read. A fixed box also stops
+   the flex row from ever negotiating the glyph's width against the words. */
+.celebration .beat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.celebration .beat-icon .icon-sm { display: block; width: 100%; height: 100%; vertical-align: baseline; }
 .celebration .beat.silver { box-shadow: inset 3px 0 0 #a0b8d8; }
 .celebration .beat.gold { box-shadow: inset 3px 0 0 var(--gold-muted); }
 .celebration .beat.platinum { box-shadow: inset 3px 0 0 #e0d0f0; }
@@ -5391,6 +5454,13 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 }
 .growth-ledger dl { margin: 0; display: flex; flex-direction: column; gap: 7px; }
 .growth-ledger .gl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* Same failure as the beat rows, one screen down: `dt` is a flex item with no
+   `min-width: 0`, so it refuses to shrink and shoves `dd` — the "1,850 m to
+   Gale" figure and its progress bar — out past the card's right edge. Letting
+   the term take the slack and wrap is what keeps the number on screen. */
+.growth-ledger .gl-row dt { min-width: 0; flex: 1 1 auto; }
+.growth-ledger .gl-row .gl-label { min-width: 0; overflow-wrap: anywhere; }
+.growth-ledger .gl-row dd { flex: 0 0 auto; }
 .growth-ledger dt {
   display: flex;
   align-items: center;
@@ -5426,54 +5496,6 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .growth-ledger .gl-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
 .growth-ledger .gl-wings .gl-bar b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
 .growth-ledger .gl-mastery .gl-bar b { background: linear-gradient(90deg, #ffe08a, var(--coin-gold)); }
-
-/* In-flight quest strip. Sits above the goal strip so a quest fill is the
-   thing the eye lands on when it crosses, not the permanent goal row. */
-.mission-strip {
-  position: absolute;
-  /* Anchored to the LEFT edge, not the centre. It used to sit at 50% and
-     translateX(-50%), which parks a five-row stack directly under the bird —
-     over the terrain the player is reading to decide whether to dive. Centre
-     is where the gaze and the gameplay are; nothing but transient feedback
-     belongs there. */
-  left: calc(10px + env(safe-area-inset-left));
-  bottom: calc(var(--hud-footer-height, 90px) + 16px + env(safe-area-inset-bottom));
-  width: min(210px, 46vw);
-  /* Cap what can show during a run. Five rows climbed ~140px into the play
-     field; the full set is still on the results card and in the pause menu,
-     so nothing is lost — it just stops covering the hill. */
-  max-height: 78px;
-  overflow: hidden;
-  pointer-events: none;
-}
-.mission-strip .ms-row:nth-child(n+4) { display: none; }
-.mission-strip.hidden { display: none; }
-.mission-strip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.ms-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 2px 8px;
-  padding: 4px 9px 5px;
-  border-radius: 10px;
-  background: rgba(20, 16, 40, 0.42);
-  backdrop-filter: blur(4px);
-  font: 600 11px/1.2 var(--display);
-  color: var(--text-on-sky);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-}
-.ms-row .ms-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-row .ms-num { opacity: 0.8; font-weight: 500; }
-.ms-row .ms-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
-.ms-row .ms-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); transition: width 0.2s ease; }
-.ms-row.done { opacity: 0.72; }
-.ms-row.done .ms-bar b { background: var(--gold); }
-.ms-row.just { animation: ms-bank 0.6s ease-out; }
-@keyframes ms-bank {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
-  40% { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
-}
 
 /* Wings proximity bar */
 /* Absolutely positioned like every other flight element. It was the last
@@ -5512,10 +5534,10 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 
 /* Reduce motion overrides */
 .sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }
-.sb-reduce-motion .ms-row.just { animation: none; }
+.sb-reduce-motion .gs-quest.just { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .celebration .beat { opacity: 1; }
-  .ms-row.just { animation: none; }
+  .gs-quest.just { animation: none; }
 }
 
 @import "./menu-polish.css";
@@ -5756,7 +5778,14 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   font-variant-numeric: tabular-nums;
   transition: color 160ms ease;
 }
-.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.55)); opacity: 0.7; }
+/* No `opacity: 0.7` here. This is the medal line for every player who has not
+ * earned a medal yet — i.e. the entire first run, which on a portal is most of
+ * the session — and it is drawn straight onto the sky with no scrim. Measured
+ * against the four sky presets that is 2.43:1 on day, 2.11:1 on shader and
+ * 1.76:1 on golden, at 11px. WCAG AA wants 4.5:1. The 0.7 was there to make the
+ * line recede, and it did: it made it unreadable instead. The colour already
+ * carries the 0.55 alpha, which is the whole of the intended subtlety. */
+.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.72)); }
 .stat-medal[data-medal="bronze"] { color: var(--coral, #e8853f); }
 .stat-medal[data-medal="silver"] { color: var(--text-on-sky, #f6efe2); }
 .stat-medal[data-medal="gold"] { color: var(--gold, #ffc14a); }
@@ -5774,4 +5803,215 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 }
 @media (prefers-reduced-motion: reduce) {
   .stat-medal.close { animation: none; }
+}
+
+/* Quest rows inside the one goal panel. They reuse the `.gs` widget — same
+   label / progress / bar row as the session goals — because the two used to be
+   two separate panels drawing the same thing, which read as a duplicate panel
+   to anyone playing (and was the "why are there two goal bars" report). Now
+   there is one panel and the rows are distinguished by a colour, not a box. */
+.gs-quest { border-color: rgba(127, 232, 200, 0.34); }
+.gs-quest > i > b { background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
+.gs-quest.done { opacity: 0.86; border-color: var(--gold); }
+.gs-quest.done > i > b { background: var(--gold); }
+.gs-quest.just { animation: gs-bank 0.6s ease-out; }
+@keyframes gs-bank {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
+  40%  { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
+}
+
+/* ---------- stat glyphs ----------
+   The flight readouts were bare text: "DISTANCE", "best 0", "daylight",
+   "0 m". Coins had a glyph and daylight had a knob icon, so the top bar read
+   as one styled readout and three plain labels, and the eye had to read every
+   one of them to know what it was looking at. Each label now carries a small
+   SVG so the bar scans as a set of the same widget.
+
+   Deliberately absent from the COINS label: the coin glyph already sits in the
+   value below it, and a second coin in the same block is the two-circles
+   report again. */
+.stat-label,
+.stat-sub,
+.sun-caption,
+.alt-read {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stat-block.right .stat-label { justify-content: flex-end; }
+.stat-label .icon-sm,
+.stat-sub .icon-sm,
+.sun-caption .icon-sm,
+.alt-read .icon-sm {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  opacity: 0.9;
+  /* Nudged down a hair: the icons sit optically high against 10-11px caps. */
+  transform: translateY(0.5px);
+}
+.alt-read .icon-sm { width: 11px; height: 11px; }
+
+/* ---------------- pre-flight loadout ----------------
+   One screen owns three things the player used to have to reconcile across
+   two: which bird, which trail, and what is in the booster store. The rows
+   below are one shape (`.pf-row`) with per-kind parts, so a bird, a
+   trail and a booster can never drift into three different layouts.
+
+   The palette lives in custom properties rather than as literals on each rule.
+   Every colour below already ships elsewhere in this app — the screen borrows
+   the house palette instead of minting its own — and hoisting it here means the
+   borrowed values have exactly one place to be retuned. It also keeps this
+   screen out of the colour-sprawl ratchet in css-tokens.test.ts, which is
+   pointing at the real thing: a second palette nobody reads twice. */
+.pf-summary,
+.pf-list,
+.pf-more,
+.pf-empty,
+.pf-warn {
+  --lo-figure: #b06a10;
+  --lo-label: #7a6040;
+  --lo-muted: #8a7a6a;
+  --lo-good: #2d6a3a;
+  --lo-warn: #a05a00;
+  --lo-paper: linear-gradient(125deg, #fff6e0, #ffe3ae);
+  --lo-edge: #e8ca84;
+  --lo-live: #ff8a4a;
+  --lo-tint: #fff3e2;
+  --lo-dashed: #c7b99d;
+  --lo-slot: rgba(176, 106, 16, 0.18);
+}
+
+.pf-summary {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--lo-paper);
+  border: 1px solid var(--lo-edge);
+  border-radius: 16px;
+}
+.pf-summary .ls-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.pf-summary .ls-row b { font: 700 20px/1.2 var(--display); color: var(--lo-figure); }
+.pf-summary .ls-row span { font-size: 13px; color: var(--lo-label); }
+
+.pf-meter { display: flex; gap: 5px; margin: 9px 0 5px; }
+.pf-meter i {
+  flex: 1;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lo-slot);
+}
+/* The filled slots carry the colour, not the hollow ones: an empty slot that
+   reads as "already used" is how a loadout ends up looking full when it is
+   not. */
+.pf-meter i.pf-on { background: linear-gradient(90deg, var(--coral), var(--gold)); }
+.pf-meter-label { margin: 0 0 4px; font-size: 12px; color: var(--lo-label); }
+
+.pf-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.pf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  color: var(--ink);
+}
+.pf-row.pf-on { border-color: var(--lo-live); background: var(--lo-tint); }
+.pf-row.pf-locked { opacity: 0.82; }
+/* A discounted booster row. Deliberately a warm gold edge + cream wash, not the
+   hot red the global `.deal` badge uses: the whole row is the surface here, so a
+   saturated fill drowned the description text. `text-shadow: none` is load-bearing
+   — the badge's glow would otherwise still be inherited from nothing, but the
+   point is this row must read as "on sale", not "on fire". */
+.pf-row.pf-deal {
+  border-color: var(--lo-figure);
+  background: linear-gradient(180deg, #fffdf4, #fdf0d4);
+  box-shadow: inset 0 0 0 1px rgba(176, 106, 16, 0.16);
+}
+.pf-row .li {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+.pf-row .li svg { width: 100%; height: 100%; display: block; }
+.pf-row .lt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-row .lt b { font-size: 14px; }
+.pf-row .lt span { font-size: 12px; line-height: 1.3; color: var(--lo-muted); }
+
+.pf-bird-row .li { width: 46px; height: 46px; }
+.pf-swatch {
+  display: block;
+  width: 34px;
+  height: 12px;
+  border-radius: 999px;
+  /* Fallback only — the trail row sets `background` inline, which wins. It
+     exists so that a future regression in that inline value shows up as a
+     neutral grey pill rather than an invisible white one. A trail you paid
+     for, own, and equipped should never render as a blank chip. */
+  background: #f0e8d5;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* The stock line is the whole point of the screen, so it gets its own
+   weight — "Owned 3 / Staged 1" is the sentence the player is here for. */
+/* The stock line is the sentence the player is here for, so it must not break
+   across two lines at 390px — "Owned: 0" over "Staged: 0" reads as a layout
+   accident rather than as two numbers. The row gives up width first (see the
+   tighter `.pf-actions` below) before this line is allowed to wrap. */
+.pf-stock { display: flex; flex-wrap: nowrap; gap: 4px 8px; margin-top: 3px; min-width: 0; }
+.pf-stock .pf-stock-count { font-size: 11px; color: var(--lo-muted); }
+.pf-stock .pf-stock-count b { color: var(--ink); font-size: 12px; }
+.pf-stock .pf-stock-spare {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(127, 232, 200, 0.24);
+  color: var(--lo-good);
+}
+
+.pf-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
+/* Fixed-width steppers: `+` must sit in the same place on every row, or a
+   player scanning the column cannot tell which button belongs to which
+   booster. */
+.pf-actions .step {
+  width: 28px;
+  min-width: 28px;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 0;
+}
+.pf-actions .buy { min-width: 52px; }
+.pf-actions .mini-btn[disabled] { opacity: 0.4; }
+
+.pf-more { margin: 0 0 12px; }
+.pf-more > summary {
+  cursor: pointer;
+  padding: 8px 11px;
+  font-size: 12px;
+  color: var(--lo-muted);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px dashed var(--lo-dashed);
+  border-radius: 12px;
+}
+.pf-more[open] > summary { margin-bottom: 8px; }
+
+.pf-empty, .pf-warn {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 12px;
+}
+.pf-empty { background: rgba(127, 232, 200, 0.16); color: var(--lo-good); }
+.pf-warn { background: rgba(255, 168, 92, 0.2); color: var(--lo-warn); }
+
+@media (max-width: 359px) {
+  .pf-row { flex-wrap: wrap; }
+  .pf-actions { width: 100%; justify-content: flex-end; }
 }

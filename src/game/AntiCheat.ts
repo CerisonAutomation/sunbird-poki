@@ -1,6 +1,5 @@
-import { BOOST_EXTRA_SPEED, MAX_SPEED_FEVER } from "./constants";
-import { SKINS } from "./Economy";
-import { endlessSpeedScale } from "./FlightProgression";
+import { BOOST_EXTRA_SPEED, MAX_MODE_SPEED_BONUS, MAX_SKIN_SPEED_MULT, MAX_SPEED_FEVER } from "./constants";
+import { ENDLESS_SPEED_SCALE_MAX } from "./FlightProgression";
 import type { ScoreSubmission } from "./Leaderboard";
 
 export type VerificationResult = {
@@ -10,59 +9,64 @@ export type VerificationResult = {
 };
 
 /**
- * The fastest a run may legally average, derived from the same expression
- * `Bird.step()` uses for its own cap — every term of it, this time.
+ * The fastest a run may legally average, derived from the physics rather than
+ * typed in.
  *
- * History, because it has now been wrong twice in the same way. It was first a
- * literal `120`, below the bird's own ceiling, so a fever-and-boost run was
- * quarantined as cheating. That was "fixed" to `MAX_SPEED_FEVER +
- * BOOST_EXTRA_SPEED` (170) with a comment claiming the number was now derived
- * from the physics. It was not. `Bird.step()` computes:
+ * It used to be a literal `120`, which is below the bird's own ceiling, so
+ * every fever-and-boost run was quarantined as cheating. Replacing it with
+ * `MAX_SPEED_FEVER + BOOST_EXTRA_SPEED` fixed that instance but left the same
+ * bug one layer down: `Bird.step` computes its cap as
  *
- *     cap = (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult
- *           + (boost ? BOOST_EXTRA_SPEED : 0)
+ *     (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (boost ? BOOST_EXTRA_SPEED : 0)
  *
- * and `Game.fixedUpdate()` passes
- * `speedMult = skin.speedMult * challengeMods.speedMult * escalateMult()`.
- * Two of those three factors were missing from the "derived" constant. Driving
- * the shipped `Bird` with fever + boost + a 1.08 skin at island 8, t=600 s in
- * an escalating mode measures **235.9 m/s** — 39% above the gate that was
- * supposed to bound it, so a strong endless run was quarantined for being
- * strong. Exactly the defect the previous comment said it had removed.
+ * and `opts.speedMult` is NOT 1 in a real run. `Game.fixedUpdate` passes
+ * `skin.speedMult * challengeMods.speedMult * escalateMult()`, so a 1.08 skin
+ * in a long escalating run reaches a cap of
+ * 128 * 1.08 * 1.55 + 42 = 256.3 m/s. The gate said 170, so the fastest
+ * legitimate runs — exactly the players a leaderboard is for — were still being
+ * quarantined, and `MIN_DURATION_MS_PER_100M` was derived from the same wrong
+ * number, so both checks agreed with each other and disagreed with the game.
  *
- * So it is computed from the constants and the tables now, not transcribed
- * from them:
- *   · `MAX_SPEED_FEVER` — the fever branch, always the higher of the two;
- *   · the largest `speedMult` any purchasable skin grants (read from SKINS,
- *     so a new skin raises the ceiling automatically);
- *   · the asymptote of `endlessSpeedScale()`, probed rather than re-derived,
- *     so a change to the curve cannot silently desynchronise the two;
- *   · `BOOST_EXTRA_SPEED`, which is additive and therefore applies last.
+ * So the ceiling multiplies out the same three factors the physics does. The
+ * challenge half is omitted deliberately: `CHALLENGE_MODS` only ever *lowers*
+ * speed (`heavy_wings` is 0.95, everything else 1), so it cannot raise the cap.
  *
- * `MAX_CHALLENGE_SPEED_MULT` is 1: every challenge modifier currently slows
- * the bird (`heavy_wings` is 0.95) and none speeds it up. It is named rather
- * than omitted so that adding a fast modifier is a visible edit here.
+ * There is a FOURTH term, and it was the one still missing. `Bird.step`'s cap
+ * is
  *
- * `anticheat.test.ts` asserts this against a live simulation rather than
- * against a number, which is the only way this stays true.
+ *     (fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult
+ *       + (boost ? BOOST_EXTRA_SPEED : 0)
+ *       + (opts.speedBonus ?? 0)
+ *
+ * and `opts.speedBonus` is `Game.modeSpeedBonus` — the mode-surge headroom
+ * (slalom warp's 18 m/s being the largest). A slalom run carries a real
+ * `modeSpeedBonus`, so the ceiling has to count it. Measured with the real
+ * `Bird` at fever + boost + max skin + full escalation + slalom: **270.69 m/s
+ * of legitimate flight against a 256.27 m/s gate.** The game was quarantining
+ * its own fastest, most legitimate runs — the exact failure this constant is
+ * supposed to make impossible, reintroduced one term down.
+ *
+ * `anticheat.test.ts` drives the real `Bird` at these settings and fails if
+ * this ceiling is ever lower than what the bird actually reaches.
  */
-const MAX_SKIN_SPEED_MULT = SKINS.reduce((m, s) => Math.max(m, s.speedMult), 1);
-const MAX_CHALLENGE_SPEED_MULT = 1;
-/** The escalation curve's asymptote, probed from the function itself. */
-const MAX_ESCALATE_MULT = endlessSpeedScale(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-
-export const MAX_LEGAL_SPEED_MPS =
-  MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * MAX_CHALLENGE_SPEED_MULT * MAX_ESCALATE_MULT + BOOST_EXTRA_SPEED;
-
-const MAX_SPEED_MPS = MAX_LEGAL_SPEED_MPS;
+const MAX_SPEED_MPS =
+  MAX_SPEED_FEVER * MAX_SKIN_SPEED_MULT * ENDLESS_SPEED_SCALE_MAX + BOOST_EXTRA_SPEED + MAX_MODE_SPEED_BONUS;
 
 /**
  * The slowest a run may legally average, as ms per 100 m. Derived from the same
- * ceiling so the two checks cannot contradict each other — the old companion
- * constant (500 ms/100 m) implied a 200 m/s ceiling while the speed gate said
- * 120, so one of the two could never fire.
+ * ceiling so the two checks cannot contradict each other.
  */
 const MIN_DURATION_MS_PER_100M = (100 / MAX_SPEED_MPS) * 1000;
+
+/**
+ * Exported so `anticheat.test.ts` can read the client's real numbers back and
+ * compare them with `server/src/anticheat/limits.ts`. The server is the side
+ * that actually decides, and the two had drifted apart silently: the server
+ * still rejected above 120 m/s while the client had already moved to 170, so a
+ * legal fast run was accepted locally and then thrown away on submission.
+ */
+export const ANTICHEAT_MAX_SPEED_MPS = MAX_SPEED_MPS;
+export const ANTICHEAT_MIN_MS_PER_100M = MIN_DURATION_MS_PER_100M;
 
 export function verifyRunSubmission(
   submission: Partial<ScoreSubmission> & { distance?: number; score?: number; durationMs?: number },

@@ -15,43 +15,62 @@ const smArtwork = {
   half_day:   '<path d="M4.5 13a5.5 5.5 0 0 1 11 0Z" fill="#ffd86b"/><path d="M2 13h16" stroke="#f5a623" stroke-width="1.5" stroke-linecap="round"/>',
   fire:       '<path d="M10 18c-4 0-6.5-3.5-5-7 0 0 1 2 2 2C6 9 9 4 10 4c0 2 2.5 3.5 3 6 1-1 1-2 1-3 2 2 2 4.5 1 7 1 0 2-1 2-2 0 2.5-2 6-7 6Z" fill="#ed974a"/>',
   // ── objects / items ────────────────────────────────────────────────────────
-  coin:       '<circle cx="10" cy="10" r="7" fill="#ffd86b"/><circle cx="10" cy="10" r="4.5" fill="none" stroke="#f5a623" stroke-width="1.3"/>',
+  // One closed curve, one open highlight — the same rule COIN_SVG follows and
+  // the same reason. This glyph was a filled disc with a stroked ring at
+  // r=4.5, which at 20px is a second concentric circle inside the first: the
+  // "two coins" defect, reintroduced in a second file. The highlight is an
+  // OPEN arc so the metal still catches light without adding a closed curve.
+  coin:       '<circle cx="10" cy="10" r="7.2" fill="#ffd86b" stroke="#f5a623" stroke-width="1.1"/><path d="M6.2 8.2A5 5 0 0 1 9 5.4" fill="none" stroke="#fff6d8" stroke-width="1.6" stroke-linecap="round"/>',
   gem:        '<path d="M10 3L4.5 8.5l5.5 8.5 5.5-8.5Z" fill="#8dbfb0"/><path d="M4.5 8.5h11" stroke="white" stroke-width=".9"/><path d="M7 8.5L10 3l3 5.5" fill="#a9d2aa"/>',
   crystal:    '<path d="M10 2L5.5 7l4.5 11 4.5-11Z" fill="#a292cf"/><path d="M5.5 7h9M7.5 7L10 2l2.5 5" stroke="#e2d5f4" stroke-width=".9"/>',
   crown:      '<path d="M3 14.5l1.5-8 3 4 2.5-7 2.5 7 3-4 1.5 8Z" fill="#ffd86b"/><rect x="3" y="14.5" width="14" height="2.5" rx=".5" fill="#f5a623"/>',
   shield:     '<path d="M10 2.5L3 6v5Q3 16.5 10 18 17 16.5 17 11V6Z" fill="#5ad8ff"/><path d="M6.5 8.5l3 3.5 4.5-5" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
-  feather:    '<path d="M5.5 17C4 8 15.5 2 17 4c-3.5 1-4.5 3.5-5.5 6.5l4-4.5-1.5 2L11 11.5l2-1.5L8.5 17" fill="none" stroke="#d2bd96" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  feather:    '<path d="M5 17.5C5.6 10 10.4 3.6 16.8 3c.5 6.4-4.6 11.6-11.2 12.6" fill="#e4d3b4" stroke="#b08a5c" stroke-width="1"/><path d="M5 17.5 14.6 6.2" fill="none" stroke="#b08a5c" stroke-width="1.2" stroke-linecap="round"/>',
   rocket:     '<path d="M10 2c-2 4-2 8-2 10l2 5 2-5c0-2 0-6-2-10Z" fill="#ed974a"/><path d="M7 12l-2 4h10l-2-4" fill="#e87853"/><circle cx="10" cy="8" r="1.3" fill="#fff0c9" stroke="none"/>',
-  comet:      '<circle cx="13.5" cy="6.5" r="3" fill="#ffd86b"/><path d="M10.7 9.3l-7 7M9.3 11l-5 5.5" stroke="#f5a623" stroke-width="1.6" stroke-linecap="round"/>',
+  // The old comet was a bare disc on three stick strokes, which at 20px reads
+  // as a magnifying glass on a handle, not a rock with a tail. The taper has to
+  // be a FILLED wedge, not strokes: strokes all share a width, so they cannot
+  // thin out toward the tail the way a comet does.
+  comet:      '<circle cx="13.4" cy="6.6" r="3.5" fill="#ffd86b" stroke="#f5a623" stroke-width="1.1"/><path d="M10.9 8.7 3.1 16.4q-1 1-1.4-.2-.3-.9.5-1.5L10.2 7.5Z" fill="#ffb347"/><path d="M17.4 12.4 18.3 14l1.6.9-1.6.9-.9 1.6-.9-1.6-1.6-.9 1.6-.9Z" fill="#ffe9a8"/>',
   magnet:     '<path d="M5 5.5h3v6a2 2 0 0 0 4 0v-6h3" fill="none" stroke="#a292cf" stroke-width="2.5" stroke-linecap="round"/><path d="M5 5.5v3.5M15 5.5v3.5" stroke="#7a70d0" stroke-width="2.5" stroke-linecap="round"/>',
   badge:      '<path d="M10 2l2 4h4.5l-3.7 2.7 1.4 4.3L10 10.5l-4.2 2.5 1.4-4.3L3.5 6H8Z" fill="#ffd86b"/><path d="M7 12l-1.5 5.5 4.5-2.5 4.5 2.5L13 12" fill="#f5a623"/>',
   dice:       '<rect x="2.5" y="2.5" width="15" height="15" rx="2.5" fill="#a4c7ac"/><circle cx="7" cy="7" r="1.3" fill="white"/><circle cx="13" cy="7" r="1.3" fill="white"/><circle cx="7" cy="13" r="1.3" fill="white"/><circle cx="13" cy="13" r="1.3" fill="white"/><circle cx="10" cy="10" r="1.3" fill="white"/>',
   trophy:     '<path d="M6.5 4h7v5.5Q13.5 14 10 14T6.5 9.5Z" fill="#ffd86b"/><path d="M5 4H3v3q0 4 3.5 4M15 4h2v3q0 4-3.5 4" fill="none" stroke="#f5a623" stroke-width="1.5"/><path d="M8.5 14h3v3h3.5v2H5V17h3.5Z" fill="#b9874b"/>',
   rainbow:    '<path d="M3.5 16.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="#e87853" stroke-width="2.5"/><path d="M5.5 16.5a4.5 4.5 0 0 1 9 0" fill="none" stroke="#ffd86b" stroke-width="2"/><path d="M7.5 16.5a2.5 2.5 0 0 1 5 0" fill="none" stroke="#72a28c" stroke-width="1.5"/>',
   // ── navigation / symbols ───────────────────────────────────────────────────
-  swords:     '<path d="M5 5l10 10M15 5L5 15" stroke="#9bb7b0" stroke-width="2.5" stroke-linecap="round"/><path d="M5 5l2.5.5-.5-2.5M15 5l-2.5.5.5-2.5M5 15l2.5-.5-.5 2.5M15 15l-2.5-.5.5 2.5" fill="#9bb7b0" stroke="none"/>',
+  // Two diagonal strokes alone are just an X, and X means "close". The blades
+  // need points and a crossguard each, or the glyph lies about what it is.
+  swords:     '<path d="M3.4 2.8 9.4 8.8 8 10.2 2 4.2Z" fill="#cdd8e4"/><path d="M16.6 2.8 10.6 8.8 12 10.2 18 4.2Z" fill="#cdd8e4"/><path d="M7.2 10.4 12.8 16" stroke="#e08b3a" stroke-width="1.9" stroke-linecap="round"/><path d="M12.8 10.4 7.2 16" stroke="#e08b3a" stroke-width="1.9" stroke-linecap="round"/><path d="M6.4 8.6 8.8 11M13.6 8.6 11.2 11" stroke="#8b6a4a" stroke-width="1.6" stroke-linecap="round"/>',
   flag:       '<path d="M5 2.5v15" stroke="#695541" stroke-width="1.8" stroke-linecap="round"/><rect x="5" y="2.5" width="12" height="8" fill="#f1c285"/><rect x="5" y="2.5" width="4" height="4" fill="#695541" opacity=".65"/><rect x="9" y="6.5" width="4" height="4" fill="#695541" opacity=".65"/><rect x="13" y="2.5" width="4" height="4" fill="#695541" opacity=".65"/>',
   lightning:  '<path d="M13 2L7 10.5h5.5L6 18l10.5-9.5H11Z" fill="#ffd86b"/>',
   infinity:   '<path d="M13.5 8.5a1.5 1.5 0 0 1 0 3 4.5 4.5 0 0 1-3.5-1.5 4.5 4.5 0 0 1-3.5 1.5 1.5 1.5 0 0 1 0-3 4.5 4.5 0 0 1 3.5 1.5A4.5 4.5 0 0 1 13.5 8.5Z" fill="none" stroke="#a292cf" stroke-width="2.5" stroke-linecap="round"/>',
   target:     '<circle cx="10" cy="10" r="7.5" fill="none" stroke="#ed974a" stroke-width="1.5"/><circle cx="10" cy="10" r="4.5" fill="none" stroke="#ed974a" stroke-width="1.5"/><circle cx="10" cy="10" r="1.5" fill="#ed974a"/>',
-  spiral:     '<path d="M10 10a2 2 0 0 0 0 3.5 4 4 0 0 0 0-6.5 6 6 0 0 0 0 9 8 8 0 1 1-2-15" fill="none" stroke="#a292cf" stroke-width="2" stroke-linecap="round"/>',
+  spiral:     '<path d="M10 10a1.6 1.6 0 1 0 0 3.2 3.2 3.2 0 1 0 0-6.4 4.8 4.8 0 1 0 0 9.6 6.4 6.4 0 1 0 6.4-6.4" fill="none" stroke="#a292cf" stroke-width="1.9" stroke-linecap="round"/>',
   // ── geography ──────────────────────────────────────────────────────────────
   mountain:   '<path d="M10 3L2.5 17h15Z" fill="#9bb7b0"/><path d="M10 3L7 11.5l3-2 3 2L10 3Z" fill="white" opacity=".3"/>',
-  volcano:    '<path d="M10 3L2.5 17h15Z" fill="#b9874b"/><path d="M8 3.5C7 2 6 3.5 6 3.5s2-2.5 4 0c2-2.5 4 0 4 0s-1.5-1.5-2 0" fill="#ed974a"/>',
+  // A symmetrical triangle in a bowl is a tent. The two cues that say "volcano"
+  // are the smoke above the rim and the lava spilling out of it, so both are
+  // explicit shapes rather than the crater being implied by a colour change.
+  volcano:    '<path d="M3.4 16.6 7.8 7.2h4.4l4.4 9.4Z" fill="#8a6a52"/><path d="M7.8 7.2h4.4l-.9 1.8H8.7Z" fill="#ffb347"/><path d="M8.4 4.2q-.4-1.4.9-2.2M11.4 3.8q.2-1.4 1.5-1.8" stroke="#c9b8a4" stroke-width="1.3" stroke-linecap="round" fill="none"/><path d="M2.4 16.6h15.2" stroke="#5c4534" stroke-width="1.6" stroke-linecap="round"/>',
   island:     '<ellipse cx="10" cy="16" rx="7" ry="2" fill="#5ad8ff" opacity=".8"/><path d="M10 15.5V8.5" stroke="#b9874b" stroke-width="1.8" stroke-linecap="round"/><path d="M10 8.5C9 4.5 5.5 5.5 5.5 5.5s3 4 4.5 3" fill="#72a28c"/><path d="M10 8.5c1-4 4.5-3 4.5-3s-3 4-4.5 3" fill="#72a28c" opacity=".8"/>',
   dunes:      '<path d="M1.5 17q3-7.5 5-5t4-3.5 5.5 8.5Z" fill="#f1c285"/><path d="M5.5 17q2-6 4-3.5t4-1.5 5 5Z" fill="#e8b86d" opacity=".7"/>',
   buildings:  '<path d="M2.5 17V9h3.5v8M6 17V6h4v11M10 17V11h3v6M13 17V8h4v9" fill="#a4c7ac"/><path d="M2.5 17h15" stroke="#72a28c" stroke-width="1.2"/>',
   shell:      '<path d="M10 4.5a5.5 5.5 0 0 1 5.5 5.5 4.5 4.5 0 0 1-4.5 4.5 3.5 3.5 0 0 1-3.5-3.5 2.5 2.5 0 0 1 2.5-2.5 2 2 0 0 1 2 2" fill="none" stroke="#b9874b" stroke-width="2" stroke-linecap="round"/>',
   // ── creatures ──────────────────────────────────────────────────────────────
-  bird:       '<path d="M3 10q3.5-7 7 0t7 0" fill="none" stroke="#ed974a" stroke-width="2.8" stroke-linecap="round"/><path d="M10 10q0 3.5 1 5" fill="none" stroke="#ed974a" stroke-width="1.5" stroke-linecap="round"/>',
+  // The old bird was a symmetric gull blob with no head, no beak and no eye —
+  // indistinguishable from `eagle` sitting next to it in the same grid, and
+  // unreadable as a bird at 16px. A side profile with a beak and an eye is the
+  // only version that survives the small sizes, and it stays distinct from the
+  // eagle's spread-wing silhouette.
+  bird:       '<ellipse cx="9.4" cy="12.6" rx="4.6" ry="3.8" fill="#e8a33d"/><circle cx="14.6" cy="9.4" r="2.7" fill="#f2b45a"/><path d="M16.8 9 19 9.9 16.9 11Z" fill="#c97f1f"/><circle cx="15.2" cy="8.8" r=".7" fill="#4a3312"/><path d="M8.6 11.4q3-3.4 6-1.4-2.8 3.2-6 1.4Z" fill="#f7cf8e"/><path d="M5.4 13.6 2.2 16.4l4-1.2Z" fill="#c97f1f"/>',
   ghost:      '<path d="M10 3a5.5 5.5 0 0 0-5.5 5.5V17l2 1.5 1.8-1.5 1.7 1.5 1.8-1.5L13.5 18.5 15.5 17V8.5A5.5 5.5 0 0 0 10 3Z" fill="#eef2f5"/><circle cx="8" cy="8.5" r="1.1" fill="#3d4739"/><circle cx="12" cy="8.5" r="1.1" fill="#3d4739"/>',
   flock:      '<path d="M2 9q2-3.5 3.5 0t3.5 0M9 6.5q2.5-4 4 0t4 0M5 13q2-3.5 3.5 0t3.5 0" fill="none" stroke="#ed974a" stroke-width="1.8" stroke-linecap="round"/>',
-  egg:        '<ellipse cx="10" cy="11" rx="5.5" ry="7" fill="#ffd86b"/><ellipse cx="10" cy="11" rx="3.5" ry="5" fill="none" stroke="#f5a623" stroke-width=".9" opacity=".5"/>',
-  eagle:      '<path d="M2 10.5q4.5-5.5 8-2t8 2" fill="#9bb7b0"/><path d="M10 8.5v7M7.5 13l-5.5 4M12.5 13l5.5 4" stroke="#695541" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
+  egg:        '<ellipse cx="10" cy="10.6" rx="5.4" ry="6.9" fill="#ffd86b" stroke="#f5a623" stroke-width="1"/><path d="M7.2 9.4a3.4 3.4 0 0 1 1.8-3.3" fill="none" stroke="#fff6d8" stroke-width="1.3" stroke-linecap="round"/>',
+  eagle:      '<path d="M1.6 11q3-6 8.4-3.2Q17.4 5 20.4 11q-3.4-.6-5.6 1 2.4 1.4 3 3.4-3-1-5.4-.2L10 18l-2.4-2.8q-2.4-.8-5.4.2.6-2 3-3.4-2.2-1.6-5.6-1Z" fill="#9bb7b0"/>',
   // ── wing types ─────────────────────────────────────────────────────────────
   glide:      '<path d="M2 14q5.5-10 13-9-3 4.5-5.5 6l5.5-1.5q-2.5 4-6 5.5Q6 15.5 2 14Z" fill="#72a28c"/>',
   wing:       '<path d="M2.5 13q5-9.5 11.5-8.5-3 4.5-5 5.5l5-1q-2.5 3.5-5.5 5.5Q5.5 14.5 2.5 13Z" fill="#a4c7ac"/>',
-  weight:     '<rect x="7" y="10" width="6" height="7" rx="1" fill="#9bb7b0"/><path d="M5.5 8.5h9l-1 1.5H6.5Z" fill="#a4c7ac"/><path d="M10 2.5v6M8.5 4l1.5-1.5L11.5 4" stroke="#9bb7b0" stroke-width="1.5" stroke-linecap="round" fill="none"/>',
+  weight:     '<path d="M2.5 8.6h2.8v2.8H2.5Zm12.2 0h2.8v2.8h-2.8Z" fill="#9bb7b0"/><path d="M5.3 9.2h9.4v1.6H5.3Z" fill="#7fa89c"/><path d="M7.6 5.4h4.8v3.2H7.6Z" fill="#a4c7ac" stroke="#5f8a7e" stroke-width="1"/>',
   paper_wing: '<path d="M2 14.5L10 2.5l8 12-8-3Z" fill="#f1c285"/><path d="M10 2.5L2 14.5l8-3 8 3L10 2.5Z" fill="none" stroke="#d2bd96" stroke-width=".9"/><path d="M10 11.5v4.5" stroke="#d2bd96" stroke-width=".9"/>',
   // ── weather / air ──────────────────────────────────────────────────────────
   wind:       '<path d="M2 6.5h9a2.5 2.5 0 1 0-2.5-2.5" fill="none" stroke="#5ad8ff" stroke-width="1.8" stroke-linecap="round"/><path d="M2 10.5h13a2.5 2.5 0 1 1-2.5 2.5" fill="none" stroke="#8dbfb0" stroke-width="1.8" stroke-linecap="round"/><path d="M2 14.5h7" stroke="#c8e8ff" stroke-width="1.8" stroke-linecap="round"/>',
@@ -69,11 +88,11 @@ const smArtwork = {
   calendar:   '<rect x="2.5" y="4" width="15" height="13.5" rx="1.8" fill="#f1c285"/><rect x="2.5" y="4" width="15" height="4" rx="1.6" fill="#e87853"/><path d="M6.5 2v3.5M13.5 2v3.5" stroke="#695541" stroke-width="1.7" stroke-linecap="round"/><path d="M6 12h2M9.5 12h2M13 12h1.5M6 15h2M9.5 15h2" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>',
   // ── people & social ────────────────────────────────────────────────────────
   chat:       '<path d="M3 4.5h14a1.5 1.5 0 0 1 1.5 1.5v7a1.5 1.5 0 0 1-1.5 1.5H8l-4 3.5v-3.5H3A1.5 1.5 0 0 1 1.5 13V6A1.5 1.5 0 0 1 3 4.5Z" fill="#a292cf"/><circle cx="7" cy="9.5" r="1.1" fill="#fff"/><circle cx="10" cy="9.5" r="1.1" fill="#fff"/><circle cx="13" cy="9.5" r="1.1" fill="#fff"/>',
-  handshake:  '<path d="M2.5 12l3-3.5 3 2.5-1.5 3-3-1Z" fill="#a4c7ac"/><path d="M17.5 12l-3-3.5-3 2.5 1.5 3 3-1Z" fill="#72a28c"/><path d="M8.5 11h3" stroke="#695541" stroke-width="1.5" stroke-linecap="round"/>',
+  handshake:  '<path d="M1.8 10.2 5 7.2l3.8 2.8-1.4 2.2 2.8 1.8-2.2 2.8-3.2-2.2Z" fill="#a4c7ac"/><path d="M18.2 10.2 15 7.2l-3.8 2.8 1.4 2.2-2.8 1.8 2.2 2.8 3.2-2.2Z" fill="#72a28c"/>',
   wave:       '<path d="M6.5 17.5V10.5L5 8.8a1.3 1.3 0 0 1 1.9-1.8L8 8V3.5a1.25 1.25 0 0 1 2.5 0V8l.8-.4a1.25 1.25 0 0 1 1.6 1.4l-1 3.6a5.3 5.3 0 0 1-5.4 4.9Z" fill="#ffd099"/><path d="M14.5 4q1.5 1.2 1.8 3" stroke="#f5a623" stroke-width="1.2" stroke-linecap="round" fill="none"/>',
   laugh:      '<circle cx="10" cy="10" r="7.5" fill="#ffd86b"/><circle cx="7" cy="8.5" r="1.1" fill="#695541" stroke="none"/><circle cx="13" cy="8.5" r="1.1" fill="#695541" stroke="none"/><path d="M5.5 11.5h9a4.8 4.8 0 0 1-9 0Z" fill="#695541" stroke="none"/><path d="M2.2 6.6q1.5 1.7.5 3M17.8 6.6q-1.5 1.7-.5 3" stroke="#f5a623" stroke-width="1.2" stroke-linecap="round" fill="none"/>',
-  bravo:      '<path d="M2.5 17c0-2.6.9-4.4 1.8-5.8l1.6 2.1V5.6a1.1 1.1 0 0 1 2.2 0v5.2a1.1 1.1 0 0 0 2.2 0V6.4a1.1 1.1 0 0 1 2.2 0v6.8a3.8 3.8 0 0 1-3.8 3.8Z" fill="#ffd099"/><path d="M17.5 17c0-2.6-.9-4.4-1.8-5.8l-1.6 2.1V6.4a1.1 1.1 0 0 0-2.2 0" fill="none" stroke="#f5a623" stroke-width="1.1" opacity=".7" stroke-linecap="round"/>',
-  hand:       '<path d="M7 17.5V10L5 7.8a1.4 1.4 0 0 1 2-2l2 2V3.5a1.3 1.3 0 0 1 2.6 0v4l.6-.4a1.3 1.3 0 0 1 1.8 1.4l-1 4.2A5.6 5.6 0 0 1 7 17.5Z" fill="#ed974a"/><path d="M7 12h6" stroke="#f5a623" stroke-width=".9" fill="none"/>',
+  bravo:      '<path d="M7 17.5V11l-2-2.4a1.2 1.2 0 0 1 1.9-1.5l1.6 1.8V4.4a1.2 1.2 0 0 1 2.4 0v4.4l1.2-.9a1.2 1.2 0 0 1 1.6 1.7l-1.3 4.2a4.4 4.4 0 0 1-4.2 3.7Z" fill="#ffd099"/><path d="M14.2 4.2l.9 1.9 1.9.9-1.9.9-.9 1.9-.9-1.9-1.9-.9 1.9-.9Z" fill="#f5a623" stroke="none"/>',
+  hand:       '<path d="M6.6 17.6V11L4.4 8.4a1.3 1.3 0 0 1 2-1.7l1.6 1.9V4a1.25 1.25 0 0 1 2.5 0v4.6l1.3-1a1.25 1.25 0 0 1 1.7 1.8l-1.4 4.4a4.6 4.6 0 0 1-4.4 3.8Z" fill="#ed974a"/>',
   robot:      '<rect x="3.5" y="6.5" width="13" height="10" rx="2.5" fill="#c8e8ff"/><path d="M10 3v3.5M1.5 11.5H3M17 11.5h1.5" stroke="#5ad8ff" stroke-width="1.5" stroke-linecap="round"/><circle cx="7.5" cy="11" r="1.4" fill="#3d4739" stroke="none"/><circle cx="12.5" cy="11" r="1.4" fill="#3d4739" stroke="none"/><path d="M7.5 14.2h5" stroke="#5ad8ff" stroke-width="1.3" stroke-linecap="round"/>',
   // ── mail / data / storage ──────────────────────────────────────────────────
   mail_in:    '<rect x="2" y="4" width="16" height="12" rx="1.5" fill="#f1c285"/><path d="M2.5 5.6L10 11l7.5-5.4" fill="none" stroke="#b9874b" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -81,10 +100,13 @@ const smArtwork = {
   save:       '<path d="M2.5 4.5h11l4 4V16a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1Z" fill="#9bb7b0"/><rect x="6" y="4.5" width="7" height="4" fill="#eef2f5"/><rect x="5.5" y="11" width="9" height="5" rx="1" fill="#f7e6c6"/>',
   globe:      '<circle cx="10" cy="10" r="7.5" fill="#5ad8ff"/><ellipse cx="10" cy="10" rx="3.4" ry="7.5" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M2.5 10h15" stroke="#fff" stroke-width="1.1"/>',
   // ── tools / measures ───────────────────────────────────────────────────────
-  ruler:      '<path d="M3 3.5V15a1.5 1.5 0 0 0 1.5 1.5H16Z" fill="#c8e8ff" stroke="#5a9c83" stroke-width="1.3" stroke-linejoin="round"/><path d="M7 13l2.5-3M10 13l2.5-3M13 13l2.5-3" stroke="#5a9c83" stroke-width="1.1" stroke-linecap="round"/>',
+  ruler:      '<rect x="2.5" y="6" width="15" height="8" rx="1.6" fill="#c8e8ff" stroke="#5a9c83" stroke-width="1.2"/><path d="M6 6v3M9 6v4.4M12 6v3M15 6v4.4" stroke="#5a9c83" stroke-width="1.2" stroke-linecap="round"/>',
   search:     '<circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="#9bb7b0" stroke-width="2"/><path d="M12.5 12.5l4.5 4.5" stroke="#ed974a" stroke-width="2.4" stroke-linecap="round"/>',
   lock:       '<rect x="4" y="9" width="12" height="8.5" rx="1.8" fill="#ffd86b"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" fill="none" stroke="#b9874b" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="13.2" r="1.3" fill="#695541" stroke="none"/>',
-  boxing:     '<path d="M4.5 12c0-2.5 1.2-4 3-5l2.5-1.5 1.3 1.3 3 1.5c1.6.8 2.2 2.2 1.7 3.8-.6 1.9-2.2 3.2-4.4 3.2H6.5c-1.3 0-2-1-2-3.3Z" fill="#e87853"/><path d="M4.5 12h2.2" stroke="#ffd86b" stroke-width="1.2" fill="none"/>',
+  // The old boxing glove was a featureless red blob with a stray gold tick
+  // floating at its left edge. At 20px a glove only reads if the wrist band and
+  // the thumb lobe are explicit shapes — the mitt alone is just a mitten.
+  boxing:     '<path d="M3.4 11.2c0-3.5 2.3-5.9 5.6-5.9h2.5c2.7 0 4.7 1.9 4.7 4.5 0 1-.3 1.9-.9 2.7 1.1.4 1.8 1.4 1.8 2.6 0 1.8-1.4 3.2-3.2 3.2H7.6c-2.6 0-4.2-2.2-4.2-5Z" fill="#e87853"/><path d="M8.6 5.6q2.6.6 3.6 2.8" stroke="#f0925f" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M4 13.2q3.8-2.2 7.6 0" stroke="#ffd86b" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M4.4 17.6h10.6" stroke="#b8503a" stroke-width="2.2" stroke-linecap="round"/>',
   takeoff:    '<path d="M2.5 16.5h15" stroke="#9bb7b0" stroke-width="1.3" stroke-linecap="round"/><path d="M3 12.5l4-3 3.5 1 3-4 1.5 1-2 3.5 3 .5-2 2.5-3.5.5-2.5 2Z" fill="#c8e8ff"/><path d="M5.5 5l2.5 3.5M10 4l2.5 3" stroke="#5ad8ff" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".75"/>',
   // ── social &amp; sharing ─────────────────────────────────────────────────────
   people:     '<circle cx="7" cy="7" r="2.6" fill="#ed974a"/><path d="M2.5 16.5c0-2.5 2-4.2 4.5-4.2s4.5 1.7 4.5 4.2Z" fill="#ed974a"/><circle cx="14" cy="7.8" r="2.2" fill="#5ad8ff"/><path d="M11 16.5c0-2.1 1.7-3.5 3.6-3.5s3.6 1.4 3.6 3.5Z" fill="#5ad8ff"/>',
@@ -97,18 +119,21 @@ const smArtwork = {
   crate:      '<path d="M3 6.5h14v10.5H3Z" fill="#b9874b"/><path d="M3 6.5 5 3.5h10l2 3" fill="#d2bd96"/><path d="M10 3.5v13.5M3 6.5h14" stroke="#695541" stroke-width="1.2" fill="none"/>',
   // ── results &amp; impact ─────────────────────────────────────────────────────
   boom:       '<circle cx="10" cy="10" r="3.2" fill="#e87853"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3M4 4l2 2M14 14l2 2M16 4l-2 2M6 14l-2 2" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/>',
-  p1:         '<circle cx="10" cy="10" r="7" fill="#ed974a"/><circle cx="10" cy="10" r="3" fill="#fff0c9"/>',
-  p2:         '<circle cx="10" cy="10" r="7" fill="#5ad8ff"/><circle cx="10" cy="10" r="3" fill="#eef2f5"/>',
+  p1:         '<circle cx="10" cy="10" r="7.2" fill="#ed974a" stroke="#c06a2e" stroke-width="1"/><circle cx="10" cy="10" r="2.6" fill="#fff0c9" stroke="none"/>',
+  p2:         '<circle cx="10" cy="10" r="7.2" fill="#5ad8ff" stroke="#2f9ec4" stroke-width="1"/><circle cx="10" cy="10" r="2.6" fill="#eef2f5" stroke="none"/>',
   offline:    '<circle cx="10" cy="10" r="7.5" fill="#9bb7b0"/><path d="M4.2 15.8 15.8 4.2" stroke="#eef2f5" stroke-width="2.4" stroke-linecap="round"/>',
   cosmos:     '<circle cx="10" cy="10" r="7.5" fill="#a292cf"/><ellipse cx="10" cy="10" rx="8" ry="2.8" fill="none" stroke="#e2d5f4" stroke-width="1.5" transform="rotate(-25 10 10)"/><circle cx="14" cy="6.2" r="1.3" fill="#ffd86b" stroke="none"/>',
   tornado:    '<path d="M3 4.5h14M4.5 7.5h11M6 10.5h8M7.5 13.5h5M9 16.5h2" stroke="#c8e8ff" stroke-width="2" stroke-linecap="round" fill="none"/>',
   fullscreen:      '<path d="M7 2.5H4a1.5 1.5 0 0 0-1.5 1.5v3M13 2.5h3A1.5 1.5 0 0 1 17.5 4v3M7 17.5H4A1.5 1.5 0 0 1 2.5 16v-3M13 17.5h3a1.5 1.5 0 0 0 1.5-1.5v-3" fill="none" stroke="#799b91" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
-  fullscreen_exit: '<path d="M8 2.5v4M2.5 8h4M12 2.5v4M17.5 8h-4M8 17.5v-4M2.5 12h4M12 17.5v-4M17.5 12h-4" fill="none" stroke="#799b91" stroke-width="2" stroke-linecap="round"/>',
+  // This was four isolated tick marks — four plus signs — which paired with
+  // `fullscreen`'s corner brackets to look like an unrelated icon. Exit is
+  // brackets plus arrows that point INWARD; a bare X here reads as "close".
+  fullscreen_exit: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" stroke="#72a28c" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.4 6.6 6 8m0 0 1.4 1.4M8 8 6.6 6.6M12.6 6.6 14 8m0 0-1.4 1.4M12 8l1.4-1.4M13.4 8 15 6.6M6.6 13.4 8 12m0 0-1.4-1.4M8 12l1.4 1.4M6.6 12 5 13.4M13.4 13.4 12 12m0 0 1.4-1.4M12 12l-1.4 1.4M13.4 12 15 13.4" stroke="#4e7a63" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   // ── ui chrome ──────────────────────────────────────────────────────────────
   pause:      '<rect x="4.5" y="4" width="4" height="12" rx="1.2" fill="#a4c7ac"/><rect x="11.5" y="4" width="4" height="12" rx="1.2" fill="#a4c7ac"/>',
   check:      '<path d="M3 10l5 5.5 9-10.5" stroke="#72a28c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   question:   '<path d="M7.5 7.5a2.5 2.5 0 0 1 5 .5c0 2-2.5 2.5-2.5 4.5" stroke="#9bb7b0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="10" cy="15.5" r="1.3" fill="#9bb7b0"/>',
-  castle:     '<path d="M4.5 17V8.5h3V7h-3V5H3v3.5h1.5V17M11.5 17V8.5h3V7h-3V5H10v3.5h1.5V17M4.5 17h11M7.5 17v-4.5h5V17" fill="none" stroke="#9bb7b0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  castle:     '<path d="M3 17V7h1.6v1.4h1.6V7h1.6v10M12.2 17V7h1.6v1.4h1.6V7h1.6v10M3 17h14" fill="none" stroke="#9bb7b0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.4 17v-4.2a1.6 1.6 0 0 1 3.2 0V17" fill="#9bb7b0"/>',
   hourglass:  '<path d="M5 3h10M5 17h10" stroke="#a4c7ac" stroke-width="1.5" stroke-linecap="round"/><path d="M5.5 3l4.5 6 4.5-6M5.5 17l4.5-6 4.5 6" fill="#a4c7ac"/>',
   spin:       '<path d="M10 3a7 7 0 1 1-5 2" fill="none" stroke="#ffd86b" stroke-width="2.5" stroke-linecap="round"/><path d="M5 2v3.5H1.5" fill="none" stroke="#ffd86b" stroke-width="2" stroke-linecap="round"/>',
   piggy:      '<ellipse cx="10.5" cy="10.5" rx="7" ry="6" fill="#ffa8e0"/><circle cx="8" cy="9" r="1.2" fill="#fff" opacity=".7"/><path d="M7 13q3 2 6 0" fill="none" stroke="#d07fb0" stroke-width="1.2" stroke-linecap="round"/><path d="M17 8.5l1.5-2" stroke="#d07fb0" stroke-width="1.5" stroke-linecap="round"/>',
@@ -116,54 +141,84 @@ const smArtwork = {
 
 export type SmIconName = keyof typeof smArtwork;
 
-/** Small inline SVG icon (20×20). Safe to insert as innerHTML — no user data. */
 /**
- * Small inline icon for a named icon.
+ * Every name an icon renderer will accept, as a runtime Set.
  *
- * It used to return "" for anything it did not recognise, which is how the
- * UI ended up with bare words where an icon belongs. Two call patterns hit
- * that path constantly:
- *
- *  · fields named `emoji` (`w.emoji`, `s.biomeEmoji`, `activeWorld.emoji`)
- *    hold an actual character, not a name — so the lookup missed and the
- *    icon silently vanished, leaving the label alone on the row;
- *  · `s.wings.icon` is already a resolved GLYPH by the time it arrives (see
- *    GrowthLedger), so the same thing happened on the wings pill.
- *
- * An icon slot that renders nothing is worse than one that renders a dot:
- * the layout still reserves the gap, so the text sits adrift from where the
- * grid expects it. That is most of the reported "text overlaps" too.
- *
- * Now it degrades in order: authored artwork, then the text glyph for a
- * known name, then the value itself when it is already a short glyph, and
- * only then a neutral marker. It never returns empty and never emits a
- * bare identifier.
+ * Exported so the coverage test can enumerate the map instead of re-typing it:
+ * a list of 95 strings maintained next to the artwork is a second thing to keep
+ * in sync, and a test written against the copy would stay green the day the
+ * copy rotted.
  */
-/** Neutral stand-in for an unmapped icon name. A small filled dot reads as
- *  "a marker" in every font that has Geometric Shapes, which is all of them. */
-const FALLBACK_GLYPH = "\u25aa";
+export const SM_ICON_NAMES: ReadonlySet<string> = new Set(Object.keys(smArtwork));
 
-export function menuIconSm(name: string): string {
-  const art = smArtwork[name as SmIconName];
-  if (art) {
-    return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
+/**
+ * One loud place for "this icon name does not exist".
+ *
+ * Icon names reach these renderers from *data* — `ev.icon`, `m.icon`,
+ * `mode.icon`, a wing tier, a chapter head — so nothing but a runtime map lookup
+ * can tell a typo from a real name. Three separate renderers each handled the
+ * miss differently and all three were visible on the results card:
+ *
+ *   - `iconGlyph` returned the raw name, so a miss printed the word "trophy"
+ *     into a results row in place of the picture.
+ *   - `menuIconSm` returned `""`, so a miss made the icon vanish silently.
+ *   - `menuIcon` interpolated `undefined`, printing the word "undefined".
+ *
+ * The fix is not three `if`s — it is that a miss can never become text again.
+ * Every renderer now routes through here, and the answer is always *drawn
+ * something or nothing*. Never a word.
+ *
+ * Loud in development, silent in production: `import.meta.env.DEV` folds to
+ * `false` at build time, so the shipped bundle carries the quiet branch. The
+ * regression guard that actually holds the line is `icon-coverage.test.ts`,
+ * which fails the build if any name in use is absent from any map — a console
+ * message nobody reads is not a guard.
+ *
+ * `console.debug`, not `console.warn`: `verify:prod` bans `log`/`warn`/`info`
+ * anywhere under `src/`, and admits `console.error` (observability) and
+ * `console.debug` (gated telemetry) as the two deliberate levels. A dev-only
+ * diagnostic is exactly that second category, so it uses the level the gate
+ * already allows rather than an exemption written for this one call.
+ */
+function unknownIcon(where: string, name: string): void {
+  if (import.meta.env.DEV) {
+    console.debug(`[MenuIcons] ${where}: no icon named "${name}" — rendering nothing. Add it to the map or fix the caller's data.`);
   }
-  return `<span class="icon-sm icon-sm-glyph" aria-hidden="true">${iconMarkText(name)}</span>`;
+}
+
+/** True when `name` is a real small-icon key. Used by callers that supply names. */
+export function isSmIconName(name: string): name is SmIconName {
+  return SM_ICON_NAMES.has(name);
 }
 
 /**
- * The plain-text mark for a value that may be an icon name, an already
- * resolved glyph, or junk. Shared by menuIconSm and the toast path so both
- * degrade the same way.
+ * Narrow an untrusted name to a real one, or fall back.
+ *
+ * The beat/chapter/mode icon fields are plain `string`s all the way up from
+ * save data, so the renderer is the first place that can know. Normalising here
+ * means the *name* stops being a thing renderers have to trust.
  */
-export function iconMarkText(value: string): string {
-  const v = (value ?? "").trim();
-  if (!v) return FALLBACK_GLYPH;
-  if (hasIconGlyph(v)) return smGlyph[v as SmIconName];
-  // Already a glyph (one or two code points, no ASCII letters) — pass it
-  // through rather than replacing a perfectly good symbol with a dot.
-  if (![...v].some((c) => /[A-Za-z0-9_]/.test(c)) && [...v].length <= 3) return v;
-  return FALLBACK_GLYPH;
+export function smIconNameOr(name: string | undefined | null, fallback: SmIconName): SmIconName {
+  return name && SM_ICON_NAMES.has(name) ? (name as SmIconName) : fallback;
+}
+
+/** Small inline SVG icon (20×20). Safe to insert as innerHTML — no user data. */
+export function menuIconSm(name: string): string {
+  if (!name) return "";
+  // Own-property check, NOT truthiness. `smArtwork` is an object literal, so
+  // `smArtwork["constructor"]` resolves up the prototype chain to
+  // `Object.prototype.constructor` — a *function*, which is truthy. An
+  // `if (!art)` guard waves it straight through and the markup becomes
+  // `<svg …>function Object() { [native code] }</svg>`: the same
+  // lookup-failure-becomes-a-word defect this function was fixed for, reached
+  // through `"constructor"` / `"toString"` / `"valueOf"` / `"__proto__"` instead
+  // of through a typo. `Set.has` is an own-key test and cannot be inherited.
+  const art = SM_ICON_NAMES.has(name) ? smArtwork[name as SmIconName] : undefined;
+  if (!art) {
+    unknownIcon("menuIconSm", name);
+    return "";
+  }
+  return `<svg class="icon-sm" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">${art}</svg>`;
 }
 
 /** One-character text glyph for a named icon — used in plain-text contexts
@@ -174,13 +229,13 @@ const smGlyph: Record<SmIconName, string> = {
   sun: "☀︎", moon: "☽", star: "★", cloud: "◌", aurora: "≋", leaf: "✿",
   snowflake: "✻", half_day: "◑", fire: "◉",
   coin: "●", gem: "◆", crystal: "✦", crown: "♛", shield: "◈",
-  feather: "❧", rocket: "▲", comet: "☄︎", magnet: "⊕", badge: "⊛",
+  feather: "❧", rocket: "▲", comet: "☄︎", magnet: "⊕", badge: "⬟",
   dice: "⚄", trophy: "◎", rainbow: "〜",
   swords: "✕", flag: "⚑", lightning: "↯", infinity: "∞", target: "⊚", spiral: "◎",
   mountain: "△", volcano: "▲", island: "◬", dunes: "≈", buildings: "⊞", shell: "◐",
-  bird: "◇", ghost: "◍", flock: "◈", egg: "○", eagle: "◆",
+  bird: "⬨", ghost: "◍", flock: "⬩", egg: "○", eagle: "⬦",
   glide: "⟿", wing: "≫", weight: "▼", paper_wing: "△",
-  pause: "‖", check: "✓", question: "?", castle: "⛫︎", hourglass: "⧖", spin: "◷", piggy: "○",
+  pause: "❙❙", check: "✓", question: "?", castle: "⛫︎", hourglass: "⧖", spin: "◷", piggy: "○",
   wind: "⇝", thermal: "♨", storm: "☈", ash_storm: "☁", sparkle: "✳",
   gift: "❁", hammer: "⚒︎", calendar: "▦",
   medal: "✪", medal_1: "✫", medal_2: "✬", medal_3: "✭",
@@ -193,25 +248,32 @@ const smGlyph: Record<SmIconName, string> = {
   fullscreen: "⛶", fullscreen_exit: "⧉",
 };
 
-
 /**
- * Resolve an icon NAME to its glyph.
+ * One-character text glyph for a named icon — used in plain-text contexts
+ * (toasts rendered via textContent, aria-label fragments). Glyphs are chosen
+ * from text-presentation code points only (★ ● ◆ ▲ ↯); emoji-presentation
+ * characters are never used here so toasts read identically on every device.
  *
- * This used to `?? name`, returning the key itself when the lookup missed.
- * That is indistinguishable from a successful lookup at the call site, and it
- * is exactly how the results card shipped reading "egg Nest upgraded!" and
- * "trophy Trophy: Cloud Nine" — `beatIcon` hands back names by design, the
- * renderer forgot to resolve them, and the fallback made the mistake look
- * like content. An unknown name now yields a neutral marker, so a miss
- * degrades to a dot instead of leaking an internal identifier into the UI.
+ * An unknown name returns `""`, and *that is load-bearing, not a shrug*.
+ * Callers already wrote the right thing against it —
+ * `GrowthLedger.ts` renders `iconGlyph(wings.icon || "") || "🪶"`, i.e. it
+ * supplies its own fallback for an icon it cannot draw. Under the old
+ * `?? name` that fallback could never fire, because a typo returned the
+ * non-empty typo, so the `||` was dead code and the ledger printed the raw
+ * icon key. Falsy is the contract; keep it.
+ *
+ * An *empty* name is "no icon", not "unknown icon", and is not reported —
+ * `x || ""` is the ordinary way to say an optional field was absent.
  */
 export function iconGlyph(name: string): string {
-  return smGlyph[name as SmIconName] ?? FALLBACK_GLYPH;
-}
-
-/** Does this name resolve to a real glyph? For guards and tests. */
-export function hasIconGlyph(name: string): boolean {
-  return Object.prototype.hasOwnProperty.call(smGlyph, name);
+  if (!name) return "";
+  // Own-key lookup — see `menuIconSm` for why `smGlyph[name]` is not safe here.
+  const glyph = SM_ICON_NAMES.has(name) ? smGlyph[name as SmIconName] : undefined;
+  if (glyph === undefined) {
+    unknownIcon("iconGlyph", name);
+    return "";
+  }
+  return glyph;
 }
 
 /** Original Sunbird miniature illustrations. Local SVG, no icon font, remote
@@ -247,8 +309,32 @@ const artwork = {
 } as const;
 
 export type MenuIconName = keyof typeof artwork;
+
+/** Every 64×64 illustration name, as a runtime Set. See `SM_ICON_NAMES`. */
+export const MENU_ICON_NAMES: ReadonlySet<string> = new Set<string>(Object.keys(artwork));
+
+/**
+ * The 64×64 menu illustration.
+ *
+ * The signature is `MenuIconName` so a literal typo is a compile error — but the
+ * name is not always a literal. `hud/kit.ts` hands over whatever a screen
+ * registry and a destination table agreed on, and those are plain `string`s, so
+ * this still has to survive a runtime miss.
+ *
+ * It did not: the body interpolated `artwork[name]` unguarded, and the template
+ * string turned a miss into the literal text "undefined" inside an `<svg>`,
+ * which renders as the word "undefined" on screen. The same class of bug as
+ * `iconGlyph` returning the name — a lookup failure leaking into the DOM as
+ * prose — one file over. Guarded, and reported, and never a word again.
+ */
 export function menuIcon(name: MenuIconName): string {
-  return `<svg class="menu-illustration" viewBox="0 0 64 64" fill="none" stroke="#695541" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${artwork[name]}</svg>`;
+  // Own-key lookup — see `menuIconSm` for why `artwork[name]` is not safe here.
+  const art = MENU_ICON_NAMES.has(name as string) ? artwork[name] : undefined;
+  if (!art) {
+    unknownIcon("menuIcon", String(name));
+    return "";
+  }
+  return `<svg class="menu-illustration" viewBox="0 0 64 64" fill="none" stroke="#695541" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${art}</svg>`;
 }
 
 /** Crisp vector arrows for menu chrome.
@@ -262,6 +348,41 @@ export function arrowUpRightSvg(): string {
 }
 export function arrowRightSvg(): string {
   return '<svg class="arrow-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h15"/><path d="m13 6 6 6-6 6"/></svg>';
+}
+
+/** A quiet illustrated horizon, not another animated particle layer. */
+export function menuHorizon(): string {
+  return '<svg class="menu-horizon" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 141Q65 83 145 125T300 117T456 115T600 85V200H0Z" fill="#ced8ba"/><path d="M0 163Q85 108 180 153T366 143T600 138V200H0Z" fill="#a2be9f"/><path d="M0 184Q90 160 190 181T400 171T600 180V200H0Z" fill="#749d87"/><path d="M0 179Q96 155 195 177T400 167T600 176" fill="none" stroke="#eaf0d2" stroke-width="2" opacity=".65"/></svg>';
+}
+
+/* ------------------------------------------------------------------ chrome
+ * Vector replacements for the functional chrome glyphs.
+ *
+ * Kept from the arena branch through the merge with main: main's rewrite of
+ * the icon LOOKUP (own-key `Set.has`, so `smArtwork["constructor"]` can no
+ * longer resolve up the prototype chain into markup) is strictly better and
+ * is what this file now uses, but that rewrite does not contain these four
+ * functions and every call site in HUD.ts and hud/run.ts imports them.
+ *
+ * They exist because U+2759, U+2715 and the U+2B00-block arrows are absent
+ * from lean Android WebViews and stripped Linux font sets, so the pause
+ * button shipped as two empty boxes and every countdown as bare text.
+ * ------------------------------------------------------------------------ */
+
+/** Countdown / duration marker.
+ *
+ * Every timer in the game was bare text ("Continues in 7", "Second wind
+ * closes in 9s") or, worse, `⏳` U+23F3 — an emoji-presentation code point
+ * from the same family as the glyphs that were already caught rendering as
+ * tofu. A number with no icon also reads as a label rather than as something
+ * counting: the player has to re-read it to notice it changed.
+ *
+ * One vector clock, `currentColor`, used everywhere a value counts down, so
+ * "there is time on this" is a shape the eye learns once. The hands sit at
+ * 10-past so the glyph is legible at 14 px, where a vertical minute hand
+ * disappears into the face's stroke. */
+export function clockSvg(): string {
+  return '<svg class="chrome-glyph timer-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12.5" r="8"/><path d="M12 8v4.5l3 1.8"/><path d="M9 2.6h6"/></svg>';
 }
 
 /** Functional chrome controls — pause, dismiss, back.
@@ -280,30 +401,11 @@ export function arrowRightSvg(): string {
 export function pauseSvg(): string {
   return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="7" y="5" width="3.6" height="14" rx="1.6"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.6"/></svg>';
 }
+
 export function closeSvg(): string {
   return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg>';
 }
+
 export function backSvg(): string {
   return '<svg class="chrome-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m14.5 5-7 7 7 7"/></svg>';
-}
-
-/** Countdown / duration marker.
- *
- * Every timer in the game was bare text ("Continues in 7", "Second wind
- * closes in 9s") or, worse, `⏳` U+23F3 — an emoji-presentation code point
- * from the same family as the glyphs that were already caught rendering as
- * tofu. A number with no icon also reads as a label rather than as something
- * counting: the player has to re-read it to notice it changed.
- *
- * One vector clock, `currentColor`, used everywhere a value counts down, so
- * "there is time on this" is a shape the eye learns once. The hands sit at
- * 10-past so the glyph is legible at 14 px, where a vertical minute hand
- * disappears into the face's stroke. */
-export function clockSvg(): string {
-  return '<svg class="chrome-glyph timer-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12.5" r="8"/><path d="M12 8v4.5l3 1.8"/><path d="M9 2.6h6"/></svg>';
-}
-
-/** A quiet illustrated horizon, not another animated particle layer. */
-export function menuHorizon(): string {
-  return '<svg class="menu-horizon" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 141Q65 83 145 125T300 117T456 115T600 85V200H0Z" fill="#ced8ba"/><path d="M0 163Q85 108 180 153T366 143T600 138V200H0Z" fill="#a2be9f"/><path d="M0 184Q90 160 190 181T400 171T600 180V200H0Z" fill="#749d87"/><path d="M0 179Q96 155 195 177T400 167T600 176" fill="none" stroke="#eaf0d2" stroke-width="2" opacity=".65"/></svg>';
 }

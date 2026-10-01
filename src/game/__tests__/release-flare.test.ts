@@ -11,9 +11,14 @@
 // timing that was guaranteed to be dropped.
 //
 // The latch in `Bird.step` is what makes a release possible at all, so these
-// drive the real `Bird` through real `Bird.step` calls and assert on
-// `flareAmount`. No mocks, no renderer: the same pure-math path
-// `physics.test.ts` already relies on.
+// drive the real `Bird` through real `Bird.step` calls. No mocks, no
+// renderer: the same pure-math path `physics.test.ts` already relies on.
+//
+// The release has two halves and these tests hold both to their contract: the
+// sustained dive BRAKE (`flareAmount`) and the one-shot upward KICK. The brake
+// is dive-specific and bounded — it arrests a fall and can never become a
+// climb. The kick is everything else, and it is what makes a release off a
+// ramp do the thing the tutorial promises.
 import { describe, expect, it } from "vitest";
 
 import { Bird } from "../Bird";
@@ -25,23 +30,51 @@ type Phase = "apex" | "falling" | "climbing";
 
 const IDLE = { fever: false, speedMult: 1, boost: false } as const;
 
+/** What the player actually got out of a single release. */
+interface Pullout {
+  /** `vy` at the instant the button was let go. */
+  readonly vyAtRelease: number;
+  /** Largest `vy` reached in the half second after the release. */
+  readonly peakVy: number;
+  /** Brake actually applied (m/s^2 summed). 0 when the one-shot kick owns it. */
+  readonly brake: number;
+}
+
 /**
- * Dives until `vy` matches `phase`, lets go, and reports how much flare the
- * pull-out actually produced. Returns 0 if the phase was never reached, so a
- * test that stops matching the physics fails loudly instead of passing vacuously.
+ * Dives until `vy` matches `phase`, lets go, and reports what the pull-out
+ * actually did. Returns `null` if the phase was never reached, so a test that
+ * stops matching the physics fails loudly instead of passing vacuously.
+ *
+ * This used to return the summed `flareAmount` and nothing else, which made
+ * "the release fired" mean "the BRAKE engaged". That was the right question
+ * when the brake was the entire release verb. It stopped being the right
+ * question the moment the release grew a second half: at an apex the kick
+ * lifts the bird clean out of the brake's engagement band on the same tick, so
+ * `flareAmount` reads 0 for a release that visibly threw the bird 22 m/s
+ * upward. Asserting only on the brake silently swapped the bug for its mirror
+ * — a test that now fails when the feature WORKS. The visible outcome is
+ * `peakVy`; the brake is reported alongside it as the dive-specific signal.
  */
-function flareOnReleaseAt(phase: Phase, maxSeconds = 4): number {
+function pulloutOnReleaseAt(phase: Phase, maxSeconds = 4): Pullout | null {
   const terrain = new TerrainSystem("release-probe");
   const bird = new Bird();
-  // 400 m of air, not 70. A dive at GRAVITY_DIVE (96 m/s^2) covers 70 m in
-  // 1.2 s, so a low start LANDS long before the "apex" and "climbing" phases
-  // exist to be tested — the loop hit `if (bird.grounded) break` and returned
-  // 0, which the test then reported as "the flare did not fire". The brake was
-  // never reached; the probe ran out of sky.
-  bird.reset(64, terrain.heightAt(64) + 400);
+  // 150 m of air, and BELOW ALT_CEILING (230) on purpose.
+  //
+  // A dive at GRAVITY_DIVE (96 m/s^2) passes -20 m/s after 0.2 s and about 2 m
+  // of fall, so none of the three phases needs the 400 m this probe used to
+  // start from. What 400 m cost is that "apex" was matched on the very first
+  // step — a held dive passes through vy = 0 only at its start — and it matched
+  // it 400 m up, where `dampClimbAtCeiling` is designed to scale any climb to
+  // nothing. The probe was measuring a correct ceiling against a release. The
+  // bug this file exists to pin lives at ramp height, not at the ceiling.
+  bird.reset(64, terrain.heightAt(64) + 150);
 
   const matches = (vy: number): boolean => {
-    if (phase === "falling") return vy < -8;
+    // "falling" means a DIVE, not a drift: -20 m/s is comfortably past the
+    // brake's engagement band (FLARE_MAX_RISE = -14), so this case exercises
+    // the brake itself rather than the shallow-release kick. The drift band
+    // between 0 and -14 is covered in flight-release.test.ts.
+    if (phase === "falling") return vy < -20;
     if (phase === "climbing") return vy > 8;
     return vy > -1 && vy < 1; // apex: essentially no vertical momentum
   };
@@ -60,27 +93,46 @@ function flareOnReleaseAt(phase: Phase, maxSeconds = 4): number {
     if (bird.grounded) continue;
     if (!matches(vyBefore)) continue;
 
-    // Let go for half a second and total the flare the pull-out produced.
-    let flare = 0;
+    // Let go for half a second and record both what the release did to the
+    // bird and how much brake it spent doing it.
+    let peakVy = -Infinity;
+    let brake = 0;
     for (let k = 0; k < Math.round(0.5 / PHYS_DT); k++) {
       bird.step(PHYS_DT, { ...IDLE, diving: false }, terrain);
-      flare += bird.flareAmount;
+      peakVy = Math.max(peakVy, bird.vy);
+      brake += bird.flareAmount;
     }
     terrain.dispose();
-    return flare;
+    return { vyAtRelease: vyBefore, peakVy, brake };
   }
   terrain.dispose();
-  return 0;
+  return null;
 }
 
 describe("releasing always pulls out, whatever the bird is doing", () => {
   // Each of these was a silent no-op before the `vy < 0` guard was dropped.
   it("fires on a release made while falling", () => {
-    expect(flareOnReleaseAt("falling")).toBeGreaterThan(0);
+    const p = pulloutOnReleaseAt("falling");
+    expect(p, "the probe never reached a committed dive").not.toBeNull();
+    expect(p!.brake, "a dive release is met by the brake").toBeGreaterThan(0);
+    expect(p!.peakVy, "and it visibly arrests the fall").toBeGreaterThan(p!.vyAtRelease);
   });
 
   it("fires on a release made at the apex — the timing the tutorial teaches", () => {
-    expect(flareOnReleaseAt("apex")).toBeGreaterThan(0);
+    // This is the reported bug. `release` at the apex used to do nothing at
+    // all, because commit cbf6950 reduced the whole release to the dive brake
+    // and then made the dive brake refuse to engage unless `vy < FLARE_MAX_RISE`
+    // — and an apex is by definition not that. So the one timing the tutorial
+    // coaches ("RELEASE at the top to launch") was a guaranteed no-op.
+    //
+    // The bar is deliberately a LAUNCH, not "something happened": an apex
+    // release must hand the player real upward speed, or the game is still
+    // teaching a lie.
+    const p = pulloutOnReleaseAt("apex");
+    expect(p, "the probe never reached an apex").not.toBeNull();
+    expect(p!.vyAtRelease, "sanity: the release really was made near the apex").toBeLessThan(1);
+    expect(p!.vyAtRelease).toBeGreaterThan(-1);
+    expect(p!.peakVy, "an apex release must launch the bird, not merely nudge it").toBeGreaterThan(15);
   });
 
   it("leaves a rising bird alone — a brake arrests a fall, not a climb", () => {

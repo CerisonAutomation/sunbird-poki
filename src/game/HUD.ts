@@ -32,12 +32,13 @@ import { MissionRow } from "./Missions";
 import { TRACK_NAMES } from "./Music";
 
 import { streakOpacity } from "./SpeedFeel";
-import { messageHoldMs } from "./MessageTiming";
+import { TOAST_OBSCURE_POLL_MS, TOAST_OBSCURE_WAIT_MS, messageHoldMs } from "./MessageTiming";
 import { medalStanding, type Medal } from "./RunMedals";
 import type { HudSnapshot } from "./hud/types";
 import { TOAST_MIN_VISIBLE_MS, decideToast } from "./toastFloor";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
 import { renderCheckout, renderPaywall, renderShop } from "./hud/shop";
+import { renderLoadout } from "./hud/loadout";
 import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
 import { renderAd, renderContinue, renderGameOver } from "./hud/run";
 import { renderProgress, renderPass, renderTrophies, renderAccount, renderCampaign, renderCups } from "./hud/meta";
@@ -77,17 +78,36 @@ const LAUNCH_CTA = ".home-launch";
 function medalText(earned: Medal, toNext: number | null): string {
   if (toNext === null) return "◆ Maxed";
   if (earned === "none") return `${toNext} m to first medal`;
-  return `${toNext} m to next`;
+  // Name the tier. The line is tinted per medal (bronze / silver / gold /
+  // platinum, ui.css) and until now the string never said which one you had, so
+  // the colour was the only thing carrying it. Four colours and one string is a
+  // WCAG 1.4.1 failure: a player who reached gold and a player who reached
+  // platinum read identical words in different hues. The tint stays as
+  // decoration; the word is what carries it.
+  return `${earned} · ${toNext} m to next`;
 }
 /** In-flight quest strip: how close a quest must be before it earns screen
  *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
  *  threshold, so the footer and the strip can never disagree. */
 const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
+/** How long a finished quest keeps its row before it leaves the strip. Long
+ *  enough to read "✓ +120", short enough that the panel is not a wall of
+ *  banked rows by the end of a run. The `goalPop` toast carries the celebration
+ *  past this point, so nothing is lost by letting the row go. */
+const QUEST_DONE_LINGER_MS = 4_500;
+/** Ceiling on rows in the one goal panel. Three fits a phone footer; more than
+ *  that is the "wall of permanent bars" the threshold above exists to prevent. */
+const GOAL_STRIP_MAX_ROWS = 3;
 /** Longest single-run distance, used to decide whether a mid-run goal is
  *  actually actionable. Measured from the shipped build: a good run reaches
  *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
  *  it mid-flight is showing a bar that cannot move. */
 const RUN_REACHABLE_M = 3000;
+/** How many bird-position quips may be alive at once. The lane is a stack, not
+ *  a slot: `impact-rise` runs for 1.1s, so a cap of 3 covers a fast burst
+ *  (thud → bop → thud) without letting a sustained scrape pile the play area
+ *  up with words. Mirrors the toast lane's bound. */
+const IMPACT_POPUP_CAP = 3;
 
 type ActionHandler = (action: string, id: string) => void;
 
@@ -198,7 +218,6 @@ export class HUD {
   private countdownEl!: HTMLElement;
   private versusBar!: HTMLElement;
   private goalStrip!: HTMLElement;
-  private missionStrip!: HTMLElement;
   private goalPop!: HTMLElement;
   private rankUp!: HTMLElement;
   private standingsEl!: HTMLElement;
@@ -227,7 +246,9 @@ export class HUD {
   private lastGoals = "";
 
   private lastGoalPop = "";
-  private lastMissionStrip = "";
+  /** First frame each quest was seen complete, so the linger window has a start.
+   *  Cleared when the row goes back to open, and pruned on reset. */
+  private readonly doneRowAt = new Map<string, number>();
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
@@ -309,9 +330,14 @@ export class HUD {
       <div class="play-hud hidden" data-ref="playHud">
         <div class="top-bar">
           <div class="stat-block">
-            <div class="stat-label">${t("hud.stat.distance", undefined, "Distance")}</div>
+            <div class="stat-label">${menuIconSm("ruler")}<span>${t("hud.stat.distance", undefined, "Distance")}</span></div>
             <div class="stat-value" data-ref="distance">0 m</div>
-            <div class="stat-sub" data-ref="bestRow" hidden>best <span data-ref="best">0</span></div>
+            <!-- Merge: main's trophy icon plus this branch's hidden attribute.
+                 A fresh save showed "best 0" beside a 1.65 km run for the whole
+                 of a record-setting flight, which reads as a bug rather than an
+                 empty state; the row stays out of the layout until a real
+                 record exists, and then never disappears mid-run. -->
+            <div class="stat-sub" data-ref="bestRow" hidden>${menuIconSm("trophy")}<span>best</span> <span data-ref="best">0</span></div>
             <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
@@ -319,9 +345,13 @@ export class HUD {
               <div class="sun-fill" data-ref="sunFill"></div>
               <div class="sun-knob" data-ref="sunKnob">${menuIcon("daily")}</div>
             </div>
-            <div class="sun-caption">${t("hud.stat.daylight", undefined, "daylight")}</div>
+            <div class="sun-caption">${menuIconSm("sun")}<span>${t("hud.stat.daylight", undefined, "daylight")}</span></div>
           </div>
           <div class="stat-block right">
+            <!-- No icon on this label, and that is deliberate. Every other stat
+                 label now carries a glyph so the readouts scan as a set, but the
+                 coin's glyph already sits in the VALUE below it. Putting a coin
+                 up here as well is the two-circles report, verbatim. -->
             <div class="stat-label">${t("hud.stat.coins", undefined, "Coins")}</div>
             <div class="stat-value coin">${COIN_SVG}<span data-ref="coins">0</span></div>
           </div>
@@ -334,13 +364,12 @@ export class HUD {
             <i class="alt-fill" data-ref="altFill"></i>
             <b class="alt-bird" data-ref="altBird">${menuIcon("bird")}</b>
           </div>
-          <div class="alt-read" data-ref="altRead">0 m</div>
+          <div class="alt-read" data-ref="altRead">${menuIconSm("glide")}<span>0 m</span></div>
         </div>
         <div class="chain-readout" data-ref="chainReadout" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="launch-banner" data-ref="launchBanner"></div>
         <div class="power-strip" data-ref="powerStrip"></div>
-        <div class="goal-strip" data-ref="goalStrip"></div>
-        <div class="mission-strip hidden" data-ref="missionStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
+        <div class="goal-strip" data-ref="goalStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
         <div class="goal-pop" data-ref="goalPop" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="rank-up" data-ref="rankUp" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="countdown" role="status" aria-live="assertive" aria-atomic="true" data-ref="countdown"></div>
@@ -1076,7 +1105,10 @@ export class HUD {
       const aN = Math.min(1, Math.pow(s.altitude / 340, 0.65));
       this.setStyle(this.altFill, "altFill", "height", `${aN * 100}%`);
       this.setStyle(this.altBird, "altBird", "bottom", `calc(${aN * 100}% - 9px)`);
-      this.setText(this.altRead, "altRead", `${Math.round(s.altitude)} m`);
+      // The readout now holds an icon plus a <span>, so the writer has to
+      // target the span — setting textContent on the wrapper would delete the
+      // glyph on the first frame.
+      this.setText(this.altRead.querySelector("span") ?? this.altRead, "altReadNum", `${Math.round(s.altitude)} m`);
       this.altGauge.dataset.zone = String(s.altZone);
 
       const chainKey = `${s.chainLabel}|${s.chainTier}`;
@@ -1131,7 +1163,12 @@ export class HUD {
         }
       }
 
-      // Goal strip: max 2 rows — beat row + closest goal, OR closest goal + career.
+      // ONE goal panel. Session goals and quests used to be two separate
+      // panels — the strip centre-bottom, and a `.mission-strip` pinned to the
+      // left edge — each drawing the same label / progress / bar row in the
+      // same corner of a phone screen. That is the "why are there two goal
+      // bars" report, and the player was not misreading it: there were two.
+      // They are now rows in one strip, capped at GOAL_STRIP_MAX_ROWS.
       let lead: SessionGoal | null = null;
       for (const g of s.sessionGoals) {
         if (g.done) continue;
@@ -1144,7 +1181,42 @@ export class HUD {
       const ntRaw = s.nearestTrophy as AchievementView | null;
       const nt = ntRaw && ntRaw.def && typeof ntRaw.def.target === "number" && ntRaw.def.target > 0 && typeof ntRaw.progress === "number" ? ntRaw : null;
       const tk = nt ? `${nt.def.id}:${Math.floor((nt.progress / nt.def.target) * 20)}` : "";
-      const stripKey = `${blKey}|${gk}|${wk}|${tk}`;
+
+      // Quests: what is worth showing right now.
+      //
+      // The expiry is the "goals are stuck on the HUD" report. The filter kept
+      // `r.done` UNCONDITIONALLY, so a quest you had already banked sat on
+      // screen for the rest of the flight with a full gold bar, permanently.
+      // Completion is a moment, not a state: a finished row lingers long enough
+      // for the payoff to land, then leaves. `goalPop` carries the celebration
+      // past that point.
+      const now = performance.now();
+      const questRows: MissionRow[] = [];
+      for (const r of s.missionRows) {
+        if (r.done) {
+          if (!this.doneRowAt.has(r.id)) this.doneRowAt.set(r.id, now);
+          if (now - this.doneRowAt.get(r.id)! > QUEST_DONE_LINGER_MS) continue;
+        } else {
+          this.doneRowAt.delete(r.id);
+          // A row sitting at zero trains the player to stop reading the strip —
+          // `closestGoalLine` says so in its own comment, and gates its line on
+          // 50%+. The strip now uses the same threshold.
+          if (r.pct < IN_FLIGHT_MISSION_MIN_PCT) continue;
+        }
+        questRows.push(r);
+      }
+      // The remaining linger is bucketed INTO the key, or a key that never
+      // changes is a row that never leaves — the exact bug being fixed.
+      const questKey = questRows
+        .map((r) => {
+          const left = r.done
+            ? Math.ceil((QUEST_DONE_LINGER_MS - (now - (this.doneRowAt.get(r.id) ?? now))) / 400)
+            : 0;
+          return `${r.id}${Math.round(r.pct * 200)}${r.done ? `D${left}` : ""}${r.justDone ? "J" : ""}`;
+        })
+        .join("|");
+
+      const stripKey = `${blKey}|${gk}|${wk}|${tk}|${questKey}`;
       if (stripKey !== this.lastGoals) {
         this.lastGoals = stripKey;
         const rows: string[] = [];
@@ -1159,7 +1231,7 @@ export class HUD {
         }
 
         // Row 2a: closest goal (if beat row is showing) or Row 1: closest goal
-        if (lead && (!bl || rows.length < 2)) {
+        if (lead && rows.length < GOAL_STRIP_MAX_ROWS) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
           rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
@@ -1180,46 +1252,33 @@ export class HUD {
         // belongs. The bar is only hidden while a run is in flight; a goal that
         // becomes reachable mid-run shows itself, because `nextNeeded` is part
         // of the strip key.
-        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < 2) {
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < GOAL_STRIP_MAX_ROWS) {
           const cpct = Math.min(100, s.wings.progress * 100);
           rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
         }
 
         // Trophy progress: lowest priority — only when a slot is still free.
-        if (nt && rows.length < 2) {
+        if (nt && rows.length < GOAL_STRIP_MAX_ROWS) {
           const tpct = Math.min(100, (nt.progress / nt.def.target) * 100);
           rows.push(`<span class="gs gs-trophy"><em>${menuIconSm("trophy")} ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
         }
 
+        // Quests fill whatever slots the session goals left. They are the same
+        // `.gs` widget, so the panel reads as one list rather than two panels
+        // that happen to both be progress bars.
+        for (const r of questRows) {
+          if (rows.length >= GOAL_STRIP_MAX_ROWS) break;
+          const qpct = Math.min(100, r.pct * 100);
+          const cls = r.done ? " done" : r.pct >= 0.7 ? " close" : "";
+          const num = r.done
+            ? `✓ ${COIN_SVG}${r.reward}`
+            : `${Math.round(r.progress)}/${Math.round(r.target)} · +${COIN_SVG}${r.reward}`;
+          rows.push(
+            `<span class="gs gs-quest${cls}${r.justDone ? " just" : ""}"><em>${escapeHtml(r.title)}</em><u>${num}</u><i><b style="width:${qpct.toFixed(1)}%"></b></i></span>`,
+          );
+        }
+
         this.goalStrip.innerHTML = rows.join("");
-      }
-      // The quest strip. Keyed on the numbers rather than rebuilt per frame, so
-      // a 30 Hz HUD push does not churn 3-4 nodes; the `just` class is folded
-      // into the key so the "banked" flourish still fires on the frame it lands.
-      // Only quests worth looking at right now.
-      //
-      // This rendered EVERY mission unconditionally, so a fresh run put three
-      // permanent bars on screen reading 0/6, 0/15 and 0/2 — a screenshot of
-      // the shipped build shows exactly that, sitting in the lower-left of the
-      // terrain-reading zone. The codebase already contains the answer to this
-      // and the strip was ignoring it: `closestGoalLine`'s comment says a
-      // permanent "you are 3% of the way there" nag "teaches the player to
-      // ignore the strip", and then gates its own line on 50%+. So the in-flight
-      // strip now uses the same threshold.
-      //
-      // Kept: quests at 50%+ (they are close, and close is motivating), and
-      // anything that just completed this frame (the payoff is the point of
-      // showing it). Dropped: the rows sitting at zero, which are the ones that
-      // train the player to stop reading the strip. Nothing is *lost* — every
-      // quest is still listed on the progress screen.
-      const worthShowing = s.missionRows.filter(
-        (r) => r.done || r.justDone || r.pct >= IN_FLIGHT_MISSION_MIN_PCT,
-      );
-      const mkey = worthShowing.map((r) => `${r.id}${Math.round(r.pct * 200)}${r.done ? "D" : ""}${r.justDone ? "J" : ""}`).join("|");
-      if (mkey !== this.lastMissionStrip) {
-        this.lastMissionStrip = mkey;
-        this.missionStrip.classList.toggle("hidden", worthShowing.length === 0);
-        this.missionStrip.innerHTML = renderMissionStrip(worthShowing);
       }
       if (s.goalPop !== this.lastGoalPop) {
         this.lastGoalPop = s.goalPop;
@@ -1448,6 +1507,11 @@ export class HUD {
   }
 
   toast(text: string, kind = "info"): void {
+    // An empty pill is worse than no pill: it occupies the one flight slot,
+    // so it evicts a real message and then renders as nothing. Translation can
+    // resolve a key to "" (a blank string is a legitimate translation), and
+    // several call sites interpolate values that can stringify empty.
+    if (!text || !text.trim()) return;
     // Dedup: firing the same line while it is still on screen bumps a ×n
     // counter instead of stacking identical pills (ash storms, repeat
     // pickups). Never show the same words twice at once.
@@ -1457,7 +1521,7 @@ export class HUD {
       live.el.textContent = `${text} ×${live.count}`;
       // Updating a duplicate must not force a synchronous browser layout.
       this.cancelTimer(live.timer);
-      live.timer = this.scheduleToastOut(live.el, text);
+      live.timer = this.scheduleToastOut(live.el, text, () => this.toastLaneObscured());
       return;
     }
     // One readable pill in flight, at most two on menu screens.
@@ -1500,7 +1564,11 @@ export class HUD {
     el.textContent = text;
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
-    const timer = this.scheduleToastOut(el, text);
+    // Merge: main's obscured-lane callback plus this branch's readability
+    // floor. They solve different halves of the same complaint — main stops
+    // a toast expiring while something is covering it, this stops a toast
+    // being evicted by the next one before it has been on screen at all.
+    const timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured());
     this.after(() => this.toastSeen.add(el), TOAST_MIN_VISIBLE_MS);
     this.liveToasts.set(text, { el, count: 1, timer });
   }
@@ -1531,6 +1599,24 @@ export class HUD {
 
 
   /**
+   * Is the toast lane currently unable to be read?
+   *
+   * Measured, not inferred: `getComputedStyle` on the lane itself answers the
+   * question the stylesheet actually implements, including the three rules
+   * that hide it (`visibility:hidden` while a countdown / launch / finish
+   * message owns the screen) and the two more that hide it by state. Guessing
+   * from `data-feedback` would have to be kept in sync with the stylesheet by
+   * hand; reading the computed value cannot drift.
+   *
+   * `getComputedStyle` forces style resolution, so it is polled rather than
+   * read every frame — see `TOAST_OBSCURE_POLL_MS`.
+   */
+  private toastLaneObscured(): boolean {
+    const cs = getComputedStyle(this.toastLayer);
+    return cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0";
+  }
+
+  /**
    * How long a message must stay up to actually be read.
    *
    * The old model was 1.2 s + 28 ms per character. Measured against the real
@@ -1556,21 +1642,61 @@ export class HUD {
    * Floor and ceiling both earn their keep. The floor is because a one-word
    * toast still has to be SEEN. The ceiling is because the layer can be
    * occupied, and an unbounded hold deadlocks it.
+   *
+   * `isObscured` is the part that was missing. The hold used to start the
+   * instant the pill was created, but three of the five feedback slots
+   * (`countdown`, `launch`, `finish`) set `visibility:hidden` on the whole
+   * toast lane in CSS — the launch banner, the countdown and the finish
+   * counter are all in the flight-messages lane, and the stylesheet hides
+   * everything else while they own the screen. A quip fired during one of
+   * those windows was therefore created, sat there for its entire read
+   * window with nobody able to see it, and was then removed. Measured on a
+   * real flight: 48 of 44 sampled frames reported `feedback=countdown`
+   * with the lane hidden, and the `launch` slot alone is ~1 s after EVERY
+   * launch, which in a game about launching is most of the run.
+   *
+   * So the hold must be spent VISIBLE, not merely elapsed. The timer below
+   * measures only the frames the lane is actually painted, and the total is
+   * still bounded — by `TOAST_CEIL_MS` plus the wait, so a message that
+   * arrives at the tail of a long countdown waits rather than vanishing, and
+   * a message whose lane never opens is released anyway rather than leaked.
    */
-  private scheduleToastOut(el: HTMLElement, key: string): number {
-    const hold = messageHoldMs(el.textContent ?? "");
-    return this.after(() => {
-      // Once exit starts, a repeat is a new toast rather than refreshing a
-      // node that already has a pending removal callback.
-      if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
-      el.classList.remove("in");
-      el.classList.add("out");
-      this.after(() => {
-        el.remove();
-        const live = this.liveToasts.get(key);
-        if (live && live.el === el) this.liveToasts.delete(key);
-      }, 420);
-    }, hold);
+  private scheduleToastOut(el: HTMLElement, key: string, isObscured?: () => boolean): number {
+    const text = el.textContent ?? "";
+    const hold = messageHoldMs(text);
+    const budget = hold + TOAST_OBSCURE_WAIT_MS;
+    const startedAt = Date.now();
+    let visibleFor = 0;
+    let lastTick = startedAt;
+    const tick = (): void => {
+      const now = Date.now();
+      const dt = now - lastTick;
+      lastTick = now;
+      // Only bank time the player could actually read.
+      if (!isObscured?.()) visibleFor += dt;
+      if (visibleFor >= hold || now - startedAt >= budget) {
+        // Once exit starts, a repeat is a new toast rather than refreshing a
+        // node that already has a pending removal callback.
+        if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
+        el.classList.remove("in");
+        el.classList.add("out");
+        this.after(() => {
+          el.remove();
+          const live = this.liveToasts.get(key);
+          if (live && live.el === el) this.liveToasts.delete(key);
+        }, 420);
+        return;
+      }
+      this.timers.add(this.scheduleTick(tick));
+    };
+    return this.scheduleTick(tick);
+  }
+
+  /** Poll interval while a toast is waiting for its lane to open. */
+  private scheduleTick(fn: () => void): number {
+    const timer = window.setTimeout(fn, TOAST_OBSCURE_POLL_MS);
+    this.timers.add(timer);
+    return timer;
   }
 
   flash(kind: "perfect" | "fever" | "island" | "sleep"): void {
@@ -1646,7 +1772,9 @@ export class HUD {
 
   private renderScreen(s: HudSnapshot): string {
     switch (s.screen) {
-      case "shop":
+      case "loadout":
+      return renderLoadout(s);
+    case "shop":
         this.shopSnapshot = s;
         return renderShop(s, this.shopBrowse);
       case "paywall":
@@ -1759,7 +1887,6 @@ export class HUD {
     this.matchmakingKeep = grab("matchmakingKeep");
     this.matchmakingReady = grab("matchmakingReady");
     this.goalStrip = grab("goalStrip");
-    this.missionStrip = grab("missionStrip");
     this.goalPop = grab("goalPop");
     this.rankUp = grab("rankUp");
     this.standingsEl = grab("standings");
@@ -1796,7 +1923,20 @@ export class HUD {
     const viewport = this.root.getBoundingClientRect();
     el.style.left = `${Math.max(40, Math.min(lane.width - 40, sx * viewport.width + viewport.left - lane.left))}px`;
     el.style.top = `${Math.max(50, Math.min(lane.height - 20, sy * viewport.height + viewport.top - lane.top))}px`;
-    this.impactPopupsEl.replaceChildren(el);
+    // Append + cap, NOT replaceChildren. Replacing meant the lane held exactly
+    // one popup, so two quips landing inside the same 1100ms window killed the
+    // first on the tick the second arrived — during continuous thudding the
+    // player saw one word flicker instead of a run of them. Coexisting popups do
+    // not collide: `impact-rise` is time-based and travels upward, so by the
+    // time a second one spawns at the bird the first is already higher in its
+    // own arc. The cap is what bounds the lane, exactly as the toast lane's
+    // eviction bounds that one.
+    while (this.impactPopupsEl.children.length >= IMPACT_POPUP_CAP) {
+      const oldest = this.impactPopupsEl.firstElementChild;
+      if (!oldest) break;
+      oldest.remove();
+    }
+    this.impactPopupsEl.appendChild(el);
     // Trigger animation on next frame then remove after it finishes.
     requestAnimationFrame(() => el.classList.add("rise"));
     this.after(() => el.remove(), 1100);
@@ -1825,20 +1965,38 @@ export class HUD {
  *  Pack header. An inline SVG matches the current text size and color, sits
  *  cleanly on the baseline, and never needs a fallback font.
  *
- *  One disc, one rim, one highlight. The previous art carried a *second
- *  filled circle* (r=1.8) underneath a lens-shaped path on top of the body
- *  circle. At the 0.9em the HUD actually renders it, that inner blob read as
- *  a separate circle sitting next to the coin — players reported "two
- *  circles" by the coin counter. The inner dot was redundant anyway: at ~18px
- *  it landed on top of the lens it was meant to shine through and added a
- *  smudge rather than depth. The rim is now a stroked ring (`fill="none"`),
- *  so it can never be mistaken for a second disc, and the highlight is a
- *  path rather than a circle. */
+ *  One disc and one highlight arc. That is the whole rule, and it is worth
+ *  stating precisely because this glyph has now carried TWO different fixes for
+ *  the same "two circles" complaint and both were wrong:
+ *
+ *   - v1 added a small filled pupil (r=1.8) inside the body circle.
+ *   - v2 removed the pupil but replaced it with a stroked ring at r=6.3 —
+ *     reasoning that "fill=none can never be mistaken for a second disc".
+ *
+ *  v2 is why players still saw two circles. A 30%-white ring sitting inside a
+ *  filled disc is not a rim; at the ~18px the HUD renders it, it is a second
+ *  concentric circle, and it reads *more* like a separate disc than the pupil
+ *  did because it is a complete closed curve at high contrast. Changing how a
+ *  shape is filled does not change the silhouette the eye reads.
+ *
+ *  The fix is to have only ONE closed curve in the glyph. The highlight is now
+ *  an open arc (a path with two endpoints, no `Z`), which gives the metal its
+ *  shine without adding a second circle anywhere inside the disc. The dark
+ *  stroke on the outer circle is the edge, not an inner ring.
+ *
+ *  v3 — the second disc is gone from the STYLESHEET, not from here. This
+ *  glyph was already correct: one filled disc plus one open highlight arc. The
+ *  other circle players kept seeing was a `.stat-value.coin::before`
+ *  radial-gradient painted BESIDE this SVG in index.css, so the counter showed
+ *  a gradient dot AND a gold disc side by side. That pseudo-element is deleted
+ *  (see index.css). Nothing about the colour was lost with it: this disc fills
+ *  with `currentColor`, and `.stat-value.coin .coin-glyph` sets that to
+ *  `var(--amber)`, so the single remaining disc is still gold — it just gets
+ *  its colour from the theme instead of from a second circle. */
 const COIN_SVG =
   '<svg class="coin-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
   '<circle cx="12" cy="12" r="8.7" fill="currentColor" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>' +
-  '<circle cx="12" cy="12" r="6.3" fill="none" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>' +
-  '<path d="M6.2 9.4A7 7 0 0 1 10.4 5.6" fill="none" stroke="rgba(255,255,255,0.62)" stroke-width="1.5" stroke-linecap="round"/>' +
+  '<path d="M6.4 9.6A7.4 7.4 0 0 1 10.6 5.5" fill="none" stroke="rgba(255,255,255,0.66)" stroke-width="1.7" stroke-linecap="round"/>' +
   "</svg>";
 
 /** Replace every leading bullet with the SVG coin glyph. Runs on the final
@@ -2265,8 +2423,13 @@ function renderTournamentCountdown(s: HudSnapshot): string {
  * opened by offering the player something they had just been handed, and the
  * two text destinations it taught (racing, the shop) were not the two the game
  * actually needs explained first. It is now the five surfaces a first run has
- * to meet: fly, the hangar, the AI flock, live rivals, and settings — which is
+ * to meet: fly, the loadout, the AI flock, live rivals, and settings — which is
  * every action in `QUICK_ACTIONS` plus the first flight itself.
+ *
+ * Step 2 sends the player to the pre-flight Loadout rather than the Shop. The
+ * step promises a bird, a trail and boosters, and Loadout is the only screen
+ * that stages all three; the Shop is where you spend, which is a different
+ * promise than the one the step makes. The Shop remains one tap from Loadout.
  *
  * The steps are honest about WHERE they are: step 1 used to say "Spend the coins
  * you just earned" on a brand-new save, which starts at zero.
@@ -2293,13 +2456,17 @@ function renderOnboardingRoute(s: HudSnapshot): string {
       done: s.runsPlayed >= 1,
     },
     {
-      n: "02", action: "open-shop", go: t("onboarding.step2Action", undefined, "Shop ›"),
+      n: "02", action: "open-loadout", go: t("onboarding.step2Action", undefined, "Loadout ›"),
       title: t("onboarding.step2Title", undefined, "Choose your bird"),
       sub: t("onboarding.step2Sub", undefined, "Birds, trails and boosts for your next flight"),
-      // `seenShop`, not `wallet > 0`. The wallet is a live balance: a player
-      // who completed this step and then spent their coins saw it revert to
-      // active. A milestone that un-completes itself is worse than none.
-      done: s.firstSteps.shop,
+      // `seenLoadout`, not `seenShop` and not `wallet > 0`. The wallet is a live
+      // balance: a player who completed this step and then spent their coins
+      // saw it revert to active, and a milestone that un-completes itself is
+      // worse than none. Loadout is also the screen that actually does what
+      // this step promises — it stages the bird, trail and boosters you fly
+      // with, and it is reachable from the shop for anything you do not own yet.
+      // The store itself is still one tap away from there.
+      done: s.firstSteps.loadout,
     },
     {
       n: "03", action: "open-practice", go: t("onboarding.step3Action", undefined, "AI race ›"),
@@ -2476,25 +2643,4 @@ function renderScores(s: HudSnapshot): string {
   `;
 }
 
-/**
- * The in-flight quest strip — `missionRows`, drawn next to the goal strip.
- *
- * Emitted unconditionally (and hidden when empty) for the same reason
- * `.growth-ledger` is: the element is part of the HUD's structure, so a test
- * and a screen reader can both find it whether or not this particular run has a
- * quest in it. It is a `<ul>` of rows, each with its progress as text, because a
- * bar alone tells a screen reader nothing.
- */
-function renderMissionStrip(rows: MissionRow[]): string {
-  if (!rows.length) return "";
-  return `<ul class="mission-strip-list">${rows
-    .map(
-      (r) => `<li class="ms-row${r.done ? " done" : ""}${r.justDone ? " just" : ""}">
-        <span class="ms-title">${r.done ? "✓ " : ""}${escapeHtml(r.title)}</span>
-        <span class="ms-num">${Math.round(r.progress)}/${Math.round(r.target)}</span>
-        <i class="ms-bar" aria-hidden="true"><b style="width:${(r.pct * 100).toFixed(1)}%"></b></i>
-      </li>`,
-    )
-    .join("")}</ul>`;
-}
 

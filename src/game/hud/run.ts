@@ -185,7 +185,7 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
   const ledger = lines
     .map(
       (l) => `<div class="gl-row gl-${escapeHtml(l.kind)}">
-        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i><span>${escapeHtml(l.label)}</span></dt>
+        <dt><i aria-hidden="true">${escapeHtml(l.icon)}</i><span class="gl-label">${escapeHtml(l.label)}</span></dt>
         <dd><span>${escapeHtml(l.detail)}</span><i class="gl-bar" aria-hidden="true"><b style="width:${(l.progress * 100).toFixed(1)}%"></b></i></dd>
       </div>`,
     )
@@ -198,20 +198,21 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
     const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
     const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
     const text = t(b.key, b.params, b.fallback);
-    // `beatIcon` returns an icon *NAME* ("egg", "badge", "trophy") — its own
-    // doc comment says so and says to render it through menuIconSm or
-    // iconGlyph. This printed the raw name, so every celebration row on the
-    // results card read "egg Nest upgraded!" and "trophy Trophy: Cloud Nine".
-    // It survived because iconGlyph used to fall back to the name it was
-    // given, which is indistinguishable from a working lookup.
-    // Prefer the real miniature SVG over a text glyph. `smGlyph` has an entry
-    // for every one of these names, but they are abstract stand-ins (a trophy
-    // is "◎", a badge is "⊛") chosen for plain-text contexts like toasts. The
-    // results card is HTML and there is authored artwork for all of them, so
-    // it gets the artwork; the glyph stays as the fallback for anything the
-    // illustrator has not drawn yet.
+    // `b.icon` is an icon NAME ("trophy", "egg", "badge"), not art and not a
+    // glyph. It used to be `escapeHtml(b.icon)` — the name, escaped, as the
+    // row's leading text — so every beat on the results card rendered its own
+    // caption in place of its picture: "egg Nest upgraded!", "trophy Trophy:
+    // Cloud Nine". `menuIconSm` draws the SVG; an unknown name draws nothing,
+    // and can no longer become a word (see MenuIcons).
+    //
+    // Merge note: main's markup (the .beat-icon / .beat-text hooks) is kept
+    // because the icon needs a sized slot of its own — a bare <i> in the text
+    // flow is part of why these rows collided. The arena branch's glyph
+    // fallback is kept too: several beat names have a text glyph but no
+    // authored artwork, and under main's contract `iconGlyph` returns "" for
+    // anything unknown, so this degrades to empty rather than to a word.
     const mark = menuIconSm(b.icon) || escapeHtml(iconGlyph(b.icon));
-    return `<div class="${cls}" role="listitem"${delay}><i aria-hidden="true">${mark}</i>${escapeHtml(text)}</div>`;
+    return `<div class="${cls}" role="listitem"${delay}><i class="beat-icon" aria-hidden="true">${mark}</i><span class="beat-text">${escapeHtml(text)}</span></div>`;
   };
   const stageBits = cel.staged.map((b) => beatEl(b)).join("");
   const ledgerBits = cel.ledger.map((b) => beatEl(b, false)).join("");

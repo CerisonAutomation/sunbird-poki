@@ -1,4 +1,4 @@
-import { dampClimbAtCeiling, glideLiftScale } from "./FlightPhysics";
+import { applyReleaseKick, dampClimbAtCeiling, glideLiftScale, releaseKick, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
 import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
@@ -44,11 +44,8 @@ import {
   WATER_Y,
 } from "./constants";
 import {
-  LAUNCH_POP_COYOTE_S,
-  LAUNCH_POP_FLOOR,
   launchPopQuality,
   shouldLeaveGround,
-  withinPopCoyote,
 } from "./launchPop";
 import { clamp, lerp, lerpAngle } from "./math";
 import type { TerrainSystem } from "./TerrainSystem";
@@ -58,6 +55,23 @@ export type BirdStepOpts = {
   fever: boolean;
   speedMult: number;
   boost: boolean;
+  /**
+   * Transient extra cap headroom in m/s, for mode mechanics (draft slingshot,
+   * typhoon tailwind, slalom warp, coin turbo).
+   *
+   * This exists because those mechanics used to write `bird.vx` directly with a
+   * `Math.min(234, …)`-style guard. Every one of those literals was above every
+   * reachable cap, so the `Math.min` never did anything, and `step()` re-clamped
+   * total speed to `cap` on the very next 8.3 ms substep — the boost was deleted
+   * before it was ever visible. A mechanic that pays out a banner and a particle
+   * burst for no speed is worse than one that is absent, because the player
+   * learns the mode rewards nothing.
+   *
+   * Raising the cap is the only version that survives: the bird still obeys one
+   * speed limit, so this cannot compound across frames the way an injected
+   * velocity could.
+   */
+  speedBonus?: number;
   /** wing boost / golden wings — multiplies speed-borne lift */
   liftMult?: number;
   /** long glide — scales air drag down */
@@ -94,7 +108,7 @@ type ShapeProportions = {
   crest: boolean;
 };
 
-const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
+export const BIRD_SHAPE_PROPORTIONS: Readonly<Record<BirdShape, ShapeProportions>> = {
   songbird: { span: 1, tail: 1, beak: 1, beakWidth: 1, bulk: 1, crest: true },
   raptor: { span: 1.34, tail: 1.5, beak: 0.72, beakWidth: 0.8, bulk: 0.92, crest: true },
   owl: { span: 0.84, tail: 0.72, beak: 0.6, beakWidth: 0.72, bulk: 1.16, crest: false },
@@ -198,8 +212,29 @@ export class Bird {
   private readonly bodyMat: THREE.MeshLambertMaterial;
   private readonly wingMat: THREE.MeshLambertMaterial;
   private readonly crests: THREE.Mesh[] = [];
+  /** The two tail feathers flanking the fan, scaled with it — see `setShape`. */
+  private readonly tailFeathers: THREE.Mesh[] = [];
+  /**
+   * Rearmost x of the tail assembly in `squash` local space, split by which
+   * part moves with the species scale. Measured from the geometry in the
+   * constructor; `tailPoint` combines them. Hand-deriving this is how the wake
+   * ended up anchored mid-body.
+   */
+  private readonly tailFanRear: number;
+  /** The fan's own origin x — what a species tail scale stretches away from. */
+  private readonly tailPivRear: number;
+  /** Rearmost x of the two flanking feathers, which never change length. */
+  private readonly tailFeatherRear: number;
   /** The species currently worn — see `setShape`. */
   private shape: BirdShape = "songbird";
+  /**
+   * Species beak scale, held separately because `syncVisual` rewrites
+   * `beak.scale` every frame to animate the call opening. Songbird values, so
+   * a bird that never calls `setShape` renders exactly as before.
+   */
+  private readonly beakMult = new THREE.Vector3(1, 1, 1);
+  /** Species body bulk, held for the same reason as `beakMult`. */
+  private bulk = 1;
   private readonly bellyMat: THREE.MeshLambertMaterial;
   private readonly lidMat: THREE.MeshLambertMaterial;
   private readonly beakMat: THREE.MeshLambertMaterial;
@@ -213,6 +248,20 @@ export class Bird {
   /** m/s of upward impulse applied by the most recent flare, 0 if none this
    *  step. Public so a sound or a particle can react to the pull-out. */
   flareAmount = 0;
+  /**
+   * m/s of upward impulse bought by the RELEASE itself this step, 0 if none.
+   *
+   * Deliberately separate from `flareAmount`. `flareAmount` is the sustained
+   * brake, measured in m/s^2 and bounded by FLARE_BRAKE; this is the one-shot
+   * kick, measured in m/s. They fire in disjoint situations — the brake on a
+   * dive worth arresting, the kick from a drift or a launch — so a single
+   * number cannot honestly describe both, and the audio/haptic cue scales off
+   * whichever actually engaged.
+   */
+  releaseKickAmount = 0;
+  /** Seconds left before another release can buy a kick. See
+   *  `RELEASE_KICK_COOLDOWN` — without it the kick is farmable. */
+  private kickCooldown = 0;
   /** Whether the previous physics step was a dive. The flare fires on the
    *  falling edge, so a held dive does not re-apply it every step. */
   private wasDiving = false;
@@ -227,10 +276,33 @@ export class Bird {
   /** 0..1 — how well the last crest launch was timed. Read by the Game for
    * feedback (callout, sound, particles); 0 means the stick was held. */
   popQuality = 0;
-  /** Seconds of coyote grace remaining in which a release still pops. */
-  private popArmedFor = 0;
-  /** Launch speed captured when the grace was armed, for the pop's scaling. */
-  private popArmedSpeed = 0;
+  /**
+   * Render interpolation: the state as of the PREVIOUS physics step.
+   *
+   * `step()` is fixed at 120 Hz and `syncVisual` runs at display rate, so
+   * reading `vx`/`vy`/`rotation` straight into the mesh drew a 120 Hz
+   * staircase — the wing roll, the pupils, the beak and the tail flutter all
+   * stepped with the physics rather than with the screen. On a 144 Hz display
+   * that is a visible tick on every visual channel at once, which is what
+   * "the bird's movement is jaggery" is.
+   *
+   * Recorded here, inside `step`, rather than once per frame: `step` may run
+   * any number of times in a frame, so this is always exactly one `PHYS_DT`
+   * behind, which is the interval the render alpha is expressed in.
+   */
+  private prevVx = 0;
+  private prevVy = 0;
+  private prevRotation = 0;
+  /** X one physics step ago. `Game` keeps the mirror of this for the mesh
+   *  position; both must be sampled inside `step` for the same reason. */
+  private prevX = 0;
+  /** The velocity and position actually used for the last draw, exposed so the
+   *  interpolation can be asserted directly — see flight-smoothness.test.ts. */
+  private drawnVx = 0;
+  private drawnVy = 0;
+  /** The heading the mesh was last DRAWN at, so the wake stays attached to the
+   *  sprite the player can see rather than to the raw physics angle. */
+  private drawRotation = 0;
   /**
    * This frame's camera distance, pushed in by the game after the camera
    * settles. Drives the readability compensation in syncVisual so the bird
@@ -311,7 +383,30 @@ export class Bird {
       f.rotation.y = 0.35 * side;
       f.position.set(-0.64, 0.02, 0.16 * side);
       this.squash.add(f);
+      this.tailFeathers.push(f);
     }
+    // Measured, not derived by hand. The tail is a fan plus two feathers at
+    // different angles and offsets, and this is the number the wake is
+    // anchored on, so it is read off the real geometry rather than worked out
+    // on paper. Measured in `squash` local space — geometry bounds pushed
+    // through each mesh's own local matrix — so it does not depend on where
+    // the root happens to be scaled at construction time.
+    //
+    // The fan and the feathers are kept apart because only the fan is
+    // species-scaled, and a mesh scale is applied about that mesh's OWN origin
+    // rather than the bird's: scaling the feathers by `p.tail` would have left
+    // them floating away from the fan they are supposed to flank. The fan's
+    // rear therefore moves about the fan's pivot, which `tailPivRear` records.
+    const rearOf = (m: THREE.Mesh): number => {
+      m.geometry.computeBoundingBox();
+      // `Object3D.matrix` is only recomposed on demand — read it before
+      // asking, or every mesh measures as unrotated and untranslated.
+      m.updateMatrix();
+      return m.geometry.boundingBox!.clone().applyMatrix4(m.matrix).min.x;
+    };
+    this.tailFanRear = rearOf(this.tail);
+    this.tailPivRear = this.tail.position.x;
+    this.tailFeatherRear = Math.min(...this.tailFeathers.map(rearOf));
 
     this.glow = new THREE.PointLight(0xffe08a, 0, 18, 2);
     this.glow.position.set(0, 0.4, 1);
@@ -405,6 +500,14 @@ export class Bird {
     this.bounceCd = 0;
     this.wasGrounded = false;
     this.rotation = 0;
+    this.prevRotation = 0;
+    this.drawRotation = 0;
+    this.prevX = this.x;
+    this.drawnVx = this.vx;
+    this.drawnVy = this.vy;
+    this.kickCooldown = 0;
+    this.flareAmount = 0;
+    this.releaseKickAmount = 0;
     this.squashAmt = 1;
     this.stretchAmt = 1;
     this.wingTuck = 0;
@@ -421,12 +524,92 @@ export class Bird {
     this.tail.scale.set(1, 1, 1);
     this.beak.scale.set(1, 1, 1);
     this.squash.scale.set(1, 1, 1);
+    this.beakMult.set(1, 1, 1);
+    this.bulk = 1;
     for (const crest of this.crests) crest.visible = true;
     this.shape = "songbird";
   }
 
   speed(): number {
     return Math.hypot(this.vx, this.vy);
+  }
+
+  /**
+   * World position of the tail tip — where a wake should be anchored.
+   *
+   * `x`/`y` are the BODY CENTROID (the body sphere's centre), which is the
+   * right anchor for physics and the wrong one for a trail. The tail tip sits
+   * 1.65 world units behind the centroid at base scale and up to 4.0 for the
+   * comet, so a ribbon anchored at the centroid starts inside the bird and
+   * paints over its body — the "trail is half way through the bird" report.
+   *
+   * The tail is scaled about its own pivot at x=-0.7, not about the bird, so
+   * the offset has to be interpolated between the pivot and the tip using the
+   * tail's own scale, then run through the same squash and readability scale
+   * the mesh is drawn with. Skipping either is how a species-specific trail
+   * would drift off its own bird.
+   *
+   * The whole point is that the anchor moves with the visual, so this must be
+   * read AFTER `syncVisual`, and called with the same interpolated x/y the
+   * mesh was drawn at — see `Game.updateTrailRibbon`.
+   */
+  /**
+   * The velocity the mesh was last DRAWN at, i.e. the interpolated value rather
+   * than the raw physics one. Read-only, and exposed so the render
+   * interpolation can be asserted directly instead of inferred from a picture —
+   * see `flight-smoothness.test.ts`.
+   */
+  get interpolatedVyForTest(): number {
+    return this.drawnVy;
+  }
+
+  /** The same, horizontally. */
+  get interpolatedVxForTest(): number {
+    return this.drawnVx;
+  }
+
+  /** `vy` as of the previous physics step — the other end of the blend. */
+  get prevVyForTest(): number {
+    return this.prevVy;
+  }
+
+  /** `x` as of the previous physics step. */
+  get prevXForTest(): number {
+    return this.prevX;
+  }
+
+  /**
+   * Force the render-interpolation pair, for testing the draw at a heading the
+   * simulation has not happened to produce. Exposed rather than poked at
+   * through a cast, because the +/-pi seam is unreachable by driving the bird
+   * there honestly — it depends on the terrain facing at the right x.
+   */
+  setHeadingPairForTest(prev: number, cur: number): void {
+    this.prevRotation = prev;
+    this.rotation = cur;
+  }
+
+  tailPoint(x: number, y: number): { x: number; y: number } {
+    // The fan's species scale stretches it about the fan's own origin, so its
+    // rear is interpolated between the pivot and the measured tip; the feathers
+    // are fixed. Whichever reaches further back is the real rear of the bird.
+    const fan = this.tailPivRear + (this.tailFanRear - this.tailPivRear) * this.tail.scale.x;
+    const rear = Math.min(fan, this.tailFeatherRear);
+    // Then everything above `squash` scales about the bird's origin, so the
+    // measured extent just multiplies through — body bulk, speed stretch and
+    // the readability scale included, because the wake has to stay attached to
+    // the bird the player can actually see.
+    const back = rear * this.squash.scale.x * this.root.scale.x;
+    // The angle the MESH was drawn at, not the raw physics heading. The caller
+    // already passes the interpolated x/y (see `Game.updateTrailRibbon`); using
+    // the un-interpolated angle here instead would leave the wake attached to a
+    // heading the sprite is no longer at, which is the same detachment the
+    // interpolated position argument exists to prevent. `drawRotation` equals
+    // `rotation` whenever the render is not interpolating, so this is exactly
+    // the old behaviour on any caller that passes no alpha.
+    const c = Math.cos(this.drawRotation);
+    const s = Math.sin(this.drawRotation);
+    return { x: x + back * c, y: y + back * s };
   }
 
   applySkin(skin: BirdSkinColors): void {
@@ -460,7 +643,15 @@ export class Bird {
     this.wingL.scale.set(p.span, 1, p.span);
     this.wingR.scale.set(p.span, 1, p.span);
     this.tail.scale.set(p.tail, p.tail, 1);
-    this.beak.scale.set(p.beakWidth, p.beak, p.beakWidth);
+    // Beak and bulk are ALSO written every frame by `syncVisual` (beak opens
+    // with the call, the body stretches with speed), so the species factor has
+    // to be kept here and multiplied in at that point. Setting the scale here
+    // and letting `syncVisual` overwrite it next frame is what silently
+    // discarded the wader's 1.7x beak and the owl's 1.16 bulk — the shop drew
+    // them, the run did not have them.
+    this.beakMult.set(p.beakWidth, p.beak, p.beakWidth);
+    this.bulk = p.bulk;
+    this.beak.scale.copy(this.beakMult);
     this.squash.scale.set(p.bulk, p.bulk, 1);
     // An owl is a round bird with no crest to speak of; a phoenix is not.
     for (const child of this.crests) child.visible = p.crest;
@@ -483,6 +674,15 @@ export class Bird {
     this.justLaunched = false;
     this.impact = 0;
     this.flareAmount = 0;
+    this.releaseKickAmount = 0;
+    this.kickCooldown = Math.max(0, this.kickCooldown - dt);
+
+    // One PHYS_DT of render history, recorded per STEP so it is exactly one
+    // step behind however many steps this frame runs. See `prevVx`.
+    this.prevVx = this.vx;
+    this.prevVy = this.vy;
+    this.prevRotation = this.rotation;
+    this.prevX = this.x;
 
     // Record the release ONCE, here, before the grounded/ballistic branch —
     // so it is latched whether the bird is flying or still on the ground.
@@ -518,7 +718,9 @@ export class Bird {
     this.releaseAge = diving ? Number.POSITIVE_INFINITY : this.releaseAge + dt;
     const gMult = opts.gravityMult ?? 1;
     const cap =
-      (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult + (opts.boost ? BOOST_EXTRA_SPEED : 0);
+          (opts.fever ? MAX_SPEED_FEVER : MAX_SPEED) * opts.speedMult +
+          (opts.boost ? BOOST_EXTRA_SPEED : 0) +
+          (opts.speedBonus ?? 0);
 
     if (was) {
       /* ---------- carving the surface ---------- */
@@ -619,16 +821,6 @@ export class Bird {
           // the same take-off and cannot pop twice off a double lip.
           this.releaseAge = Number.POSITIVE_INFINITY;
           this.releaseBuffer = 0;
-          this.popArmedFor = 0;
-        } else {
-          // Left the lip still holding. Arm the coyote grace: releasing just
-          // AFTER the top is what the coach line teaches and what the hand
-          // wants to do, because a lip is easier to see than to anticipate.
-          // Without this the pop was gone the instant the wheels left, and
-          // all that remained was the flare, which is deliberately clamped so
-          // it can arrest a fall and never climb.
-          this.popArmedFor = LAUNCH_POP_COYOTE_S;
-          this.popArmedSpeed = Math.abs(vt);
         }
       } else {
         this.grounded = true;
@@ -684,21 +876,46 @@ export class Bird {
       //  - still bounded, because FLARE_MAX_RISE clamps the result, so a
       //    release made while level gives the same capped pull-out a release
       //    out of a committed dive does — never more.
+      //
+      // THE RELEASE IMPULSE, and the bug it fixes.
+      //
+      // Arming the brake was never the whole release. The brake is a *brake*:
+      // it arrests a fall, and by design it is spent without effect whenever
+      // there is no fall to arrest (`vy >= FLARE_MAX_RISE` below). So every
+      // release made from level or climbing flight produced EXACTLY NOTHING.
+      //
+      // Releasing at the crest of a ramp is precisely such a release — it is a
+      // release from climbing flight. Measured over 57 real ramp launches, 95%
+      // leave the bird at `vy >= 0`, so "release at the end of a ramp" landed
+      // in the dead branch almost every time and the bird did not jump. That is
+      // the whole "the release doesn't work on the last ramp" report: not a weak
+      // impulse, a literally absent one.
+      //
+      // So the release is now two things, chosen by what the bird is doing:
+      //  - a real dive (below FLARE_MAX_RISE) is still the brake's job, and the
+      //    brake is untouched;
+      //  - anything from a drift up to a launch gets `applyReleaseKick`, a
+      //    bounded upward impulse. See FlightPhysics for the numbers, the
+      //    cooldown that stops it being chained, and why the ceiling is applied
+      //    as a `Math.min` that can only RAISE vy — the previous clamp could
+      //    slam a +30 climb to -14 in one frame, and that must not come back.
       if (this.releaseBuffer > 0 && !diving) {
         this.releaseBuffer = 0;
         this.flareTimer = FLARE_DURATION;
-        // Coyote pop: the player left the lip holding and let go a moment
-        // later. That is the gesture the tutorial asks for, so pay it — at
-        // the floor rate, because it is the forgiving version of the input,
-        // not the precise one. Consumed here so it cannot also fire again.
-        if (withinPopCoyote(LAUNCH_POP_COYOTE_S - this.popArmedFor)) {
-          const speedFactor = clamp(this.popArmedSpeed / LAUNCH_POP_SPEED, 0, 1);
-          this.vy += LAUNCH_POP_MAX * LAUNCH_POP_FLOOR * speedFactor;
-          this.popQuality = Math.max(this.popQuality, LAUNCH_POP_FLOOR);
-        }
-        this.popArmedFor = 0;
+        // Airborne release. main's RELEASE_KICK supersedes the coyote pop that
+        // stood here on this branch: both existed to make a release in the air
+        // produce lift, but the kick is constant, measured off a real Bird
+        // (flat -0.07 -> +21.84, ramp p50 +10.2 -> +32.14) and carries its own
+        // cooldown, where the coyote pop was a decaying fraction of the crest
+        // pop with no rate limit. Keeping both would pay the same gesture
+        // twice. The crest-gate fix and the grounded pop floor from this
+        // branch are untouched — they solve a different failure (the launch
+        // not firing at all, and the GROUNDED pop scoring zero on a long ramp)
+        // and sit upstream of this branch.
+        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown);
+        this.vy = applyReleaseKick(this.vy, this.kickCooldown);
+        this.kickCooldown = RELEASE_KICK_COOLDOWN;
       }
-      this.popArmedFor = Math.max(0, this.popArmedFor - dt);
 
       // The pull-out: a DECAYING BRAKE, not an impulse.
       //
@@ -877,30 +1094,51 @@ export class Bird {
     this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.00008 : 0.003, dt));
   }
 
-  syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number): void {
-    const sp = this.speed();
+  syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number, interp = 1): void {
+    // Render interpolation. `ox`/`oy` arrive already interpolated by the game;
+    // the velocity and heading the visuals are built from are interpolated
+    // here, from the per-step history `step()` records. Before this, every one
+    // of these channels read the raw 120 Hz physics value, so on a display
+    // faster than 120 Hz the roll, the heading, the pupil dart, the beak and
+    // the tail flutter all advanced in visible steps — the sprite juddering
+    // while its position, which WAS interpolated, glided smoothly past it.
+    // Interpolating the whole visual state together is what makes the bird
+    // move as one object.
+    const rvx = lerp(this.prevVx, this.vx, interp);
+    const rvy = lerp(this.prevVy, this.vy, interp);
+    const rrot = lerpAngle(this.prevRotation, this.rotation, interp);
+    this.drawnVx = rvx;
+    this.drawnVy = rvy;
+    this.drawRotation = rrot;
+    const sp = Math.hypot(rvx, rvy);
     // Render interpolation: the mesh draws at a smoothed position between two
     // fixed physics steps (ox/oy), so a >60 Hz display never sees the bird
     // step. The sim state (this.x/y) stays untouched.
     const px = ox ?? this.x;
     const py = oy ?? this.y;
     // 3D dynamic banking: subtle roll and pitch that gives true depth
-    const bankX = Math.sin(time * 3.2) * 0.04 + clamp(this.vy * 0.012, -0.22, 0.22);
-    const bankY = clamp(this.vx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
+    const bankX = Math.sin(time * 3.2) * 0.04 + clamp(rvy * 0.012, -0.22, 0.22);
+    const bankY = clamp(rvx * 0.002, 0, 0.16) + (diving ? 0.06 : 0);
     this.root.position.set(px - this.originX, py, 0);
-    this.root.rotation.z = this.rotation; // visual matches physics — no lag factor
+    this.root.rotation.z = rrot;
     this.root.rotation.x = bankX;
     this.root.rotation.y = bankY;
 
     // Pupil directional lookahead
-    const pDx = clamp(this.vx * 0.0012, -0.01, 0.04);
-    const pDy = clamp(this.vy * 0.002, -0.03, 0.03);
+    const pDx = clamp(rvx * 0.0012, -0.01, 0.04);
+    const pDy = clamp(rvy * 0.002, -0.03, 0.03);
     this.pupilL.position.set(0.12 + pDx, 0.02 + pDy, 0.04);
     this.pupilR.position.set(0.12 + pDx, 0.02 + pDy, -0.04);
 
     // Beak opening on fast glides / high launches
     const beakOpen = clamp((sp - 35) / 55, 0, 0.35);
-    this.beak.scale.set(1 + beakOpen * 0.2, 1 + beakOpen * 0.35, 1);
+    // The call opening is an animation ON TOP of the species' beak, not a
+    // replacement for it — hence the multiply by `beakMult`.
+    this.beak.scale.set(
+      this.beakMult.x * (1 + beakOpen * 0.2),
+      this.beakMult.y * (1 + beakOpen * 0.35),
+      this.beakMult.z,
+    );
 
     // Tail wind flutter
     const tailFlutter = Math.sin(time * 24 + sp * 0.2) * 0.12 * clamp(sp / 40, 0.2, 1.2);
@@ -921,7 +1159,9 @@ export class Bird {
     this.squashAmt = lerp(this.squashAmt, 1, 1 - Math.pow(0.002, dt));
     this.stretchAmt = lerp(this.stretchAmt, 1, 1 - Math.pow(0.002, dt));
     const speedStretch = 1 + clamp(this.speed() / 180, 0, 0.18);
-    this.squash.scale.set(this.stretchAmt * speedStretch, this.squashAmt, 1);
+    // Likewise: speed stretch and landing squash are animations on top of the
+    // species' bulk, so the owl stays a round bird while it stretches.
+    this.squash.scale.set(this.bulk * this.stretchAmt * speedStretch, this.bulk * this.squashAmt, 1);
     this.squash.rotation.x = Math.sin(time * 3.2) * 0.04;
 
     // `syncVisual` runs at DISPLAY rate, not the fixed 120 Hz physics rate, so

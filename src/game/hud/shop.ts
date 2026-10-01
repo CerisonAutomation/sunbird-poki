@@ -102,7 +102,18 @@ function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: n
   // sells.
   const birdSvg = sunbirdSVG({ palette: skinPalette(d), shape: skinShape(d), width: 104, animateWings: true, title: d.name });
   const dealTag = v.dealPrice !== undefined && !v.owned ? `<span class="deal-tag">TODAY −40%</span>` : "";
-  return `<div class="skin-card r-${rarity.key} ${v.equipped ? "equipped" : ""} ${v.owned ? "owned" : ""} ${v.dealPrice !== undefined ? "deal" : ""}" data-skin="${d.id}">
+  // The card is dressed as a control — `menu-polish.css` gives it a pointer
+  // cursor, a hover lift and a press shadow — but it emitted no action, so
+  // `closest("[data-action]")` in HUD.ts matched nothing and a press on the
+  // bird did NOTHING. Only the 104px "Preview" art and the small Equip button
+  // at the very bottom of a ~200px card were live, which is the whole card
+  // reading as a tap target that swallows the tap. Owned birds are free and
+  // reversible, so the whole card now selects them.
+  //
+  // Unowned cards keep their price button and no wrapper action: a press that
+  // spends coins must stay on the button that shows the price.
+  const select = v.owned && !v.equipped ? ` data-action="select-skin" data-id="${d.id}"` : "";
+  return `<div class="skin-card r-${rarity.key} ${v.equipped ? "equipped" : ""} ${v.owned ? "owned" : ""} ${v.dealPrice !== undefined ? "deal" : ""}" data-skin="${d.id}"${select}>
     <span class="rarity">${rarity.label}</span>
     ${dealTag}
     <button class="skin-bird skin-preview" data-ui data-action="preview-skin" data-id="${d.id}" aria-label="Preview ${d.name}" aria-pressed="${preview === d.id}">${birdSvg}<span>Preview</span></button>
@@ -127,16 +138,20 @@ function renderTrailCard(v: ShopTrailView, wallet: number): string {
   const d = v.def;
   const stops = d.css.join(", ");
   const missing = Math.max(0, d.price - wallet);
+  // An owned trail is EQUIPPED here, not re-bought. It used to fire `buy-trail`,
+  // which toggles an already-owned trail, so the button labelled "Equip" turned
+  // the ribbon OFF on the second press and no press of it could ever be a
+  // second "Equip".
   const action = v.equipped
     ? `<span class="tag on">✓ In use</span>`
     : v.owned
-      ? `<button class="mini-btn" data-ui data-action="buy-trail" data-id="${d.id}">Equip</button>`
+      ? `<button class="mini-btn" data-ui data-action="select-trail" data-id="${d.id}">Equip</button>`
       : v.affordable
         ? `<button class="mini-btn" data-ui data-action="buy-trail" data-id="${d.id}">● ${d.price}</button>`
         : `<span class="tag need">Need ${missing}●</span>`;
   return `<div class="trail-card ${v.equipped ? "equipped" : ""}">
     <span class="trail-swatch" style="background:linear-gradient(90deg, ${stops})"></span>
-    <div class="trail-body"><b>${d.label}</b><em>${d.desc}</em></div>${action}</div>`;
+    <div class="trail-body"><b>${escapeHtml(d.label)}</b><em>${escapeHtml(d.desc)}</em></div>${action}</div>`;
 }
 
 export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dailyFlash" | "gold" | "nestLevel" | "nestMaxed" | "nestMult" | "nestPrice" | "portalName" | "shopTrails" | "skins" | "stipendClaimed" | "vip" | "wallet" | "wingmanBundle">, browse: ShopBrowse): string {

@@ -797,30 +797,29 @@ export const VIP = {
   ],
 };
 
-export type Promo = { type: "gold" } | { type: "vip" } | { type: "coins"; amount: number };
-
 /**
- * Redeemable codes. **Coins only, and small.**
+ * What a promo code is allowed to grant: coins, and only coins.
  *
- * This table ships inside the bundle, in plaintext, inside the submission zip.
- * There is no server to validate a code against, so every entry here is public
- * the moment the game is live — one devtools search, or one forum post, and
- * every player has every code.
+ * This table ships inside the bundle, so every code in it is public to anyone
+ * who opens devtools. It used to hold `{ type: "gold" }` and `{ type: "vip" }`
+ * entries, which handed the two paid tiers — 2x coins permanently, the Nest
+ * Pass track, skin unlocks — to anyone who typed ZENITH. There is no server to
+ * validate a code against, so a client-side secret is not a secret: the codes
+ * were worth far more than the 60,475-coin collection they bypassed, and they
+ * cost nothing to read.
  *
- * It used to grant entitlements: `ZENITH`/`SUNBIRD` → Gold (2x coins forever,
- * premium pass track, locked skins) and `AURORA` → VIP. Those were not promo
- * codes, they were a plaintext bypass of the entire 60k-coin economy, and the
- * economy is the only progression this build has. They are gone.
- *
- * What remains is deliberately harmless: a handful of small, one-per-device
- * coin grants worth roughly one good run each, of the kind that can be printed
- * on a jam sticker without consequence. `SaveData.redeem()` still enforces
- * one use per code per device.
- *
- * RULE: nothing in this table may grant an entitlement, a permanent
- * multiplier, or a cosmetic. `economy.test.ts` enforces it.
+ * Coins survive this only because a bounded giveaway is a deliberate marketing
+ * choice rather than a hole: redeeming every code in the table is worth ~2.8%
+ * of the collection, and `redeemedCodes` still stops one device farming them.
+ * Anything that unlocks content or multiplies earnings has to move behind a
+ * server before it can be a code again.
  */
+export type Promo = { type: "coins"; amount: number };
+
 export const PROMO_CODES: Record<string, Promo> = {
+  ZENITH: { type: "coins", amount: 250 },
+  SUNBIRD: { type: "coins", amount: 250 },
+  AURORA: { type: "coins", amount: 250 },
   NEST250: { type: "coins", amount: 250 },
   FEATHER: { type: "coins", amount: 100 },
   KONAMI: { type: "coins", amount: 500 },
@@ -843,6 +842,14 @@ export type BoostView = {
   affordable: boolean;
   /** Present when this boost is today's half-price deal. */
   dealPrice?: number;
+  /** Copies owned in storage. Always 0 for a permanent upgrade. */
+  stocked: number;
+  /** Copies staged for the next flight. */
+  armedCount: number;
+  /** Copies owned but not staged — what the loadout screen can still add. */
+  spare: number;
+  /** Unlocked outright; the store offers no "buy" for these. */
+  permanent: boolean;
 };
 
 export type ShopTrailView = {

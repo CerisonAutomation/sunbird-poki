@@ -35,6 +35,15 @@ export class ParticleFX {
   private readonly rings: THREE.Mesh[] = [];
   private budget = 1;
   private recycleSlot = 0;
+  /**
+   * Floating-origin recenter point (see `TerrainSystem.recenter()`). Particles
+   * integrate in true world space and are pushed true world x by their
+   * emitters, so the subtraction happens at the buffer write. The Points object
+   * carries no transform, so without this the entire sparkle wake and every
+   * impact ring jump 4096 units off-screen the instant the origin rebases and
+   * never come back for the rest of an Endless run.
+   */
+  private originX = 0;
 
   constructor() {
     this.pos = new Float32Array(MAX * 3);
@@ -506,7 +515,7 @@ export class ParticleFX {
   burstRing(x: number, y: number, color = 0xfff2a3): void {
     const ring = this.rings.find((r) => !r.visible) ?? this.rings[0]!;
     ring.visible = true;
-    ring.position.set(x, y, 0.8);
+    ring.position.set(x - this.originX, y, 0.8);
     ring.scale.setScalar(0.65);
     const mat = ring.material as THREE.MeshBasicMaterial;
     mat.opacity = 1;
@@ -543,7 +552,7 @@ export class ParticleFX {
     for (let i = 0; i < n; i++) {
       const p = this.particles[i]!;
       const o = i * 3;
-      this.pos[o] = p.x;
+      this.pos[o] = p.x - this.originX;
       this.pos[o + 1] = p.y;
       this.pos[o + 2] = p.z;
       const a = p.life / p.max;
@@ -582,6 +591,24 @@ export class ParticleFX {
 
   setBudget(mult: number): void {
     this.budget = Math.max(0.2, Math.min(1, mult));
+  }
+
+  /**
+   * Shift into the new render frame. Called from `Game.maybeRecenter()`; see
+   * `originX`.
+   *
+   * Live particles only need the new `originX` — they are rewritten from
+   * `p.x` every frame. Rings are meshes positioned once at spawn, so they have
+   * to be moved by the delta here. A ring lives ~0.55s and a rebase is 4096m
+   * apart, so there is almost never one alive across a rebase; "almost" is not
+   * a reason to leave a 4096-unit ring stranded on screen.
+   */
+  setRenderOrigin(originX: number): void {
+    const delta = this.originX - originX;
+    this.originX = originX;
+    for (const ring of this.rings) {
+      if (ring.visible) ring.position.x += delta;
+    }
   }
 
   clear(): void {

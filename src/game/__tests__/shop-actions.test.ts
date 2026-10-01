@@ -53,6 +53,11 @@ function context(save: SaveData, rec: Recorded, over: Partial<ShopActionContext>
     buySkin: () => rec.calls.push("buySkin"),
     buyBoost: () => rec.calls.push("buyBoost"),
     buyTrail: () => rec.calls.push("buyTrail"),
+    // The loadout's staging moves go through the real save so a test can see
+    // stock actually change; a recorder stub would let a broken inventory
+    // pass as a working one.
+    armBoost: (id, n) => save.armBoost(id, n),
+    unarmBoost: (id, n) => save.unarmBoost(id, n),
     buyCoinStarter: () => rec.calls.push("buyCoinStarter"),
     buyCoinGold: () => rec.calls.push("buyCoinGold"),
     buyPortalVip: () => rec.calls.push("buyPortalVip"),

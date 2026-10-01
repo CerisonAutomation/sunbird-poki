@@ -80,6 +80,11 @@ export const QUICK_ACTIONS: MenuDestination[] = [
 ];
 
 export const PLAY_DESTINATIONS: MenuDestination[] = [
+  // The pre-flight screen: pick a bird, pick a trail, and buy or stage
+  // boosters — all on one page. It lives here rather than in the four-tile
+  // quick rail because that rail is a deliberate 2x2 block; a fifth tile
+  // would strand an orphan in a third row.
+  dest("loadout", "open-loadout", "trail", "Loadout", "Bird, trail & boosters",),
   dest("challenges", "open-challenges", "challenge", "Challenges", "Daily & weekly goals, auto-matched",),
   dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush",),
   dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge",),

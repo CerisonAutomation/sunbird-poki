@@ -33,7 +33,7 @@
  * `scripts/verify-upload.mjs` (which also proves it is not stale).
  */
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { paymentMarkersIn } from "./portal-markers.mjs";
 import path from "node:path";
@@ -148,6 +148,64 @@ function stageHtml() {
 const ENTRY_DIRS = ["icons", "i18n"];
 const ENTRIES = ["index.html", ...ENTRY_DIRS];
 
+/**
+ * Drop shipped files the game can never fetch.
+ *
+ * `fonts/` is the case worth explaining. vite-singlefile inlines every woff2
+ * into index.html as a `data:font/woff2` URI — 6 faces, 112 KB of base64 the
+ * game genuinely loads — and staging then copied those SAME 6 files out of
+ * `public/` as well: another 112 KB that nothing has ever requested. The
+ * directory survived the earlier `i18n/` prune on the argument that it was
+ * "kept for host-side/offline tooling", but there is no host. A portal serves
+ * exactly the folder handed to it, and the game reads its faces out of the
+ * HTML. So those were ~112 KB of dead weight in a size-budgeted upload.
+ *
+ * Both decisions are read out of the staged HTML rather than a hand-kept list,
+ * so a font or icon that IS referenced keeps shipping with no edit here.
+ *
+ * `i18n/` is exempt and always kept. Its packs are fetched from a path built at
+ * runtime (`./i18n/${locale}.json` in src/i18n/index.ts), which never appears
+ * as a literal in the HTML — "not referenced by index.html" is therefore not a
+ * valid reason to drop one, and dropping them would break every non-English
+ * player.
+ */
+function pruneUnreferenced(target, html) {
+  const dropped = [];
+  const drop = (dir, file) => {
+    rmSync(path.join(target, dir, file));
+    dropped.push(`${dir}/${file}`);
+  };
+  const pruneEmpty = (dir) => {
+    const full = path.join(target, dir);
+    if (existsSync(full) && readdirSync(full).length === 0) rmSync(full, { recursive: true, force: true });
+  };
+
+  // Fonts: if any face is inlined, the @font-face rules that pointed at these
+  // files were inlined with it, so the whole directory is unreachable.
+  const fontsInlined = html.includes("data:font/woff2") || html.includes("data:application/font-woff");
+  if (fontsInlined) {
+    const fontDir = path.join(target, "fonts");
+    if (existsSync(fontDir)) {
+      for (const file of readdirSync(fontDir)) drop("fonts", file);
+      pruneEmpty("fonts");
+    }
+  }
+
+  // Icons: keep only what the head actually links.
+  const iconDir = path.join(target, "icons");
+  if (existsSync(iconDir)) {
+    for (const file of readdirSync(iconDir)) {
+      if (!html.includes(file)) drop("icons", file);
+    }
+    pruneEmpty("icons");
+  }
+
+  if (dropped.length) {
+    console.log(`  · pruned ${dropped.length} file(s) the game cannot fetch: ${dropped.join(", ")}`);
+  }
+  return dropped;
+}
+
 /** Write a staged bundle into `target` (fresh every run). */
 function stageInto(target) {
   rmSync(target, { recursive: true, force: true });
@@ -158,6 +216,7 @@ function stageInto(target) {
     const from = path.join(src, dir);
     if (existsSync(from)) cpSync(from, path.join(target, dir), { recursive: true });
   }
+  pruneUnreferenced(target, html);
   return html;
 }
 
@@ -171,6 +230,22 @@ for (const junk of ["sw.js", "manifest.webmanifest", "service-worker.js"]) {
   if (existsSync(p)) {
     rmSync(p, { force: true });
     console.log(`  · removed ${src}/${junk} (not shippable to a portal)`);
+  }
+}
+
+// Removing the file is only half of it: `index.html` still pointed at
+// `manifest.webmanifest`, so the portal build shipped a <link rel=manifest>
+// resolving to a file that is no longer there and 404ed on every load. The
+// upload folder had its HTML rewritten already, which is why the shipped zip
+// was clean and `dist-poki/` — the folder anyone serves directly to check the
+// build — was the one left dangling.
+const builtIndex = path.join(src, "index.html");
+if (existsSync(builtIndex)) {
+  const before = readFileSync(builtIndex, "utf8");
+  const after = before.replace(/[ \t]*<link\b[^>]*\brel=["']manifest["'][^>]*>\r?\n?/gi, "");
+  if (after !== before) {
+    writeFileSync(builtIndex, after);
+    console.log(`  · removed <link rel="manifest"> from ${src}/index.html`);
   }
 }
 

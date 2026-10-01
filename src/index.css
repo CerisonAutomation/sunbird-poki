@@ -286,9 +286,14 @@ textarea {
   }
 }
 
+/* Hiding the ripple outright (rather than collapsing its animation) is the
+   point: the animation is what carries the motion, so a duration override
+   would still draw a 52px circle that scales and fades. No `!important` is
+   needed — `.touch-ripple` is the only rule in any sheet that touches this
+   class, so nothing competes for `display` and it wins at (0,1,0). */
 @media (prefers-reduced-motion: reduce) {
   .touch-ripple {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -324,22 +329,23 @@ textarea {
 
 /* The coin counter's glyph is the SAME inline SVG the menus use, injected in
    HUD.ts. It used to be a ::before radial-gradient dot built here, which made
-   the flight counter the one coin in the game drawn with different art. No
-   ::before rule any more — see .coin-glyph above for its size and alignment. */
+   the flight counter the one coin in the game drawn with different art. */
 .stat-value.coin {
   /* Inline flow, not flex: .coin-glyph is aligned with vertical-align, and
      the pair must never break mid-number on a narrow screen. */
   white-space: nowrap;
 }
-.stat-value.coin::before {
-  content: "";
-  display: inline-block;
-  width: 0.9em; height: 0.9em;
-  vertical-align: -0.1em;
-  margin-right: 0.15em;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe89a, var(--coin-gold) 55%, #c88a00);
-}
+/* The ::before dot is gone — deleted, not overridden.
+
+   It survived three previous "fixes" because every one of them changed the SVG
+   and left this rule alone, so the SVG's own shape was judged in isolation and
+   never rendered beside it. The result in the shipped build was a gradient
+   disc from this pseudo-element PLUS the inline SVG disc, side by side: the
+   "two circles" players kept reporting, and the reason fixing COIN_SVG twice
+   (a filled pupil, then a stroked rim ring) never changed what they saw.
+
+   Do not re-add a ::before glyph here. If a coin needs to be drawn, change
+   renderCoins()/COIN_SVG so every coin in the game changes together. */
 @media (max-height: 500px) and (min-width: 641px) {
   .hud-root .rank-up, .hud-root .goal-pop { max-width: min(42vw, 360px); }
 }
@@ -1616,6 +1622,7 @@ fieldset.squad-fields {
   display: flex;
   flex-direction: row;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1641,9 +1648,17 @@ fieldset.squad-fields {
   line-height: 1;
 }
 
+/* `min-width: 140px` is load-bearing, not decoration. `.pc-preview` has
+ * `min-width: auto` so the bird SVG floors it near 104px, and `.pc-action` is
+ * `flex-shrink: 0` around a `white-space: nowrap` price button near 138px. That
+ * leaves the body column — the only one carrying readable text — as the sole
+ * shrinkable child. With `min-width: 0` it absorbed the whole deficit and the
+ * flash-sale perk rendered in a 34px sliver, one word per line. A floor at 140px
+ * means the row runs out of room instead, and `flex-wrap` on `.pc-row` sends the
+ * action column to its own line. */
 .pc-body {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 140px;
+  min-width: 140px;
 }
 
 .pc-body b {
@@ -1700,10 +1715,15 @@ fieldset.squad-fields {
   text-align: center;
 }
 
-/* Action column */
+/* Action column. Sits side-by-side rather than stacked: once `.pc-row` wraps,
+ * a stacked pair would leave a tall, mostly-empty second line under a wide row.
+ * `margin-left: auto` keeps the buttons right-aligned on that wrapped line. */
 .pc-action {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
   gap: 6px;
   flex-shrink: 0;
 }
@@ -2108,7 +2128,17 @@ fieldset.squad-fields {
   transform: none;
 }
 .hud-root[data-flying="true"] .toasts {
-  top: calc(env(safe-area-inset-top, 0px) + 112px);
+  /* Below the ring chain, not level with it. Both are right-anchored at
+     `right: 14px`, and this lane used to sit at a fixed `112px` while the
+     chain took `var(--hud-header-height) + 4px` — which measures ~106px on
+     desktop, so the two landed 2px apart and shared a ~113x33px corner at
+     every viewport, on every flight where a chain was live. One number was a
+     literal and the other is measured at runtime, so they were never going to
+     agree by luck. The chain is a live meter and the toast lane is transient,
+     so the chain keeps the corner and the lane drops below it — and every
+     value here now derives from the same measured variable rather than from
+     a second guess at the header's height. */
+  top: calc(var(--hud-header-height, 110px) + 72px + env(safe-area-inset-top, 0px));
   right: calc(14px + env(safe-area-inset-right, 0px));
   left: auto;
   bottom: auto;
@@ -2118,11 +2148,11 @@ fieldset.squad-fields {
 }
 .hud-root[data-flying="true"] .toasts .toast { max-width: 100%; }
 @media (max-width: 640px) {
-  .hud-root[data-flying="true"] .toasts { width: min(240px, 48vw); top: calc(env(safe-area-inset-top, 0px) + 110px); }
+  .hud-root[data-flying="true"] .toasts { width: min(240px, 48vw); top: calc(var(--hud-header-height, 110px) + 68px + env(safe-area-inset-top, 0px)); }
   .hud-root[data-flying="true"] .ring-chain { right: 12px; }
 }
 @media (max-height: 500px) and (min-width: 641px) {
-  .hud-root[data-flying="true"] .toasts { top: calc(env(safe-area-inset-top, 0px) + 96px); }
+  .hud-root[data-flying="true"] .toasts { top: calc(var(--hud-header-height, 110px) + 62px + env(safe-area-inset-top, 0px)); }
 }
 /* Split-screen keeps its score bar but shares the same accessible controls. */
 .play-hud.versus .top-bar { display: flex; justify-content: flex-end; }
@@ -2264,10 +2294,21 @@ fieldset.squad-fields {
 
      So: keep one visible, make it smaller, and move it clear of the corridor
      rather than removing it. The landing corridor is the thing the player
-     reads, and this keeps it clear by position instead of by deletion. */
+     reads, and this keeps it clear by position instead of by deletion.
+
+     The lane is anchored to the BOTTOM here, not the top. It used to be pulled
+     up to `safe-area + 6px`, which on a 844x390 frame put it at y 6..40,
+     x 620..830 — directly over the mute and pause buttons at y 4..48,
+     x 744..840. The taps still landed (the lane is `pointer-events: none`), so
+     nothing was broken; the player just could not see what they were hitting,
+     on the two controls most likely to cause a support ticket. The footer is
+     already measured into `--hud-footer-height`, so the bottom of the free
+     band is the one anchor on a short screen that is not shared with a
+     control. */
   .hud-root[data-flying="true"] .toasts {
     width: min(210px, 42vw);
-    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    top: auto;
+    bottom: calc(var(--hud-footer-height, 65px) + 78px + env(safe-area-inset-bottom, 0px));
   }
   .hud-root[data-flying="true"] .toast {
     font-size: clamp(11px, 1.5vw, 13px);
@@ -2323,7 +2364,23 @@ fieldset.squad-fields {
 .hud-root .impact-popups {
   top:calc(var(--hud-header-height,110px) + 94px + env(safe-area-inset-top));
   bottom:calc(var(--hud-footer-height,65px) + 90px + env(safe-area-inset-bottom));
-  left:50px; right:50px; overflow:hidden; contain:paint;
+  /* The right inset is deliberately NOT the mirror of the left one, and that
+     asymmetry is the whole fix. `.toasts` is a top-RIGHT column while flying
+     (top: safe-area + 112px, width min(280px, 34vw)) while this lane ran to
+     `right: 50px` — so a popup whose bird was in the upper right of the
+     corridor landed directly underneath the toast pill, and the two read as
+     one overlapping smear. That is the "messages overlap" report: a "THUD!"
+     and a milestone line occupying the same pixels at the same moment.
+
+     Reserving the toast column's width keeps the two layers disjoint by
+     construction instead of by hoping they never coincide. `HUD.popup()`
+     clamps against lane.width, so a popup now cannot be positioned into the
+     reserved band at all. It keeps its foveal placement at the bird — the one
+     thing that made impact text readable — and simply loses the corner the
+     toast already owns. */
+  left:50px;
+  right:calc(min(280px, 34vw) + 28px + env(safe-area-inset-right, 0px));
+  overflow:hidden; contain:paint;
 }
 .hud-root .impact-popup { max-width:min(180px,100%); font-size:clamp(14px,2.5vw,22px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .hud-root:not([data-ui-state="playing"]) .impact-popups,
@@ -2335,6 +2392,23 @@ fieldset.squad-fields {
 @media(max-height:500px) {
   .hud-root .impact-popups { display:block; }
   .hud-root .impact-popup { font-size:clamp(13px,2.2vw,17px); max-width:min(150px,100%); }
+}
+/* The reservation above is only as good as its agreement with the toast
+   column's actual width. Both breakpoints below resize `.toasts`, so both have
+   to resize the reservation with it — otherwise the fix holds on a desktop
+   window and quietly stops holding on exactly the short, narrow embedded
+   frames Poki serves, which is where overlapping text was reported from.
+   Both numbers are the same `min()` used by the `.toasts` rules themselves, so
+   there is one value per breakpoint and the two cannot drift apart. */
+@media (max-width: 640px) {
+  .hud-root .impact-popups {
+    right:calc(min(240px, 48vw) + 28px + env(safe-area-inset-right, 0px));
+  }
+}
+@media (max-height: 500px) and (min-width: 641px) {
+  .hud-root .impact-popups {
+    right:calc(min(280px, 34vw) + 28px + env(safe-area-inset-right, 0px));
+  }
 }
 /* Keep optional social controls secondary and readable without emoji fonts. */
 .flight-footer .emote-wheel { justify-content:flex-end; }
@@ -2833,4 +2907,29 @@ label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
 
   /* Input text direction */
   input, textarea { text-align: right; }
+}
+
+/* Impact popups, and the one thing the motion kill-switch was missing.
+ *
+ * `ui.css` neutralises animation for reduced-motion with an `!important`
+ * longhand on `*`. Two impact-popup variants declare their animation through the
+ * SHORTHAND with `!important` as well, and a shorthand `!important` at class
+ * specificity (0,1,0) outranks a longhand `!important` on the universal
+ * selector (0,0,0). So the biggest, fastest, most motion-heavy element in the
+ * flight HUD — 28-38px type scaling to 1.4x and travelling 210% of its own
+ * height — played its full animation for exactly the players who asked for
+ * stillness. Every other pulse in the HUD stopped correctly; this one did not.
+ *
+ * Restating the rules here works on two counts: this file loads after `ui.css`,
+ * and the selector list is specific enough to win. The popup is then left
+ * visible and static rather than hidden, because "no impact registered" is a
+ * worse outcome than "the impact registered without the flourish". */
+@media (prefers-reduced-motion: reduce) {
+  .impact-popup,
+  .impact-popup.rise,
+  .impact-popup--thud,
+  .impact-popup--bop {
+    animation: none !important;
+    opacity: 1;
+  }
 }

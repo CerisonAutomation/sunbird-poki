@@ -18,6 +18,7 @@ import {
   wingsProximity,
   type ProgressEvent,
 } from "../ProgressBeats";
+import { menuIconSm, SM_ICON_NAMES } from "../MenuIcons";
 
 const trophy = (rarity: "bronze" | "silver" | "gold" | "platinum", id = `t_${rarity}`): ProgressEvent => ({
   kind: "trophy",
@@ -25,10 +26,21 @@ const trophy = (rarity: "bronze" | "silver" | "gold" | "platinum", id = `t_${rar
   title: `${rarity} trophy`,
   rarity,
 });
-const wings = (tierId = "gold"): ProgressEvent => ({ kind: "wings", tierId, icon: "🥇", name: "Gold Wings" });
+/**
+ * `icon` is an icon NAME the renderer draws with `menuIconSm` — not art, not a
+ * glyph, and emphatically not an emoji. These fixtures used emoji ("🥇", "🏔")
+ * as convenient placeholders, and the beat view passed them straight through,
+ * so every rank-up and mastery beat on the results card rendered NO icon at all:
+ * `menuIconSm` returns "" for a name it cannot draw.
+ *
+ * `Career.WINGS` and `Modes` carry real keys in production ("paper_wing",
+ * "feather", "aurora"), so the fixtures now match what actually ships. The
+ * normalisation itself is asserted separately, below.
+ */
+const wings = (tierId = "gold"): ProgressEvent => ({ kind: "wings", tierId, icon: "feather", name: "Gold Wings" });
 const mastery = (maxed = false): ProgressEvent => ({
   kind: "mastery",
-  icon: "🏔",
+  icon: "mountain",
   mode: "Tempest",
   level: maxed ? 5 : 2,
   maxed,
@@ -230,9 +242,36 @@ describe("celebration: what the card renders", () => {
     expect(view.key).toBe("hud.progress.wings");
     expect(view.params).toEqual({ name: "Gold Wings" });
     expect(view.fallback).toBe("Lifetime rank earned · {{name}}");
-    expect(view.icon).toBe("🥇");
+    expect(view.icon).toBe("feather");
     expect(view.rarity).toBe("gold");
     expect(view.banner).toBe(true);
+  });
+
+  /**
+   * The contract that makes a lookup failure impossible to miss downstream:
+   * `BeatView.icon` is typed `SmIconName`, so every value that reaches a
+   * renderer is a name the icon map actually has. Before this, the `|| "…"`
+   * fallbacks only covered an ABSENT field; a present-but-unknown name (a
+   * renamed icon, a typo, an emoji from old save data) sailed through and the
+   * row rendered either the raw word or no icon at all.
+   */
+  it("normalises an undrawable icon name instead of handing the renderer a word", () => {
+    const bad = [
+      wings("gold"),
+      { kind: "wings", tierId: "aurora", icon: "🥇", name: "Aurora Wings" },
+      { kind: "wings", tierId: "gold", icon: "", name: "Gold Wings" },
+      { ...mastery(), icon: "🏔" },
+      { ...mastery(), icon: "no_such_icon" },
+      { kind: "cosmetic", icon: "✨", label: "Stormline trail" },
+      { kind: "challenge", variant: "gauntlet", icon: "🌩", label: "Gauntlet", coins: 300 },
+    ] as ProgressEvent[];
+
+    for (const event of bad) {
+      const view = beatView(planCelebration([event]).staged[0]!);
+      expect(SM_ICON_NAMES.has(view.icon), `${event.kind} "${view.icon}" is not drawable`).toBe(true);
+      // The whole bug in one line: the name must never become the text.
+      expect(menuIconSm(view.icon)).toMatch(/^<svg /);
+    }
   });
 
   it("reuses the keys the toasts already had, so no copy is translated twice", () => {

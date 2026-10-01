@@ -181,8 +181,20 @@ describe("release — the current behaviour, measured", () => {
     shallow.step(DT, DIVE, terrain);
     shallow.vy = -5;
     shallow.step(DT, GLIDE, terrain);
-    expect(shallow.vy, "5 m/s is a drift, not a dive — it keeps falling gently").toBeLessThan(0);
-    expect(shallow.vy, "and is not slammed downward by the clamp").toBeGreaterThan(-20);
+    // A shallow fall is not a dive, so the BRAKE must not engage. But "the
+    // brake didn't engage" was originally asserted as "therefore the release
+    // does nothing" — `toBeLessThan(0)`, the bird still sinking at -5 m/s after
+    // the player let go. That is the reported bug in miniature: a release that
+    // spends no brake is a release the player experiences as broken, and off a
+    // ramp crest it is very nearly every release. Commit cbf6950 was right that
+    // a brake must never clamp a climb, and wrong to conclude that a release
+    // with no brake to spend must therefore be a no-op. The release now carries
+    // a second, non-brake impulse, so the invariant worth pinning is not "still
+    // falling" but "never falling faster than before" — the cbf6950 guarantee,
+    // preserved — plus a real lift rather than mere absence of harm.
+    expect(shallow.flareAmount, "a drift is not a dive, so the brake stays off").toBe(0);
+    expect(shallow.vy, "a release must never make the bird fall FASTER than it was").toBeGreaterThanOrEqual(-5);
+    expect(shallow.vy, "and a 5 m/s release is a small lift, not a launch").toBeLessThan(-FLARE_MAX_RISE);
 
     // A committed dive does get it, and it is a real pull-out, not a nudge.
     const diving = new Bird();

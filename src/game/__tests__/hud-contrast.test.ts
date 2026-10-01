@@ -205,10 +205,31 @@ describe("flight HUD stat colours survive every sky", () => {
   });
 
   it("keeps the coin glyph gold so the counter still reads as coins", () => {
-    const glyph = resolveValue(forSelector(".stat-value.coin::before").map((r) => r.body).join("\n"));
+    // This used to assert a gold radial-gradient on `.stat-value.coin::before`.
+    // That pseudo-element WAS the second circle: a gradient disc painted beside
+    // the injected SVG, so the counter showed two coins. The assertion was
+    // pinning the defect, and it had to be rewritten rather than deleted — the
+    // intent ("the counter must still read as gold coins") is still real.
+    //
+    // The gold now arrives the right way: the SVG's one disc fills with
+    // `currentColor`, and this rule paints that colour from the theme token.
+    // So assert BOTH halves — the disc inherits, and the rule supplies a gold —
+    // or the coin silently falls back to the counter's white text and still
+    // passes a test that only looks at the SVG.
+    const disc = /<circle\b[^>]*fill="currentColor"/.exec(
+      readFileSync(join(process.cwd(), "src/game/HUD.ts"), "utf8"),
+    );
+    expect(disc, "the coin disc must keep filling from the theme").not.toBeNull();
 
-    expect(glyph).toMatch(/#ffd76a/);
-    expect(glyph).toMatch(/radial-gradient/);
+    const themed = effective(".stat-value.coin .coin-glyph", "color");
+    expect(themed, "nothing colours the coin glyph any more").toBeTruthy();
+    expect(themed!.toLowerCase()).toBe(resolveValue("var(--amber)").toLowerCase());
+    expect(luminance(themed!), `coin glyph ${themed} is not a bright metal`).toBeGreaterThan(0.5);
+
+    // And the second disc must stay deleted: coin-glyph.test.ts sweeps all three
+    // stylesheets for a painting ::before/::after on a coin selector.
+    const before = forSelector(".stat-value.coin::before").map((r) => r.body).join("\n");
+    expect(before, "a second coin disc is back beside the SVG").not.toMatch(/radial-gradient|#ffd76a/);
   });
 
   it("keeps the halo dark enough to carry the bright-sky case", () => {

@@ -473,6 +473,34 @@ export class GameAudio {
   }
 
   /**
+   * The release half of `diveCue()`.
+   *
+   * `diveCue()` slides DOWN (280 -> 140 Hz) because the press commits you to
+   * a fall. This slides UP, so the two halves of the one gesture are audible
+   * opposites and the reversal is audible without looking. The noise layer is
+   * air over the wings as the dive washes out into a glide, which is the
+   * actual texture of the moment.
+   *
+   * `intensity` is the brake the flare applied this tick, normalised. A gentle
+   * release from a shallow dive is a quiet chirp; hauling out of a 95 m/s dive
+   * is a full sweep with air on top. Calls under the threshold are dropped
+   * rather than made quiet — a near-silent cue at a low moment reads as a
+   * glitch, not as subtlety.
+   */
+  soarCue(intensity = 1): void {
+    // `Number.isFinite` first, not `Math.min/Math.max`: those propagate NaN
+    // rather than swallowing it, so a NaN intensity would reach the synth as
+    // a NaN frequency and a NaN gain, which is a thrown exception inside the
+    // audio callback — on the frame the player pulls out of a dive.
+    if (!Number.isFinite(intensity)) return;
+    const i = Math.max(0, Math.min(1, intensity));
+    if (i < 0.08) return;
+    const base = 300 + 240 * i;
+    this.tone(base, 0.16, "sine", 0.03 + 0.045 * i, base * 2.1);
+    this.noiseBurst(0.1, 900, 0.01 + 0.018 * i);
+  }
+
+  /**
    * Ascending musical coin chime!
    * Rapid coin collections ascend a soaring pentatonic scale (C6 -> A7)
    * with overtone sparkle and resonant bell harmony on streaks of 5+.

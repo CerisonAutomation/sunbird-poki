@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasIconGlyph, iconGlyph, menuIconSm } from "../MenuIcons";
+import { iconGlyph, menuIconSm } from "../MenuIcons";
 import {
   ALT_CEILING,
   ALT_CEILING_FADE,
@@ -37,16 +37,25 @@ describe("an icon name never reaches the screen as text", () => {
 
   it("resolves every name beatIcon can return", () => {
     for (const name of BEAT_ICON_NAMES) {
-      expect(hasIconGlyph(name), `beatIcon may return "${name}"`).toBe(true);
+      // main's contract: a known name resolves to a glyph; an unknown one
+      // returns "" (falsy is deliberate, so callers can supply their own
+      // fallback). Either way it is never the identifier.
+      expect(iconGlyph(name), `beatIcon may return "${name}"`).toBeTruthy();
       expect(iconGlyph(name), name).not.toBe(name);
     }
   });
 
   it("degrades an unknown name to a marker, never to the name itself", () => {
-    for (const junk of ["not_an_icon", "", "egg2", "Trophy", "undefined"]) {
+    // Under main's contract an unrecognised name returns "" — falsy on
+    // purpose, so a caller can supply its own fallback (GrowthLedger relies
+    // on exactly that). The invariant this test exists for is narrower and
+    // survives the change: whatever comes back, it is never the identifier
+    // that went in. "" is excluded because an empty name means "no icon",
+    // not "unknown icon".
+    for (const junk of ["not_an_icon", "egg2", "Trophy", "undefined", "constructor", "__proto__"]) {
       const glyph = iconGlyph(junk);
       expect(glyph, `"${junk}" must not leak`).not.toBe(junk);
-      expect(glyph.length).toBeLessThanOrEqual(2);
+      expect(glyph.length, `"${junk}"`).toBeLessThanOrEqual(2);
     }
   });
 

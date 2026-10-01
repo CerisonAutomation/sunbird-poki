@@ -131,6 +131,21 @@ export const FLARE_REFERENCE = 95;
  */
 export const FLARE_BRAKE = 300;
 export const FLARE_DURATION = 0.42;
+/** Largest m/s of extra speed cap any mode surge can grant — slalom warp's 18.
+ *
+ *  This lives here, not in `Game.ts`, for one reason: the anti-cheat ceiling
+ *  derives itself from the same expression `Bird.step` clamps to, and that
+ *  expression has a THIRD term — `speedBonus` — that the ceiling was
+ *  forgetting. The four surge constants are private to `Game.ts`, so the
+ *  ceiling could not see them and sat 18 m/s below what a fever + boost +
+ *  max-skin + slalom dive legitimately reaches. Measured: 270.69 m/s of real
+ *  flight against a 256.27 m/s gate, i.e. the game quarantined its own best
+ *  players. Adding this term moves the gate to 274.27 and the run clears it.
+ *
+ *  `Game.ts` keeps the individual per-mode values and must keep every one of
+ *  them at or below this; `anticheat.test.ts` fails the build if it does not.
+ */
+export const MAX_MODE_SPEED_BONUS = 18;
 /** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
 export const FLARE_MAX_RISE = -14;
 /** How long a release stays live and can still spend the flare.
@@ -202,6 +217,13 @@ export const STICK_ACCEL_GLIDE = 13;
 
 export const MAX_SPEED = 108;
 export const MAX_SPEED_FEVER = 128;
+/**
+ * The highest `speedMult` any skin may carry. The anti-cheat ceiling multiplies
+ * by this, so it is a ceiling on the *content* as well as on the gate: a skin
+ * added above it would be legal to fly and illegal to submit. Pinned by
+ * `anticheat.test.ts`, which fails if `SKINS` ever exceeds it.
+ */
+export const MAX_SKIN_SPEED_MULT = 1.08;
 export const BIRD_RADIUS = 0.9;
 export const MIN_KEEP_SPEED = 12; // higher floor: bird never stalls on uphill terrain
 

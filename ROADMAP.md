@@ -69,9 +69,11 @@ until proven otherwise. This file exists so the commit log can't overclaim.
   pinned by `hello_limits_are_camel_case_on_the_wire`. Found by the contract
   suite, which is the only reason it was found.
 - `scripts/botsim.mjs` — 40 headless pilots on the real wire protocol, seeded
-  and reproducible. Gated in `.github/workflows/botsim.yml`: the Node reference
-  job reports cheat containment, the Rust job **gates** on it
-  (`--require-anticheat`). Measured locally against the reference server:
+  and reproducible. **Not gated.** The workflow that ran it
+  (`.github/workflows/botsim.yml`) was deleted, and this fork has no CI at all,
+  so cheat containment is measured by hand rather than enforced on every push —
+  run it deliberately before trusting the multiplayer numbers below. Measured
+  locally against the reference server:
   40/40 connected in 42 ms, roster 40/40, broadcast cadence p95 66.8 ms, 13
   unique finish places, 4/4 mid-race resumes.
 

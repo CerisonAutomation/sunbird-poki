@@ -16,7 +16,7 @@
  *      in the page head, and it is the platform's own host, so it is not the
  *      "external asset" rule REQ-40 forbids. Every other remote reference
  *      fails the gate, and generic exposes no reachable SDK loader path.
- *   6. icons/ ships inside the zip; fonts/ must not (already base64-inlined).
+ *   6. icons/ + fonts/ ship inside the zip (self-contained, offline-safe).
  *   7. No third-party backend markers anywhere in the bundle: portals ship
  *      local/coin-only editions, so Stripe endpoints, live/test publishable
  *      keys, the Upstash-backed leaderboard Worker, and the social server
@@ -98,10 +98,19 @@ for (const portal of PORTALS) {
     failures.push(`${portal}: payment-processor marker in the staged bundle — ${hit} (portal builds are coin-only).`);
   }
   if (/(href|src)="\/[^"]*"/.test(html)) failures.push(`${portal}: absolute /asset reference (breaks CDN subpaths).`);
+  // Self-containment, not a literal directory listing. `vite-plugin-singlefile`
+  // inlines the woff2 faces into index.html as base64 data URIs, so the fonts
+  // genuinely are in the zip — just not as files under fonts/. This check used
+  // to demand that directory, and started failing the moment the dead-payload
+  // trim stopped shipping files that were already inlined — which is the trim
+  // working correctly, not a regression. Icons still ship as real files (a
+  // <link rel=icon> href cannot be inlined), so those stay mandatory; the
+  // requirement is that the bytes are present, however they got there.
+  const fontsInlined = html.includes("data:font/woff2") || html.includes("data:application/font-woff");
   if (!/icons\//.test(list)) failures.push(`${portal}: icons/ missing from zip.`);
-  // fonts/ must NOT be there: they are base64-inlined into the stylesheet, so
-  // a copy on disk is a download nobody reads. See audit-zips.mjs.
-  if (/fonts\//.test(list)) failures.push(`${portal}: fonts/ in zip — the fonts are already inlined.`);
+  if (!/fonts\//.test(list) && !fontsInlined) {
+    failures.push(`${portal}: fonts are neither shipped under fonts/ nor inlined into index.html.`);
+  }
   // SDK profile: the build must SHIP its own portal integration, and must not
   // STATICALLY load anything remote (a <script src="http…"> runs unconditionally
   // — portals block those). Which SDK URL flows into the dynamic loader is

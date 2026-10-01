@@ -18,19 +18,75 @@ export type Friend = { name: string; code: string; club_id: number | null };
 export type Club = { id: number; name: string; motto: string; members: number };
 export type ChatMessage = { id: number; name: string; text: string; at: string };
 
+/** Which stat a quest is measured against. This field is the ONLY thing that
+ *  decides how often its reward may be claimed — see `squadQuestScope`. */
+export type SquadQuestMeasure = "bestDistance" | "runsPlayed" | "todayBest";
+/** A lifetime measure is satisfied once and stays satisfied forever, so its
+ *  reward is claimable exactly once. A daily measure resets, so its reward is
+ *  claimable once per day. */
+export type SquadQuestScope = "lifetime" | "daily";
+/** Lifetime stats rise forever; only `todayBest` is scoped to the day. */
+const MEASURE_SCOPE: Record<SquadQuestMeasure, SquadQuestScope> = {
+  bestDistance: "lifetime",
+  runsPlayed: "lifetime",
+  todayBest: "daily",
+};
+
+export type SquadQuestProgressInput = {
+  bestDistance: number;
+  runsPlayed: number;
+  todayBest: number;
+};
+
 export type SquadQuest = {
   id: string;
   title: string;
   desc: string;
   target: number;
   rewardCoins: number;
+  /** Progress is `round(measure * factor)`, capped at `target`. */
+  measure: SquadQuestMeasure;
+  factor: number;
 };
 
 export const SQUAD_QUESTS: SquadQuest[] = [
-  { id: "migration", title: "Flock Migration", desc: "Glide 4,000 m — a squad bonus counts 1.5x toward it", target: 4000, rewardCoins: 150 },
-  { id: "drafting", title: "Slipstream Drafting", desc: "Fly 5 squad races — 5 points each, 25 to claim", target: 25, rewardCoins: 120 },
-  { id: "precision", title: "Perfect Formations", desc: "Fly 800 m in a day — 1 point per 100 m, 8 to claim", target: 8, rewardCoins: 100 },
+  { id: "migration", title: "Flock Migration", desc: "Glide 4,000 m — a squad bonus counts 1.5x toward it", target: 4000, rewardCoins: 150, measure: "bestDistance", factor: 1.5 },
+  { id: "drafting", title: "Slipstream Drafting", desc: "Fly 5 squad races — 5 points each, 25 to claim", target: 25, rewardCoins: 120, measure: "runsPlayed", factor: 5 },
+  { id: "precision", title: "Perfect Formations", desc: "Fly 800 m in a day — 1 point per 100 m, 8 to claim", target: 8, rewardCoins: 100, measure: "todayBest", factor: 0.01 },
 ];
+
+/** Progress toward a quest. One implementation, called by the UI and by the
+ *  claim handler, so the button and the payout can never disagree. */
+export function squadQuestProgress(q: SquadQuest, s: SquadQuestProgressInput): number {
+  return Math.min(q.target, Math.max(0, Math.round(s[q.measure] * q.factor)));
+}
+
+/** How often this quest's reward may be claimed. Derived from `measure`, not
+ *  stored separately, so the guard's scope cannot drift away from the
+ *  condition's scope — that drift is what made two squad quests an infinite
+ *  daily faucet (a lifetime milestone, guarded once per day). */
+export function squadQuestScope(q: SquadQuest): SquadQuestScope {
+  return MEASURE_SCOPE[q.measure];
+}
+
+/** Whether a quest can be claimed right now. `already-claimed` covers both the
+ *  once-ever lifetime case and the once-a-day case, so the caller only needs
+ *  this one verdict. */
+export function squadQuestClaimState(
+  q: SquadQuest,
+  s: SquadQuestProgressInput,
+  claimed: Record<string, string> | undefined,
+  today: string,
+): SquadQuestClaimState {
+  const last = claimed?.[q.id];
+  if (last) {
+    if (squadQuestScope(q) === "lifetime") return "already-claimed";
+    if (last === today) return "already-claimed";
+  }
+  return squadQuestProgress(q, s) >= q.target ? "claimable" : "not-complete";
+}
+
+export type SquadQuestClaimState = "claimable" | "already-claimed" | "not-complete";
 
 /** One row of the wingman list — real data from the social service. */
 export type Wingman = Friend & {

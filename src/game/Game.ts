@@ -58,7 +58,14 @@ import { createWakeLock, type ScreenWakeLock } from "./WakeLock";
 import { detectDeviceProfile, describeDeviceProfile, deviceProfileTelemetry, worldTierFor, type DeviceProfile } from "../sdk/device-report";
 import { campaignProgress, campaignViews } from "./Campaign";
 import { monthKey, monthlyTheme, THEME_TRAIL_CLEARS, weeklyEvent } from "./Events";
-import { emptySquadState, SquadClient } from "./Squad";
+import {
+  emptySquadState,
+  squadQuestClaimState,
+  squadQuestScope,
+  SquadClient,
+  SQUAD_QUESTS,
+  type SquadQuestProgressInput,
+} from "./Squad";
 import { PowerUps } from "./PowerUps";
 import { Racer } from "./Racer";
 import {
@@ -108,7 +115,10 @@ ZENITH_SLOWMO,
 ZENITH_THERMAL_VY,
 SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
+FLARE_BRAKE,
 } from "./constants";
+import { RELEASE_KICK } from "./FlightPhysics";
+import { freeSlots } from "./hud/loadout";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, normalizePerks, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
 import { nextWings, wingsFor, wingsPromotion } from "./Career";
 import { GhostPlayer, GhostRecorder } from "./Ghost";
@@ -174,6 +184,22 @@ function hsl(h: number, s: number, l: number): [number, number, number] {
 const RING_CHAIN_WINDOW = 2.8;
 
 const ASLEEP: BirdStepOpts = { diving: false, fever: false, speedMult: 1, boost: false };
+
+/* Mode surge strengths, in m/s of extra cap headroom. These used to be velocity
+ * injections with `Math.min(234, …)` guards; see `BirdStepOpts.speedBonus`.
+ *
+ * `modeSpeedBonus` takes a max, never a sum, so the largest of these is the
+ * most the cap can ever be raised by. `MAX_MODE_SPEED_BONUS` is what the
+ * anti-cheat ceiling adds, and it lives in constants.ts precisely so this list
+ * can be checked against it — a surge raised above it without the ceiling
+ * following would put legitimate runs back over the gate, which is the exact
+ * bug that put them there once already. */
+const SLINGSHOT_BONUS = 16;
+const TYPHOON_BONUS = 10;
+const SLALOM_WARP_BONUS = 18;
+const COIN_TURBO_BONUS = 6;
+/** How fast a one-shot surge decays back to nothing, m/s per second. */
+const MODE_BONUS_DECAY = 45;
 
 /** Per-biome intro hint shown for ~9 s when the player first enters a world. */
 const BIOME_INTRO_HINTS: Record<string, string> = {
@@ -288,6 +314,10 @@ export class Game {
   private climbRelief = 0;
   /** Seconds of extra daylight the run has earned by clearing walls. */
   private climbDaylight = 0;
+    /** Transient cap headroom from the active mode's surge mechanic, in m/s.
+     * Decays every step and is applied through `BirdStepOpts.speedBonus`; see
+     * `Bird` for why it is a cap raise and not a velocity injection. */
+    private modeSpeedBonus = 0;
   /** Seconds of extra daylight bought by a store boost. */
   private boostDaylight = 0;
   private screen: UiScreen = "main";
@@ -1234,29 +1264,21 @@ export class Game {
     bootStage("flight");
     this.bump();
     this.pushHud();
-    // NOTHING stands between a first-time visitor and the Play button.
+    // First use: never put a screen between the visitor and the first
+    // `gameplayStart()`. This used to branch on `CUSTOM_PILOT_NAMES` and send
+    // the portal build to `nameEntry` — so the edition whose own comment
+    // argued the gate "is one screen and one tap between the visitor and the
+    // first gameplayStart(), and that first gameplay event is exactly what
+    // Poki measures as conversion to play" was the one edition that showed it.
+    // The flag meant the opposite of what its name said, and the audit is right
+    // that the two comments on this path contradicted the shipped build.
     //
-    // This used to open the `nameEntry` welcome screen on first boot, and the
-    // comment that lived here argued — correctly — that a portal must not do
-    // that: "it is one screen and one tap between the visitor and the first
-    // gameplayStart(), and that first gameplay event is exactly what Poki
-    // measures as conversion to play." The code then did it anyway, because
-    // the branch was gated on CUSTOM_PILOT_NAMES, which is `true` in this
-    // edition. The comment described the intent and the flag inverted it.
-    //
-    // A pilot name is generated, valid, unique and renameable from Settings
-    // and from the leaderboard page. There has never been anything for the
-    // player to confirm, so the screen is no longer shown unprompted — it is
-    // reachable on demand (Settings › Pilot) and nowhere else. Poki's own
-    // published post-mortems are blunt about this: "players were getting stuck
-    // in menus, so we disabled all extra screens and made sure they landed
-    // directly in gameplay."
-    //
-    // `pilotNameCustomized` is still set here so the prompt cannot come back
-    // through another path, while `pilotNameChosen` stays false so a signed-in
-    // player is still adopted by `adoptPortalIdentity()` when the portal
-    // identity resolves.
-    if (!this.save.state.pilotNameCustomized) {
+    // The generated call sign is accepted silently instead. Nothing is lost:
+    // the board page still has rename and reroll, so a player who wants a name
+    // picks one when they have an incentive to, and `pilotNameChosen` stays
+    // false so a signed-in player is still adopted by `adoptPortalIdentity()`
+    // when the portal identity resolves.
+    if (!this.save.state.pilotNameCustomized && this.state === "menu") {
       this.save.state.pilotNameCustomized = true;
       this.save.persist();
     }
@@ -1440,19 +1462,19 @@ export class Game {
     }
     const simDt = raw * this.timeScale;
 
-    // Render interpolation needs the position before the LAST physics step,
-    // not before the whole frame. This snapshotted once per frame, but the
-    // loops below run as many 120 Hz substeps as the frame's delta allows —
-    // two per frame at 60 Hz display, more on a slow frame. So `prev` was up
-    // to N steps behind `current` while the alpha covers exactly one step,
-    // and lerp(prev, current, acc/PHYS_DT) drew the bird oscillating across a
-    // multi-step gap every frame. That is the judder: the interpolation that
-    // exists to smooth motion was the thing making it jagged.
-    //
-    // `stepBird`/`stepFixed` below re-snapshot immediately before each
-    // substep, so prev is always exactly one step behind current.
-    this.prevBirdX = this.bird.x;
-    this.prevBirdY = this.bird.y;
+    // NOTE: the render-interpolation snapshot is NOT taken here. It used to be
+    // — once per frame, before the whole physics batch — and that is what made
+    // the bird judder. `lerp(prev, cur, acc / PHYS_DT)` is only a correct
+    // interpolation of ONE physics step if `prev` is the position immediately
+    // before the LAST step. Taken once per frame, `prev` is the position before
+    // however many steps this frame ran, so the lerp was stretched across that
+    // many steps while still being scaled by a single step's alpha. On a 60 Hz
+    // display that is a fixed one-frame lag; on a 144 Hz display, where most
+    // frames run ZERO steps, `prev` equals `cur`, the lerp is a no-op, and the
+    // bird stands still on those frames and then jumps a whole step on the ones
+    // that did step — a visible stutter at exactly the frame rates the
+    // interpolation was added to fix. The snapshot now lives inside each
+    // accumulator loop, so it is always exactly one PHYS_DT behind.
 
     switch (this.state) {
       case "menu":
@@ -1484,6 +1506,10 @@ export class Game {
         // "catch up" would be far worse than a beat of slow motion.
         let steps = 0;
         while (this.acc >= PHYS_DT && this.state === "playing" && steps < MAX_CATCHUP_STEPS) {
+          // One PHYS_DT of render history, taken per STEP. See the note above
+          // the switch: a once-per-frame snapshot stretches the render lerp
+          // across every step the frame ran, which judders on any display
+          // faster than the physics rate.
           this.prevBirdX = this.bird.x;
           this.prevBirdY = this.bird.y;
           if (this.versus) this.versusTick(PHYS_DT);
@@ -1684,6 +1710,22 @@ export class Game {
       this.audio.diveCue();
       this.haptic(10);
     }
+    // The release edge — the other half of the same gesture.
+    //
+    // The press fired a cue and the release fired nothing, so a pull-out was
+    // silent. That is the whole of "the release is broken" from the player's
+    // side: the brake was doing its job, but the one moment the game is asking
+    // you to feel most directly — you committed, the dive stopped, the bird
+    // came back up — had no sound, no touch, and nothing on screen confirming
+    // it. A gesture you can only verify by looking away from the bird and
+    // reading the speed number reads as dropped input.
+    //
+    // The feedback is fired AFTER `bird.step()` below, because `flareAmount`
+    // is written there: it is the brake acceleration actually applied on this
+    // tick, which is the honest measure of how hard the pull-out bit. Scaling
+    // off the dive speed instead would fire at full volume on a release from
+    // a near-hover, where nothing actually happened.
+    const released = !diving && this.wasDiving && !this.bird.grounded && this.state === "playing";
     this.wasDiving = diving;
     this.magnetTimer = Math.max(0, this.magnetTimer - dt);
     this.boostTimer = Math.max(0, this.boostTimer - dt);
@@ -1711,12 +1753,18 @@ export class Game {
       this.activateManualBoost("stall_rescue");
     }
 
-    this.bird.step(
-      dt,
-      {
-        diving,
-        fever: this.feverOn,
-        speedMult: skin.speedMult * this.challengeMods.speedMult * this.escalateMult(),
+    // Decay the mode surge before the step that spends it. A surge is a burst,
+        // not a mode: without this, a slingshot landing in a typhoon would hold its
+        // headroom until the next one fired.
+        this.modeSpeedBonus = Math.max(0, this.modeSpeedBonus - MODE_BONUS_DECAY * dt);
+    
+        this.bird.step(
+          dt,
+          {
+            diving,
+            fever: this.feverOn,
+            speedMult: skin.speedMult * this.challengeMods.speedMult * this.escalateMult(),
+            speedBonus: this.modeSpeedBonus,
         boost: this.boostTimer > 0 || this.powers.boostOn(),
         liftMult: this.powers.liftMult() * this.masteryPerk.liftMult,
         // Slipstream: tucking behind a rival genuinely reduces your drag.
@@ -1727,6 +1775,9 @@ export class Game {
       this.terrain,
     );
 
+    // Read after the step: `flareAmount` now holds the brake this tick applied.
+    if (released) this.releaseFeedback();
+
 
     this.stepLaunchAndGhosts(dt, diving);
     this.stepWeather(dt, diving);
@@ -1736,6 +1787,37 @@ export class Game {
     this.stepCollectAndPickups(dt);
     this.stepScoreAndFinish(dt);
     this.stepSettleAndGoals(dt, diving);
+  }
+
+  /**
+   * The release half of `diveCue()`.
+   *
+   * Scoped to audio + haptic on purpose. The obvious third channel — a
+   * `popupAtBird("SOAR!")` — is the wrong call here: perfect launches already
+   * fire a banner, a rating, a burst, a shake, a freeze and a slow-motion beat
+   * every 5-10 seconds, and releases happen far more often than that. Adding
+   * text to the most frequent event in the game is how the HUD ends up with
+   * four things to read at once.
+   *
+   * Returns early when `flareAmount` is 0, which is the case where the brake
+   * genuinely did not engage — releasing from a climb, per the `vy >= 0` rule
+   * in `Bird.step()`. Silence there is correct: nothing was arrested, so
+   * there is nothing to confirm.
+   */
+  private releaseFeedback(): void {
+    const strength = Math.max(this.bird.flareAmount / FLARE_BRAKE, this.bird.releaseKickAmount / RELEASE_KICK);
+    if (strength <= 0) return;
+    // Two signals, because the release is two things and they never overlap: a
+    // dive is met by the sustained BRAKE (`flareAmount`, m/s^2, bounded by
+    // FLARE_BRAKE) and everything else by the one-shot KICK
+    // (`releaseKickAmount`, m/s, bounded by RELEASE_KICK). Each is normalised
+    // against its own bound so a 22 m/s pop is a full-volume cue rather than
+    // 7% of one. Reading only `flareAmount` left the ramp release — the bug
+    // this fixes — completely silent, which is a large part of why it read as
+    // "the release doesn't work" rather than as "the release is quiet".
+    const intensity = Math.min(1, strength);
+    this.audio.soarCue(intensity);
+    this.haptic(6 + Math.round(10 * intensity));
   }
 
   /** Flight cues, the launch/landing reactions, the first-flight coach and
@@ -1871,7 +1953,7 @@ export class Game {
             this.audio.chirp();
             this.haptic([15, 10, 25]);
             this.popupAtBird(`SLINGSHOT! ${iconGlyph("rocket")}`, "perfect");
-            this.bird.vx = Math.min(234, this.bird.vx + 6);
+            this.modeSpeedBonus = Math.max(this.modeSpeedBonus, SLINGSHOT_BONUS);
             this.particles.emitWind(this.bird.x, this.bird.y + 0.5, 1.6);
           }
         }
@@ -1893,12 +1975,12 @@ export class Game {
 
       // Typhoon blitz storm tailwinds
       if (this.modeId === "pvp_typhoon" && !this.bird.asleep && !this.bird.grounded) {
-        this.bird.vx = Math.min(235, this.bird.vx + dt * 4.0);
+        this.modeSpeedBonus = Math.max(this.modeSpeedBonus, TYPHOON_BONUS);
       }
 
       // Sky Slalom launch surge
       if (this.modeId === "pvp_slalom" && this.bird.justLaunched && this.lastLaunch?.rating === "perfect") {
-        this.bird.vx = Math.min(240, this.bird.vx + 6.5);
+        this.modeSpeedBonus = Math.max(this.modeSpeedBonus, SLALOM_WARP_BONUS);
         this.popupAtBird(`WARP SLALOM! ${iconGlyph("lightning")}`, "fever");
         this.particles.emitWind(this.bird.x, this.bird.y, 1.4);
       }
@@ -2279,7 +2361,7 @@ export class Game {
         this.markFunnel("first_reward");
         this.bonus += 4 * COIN_VALUE * value;
         if (this.modeId === "pvp_coinrush") {
-          this.bird.vx = Math.min(225, this.bird.vx + 2.5);
+          this.modeSpeedBonus = Math.max(this.modeSpeedBonus, COIN_TURBO_BONUS);
           this.popupAtBird(`COIN TURBO! ${iconGlyph("lightning")}`, "splash");
         }
         this.awardXp(XP_RULES.coin);
@@ -3116,18 +3198,41 @@ export class Game {
     this.camera.recenter(this.renderOriginX);
     this.bird.setRenderOrigin(this.renderOriginX);
     this.collect.setRenderOrigin(this.renderOriginX);
+    // These two write true world x straight into their vertex buffers and
+    // carry no mesh transform, so they were the only render-space consumers
+    // still sitting at x≈4096 after a rebase — the wake and every impact ring
+    // simply disappeared off-screen for the rest of an Endless run.
+    this.trail.setRenderOrigin(this.renderOriginX);
+    this.particles.setRenderOrigin(this.renderOriginX);
   }
 
-  /** Streams the glowing ribbon behind the bird, matching the sparkle trail. */
-  private updateTrailRibbon(dt: number): void {
+  /**
+   * Streams the glowing ribbon behind the bird, matching the sparkle trail.
+   *
+   * @param visX,visY the position the bird MESH was just drawn at, not the raw
+   *   120 Hz physics position. At 170 m/s one `PHYS_DT` is 1.42 world units, so
+   *   sampling the raw position left the ribbon head visibly detached from the
+   *   sprite it is supposed to be attached to — and jittering against it by
+   *   that much, every frame, at exactly the speeds where the trail is most
+   *   visible.
+   */
+  private updateTrailRibbon(dt: number, visX: number, visY: number): void {
     this.advanceTrailHue(dt);
     const c = this.trailColor();
     this.trail.setColor(c[0], c[1], c[2]);
     const show =
       this.state === "playing" &&
       !this.save.state.settings.reduceMotion &&
+      // A bird carving terrain at 50 m/s is not leaving a wake, it is scraping
+      // along the ground — and the ribbon has `depthTest: false`, so it paints
+      // over any hill between the camera and the bird.
+      !this.bird.grounded &&
       (this.feverOn || this.boostTimer > 0 || this.bird.speed() > 48 || ((this.gameplaySkin.magnetAlways || this.gameplaySkin.id === "aurora") && this.bird.speed() > 24));
-    if (show) this.trail.push(this.bird.x, this.bird.y);
+    if (show) {
+      // Anchored at the tail tip, not the centroid — see `Bird.tailPoint`.
+      const t = this.bird.tailPoint(visX, visY);
+      this.trail.push(t.x, t.y);
+    }
     this.trail.update(dt, show ? 1 : 0);
   }
 
@@ -3196,7 +3301,12 @@ export class Game {
     const interp = this.state === "menu" ? 1 : clamp(this.acc / PHYS_DT, 0, 1);
     const visX = lerp(this.prevBirdX, this.bird.x, interp);
     const visY = lerp(this.prevBirdY, this.bird.y, interp);
-    this.bird.syncVisual(visDt, diving, glow, this.elapsed, this.terrain, visX, visY);
+    // `interp` goes in as well: the bird interpolates its own heading, roll,
+    // pupil dart, beak and tail flutter from the same one-step history the
+    // position uses, so the whole sprite advances together. Passing only the
+    // interpolated POSITION left every other visual channel reading the raw
+    // 120 Hz physics value — a smooth position with a stepping sprite on it.
+    this.bird.syncVisual(visDt, diving, glow, this.elapsed, this.terrain, visX, visY, interp);
     this.massRace.syncVisual(visDt, this.bird.x, interp);
     if (this.massRace.active && this.state === "playing") {
       const tags = this.massRace.getVisibleNameTags(this.camera.camera.position.x, this.bird.x, this.bird.y, this.startX);
@@ -3205,7 +3315,7 @@ export class Game {
       this.hud.updateNameTags([], this.camera.camera, this.renderWidth, this.renderHeight);
     }
     this.finishRemaining = this.finishGate.update(visDt, this.bird.x);
-    this.updateTrailRibbon(visDt);
+    this.updateTrailRibbon(visDt, visX, visY);
     this.particles.update(visDt);
     // Attract framing in the menu only: the demo bird leads into the open
     // margin beside the card. Every other state keeps gameplay framing.
@@ -4241,8 +4351,12 @@ export class Game {
   }
 
   private resetRun(idle: boolean): void {
-    this.attractPilot.reset();
-    this.flightCues.reset();
+      this.attractPilot.reset();
+      this.flightCues.reset();
+      // A mode surge belongs to the run that earned it. It self-limits to well
+      // under a second, but a fresh run must not open with headroom the player
+      // has not earned yet.
+      this.modeSpeedBonus = 0;
     // A new run inherits nothing from the last one: the card's progress strip,
     // the mission diff baseline and the once-per-quest "just banked" flags are
     // all per-run, and carrying them over would replay the previous flight's
@@ -4446,7 +4560,7 @@ export class Game {
           // sector's value is a real purchasable one.
           const boost = BOOSTS.find((b) => b.id === sector.value);
           if (!boost) break;
-          this.save.armBoost(boost.id);
+          this.save.grantBoost(boost.id);
           this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${boost.name}! Armed for your next flight!`, "gold");
         } else if (sector.kind === "vault") {
           // The wheel is free, so this hatch is free. It used to call the 150
@@ -4990,6 +5104,8 @@ export class Game {
       buySkin: (id) => this.buySkin(id),
       buyBoost: (id) => this.buyBoost(id),
       buyTrail: (id) => this.buyTrail(id),
+      armBoost: (id, n) => this.stageBoost(id, n),
+      unarmBoost: (id, n) => this.save.unarmBoost(id, n),
       buyCoinStarter: () => this.buyCoinStarter(),
       buyCoinGold: () => this.buyCoinGold(),
       buyPortalVip: () => this.buyPortalVip(),
@@ -5283,23 +5399,35 @@ export class Game {
         return true;
       }
       case "claim-squad-quest": {
-        const questId = id;
-        const rewards: Record<string, number> = {
-          migration: 150,
-          drafting: 120,
-          precision: 100,
-        };
-        const coins = rewards[questId] ?? 100;
+        const quest = SQUAD_QUESTS.find((q) => q.id === id);
+        // An unknown id paid a flat 100 before; nothing to pay it from.
+        if (!quest) return true;
         if (!this.save.state.squadQuestsClaimed) this.save.state.squadQuestsClaimed = {};
-        if (this.save.state.squadQuestsClaimed[questId] === this.today) {
-          this.hud.toast("Already claimed today!", "info");
+        // Re-validate here, not at the button. Every other claim path in the
+        // game does this; this one used to trust the UI, so a lifetime
+        // milestone guarded only per-day paid out again every day forever.
+        const state = squadQuestClaimState(quest, this.squadQuestProgressInput(), this.save.state.squadQuestsClaimed, this.today);
+        if (state === "already-claimed") {
+          this.hud.toast(
+            squadQuestScope(quest) === "lifetime"
+              ? t("hud.squad.questClaimedLifetime", undefined, "Already claimed — this one is a lifetime goal.")
+              : t("hud.squad.questClaimedToday", undefined, "Already claimed today!"),
+            "info",
+          );
           return true;
         }
-        this.save.state.squadQuestsClaimed[questId] = this.today;
-        this.save.addCoins(coins);
+        if (state === "not-complete") {
+          this.hud.toast(t("hud.squad.questNotComplete", undefined, "Not finished yet."), "info");
+          return true;
+        }
+        this.save.state.squadQuestsClaimed[quest.id] = this.today;
+        this.save.addCoins(quest.rewardCoins);
         this.audio.chapterFanfare();
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-        this.hud.toast(`${iconGlyph("star")} Squadron Goal Claimed! +● ${coins} coins!`, "gold");
+        this.hud.toast(
+          `${iconGlyph("star")} ` + t("hud.squad.questClaimed", { coins: String(quest.rewardCoins) }, "Squadron Goal Claimed! +{{coins}} coins!"),
+          "gold",
+        );
         this.bump();
         return true;
       }
@@ -5877,12 +6005,9 @@ export class Game {
     this.demoTime = 0;
     this.demoStuck = 0;
     this.setState("menu");
-    // Straight to the menu, always. Returning to the menu used to re-route a
-    // player who had never confirmed a name back onto the welcome screen — so
-    // a visitor who dismissed it once met it again after every run. The name
-    // is generated, valid and renameable from Settings; it has never needed a
-    // confirmation step, and a confirmation step in front of play is the one
-    // thing Poki measures against (conversion to play).
+    // Back to the menu: never the name gate. This one was not even conditional
+    // on the edition, so a player who returned to the menu before choosing a
+    // name was re-intercepted here even after the first-use path stopped.
     this.setScreen("main");
     this.camera.setIntro(1);
   }
@@ -5927,23 +6052,52 @@ export class Game {
     this.bump();
   }
 
+  /**
+   * Stage copies of a booster for the next flight, respecting the slot cap.
+   *
+   * The cap is enforced HERE, not in the loadout markup. A cap that only
+   * disables a button is a cap the player can walk around, and the loadout is
+   * the one place where "stack every Shield you own" would otherwise be
+   * strictly optimal. The UI reads the same number, so button and rule agree.
+   */
+  private stageBoost(id: string, n: number): number {
+    const def = BOOSTS.find((b) => b.id === id);
+    if (!def || def.permanent) return 0;
+    // The SAME freeSlots() the loadout screen uses to decide whether `+` is
+    // live. The cap is enforced here because a cap that only hides a button is
+    // a cap the player can walk around; sharing the arithmetic is what keeps
+    // the guard and the button from disagreeing about how full the loadout is.
+    const room = freeSlots(
+      BOOSTS.filter((b) => !b.permanent).map((b) => this.save.boostArmed(b.id)),
+    );
+    if (room <= 0) {
+      this.hud.toast(t("hud.loadout.SlotsFull", undefined, "All boost slots are full — unstage one first."), "info");
+      return 0;
+    }
+    const moved = this.save.armBoost(id, Math.min(n, room));
+    if (moved <= 0) this.hud.toast(t("hud.loadout.NoneLeft", undefined, "No more of that in the store."), "info");
+    return moved;
+  }
+
   private buyBoost(id: string): void {
     const def = BOOSTS.find((b) => b.id === id);
     if (!def) return;
-    const st = this.save.state;
     if (def.permanent && this.save.hasUpgrade(id)) {
       this.hud.toast("Already unlocked", "info");
-      return;
-    }
-    if (st.armedBoosts.includes(id)) {
-      this.hud.toast("Already armed for next flight", "info");
       return;
     }
     const deal = dailyDealBoost(this.today);
     const price = def.id === deal.id ? deal.price : def.price;
     if (this.cantAfford(price)) return;
-    if (def.permanent) this.save.ownUpgrade(id);
-    else this.save.armBoost(id);
+    if (def.permanent) {
+      this.save.ownUpgrade(id);
+    } else {
+      // Buying adds to storage; the loadout screen decides what flies. The
+      // old code refused a second copy outright ("Already armed"), which made
+      // "stock a few for later" impossible.
+      this.save.stockBoost(id);
+      this.save.armBoost(id, 1);
+    }
     this.audio.purchase();
     this.hud.toast(`${iconGlyph(def.icon)} ${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power");
     this.telemetry.track("boost_bought", { id, price });
@@ -6027,7 +6181,7 @@ export class Game {
     this.save.addCoins(STARTER_PACK.coins);
     this.save.ownTrail(STARTER_PACK.trailId);
     this.save.equipTrail(STARTER_PACK.trailId);
-    this.save.armBoost("sunflask");
+    this.save.grantBoost("sunflask");
     this.audio.fanfare();
     this.hud.toast(`${iconGlyph("star")} First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold");
     this.telemetry.track("purchase_ok", { sku: "sunbird_starter", source });
@@ -6063,13 +6217,9 @@ export class Game {
       this.restoreMessage = "Hmm, that code isn't valid.";
     } else if (!this.save.redeem(code)) {
       this.restoreMessage = "That code was already used.";
-    } else if (promo.type === "gold") {
-      this.grantGold("promo");
-      this.restoreMessage = "Gold unlocked with code ✦";
-    } else if (promo.type === "vip") {
-      this.grantVip("promo");
-      this.restoreMessage = "VIP unlocked with code ♛";
     } else {
+      // Coins only. The gold and vip arms that used to live here granted paid
+      // entitlements from a table that ships in the bundle — see `Promo`.
       this.save.addCoins(promo.amount);
       this.audio.ding();
       this.restoreMessage = `+${promo.amount} coins added.`;
@@ -7264,7 +7414,7 @@ export class Game {
       const p = grant.prize;
       if (p.kind === "coins") this.save.addCoins(p.amount);
       else if (p.kind === "skin") this.save.ownSkin(p.id);
-      else if (p.kind === "boost") this.save.armBoost(p.id);
+      else if (p.kind === "boost") this.save.grantBoost(p.id);
       this.telemetry.track("cup_prize", { tier: grant.tier, kind: p.kind, id: p.id });
     }
     // trails/titles were already recorded inside Tournaments.claim()
@@ -7592,6 +7742,10 @@ export class Game {
     if (s === "board") platform.measure("button", "portal-leaderboard", "visible");
     // The wardrobe lives in the shop screen's skin grid.
     if (s === "shop") platform.measure("cosmetic", "skin-grid", "visible");
+    // The loadout's bird picker is measured on interaction only, so the screen
+    // that shows it reports the exposure — otherwise the pre-flight picker is
+    // the one cosmetic the portal sees engaged but never seen offered.
+    if (s === "loadout") platform.measure("cosmetic", "bird-row", "visible");
   }
 
   private bump(): void {
@@ -7753,7 +7907,19 @@ export class Game {
     const deal = dailyDealBoost(this.today);
     this.boostViews = BOOSTS.map((def) => {
       const dealPrice = def.id === deal.id ? deal.price : undefined;
-      return { def, armed: def.permanent ? st.ownedUpgrades.includes(def.id) : st.armedBoosts.includes(def.id), affordable: st.wallet >= (dealPrice ?? def.price), dealPrice };
+      const permanent = Boolean(def.permanent);
+      const armedCount = permanent ? 0 : this.save.boostArmed(def.id);
+      const stocked = permanent ? 0 : this.save.boostStocked(def.id);
+      return {
+        def,
+        armed: permanent ? st.ownedUpgrades.includes(def.id) : armedCount > 0,
+        affordable: st.wallet >= (dealPrice ?? def.price),
+        dealPrice,
+        stocked,
+        armedCount,
+        spare: Math.max(0, stocked - armedCount),
+        permanent,
+      };
     });
     this.shopTrailViews = SHOP_TRAILS.map((def) => ({
       def,
@@ -7792,8 +7958,7 @@ export class Game {
     const st = this.save.state;
     const stats = this.runStats();
     this.stepMissionRows(stats);
-    let todayBest = 0;
-    for (const h of st.highScores) if (h.date === this.today && h.distance > todayBest) todayBest = h.distance;
+    const todayBest = this.todayBestDistance(st);
     const sTier = this.seasonPass.tier();
     const sProg = this.seasonPass.progressInTier();
     const snap: HudSnapshot = {
@@ -7893,6 +8058,25 @@ export class Game {
     };
   }
 
+  /** Longest flight recorded today. The only day-scoped "best" in the save
+   *  file — `state.bestDistance` is a lifetime record and stays that way. */
+  private todayBestDistance(st: SaveData["state"]): number {
+    let best = 0;
+    for (const h of st.highScores) if (h.date === this.today && h.distance > best) best = h.distance;
+    return best;
+  }
+
+  /** The three stats `SQUAD_QUESTS` are measured against, read once so the
+   *  claim handler and the squad panel always judge the same numbers. */
+  private squadQuestProgressInput(): SquadQuestProgressInput {
+    const st = this.save.state;
+    return {
+      bestDistance: st.bestDistance,
+      runsPlayed: st.runsPlayed,
+      todayBest: this.todayBestDistance(st),
+    };
+  }
+
   /** Wallet, progression, missions, quests, shop views, pack pricing,
    *  checkout, season pass and trophies. */
   private hudProfile(st: SaveData["state"], todayBest: number, sTier: number, sProg: { have: number; need: number }) {
@@ -7914,6 +8098,7 @@ export class Game {
     quests: this.questViews,
     highScores: st.highScores,
     todayBest,
+    today: this.today,
     runsPlayed: st.runsPlayed,
     newlyCompleted: this.newlyCompleted,
     claimedQuests: this.claimedQuests,
@@ -7923,6 +8108,7 @@ export class Game {
     settings: st.settings,
     firstSteps: {
       shop: st.seenShop,
+      loadout: st.seenLoadout,
       pve: st.seenPve,
       pvp: st.seenPvp,
       settings: st.seenSettings,
@@ -8081,6 +8267,7 @@ export class Game {
         ? this.massRace.rivals.slice(0, 12).map((r) => ({ id: r.id, name: r.name, skill: Math.round(r.skill * 100), hue: Math.round(r.hue * 360) }))
         : [],
     netState: this.net?.info().state ?? "offline",
+    squadQuestsClaimed: st.squadQuestsClaimed ?? {},
     linkQuality: this.net?.connectionQuality ?? "unknown",
     netError: this.net?.info().error ?? "",
     draft: this.massRace.draft,

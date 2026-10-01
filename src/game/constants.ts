@@ -45,6 +45,27 @@ export const GROUND_G_DIVE = 88;
  * you. Only the dead flat ground gains anything.
  */
 export const GROUND_STICK_DIVE = 11;
+/**
+ * The same floor for a bird that has RELEASED.
+ *
+ * `GROUND_STICK_DIVE` exists because a held stick used to do nothing on flat
+ * ground. Releasing had the identical hole and nobody noticed, because the
+ * `MIN_KEEP_SPEED` floor papered over it: the bird stopped accelerating and slid
+ * along at 12 m/s, which looks like it is working right up until you notice it
+ * can never leave the ground again.
+ *
+ * It cannot leave, because the launch test is `v^2 * curvature > gravity +
+ * STICK_ACCEL_GLIDE`. At 12 m/s the terrain has to curve away at 0.20/m; across
+ * 3900 sampled metres of a real island only 27 of them (0.7%) are that sharp. So
+ * a released bird lands, decays onto the conveyor, and stays welded to the
+ * terrain for the rest of the run — measured at 68% of a passive minute spent
+ * grounded, the altitude gauge reading a flat 0 m, and the climb goal stuck on 0.
+ *
+ * Deliberately under half the diver's value, so the trade survives: hold for speed
+ * and stay glued, release for lift. `GROUND_G_GLIDE` (14) against `GROUND_G_DIVE`
+ * (88) keeps the same slope gap, so this only adds drive where there was none.
+ */
+export const GROUND_STICK_GLIDE = 4.5;
 /** Quadratic air drag (per unit speed²) — low, so momentum lives a long time. */
 export const AIR_DRAG_GLIDE = 0.00042;
 export const AIR_DRAG_DIVE = 0.00016;

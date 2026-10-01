@@ -22,6 +22,7 @@ import {
   GROUND_G_DIVE,
   GROUND_G_GLIDE,
   GROUND_STICK_DIVE,
+  GROUND_STICK_GLIDE,
   LAND_BAD_MIN_KEEP,
   LAND_FEATHER_FLOOR,
   LAND_GOOD,
@@ -660,12 +661,27 @@ export class Bird {
 
       // Gravity along the slope: downhill (ty<0) accelerates, uphill decelerates.
       const gGround = diving ? GROUND_G_DIVE : GROUND_G_GLIDE;
-      // ...but downhill-only, with a floor when the stick is held, so that flat
-      // ground is not a place where the input does nothing. See
-      // GROUND_STICK_DIVE. Uphill keeps the full slope penalty in both states —
-      // the climb is still the thing the run is about.
+      // ...but downhill-only, with a floor in BOTH states, so that flat ground is
+      // not a place where the input does nothing. Uphill keeps the full slope
+      // penalty in both states — the climb is still the thing the run is about.
+      //
+      // The glide floor is new, and it is what makes the run loop at all. Holding
+      // has had a floor since GROUND_STICK_DIVE; releasing had none, so a gliding
+      // bird on the ground had `accel = 14 * slope` fighting `0.05 * v` and settled
+      // onto the MIN_KEEP_SPEED conveyor (12 m/s) the moment it hit flat or uphill
+      // ground. That was terminal, not a slow patch: the launch gate needs
+      // `v^2 * curvature > gravity + STICK_ACCEL_GLIDE`, so at 12 m/s the terrain
+      // would have to curve away at 0.20/m to let go — which 0.7% of sampled
+      // positions on a real island do. Measured over a full passive minute the bird
+      // spent 68% of the run grounded and hit exactly 12.0 m/s four separate times,
+      // and the climb goal never left 0.
+      //
+      // The floor is deliberately ~2.5x weaker than the diver's. Holding must stay
+      // the stronger gesture — it is 11 against this, with `GROUND_G_GLIDE` (14)
+      // supplying far less than `GROUND_G_DIVE` (88) on the same slope — so the
+      // choice stays a trade: dive for speed and stay glued, release for lift.
       const downhill = -n.ty;
-      const accel = diving ? Math.max(gGround * downhill, GROUND_STICK_DIVE) : gGround * downhill;
+      const accel = Math.max(gGround * downhill, diving ? GROUND_STICK_DIVE : GROUND_STICK_GLIDE);
       vt += accel * dt;
 
       const fr = diving ? GROUND_FRICTION_DIVE : GROUND_FRICTION;

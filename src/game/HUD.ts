@@ -302,6 +302,8 @@ export class HUD {
   private adLabelEl: HTMLElement | null = null;
   private lastKey = "";
   private lastHint = "";
+  private coachStepsEl!: HTMLElement;
+  private lastCoachKey = "";
   private readonly shopBrowse = newShopBrowse();
   private lastChainKey = "";
   private shopSnapshot: HudSnapshot | null = null;
@@ -402,6 +404,7 @@ export class HUD {
         <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
         <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">❙❙</button>
         <div class="combo" data-ref="combo"></div>
+        <div class="coach-steps hidden" data-ref="coachSteps" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-label="Coach progress"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="hand" data-ref="hand">${menuIconSm("hand")}<span class="hand-hint" data-ref="handHint"></span></div>
         <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
@@ -1114,7 +1117,7 @@ export class HUD {
         this.powerStrip.innerHTML = s.powers
           .map(
             (p) =>
-              `<span class="pu${p.time < 1.8 ? " expiring" : ""}${p.level === 2 ? " lv2" : ""}" title="${escapeHtml(p.label)}${p.level === 2 ? " II (overcharged)" : ""}"><i>${escapeHtml(p.icon)}</i>${p.level === 2 ? `<em class="pu-lv">II</em>` : ""}<b style="width:${Math.max(0, Math.min(1, p.time / p.total)) * 100}%"></b><u>${Math.ceil(p.time)}</u></span>`,
+              `<span class="pu${p.time < 1.8 ? " expiring" : ""}${p.level === 2 ? " lv2" : ""}" title="${escapeHtml(p.label)}${p.level === 2 ? " II (overcharged)" : ""}"><i>${menuIconSm(p.icon)}</i>${p.level === 2 ? `<em class="pu-lv">II</em>` : ""}<b style="width:${Math.max(0, Math.min(1, p.time / p.total)) * 100}%"></b><u>${Math.ceil(p.time)}</u></span>`,
           )
           .join("");
       }
@@ -1402,6 +1405,31 @@ export class HUD {
         this.lastHint = s.hint;
         this.hintEl.textContent = s.hint;
         this.hintEl.classList.toggle("show", Boolean(s.hint));
+      }
+
+      // Coach progress, as its own element beside the sentence rather than
+      // three unicode circles welded onto the front of it. See `Game.coachHint`
+      // for what those cost: they rendered as whatever the display font mapped
+      // them to (the "current" pip came out a hollow ring), and their ~70px of
+      // width forced the sentence onto a second line, which printed "hill"
+      // across the press-hand SVG underneath.
+      const coachOn = s.coachStep >= 0 && s.coachSteps > 1;
+      this.coachStepsEl.classList.toggle("hidden", !coachOn);
+      // Same fade as the sentence it belongs to. `coachOn` already implies the
+      // coach line is up, so the bar and the text can never disagree about
+      // being visible.
+      this.coachStepsEl.classList.toggle("show", coachOn);
+      if (coachOn) {
+        const key = `${s.coachStep}/${s.coachSteps}`;
+        if (key !== this.lastCoachKey) {
+          this.lastCoachKey = key;
+          this.coachStepsEl.innerHTML = Array.from({ length: s.coachSteps }, (_, i) => {
+            const state = i < s.coachStep ? "done" : i === s.coachStep ? "now" : "todo";
+            return `<i class="${state}"></i>`;
+          }).join("");
+          this.coachStepsEl.setAttribute("aria-valuemax", String(s.coachSteps));
+          this.coachStepsEl.setAttribute("aria-valuenow", String(s.coachStep + 1));
+        }
       }
 
       const prox = s.proximity;
@@ -1757,6 +1785,7 @@ export class HUD {
     this.slopeChainText = grab("slopeChainText");
     this.slopeChainFill = grab("slopeChainFill");
     this.hintEl = grab("hint");
+    this.coachStepsEl = grab("coachSteps");
     this.menuEl = grab("menu");
     this.menuCard = grab("menuCard");
     this.pauseEl = grab("pause");

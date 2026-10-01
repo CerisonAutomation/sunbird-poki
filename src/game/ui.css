@@ -1827,7 +1827,23 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   animation: hintpop 0.25s ease;
 }
 
-.pu i { font-style: normal; font-size: 15px; }
+/* The countdown chip's icon slot. This held `escapeHtml(p.icon)` — the pickup's
+   icon NAME — so every timed power-up in the strip rendered as the literal word
+   "rocket", "magnet", "shield"… in a 15px italic-ish slot while the boost chips
+   beside it showed the same pickup as an actual drawing. It is an `.icon-sm`
+   SVG now, so the slot is sized in pixels like every other icon slot in this
+   sheet (`.pchip .icon-sm`, `.mode-icon .icon-sm`) rather than in `em` off a
+   `font-size` that only ever sized text. `display: block` blockifies it: as a
+   flex item it would otherwise keep its `vertical-align` baseline box and sit
+   a pixel or two off the countdown number's centre line. */
+.pu i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+}
+.pu i .icon-sm { display: block; width: 15px; height: 15px; vertical-align: baseline; }
 .pu u { text-decoration: none; font-size: 11px; font-weight: 700; color: var(--text-on-sky); }
 .pu b {
   position: absolute;

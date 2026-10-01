@@ -115,7 +115,9 @@ ZENITH_SLOWMO,
 ZENITH_THERMAL_VY,
 SHOP_AD_COINS,
 SHOP_AD_SESSION_CAP,
-FLARE_BRAKE,
+  FLARE_BRAKE,
+  START_ALTITUDE,
+  START_SPEED,
 } from "./constants";
 import { RELEASE_KICK } from "./FlightPhysics";
 import { freeSlots } from "./hud/loadout";
@@ -3082,8 +3084,26 @@ export class Game {
     if (!this.coach) return "";
     const v = this.coach.view(this.save.state.settings.tapToggleDive);
     if (v.step < 0 || !v.text) return "";
-    const pips = [..."●".repeat(v.step) + "◉" + "○".repeat(Math.max(0, v.steps - v.step - 1))].join(" ");
-    return `${pips}  ${v.text}`;
+    // Just the sentence. This used to prepend three raw unicode circles
+    // (`● ◉ ○`) to mark progress through the coach, which was cheap in three
+    // separate ways: the glyphs came from whatever the display font happened to
+    // map them to (the filled pip rendered as a RING, not a disc, so the
+    // "current step" marker did not read as current), they meant nothing to
+    // anyone who had not counted them, and — the part that actually broke the
+    // screen — they consumed ~70px of a `width: 90%` centred line, pushing
+    // "HOLD to dive down the hill" onto two lines so that "hill" printed across
+    // the press-hand SVG sitting directly below it.
+    //
+    // The progress is still shown, as the segmented bar beside it
+    // (`HUD.coachSteps`), where it cannot push the sentence around.
+    return v.text;
+  }
+
+  /** Coach progress for the HUD's own step indicator. -1 when no coach is up. */
+  private coachStep(): { step: number; steps: number } {
+    if (!this.coach) return { step: -1, steps: 0 };
+    const v = this.coach.view(this.save.state.settings.tapToggleDive);
+    return v.step < 0 || !v.text ? { step: -1, steps: 0 } : { step: v.step, steps: v.steps };
   }
 
   private computeHint(): string {
@@ -4357,8 +4377,13 @@ export class Game {
     this.terrain.setDifficulty(!isRaceMode(this.modeId) && this.seed.startsWith("fly-") ? this.flow.difficulty() : 1);
     const course = isRaceMode(this.modeId) ? this.courseForRace() : null;
     this.startX = course ? course.island * ISLAND_PERIOD + 64 : 64;
-    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS;
+    // Start in flight, not on the surface. See START_ALTITUDE: parked on the
+    // terrain the bird "landed" again 0.3 s into every run and the opening frame
+    // showed a bird sunk into the grass.
+    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + START_ALTITUDE;
     this.bird.reset(this.startX, y);
+    this.bird.vx = START_SPEED;
+    this.bird.vy = 0;
     if (this.modeId === "pvp_sprint" || this.modeId === "pvp_typhoon") {
       this.bird.vx = 42;
     }
@@ -7974,6 +7999,8 @@ export class Game {
     balloons: this.runBalloons,
     sunflowers: this.runSunflowers,
     hint: this.state === "playing" ? this.coachHint() || this.hint : "",
+    coachStep: this.state === "playing" ? this.coachStep().step : -1,
+    coachSteps: this.state === "playing" ? this.coachStep().steps : 0,
     magnetTimer: this.magnetTimer,
     shield: this.shield,
     boostTimer: this.boostTimer,

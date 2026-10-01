@@ -178,6 +178,14 @@ export type HudSnapshot = {
   balloons: number;
   sunflowers: number;
   hint: string;
+  /**
+   * First-flight coach progress. `step` is -1 whenever no coach line is up, and
+   * `steps` is 0 in that case. Kept off `hint` on purpose: the progress used to
+   * be three unicode circles pasted onto the front of the sentence, which both
+   * looked cheap and pushed the sentence onto a second line.
+   */
+  coachStep: number;
+  coachSteps: number;
   magnetTimer: number;
   shield: number;
   boostTimer: number;

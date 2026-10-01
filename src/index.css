@@ -680,6 +680,52 @@ textarea {
   animation: hintpop 0.5s ease;
 }
 
+/* First-flight coach progress.
+   This replaced three unicode circles (`● ◉ ○`) that used to be pasted onto the
+   front of the coach sentence. They were cheap in three ways that all showed on
+   screen: the glyphs were whatever the display font mapped them to (the "you
+   are here" pip rendered as a hollow RING, not a disc, so it did not read as
+   current), they told a first-time player nothing they could act on, and their
+   ~70px of width forced "HOLD to dive down the hill" onto a second line, which
+   printed "hill" across the press-hand SVG sitting directly beneath it.
+
+   Segments rather than dots, and CSS rather than type: a rounded bar is drawn
+   at the exact size asked for on every device, it cannot fall back to a missing
+   glyph, and it reads as progress instead of as punctuation. It sits ABOVE the
+   sentence and is `width: auto`, so it takes no part in the sentence's line
+   breaking — the failure it was introduced along with is structurally gone. */
+.coach-steps {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  /* The hint below is `translate(-50%, -50%)` centred on the same 30% line and
+     is up to two lines tall, so the bar sits a fixed 44px above that origin:
+     clear of the first line of text on one line, clear of the second on two. */
+  margin-top: -46px;
+  display: flex;
+  gap: 5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.coach-steps.hidden { display: none; }
+.coach-steps.show { opacity: 1; }
+.coach-steps i {
+  display: block;
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 1px 2px rgba(20, 16, 40, 0.35);
+}
+.coach-steps i.done { background: rgba(255, 214, 140, 0.75); }
+.coach-steps i.now {
+  width: 26px;
+  background: linear-gradient(90deg, var(--gold), #fff1a0);
+  box-shadow: 0 0 10px rgba(255, 210, 74, 0.6);
+}
+
 /* The centre cue and the hand were both saying the same thing at the same
    time — "HOLD to dive down the hill" over "Hold to dive" — stacked in the
    middle of the screen. The hand is a pointer at the control; the cue is the
@@ -2277,7 +2323,8 @@ fieldset.squad-fields {
   .hud-header .power-strip { justify-content: flex-end; flex-wrap: nowrap; }
   .hud-header .pu { padding: 3px 5px; gap: 3px; min-width: 0; }
   .hud-header .pu u { max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
-  .hud-header .pu i { font-size: 12px; }
+  .hud-header .pu i { width: 12px; height: 12px; }
+  .hud-header .pu i .icon-sm { width: 12px; height: 12px; }
   .flight-footer .goal-strip .gs:not(:first-child) { display: none; }
   .flight-messages > .hint, .flight-messages > .launch-banner { font-size: 18px; }
 }

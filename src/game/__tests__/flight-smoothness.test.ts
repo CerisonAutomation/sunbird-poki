@@ -55,6 +55,27 @@ function wrapPi(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
+/** The body of the method starting at `from`, comment-stripped, brace-matched.
+ *
+ *  Braces inside comments and strings are ignored, so the count cannot be thrown
+ *  off by prose. Returns "" if the body never closes, which makes every assertion
+ *  below fail loudly rather than pass on a truncated slice. */
+function extractMethodBody(src: string, from: number): string {
+  // Strip block and line comments, replacing them with spaces so byte offsets and
+  // the remaining text stay comparable.
+  const clean = src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => " ".repeat(m.length))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+  const start = clean.indexOf("{", from);
+  if (start < 0) return "";
+  let depth = 0;
+  for (let i = start; i < clean.length; i++) {
+    if (clean[i] === "{") depth++;
+    else if (clean[i] === "}" && --depth === 0) return clean.slice(from, i + 1);
+  }
+  return "";
+}
+
 function probe(seed = "flight-smoothness-probe"): { bird: Bird; terrain: TerrainSystem } {
   const terrain = new TerrainSystem(seed);
   const bird = new Bird();
@@ -76,8 +97,21 @@ describe("the physics history a render interpolates against exists", () => {
     const src = readFileSync(join(process.cwd(), "src/game/Bird.ts"), "utf8");
     const stepAt = src.indexOf("  step(");
     expect(stepAt, "Bird.step was not found").toBeGreaterThan(-1);
-    // 4 kB is the whole of step(); the next member declaration is well inside it.
-    const stepBody = src.slice(stepAt, stepAt + 4000);
+
+    // Extract the REAL method body by brace matching, comment-stripped.
+    //
+    // This used to slice a fixed 4 kB window, on the stated assumption that 4 kB
+    // "is the whole of step()". It is not: step() is ~20 kB, so the window
+    // covered a fifth of the method and the check silently passed while examining
+    // almost none of it. It then failed for the opposite reason the moment a
+    // comment grew the method past the cutoff and pushed the earliest `this.vx =`
+    // out of range — the assertion was right and the window was the bug.
+    //
+    // Brace matching removes the failure mode instead of moving the cliff: the
+    // window is now the method, so it cannot go stale. Comments are stripped
+    // first so a `this.vx =` mentioned in prose cannot satisfy the check, and so
+    // braces inside comments cannot unbalance the count.
+    const stepBody = extractMethodBody(src, stepAt);
 
     const snapVx = stepBody.indexOf("this.prevVx = this.vx;");
     const snapVy = stepBody.indexOf("this.prevVy = this.vy;");
@@ -89,7 +123,16 @@ describe("the physics history a render interpolates against exists", () => {
     expect(snapX, "prevX is not snapshotted in step()").toBeGreaterThan(-1);
 
     for (const write of ["this.vx =", "this.vy ="]) {
-      const at = stepBody.indexOf(write, snapVx);
+      // The FIRST write in the method, not merely one somewhere after the
+      // snapshot. `indexOf(write, snapVx)` used to search *forward from* the
+      // snapshot, which asks "is there a write later?" — so a mutation that
+      // moved the snapshot to sit immediately after the first write still
+      // passed, because some other write further down the method satisfied it.
+      // That is precisely the regression this test exists to catch, and it was
+      // letting it through. What must hold is that NO write precedes the
+      // snapshot, which is the same statement as "the first write comes after
+      // it".
+      const at = stepBody.indexOf(write);
       expect(at, `step() never writes ${write}, so this test is not measuring the right thing`).toBeGreaterThan(-1);
       expect(at, `${write} is written BEFORE the snapshot — prev would equal cur and the blend would be a no-op`)
         .toBeGreaterThan(snapVx);

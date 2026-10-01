@@ -127,6 +127,27 @@ export const FLARE_DURATION = 0.42;
 export const MAX_MODE_SPEED_BONUS = 18;
 /** m/s. The flare brakes toward this and stops — it never lifts into a climb. */
 export const FLARE_MAX_RISE = -14;
+/**
+ * Where a run begins: already flying, not parked on the tarmac.
+ *
+ * `bird.reset()` places the bird at `heightAt + BIRD_RADIUS` with `vx = 11` and
+ * `grounded = false`. That reads as airborne to the physics but is neither: the
+ * body is sitting *on* the surface, so the very first step satisfies
+ * `y <= surf` and it "lands" again 0.3 s into every run. Measured across four
+ * seeds that is what the player sees — a bird embedded in the grass with the
+ * altitude gauge on 0 m, which is why the run opens by looking broken.
+ *
+ * The start is now a shallow drop-in: clear of the terrain by a visible margin
+ * and carrying real airspeed, so the first arc lasts ~2.8 s instead of 0.3 s
+ * and the opening frame is a bird in flight.
+ *
+ * The altitude is deliberately small. It is the run PEAK that scores the climb
+ * goal (`Game.maxAltitude`), so a generous start would hand out a slice of the
+ * 120 m target for doing nothing; 14 m is enough to read as flight and cheap
+ * enough that it is 12% of the goal.
+ */
+export const START_ALTITUDE = 14;
+export const START_SPEED = 48;
 /** How long a release stays live and can still spend the flare.
  *
  *  Without this the pull-out depended on the player letting go during one

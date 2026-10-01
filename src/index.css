@@ -2649,8 +2649,27 @@ fieldset.squad-fields {
   }
   .flight-footer .emote-wheel { padding: 0; }
 }
+/* The picker wraps rather than scrolling out of reach.
+
+   The row is six buttons, each an icon AND a word ("👋 Wave"), so it runs
+   ~480px inside a footer that is `min(400px, 100% - 32px)`. As a single line
+   it overflowed into the footer's horizontally-scrolling wheel: "Send Wave"
+   sat past the edge of a 568x320 window and could not be clicked, and
+   Playwright reported "element is outside of the viewport" after scrolling,
+   because the overflow was inside the wheel rather than the page.
+
+   Wrapping is the fix, and it stays IN FLOW on purpose. Lifting it out of the
+   flow (`position: absolute; bottom: 100%`) also made the buttons reachable,
+   but it then hung the picker in the one corridor the HUD measures for the
+   coaching band — at 568x320 the band and the footer overlapped by 191x11px
+   the moment the picker opened. A footer that grows is a footer the HUD can
+   measure and the band can be placed against; a popup floating over the band
+   is not. So: wrap inside the flow, and let the band move. */
 .flight-footer .emote-options {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 100%;
   gap: 6px;
   background: rgba(30, 24, 40, 0.45);
   backdrop-filter: blur(12px);

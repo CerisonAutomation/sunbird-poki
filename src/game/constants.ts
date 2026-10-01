@@ -497,7 +497,25 @@ export const VISIBLE_CHUNKS_BACK = 4;
 export const VISIBLE_CHUNKS_FWD = 14;
 
 export let DAYLIGHT_MAX = 52;
-export const DAYLIGHT_ISLAND_REFILL = 15;
+/**
+ * What crossing an island gives back, as a share of your current day.
+ *
+ * This used to be a flat 15 seconds, tuned against a 52-second day — about 29%
+ * of the bar. But `daylightMax()` is not 52 for most of a run: the Climb
+ * Breaker adds to `climbDaylight` on every island, sun flasks add to
+ * `boostDaylight`, and gold/perks raise the base. Measured on a live flight
+ * that had picked up boosts, the max had reached ~141 while the island still
+ * paid 15 — the refill had shrunk to 10.6% of the bar. Crossing an island
+ * looked like nothing happened, while the results card promised "Each new
+ * island refills it".
+ *
+ * Scaling by the cap fixes it at the root: the number the player reads is the
+ * share of the meter that moves, and that share is now the same at every
+ * upgrade tier. At base stats it is unchanged — 0.29 x 52 = 15.1, which rounds
+ * to the 15 this constant used to be, so nothing about an unupgraded run
+ * differs.
+ */
+export const DAYLIGHT_ISLAND_REFILL_FRACTION = 0.29;
 /**
  * How high you may be and still collect an island's refill.
  *

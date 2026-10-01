@@ -156,8 +156,11 @@ test("an embedded game follows its iframe rather than the outer page orientation
   const app = new SunbirdPage(page); // Collect runtime errors across frames too.
   await page.goto("/orientation-host");
   const game = page.frameLocator("#game");
-  await game.getByRole("button", { name: "Random name", exact: true }).click();
-  await game.locator('[data-action="confirm-pilot-name"]').click();
+  // No name-entry step: this build goes straight from the loader to the menu,
+  // and `[data-action="confirm-pilot-name"]` is not in the DOM at all. The test
+  // used to click "Random name" and then confirm, so it sat on
+  // `waiting for getByRole('button', { name: 'Random name' })` for the full
+  // 300s budget on every run — a removed screen read as a hung iframe test.
   await game.getByRole("button", { name: "Fly now", exact: true }).click();
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
     await page.locator("#game").evaluate((el, size) => {

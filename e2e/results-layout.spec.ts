@@ -3,7 +3,14 @@ import { test, expect } from "@playwright/test";
 import { SunbirdPage } from "./SunbirdPage";
 
 test("a real completed flight puts replay first and preserves results when browsing the shop", async ({ page }, info) => {
-  test.setTimeout(180000);
+  // 180s was not enough for this test's own work, let alone the game: the
+  // daylight clock is deliberately left to run out, and that wait is allowed
+  // 140s of it. What was left could not cover rendering and encoding a
+  // 1000x620 share card on CPU-rasterised SwiftShader, so `waitForEvent
+  // ("download")` was the assertion that timed out — the budget was the thing
+  // under test, not the share button. The assertions are unchanged; only the
+  // clock the flight genuinely needs has been given to it.
+  test.setTimeout(420000);
   await page.setViewportSize({ width: 320, height: 568 });
   await page.addInitScript(() => Object.defineProperty(navigator, "share", { value: undefined, configurable: true }));
   const app = new SunbirdPage(page);
@@ -15,7 +22,13 @@ test("a real completed flight puts replay first and preserves results when brows
   if (await sleep.isVisible()) await sleep.click();
   const result = page.locator('[data-ref="over"]');
   await expect(result).toBeVisible();
-  await expect(result.getByRole("heading", { name: "Flight completed", exact: true })).toBeVisible();
+  // The card names WHY the run ended, it does not say "Flight completed" for
+  // every death — three different reasons used to produce one line that no
+  // player could act on. This flight deliberately runs the daylight clock out,
+  // so the title is pinned to that reason: a weaker `toBeVisible()` here would
+  // pass no matter which reason the game reported, including none at all.
+  await expect(result.getByRole("heading", { name: "The sun beat you", exact: true })).toBeVisible();
+  await expect(result.locator(".end-reason")).toContainText("daylight ran out");
   await expect(result.locator(".result-actions .play-again-btn")).toBeInViewport({ ratio: 1 });
   await expect(result.locator(".play-again-btn")).toHaveCount(1);
   const bounds = await result.locator(".paper-card").boundingBox();

@@ -84,14 +84,12 @@ import {
   AD_SAFETY_SECONDS,
   COMMERCIAL_BREAK_MIN_GAP_MS,
   CONTINUE_TIMEOUT,
-  DAYLIGHT_ISLAND_REFILL,
   ISLAND_REFILL_CEILING,
   DAYLIGHT_MAX,
   DAYLIGHT_MAX_GOLD,
   DAYLIGHT_OCEAN_PENALTY,
   DAYLIGHT_SPLASH_INTERVAL,
   CLIMB_DAYLIGHT_BONUS,
-  CLIMB_REFILL_MULT,
   RENDER_RECENTER_THRESHOLD,
   SOLO_START_COUNTDOWN,
   MAX_CATCHUP_STEPS,
@@ -119,6 +117,7 @@ SHOP_AD_SESSION_CAP,
   START_ALTITUDE,
   START_SPEED,
 } from "./constants";
+import { islandEntry } from "./hud/islandRefill";
 import { RELEASE_KICK } from "./FlightPhysics";
 import { freeSlots } from "./hud/loadout";
 import { BOOSTS, COLLECTIONS, GOLD, PROMO_CODES, SHOP_TRAILS, SKINS, STARTER_PACK, VIP, WHEEL_SECTORS, dailyDealBoost, dailyFlashBird, normalizePerks, skinById, type BoostView, type ShopTrailDef, type ShopTrailView, type SkinDef, type SkinView } from "./Economy";
@@ -2296,7 +2295,14 @@ export class Game {
 
     const idx = this.terrain.islandIndex(this.bird.x);
     if (idx > this.lastIsland) {
-      this.lastIsland = idx;
+      // `island` is a label for where the bird is, so it always advances.
+      // `lastIsland` is the "already paid out" marker, and it must NOT —
+      // see the airborne gate below. Marking the island consumed on the same
+      // frame the bird entered it forfeited the daylight for good whenever the
+      // boundary was crossed in the water or above the refill ceiling: the run
+      // went on, the toast still said you had reached the island, and the sun
+      // never came back. Coming back did not help either, because crossing
+      // westbound makes `idx` smaller and `idx > lastIsland` false.
       this.island = idx;
       // The refill has to be EARNED BY FLYING THE ISLAND, not banked by
       // overflying it. The old gate was "above the waterline", which a player
@@ -2312,8 +2318,20 @@ export class Game {
       const overhead = this.bird.y < WATER_Y + 2 + ISLAND_REFILL_CEILING;
       const airborne = overhead && !this.bird.inWater;
       const b = biomeForIsland(idx);
-      if (airborne) {
-        this.daylight = Math.min(this.daylightMax(), this.daylight + DAYLIGHT_ISLAND_REFILL * (1 + this.climbRelief * CLIMB_REFILL_MULT));
+      // The whole decision — did this island pay out, how much, and is it now
+      // spent — is one pure call, so it can be asserted without flying 1,900 m
+      // in a browser. See hud/islandRefill.ts for the two bugs it encodes.
+      const entry = islandEntry({
+        idx,
+        lastIsland: this.lastIsland,
+        airborne,
+        daylight: this.daylight,
+        daylightMax: this.daylightMax(),
+        climbRelief: this.climbRelief,
+      });
+      this.lastIsland = entry.consumed ? idx : this.lastIsland;
+      this.daylight = entry.daylight;
+      if (entry.consumed) {
         this.grantClimbBreaker(idx);
         this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
         this.audio.island();

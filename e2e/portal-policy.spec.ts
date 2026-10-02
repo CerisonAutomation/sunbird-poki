@@ -199,29 +199,48 @@ async function boot(page: Page, origin: string): Promise<string[]> {
   });
   await page.goto(origin + "/", { waitUntil: "commit" });
   await expect(page.locator("#boot-shell")).toHaveCount(0, { timeout: 45_000 });
-  await dismissNameEntry(page);
-  await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible({ timeout: 45_000 });
+  // Nothing to dismiss any more. `boot()` used to click through a first-run
+  // `nameEntry` screen here first, and that helper guarded itself with
+  // `if (await fly.isVisible())` — so from the day the screen was cut (see
+  // `Game`'s boot) it was a branch that could not run, describing a boot flow
+  // the build does not have. The menu CTA is now the whole of "ready", and a
+  // regression that reintroduces the gate fails in the test that asserts the
+  // gate is gone rather than here, where the wait would just time out.
+  //
+  // 120s for the CTA, where the shell keeps 45s. Measured boots of THIS artifact
+  // across runs: 9.5s, 15.8s, 26s on a quiet box, and one run under five
+  // concurrent CI suites passed the shell at 45s and then missed the CTA's 45s
+  // too — reported as `element(s) not found`, which reads as a missing control
+  // rather than a slow boot. This is a watchdog, not a budget: it still fails,
+  // with the same message, on a build whose menu never appears.
+  await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible({ timeout: 120_000 });
   return errors;
-}
-
-/** A fresh profile lands on the first-run welcome screen before the menu CTA,
- *  so every test that boots a build has to get past it. Both editions leave it
- *  with "Let's Fly": the Poki build commits the field, which is pre-filled with
- *  a generated name so accepting it is one tap; crazy/generic commit the
- *  curated name on the plate. Without this the CTA wait below simply times out
- *  and the failure looks like a broken menu rather than an undismissed
- *  onboarding screen. */
-async function dismissNameEntry(page: Page): Promise<void> {
-  const fly = page.locator('[data-action="confirm-pilot-name"]');
-  if (!(await fly.isVisible().catch(() => false))) return;
-  await fly.click();
-  await expect(fly).toHaveCount(0, { timeout: 20_000 });
 }
 
 async function openMenu(page: Page, action: string, title: string): Promise<void> {
   const card = page.locator('[data-ref="menuCard"]');
-  await card.locator(`[data-action="${action}"]`).first().click();
+  await clickMenuAction(page, action);
   await expect(card.locator(".screen-head h2")).toHaveText(title, { timeout: 20_000 });
+}
+
+/**
+ * Click a control in the menu card, having first PROVED it is there.
+ *
+ * The existence check is not ceremony. `locator.click()` on a locator that
+ * matches nothing waits forever — the config sets no `actionTimeout` — and a
+ * locator that cannot ever appear spends the entire test budget before saying
+ * so. That is how this walk reported a wrong screen list as
+ * `open-rank: locator.click: Test timeout of 300000ms exceeded` with the other
+ * six screens afterwards reporting `Target page, context or browser has been
+ * closed`: one wrong entry ate the budget, the timeout closed the page, and
+ * the collect-then-report loop faithfully wrote down six more "findings" that
+ * were the teardown talking. Bounding the wait turns the same mistake into one
+ * line that says what is actually wrong.
+ */
+async function clickMenuAction(page: Page, action: string): Promise<void> {
+  const target = page.locator(`[data-ref="menuCard"] [data-action="${action}"]`).first();
+  await expect(target, `the menu card must offer "${action}" to walk into it`).toBeVisible({ timeout: 20_000 });
+  await target.click({ timeout: 20_000 });
 }
 
 /** Walk back out of any sub-screens until the home CTA is on screen again.
@@ -270,46 +289,51 @@ test.describe("portal artifact (poki-upload/)", () => {
     );
   });
 
-  test("the first-run welcome screen offers typing, pre-filled so it stays optional", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.goto(`http://127.0.0.1:${PORTAL_PORT}/`, { waitUntil: "commit" });
-    await expect(page.locator("#boot-shell")).toHaveCount(0, { timeout: 45_000 });
+  test("a first-run portal player reaches the menu with no name gate, and their call sign is already in place", async ({ page }) => {
+    const errors = await boot(page, `http://127.0.0.1:${PORTAL_PORT}`);
 
-    // A fresh profile lands here before the menu, so this is the first name
-    // surface a Poki player meets. Poki forbids chat systems and personal-data
-    // collection, not display names — so the field is here, and it is already
-    // filled with a generated call sign, which keeps "Let's Fly" a single tap.
-    const fly = page.locator('[data-action="confirm-pilot-name"]');
-    await expect(fly).toBeVisible({ timeout: 45_000 });
-    const input = page.locator('[data-ref="pilotNameInput"]');
-    await expect(input).toHaveCount(1);
-    await expect(input).toHaveAttribute("maxlength", "14");
-    const seeded = await input.inputValue();
-    expect(seeded.length, "the field is pre-filled with a generated name").toBeGreaterThan(0);
-    await expect(page.locator(".name-char-count span")).toHaveText(String(seeded.length));
+    // The first-run NAME GATE is deliberately gone. `Game`'s boot used to branch
+    // on `CUSTOM_PILOT_NAMES` and open `nameEntry` before the menu — so the
+    // edition whose own comment argued the gate "is one screen and one tap
+    // between the visitor and the first gameplayStart(), and that first
+    // gameplay event is exactly what Poki measures as conversion to play" was
+    // the one edition that shipped it. The flag meant the opposite of what its
+    // name said, so the branch was cut and the generated call sign is accepted
+    // silently instead. `boot()` above has already waited for the menu CTA on a
+    // profile with nothing stored and nothing dismissed, which is most of this
+    // assertion; these two make the contract explicit rather than incidental.
+    await expect(
+      page.locator('[data-action="confirm-pilot-name"]'),
+      "no first-run name gate may stand between a Poki visitor and the first gameplayStart()",
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-ref="pilotNameInput"]'),
+      "the removed welcome screen must not leave its field behind in the document",
+    ).toHaveCount(0);
 
-    // The dice must write into the field, not to a plate that is no longer in
-    // the bundle — a dead dice would leave the player with a name they cannot
-    // change and no idea why.
-    await page.locator('[data-action="randomize-pilot-name"]').click();
-    await expect.poll(async () => input.inputValue(), { timeout: 15_000 }).not.toBe(seeded);
+    // "Accepted silently" is not "no call sign": a player still has to be
+    // somebody on the public leaderboard, or every portal run submits a blank.
+    // The board's field is the value the leaderboard would carry, so read it
+    // there — that is the assertion's whole point, and it is the first place a
+    // first-run player can rename if they want to (proved end to end, blocked
+    // spellings and all, by the next test).
+    await openMenu(page, "open-board", "Leaderboard");
+    const field = page.locator('[data-ref="pilotName"]');
+    await expect(field).toHaveCount(1);
+    const generated = await field.inputValue();
+    expect(generated.trim().length, "a first-run player must already carry a generated call sign").toBeGreaterThan(0);
+    await expect(field, "the call sign must fit the same 14-character field the board enforces").toHaveAttribute(
+      "maxlength",
+      "14",
+    );
 
-    // THE MODERATION PROOF. "fuuuck" is not a literal blocklist entry — it is a
-    // stretched spelling that only the shipped normaliser collapses to a
-    // blocked key, so this fails if the moderation pipeline is tree-shaken out
-    // of the portal bundle or silently stops running.
-    await input.fill("fuuuck");
-    await fly.click();
-    await expect(fly, "a blocked call sign must not get past the welcome screen").toBeVisible();
-    // Match by text, not by position: toasts from boot (the streak/welcome
-    // ones) are still in the DOM, so `.first()` would read an older toast.
-    await expect(page.locator(".toast").filter({ hasText: /call sign/i }).first()).toBeVisible();
+    // And the dice is the one-tap escape from an auto-accepted name, so it must
+    // still rewrite the field a first-run player is handed.
+    const before = generated;
+    await page.locator('[data-action="autogen-pilot"]').click();
+    await expect.poll(async () => field.inputValue(), { timeout: 15_000 }).not.toBe(before);
+    expect(await field.inputValue(), "a rolled call sign must be non-empty too").not.toBe("");
 
-    // A clean name is accepted, all the way to the menu.
-    await input.fill("SkyFox42");
-    await fly.click();
-    await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeVisible({ timeout: 30_000 });
     expect(errors).toEqual([]);
   });
 
@@ -372,6 +396,15 @@ test.describe("portal artifact (poki-upload/)", () => {
     // can never appear, which is how this test spent four minutes per attempt
     // before the list was checked against the build.
     //
+    // `open-rank` was one such entry until this run: `MenuCatalog`'s
+    // `SECONDARY_DESTINATIONS` puts `rivalRank` there precisely so it is NOT a
+    // home tile — "rivalRank and nestPass both open from inside the
+    // Your-progress hub… They stay here, and out of the grids" — and HUD renders
+    // that control inside `renderProgress`. Asking the home card for it is a
+    // question the home card cannot answer. It is not dropped: the walk reaches
+    // it the way a player does, through the progress hub, because the Rival-rank
+    // page is exactly where a rival offer would be most tempting.
+    //
     // `open-live` is deliberately absent from this list, but NOT because it is
     // missing from the home menu — it is the single PvP tile. It is skipped
     // because its page is the tallest in the game (lobby + rooms + the AI flock
@@ -390,22 +423,25 @@ test.describe("portal artifact (poki-upload/)", () => {
     // screen this walk does not open. `visual-screens.spec.ts` opens it and
     // fails on any visual defect, so the page is covered — just not by this
     // ad-removal scan.
-    const screens = [
-      "open-shop",
-      "open-settings",
-      "open-board",
-      "open-progress",
-      "open-cups",
-      "open-account",
-      "open-challenges",
-      "open-campaign",
-      "open-rank",
-      "open-pass",
-      "open-trophies",
-      "open-atlas",
-      "open-scores",
-      "open-squad",
-      "mode-select",
+    //
+    // `via` is the route to a screen that is not a home tile. `undefined` means
+    // "home → this action", which is every entry except Rival rank.
+    const screens: ReadonlyArray<{ action: string; via?: string }> = [
+      { action: "open-shop" },
+      { action: "open-settings" },
+      { action: "open-board" },
+      { action: "open-progress" },
+      { action: "open-cups" },
+      { action: "open-account" },
+      { action: "open-challenges" },
+      { action: "open-campaign" },
+      { action: "open-rank", via: "open-progress" },
+      { action: "open-pass" },
+      { action: "open-trophies" },
+      { action: "open-atlas" },
+      { action: "open-scores" },
+      { action: "open-squad" },
+      { action: "mode-select" },
     ];
     const card = page.locator('[data-ref="menuCard"]');
     // The walk collects its failures instead of throwing on the first one.
@@ -416,10 +452,26 @@ test.describe("portal artifact (poki-upload/)", () => {
     // way for a compliance gate to fail. So: try all 15, then fail with the
     // whole list.
     const walkFailures: string[] = [];
-    for (const action of screens) {
+    for (const { action, via } of screens) {
+      // A dead page cannot confirm anything. The previous run proved what
+      // happens without this: the budget ran out, Playwright closed the page,
+      // and the loop went on to record `Target page, context or browser has
+      // been closed` for the remaining six screens as if each were its own
+      // finding. One real cause, seven lines of noise, and the reader has to
+      // work out which is which. When the page dies the walk stops and says so.
+      if (page.isClosed()) {
+        walkFailures.push(`${action}: the page died before this screen could be checked`);
+        break;
+      }
       try {
         await goHome(page);
-        await card.locator(`[data-action="${action}"]`).first().click();
+        if (via) {
+          await clickMenuAction(page, via);
+          await expect(card.locator(".screen-head h2").first(), `${via} opened no screen with a heading`).toBeVisible({
+            timeout: 60_000,
+          });
+        }
+        await clickMenuAction(page, action);
         // 60s, not 20s. Under headless SwiftShader a single menu transition
         // costs ~12s, so 20s left about eight seconds of slack for a step that
         // is slow *by environment* — and the walk died on the first screen with

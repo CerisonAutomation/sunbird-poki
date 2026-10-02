@@ -211,8 +211,18 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
       <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.ESaveCode", undefined, "Your exportable save code")}" readonly rows="3">${s.cloudCode}</textarea>
       <button class="mini-btn" data-ui data-action="copy-cloud">${t("hud.renderAccount.CCode", undefined, "Copy code")}</button>
       <p class="tagline" style="margin-top:10px">${t("hud.renderAccount.PCodeFromAnotherDeviceRestoreHere", undefined, "Paste a code from another device to restore it here:")}</p>
-      <textarea class="cloud-box" data-ui aria-label="${t("hud.renderCelebration.SCodeImport", undefined, "Save code to import")}" rows="3" placeholder="Paste save code…"></textarea>
-      <label class="import-confirm"><input type="checkbox" data-ui/>${t("hud.renderAccount.RProgressDeviceSave", undefined, "Replace progress on this device with this save.")}</label>
+      <!-- The two data-ref attributes are load-bearing, not decoration.
+           Game.importCloud() reads the pasted code with
+           hud.readValue("cloudImport") and the consent with
+           hud.readChecked("confirmImport"), and both helpers resolve ONLY
+           through a [data-ref] selector. With the refs missing, readValue
+           returned "" on every press, so "Import save" answered "Paste a
+           save code first." no matter what the player pasted — the whole
+           move-your-progress-to-another-device flow this section advertises
+           was dead, and clearValue("confirmImport") after a successful
+           import was a no-op for the same reason. -->
+      <textarea class="cloud-box" data-ui data-ref="cloudImport" aria-label="${t("hud.renderCelebration.SCodeImport", undefined, "Save code to import")}" rows="3" placeholder="Paste save code…"></textarea>
+      <label class="import-confirm"><input type="checkbox" data-ui data-ref="confirmImport"/>${t("hud.renderAccount.RProgressDeviceSave", undefined, "Replace progress on this device with this save.")}</label>
       <button class="mini-btn" data-ui data-action="import-cloud">${t("hud.renderAccount.ISave", undefined, "Import save")}</button>
       ${s.cloudMessage ? `<p class="note" role="status">${s.cloudMessage}</p>` : ""}
     </div>

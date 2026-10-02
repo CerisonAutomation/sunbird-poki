@@ -126,6 +126,39 @@ window.PokiSDK = (function () {
 const callsOf = (page: Page): Promise<Call[]> =>
   page.evaluate(() => (window as unknown as { __pokiCalls?: Call[] }).__pokiCalls ?? []);
 
+/**
+ * Boot the ARTIFACT, from the artifact's own server, and prove it.
+ *
+ * `SunbirdPage.open()` navigates to the relative URL `"/"`, which the browser
+ * resolves against `use.baseURL` — the baseURL of whatever config is running.
+ * That is the artifact origin (4176) under `playwright.artifact.config.ts` and
+ * nothing else anywhere: the per-group configs used to run these specs
+ * concurrently all point `baseURL` at their own `vite preview`, which serves
+ * `dist/`. So two of the three tests here were silently booting the DIRECT
+ * build off a preview server while asserting things about `poki-upload/` —
+ * which is the exact "stale bundle, every assertion describes code that isn't
+ * the code under test" failure the base config's `reuseExistingServer: false`
+ * comment exists to prevent. It did not look like a mistake; it looked like a
+ * red assertion (`expect(external).toEqual([])` listing
+ * `http://127.0.0.1:4313/` and `/i18n/en.json`, i.e. the preview server's own
+ * requests), which is worse.
+ *
+ * So the navigation is explicit and the origin is ASSERTED, not assumed: if a
+ * future refactor puts this spec back on a relative URL, this fails with one
+ * line naming the baseURL that hijacked it instead of with a mystery
+ * "external resources" diff.
+ *
+ * Order matters: the page object is built BEFORE the navigation, because it is
+ * what collects `pageerror`/console errors, and a boot exception thrown during
+ * the initial load is exactly the thing this spec exists to catch.
+ */
+async function openArtifact(page: Page): Promise<SunbirdPage> {
+  const app = new SunbirdPage(page);
+  await page.goto(`${ORIGIN}/`, { waitUntil: "commit" });
+  expect(new URL(page.url()).origin, "the artifact spec must boot poki-upload/, not a preview server").toBe(ORIGIN);
+  return app;
+}
+
 let server: Server;
 
 test.beforeAll(async () => {
@@ -168,8 +201,7 @@ test("the shipping folder boots, plays, and emits the Poki event contract", asyn
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
   });
 
-  const app = new SunbirdPage(page);
-  await app.open();
+  const app = await openArtifact(page);
   await app.ready();
 
   // Let the log settle past the loading-screen failsafe window (window load +
@@ -255,15 +287,21 @@ test("boots and plays inside the cross-origin iframe the Inspector uses", async 
 
   // The boot overlay removing itself is the app's own "first playable frame".
   await expect(game.locator("#boot-shell")).toHaveCount(0, { timeout: 60_000 });
-  // A fresh profile lands on the first-run welcome screen before the menu CTA,
-  // so dismiss it the way SunbirdPage.ready() does. This test used to pass only
-  // because it ran against a poki-upload/ snapshot that predated that screen;
-  // once the artifact is built from current source the CTA is not there yet.
-  const welcome = game.locator('[data-action="confirm-pilot-name"]');
-  if (await welcome.isVisible().catch(() => false)) {
-    await welcome.click();
-    await expect(welcome).toHaveCount(0, { timeout: 20_000 });
-  }
+  // No name gate. `Game`'s boot deliberately accepts the generated call sign
+  // instead of opening `nameEntry` first ("never put a screen between the
+  // visitor and the first gameplayStart()"), so the menu CTA is reachable from
+  // a cold frame with nothing dismissed.
+  //
+  // This used to be a conditional dismiss: `if (await welcome.isVisible())`.
+  // A conditional that has been false since the screen was removed is not a
+  // safety net, it is a branch that can never run — and it documented a boot
+  // flow the build does not have. It is now the assertion instead: if a name
+  // gate ever comes back, this fails here, in the frame the Inspector actually
+  // uses, rather than timing out 45s later at a "Fly now" that never arrives.
+  await expect(
+    game.locator('[data-action="confirm-pilot-name"]'),
+    "the artifact must reach the menu CTA with no first-run name gate in front of it",
+  ).toHaveCount(0);
   await expect(game.getByRole("button", { name: "Fly now", exact: true })).toBeVisible();
 
   await game.getByRole("button", { name: "Fly now", exact: true }).click();
@@ -280,8 +318,7 @@ test("boots and plays inside the cross-origin iframe the Inspector uses", async 
 });
 
 test("the Poki leaderboard overlay is offered once the SDK reports it", async ({ page }) => {
-  const app = new SunbirdPage(page);
-  await app.open();
+  const app = await openArtifact(page);
   await app.ready();
 
   await page.locator('[data-ref="menuCard"] [data-action="open-board"]').first().click();

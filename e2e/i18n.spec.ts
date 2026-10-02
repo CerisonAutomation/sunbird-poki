@@ -33,7 +33,14 @@ async function readyInAnyLocale(page: Page): Promise<void> {
   // Same budget `SunbirdPage.ready()` uses: one self-contained 2.4 MB document
   // has to download, parse, execute and build its WebGL scene first.
   await expect(page.locator("#boot-shell")).toHaveCount(0, { timeout: 45_000 });
-  await expect(page.locator('[data-action="pvp-practice"]')).toBeVisible({ timeout: 45_000 });
+  // `:not(.onboarding-route-step)` for the same reason `SunbirdPage.menuAction()`
+  // carries it: the onboarding flight plan is built from the same destination
+  // catalog as the menu, so `pvp-practice` is BOTH the home CTA and a route
+  // step. A bare locator matches two elements, fails strict mode, and then burns
+  // the rest of the 45s budget reporting a timeout — which is how three tests
+  // in this file came to look like a localisation failure while the German and
+  // Arabic packs were on screen and correct.
+  await expect(page.locator('[data-action="pvp-practice"]:not(.onboarding-route-step)')).toBeVisible({ timeout: 45_000 });
 }
 
 /**
@@ -101,7 +108,7 @@ test("a reloaded non-English session is operable by its own translated labels", 
   await page.locator("#language-select").selectOption("de");
   await page.reload({ waitUntil: "commit" });
   await readyInAnyLocale(page);
-  const cta = page.locator('[data-action="pvp-practice"]');
+  const cta = page.locator('[data-action="pvp-practice"]:not(.onboarding-route-step)');
   await expect(cta).toBeVisible();
   await expect(cta).toHaveAttribute("aria-label", "Jetzt fliegen");
   await expect(homeSub(page)).toHaveText("Halten zum Tauchen · Loslassen zum Gleiten");
@@ -183,7 +190,7 @@ test("every shipped locale renders the home CTA in its own words", async ({ page
     await select.selectOption(locale.code);
     await expect(select).toHaveValue(locale.code);
     await backToHomeInAnyLocale(page);
-    const cta = page.locator('[data-action="pvp-practice"]');
+    const cta = page.locator('[data-action="pvp-practice"]:not(.onboarding-route-step)');
     await expect(cta).toBeVisible();
     const label = (await cta.getAttribute("aria-label"))?.trim();
     expect(label, `locale ${locale.code} rendered no accessible name for the home CTA`).toBeTruthy();

@@ -102,10 +102,48 @@ export function messageBand(input: MessageBandInput): MessageBand {
   // only 47px between the header and the quip lane, `floorY - 60` put the band
   // 10px BELOW the quip lane, and the band measured zero height.
   const room = Math.max(ceiling, obstruction - MESSAGES_TAIL_PX);
-  const preferred = Math.max(ceiling, headerPx + MESSAGES_CHAIN_CLEAR_PX);
-  const top = Math.max(ceiling, Math.min(preferred, room));
-  const laneFloor = Math.min(floorY, Math.max(top, obstruction));
-  const maxPx = Math.max(0, Math.min(naturalBandPx, laneFloor - top - LANE_GAP_PX));
+  // BOTTOM-ANCHORED. `room` is the band's TOP edge — the highest it may sit —
+  // and treating it as the bottom is what broke the first attempt at this.
+  //
+  // The band used to hang just under the header (`headerPx + CHAIN_CLEAR`),
+  // which put the coach's sentence in the middle of the flight corridor, over
+  // the bird and over the line the player is about to take. In a one-button
+  // game the corridor is the game, so the text now sits on the FLOOR of that
+  // corridor: flush above `.quips` and `.slope-chain`, which are already
+  // bottom-anchored to the footer.
+  //
+  // Nothing below the band moved. `.quips` and `.slope-chain` are anchored to
+  // `--hud-footer-bottom` (not to the band), so the band simply descends to sit
+  // on top of them, and `--hud-stack-bottom` carries the coach hand down with it.
+  //
+  // `obstruction` is the top of the highest lane the band must clear, so the
+  // floor it lands on is the lower of that and the footer's own top edge.
+  // The floor the band lands on: the lower of the footer's top edge and the top
+  // of the highest lane it must clear (`.quips` / `.slope-chain`).
+  const laneFloor = Math.min(floorY, obstruction);
+  // LANDSCAPE ONLY, and that restriction is the point rather than a cop-out.
+  //
+  // In portrait the footer is TOP-anchored, so the persistent objective cards sit
+  // directly under the header and the band is already clear of the flight
+  // corridor up there. The bottom of a portrait screen is not free — it belongs
+  // to the toast lane and the quips — and descending into it does not move the
+  // coach's text off the bird; it drags `--hud-stack-bottom` down with it and
+  // pushes the toasts off the bottom of a 568px phone (measured 613.5 of 568).
+  //
+  // In landscape the footer is bottom-anchored, the goal cards live at the
+  // bottom, and the corridor between header and footer is nearly empty. That is
+  // where the sentence was blocking the view, and that is where it now sits —
+  // flush above `.quips` and `.slope-chain`, which hang off
+  // `--hud-footer-bottom` and did not move.
+  const bottomAnchored = !anchoredTop;
+  const headroom = Math.max(0, laneFloor - ceiling - LANE_GAP_PX);
+  const bottomAnchoredMaxPx = Math.min(naturalBandPx, headroom);
+  const top = bottomAnchored
+    ? Math.max(ceiling, laneFloor - LANE_GAP_PX - bottomAnchoredMaxPx)
+    : Math.max(ceiling, Math.min(Math.max(ceiling, headerPx + MESSAGES_CHAIN_CLEAR_PX), room));
+  const maxPx = bottomAnchored
+    ? bottomAnchoredMaxPx
+    : Math.max(0, Math.min(naturalBandPx, Math.max(0, Math.min(laneFloor, Math.max(top, obstruction)) - top - LANE_GAP_PX)));
   const bottom = top + maxPx;
   const stackBottom = bottom + LANE_GAP_PX + (handPx > 0 ? handPx + LANE_GAP_PX : 0);
   return { top, maxPx, bottom, stackBottom, laneFloor, chainClear: ceiling, footerBottom: footerBottomReservation(input) };

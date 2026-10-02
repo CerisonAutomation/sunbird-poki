@@ -111,7 +111,24 @@ describe("the band clears whatever the footer is doing", () => {
     // the footer's 196..346.
     const band = messageBand(FRAMES["390x844"]!);
     expect(band.top, "the band must start below the top-anchored footer").toBeGreaterThanOrEqual(346 + 8);
-    expect(band.top).toBeLessThan(346 + 8 + LANE_GAP_PX * 4);
+    // The upper bound used to pin the band to the corridor's CEILING — it had
+    // to start within 40px of the footer's bottom edge, which is only true for
+    // a band hung under the header. The band is bottom-anchored now, so the
+    // invariant is the opposite one: it must come to rest ON the corridor floor
+    // without running off it. Reverting to a ceiling-anchored band (top ≈
+    // headerPx + CHAIN_CLEAR ≈ 132) fails this; so does a floor-anchored band
+    // that overshoots the play area.
+    expect(band.top + band.maxPx, "the band must stay inside the play area").toBeLessThanOrEqual(FRAMES["390x844"]!.hudPx);
+    // Portrait keeps its placement: the footer is top-anchored there, so the
+    // band is already clear of the corridor, and descending would drag the
+    // toast lane off the bottom of the screen. The "use the room" assertion is
+    // a LANDSCAPE one and must not be smuggled in here — asserting it on this
+    // frame is what would force portrait back into a placement that does not
+    // fit it. `toBeBottomAnchored` in the describe below pins which frames are
+    // in which mode.
+    if (!FRAMES["390x844"]!.anchoredTop) {
+      expect(band.top).toBeGreaterThan(FRAMES["390x844"]!.headerPx + 200);
+    }
   });
 
   it("and it is above the header in the same frame", () => {
@@ -374,4 +391,59 @@ describe("footerAnchoredTop", () => {
     expect(just(1)).toBe(false);
     expect(just(-1)).toBe(true);
   });
+});
+
+describe("the band lands ON the corridor floor, not merely low", () => {
+  // Two ways to be "near the bottom" without actually being placed there, both
+  // of which the suite could not see:
+  //
+  //   · dropping LANE_GAP_PX from the placement leaves the band flush against
+  //     the lanes it has to clear — the exact class of collision the whole
+  //     measured-stack design exists to prevent, and invisible to an assertion
+  //     that only checks the band's top edge.
+  //   · ignoring `obstruction` lets the floor become the footer's top edge
+  //     alone, so the band descends straight through `.quips`.
+  //
+  // Both are restated here as invariants over EVERY frozen frame, because both
+  // mutations leave every individual frame's numbers plausible.
+  for (const [name, frame] of Object.entries(FRAMES)) {
+    it(`clears the lanes below it by the lane gap at ${name}`, () => {
+      const band = messageBand(frame!);
+      expect(band.maxPx, "the band collapsed to nothing").toBeGreaterThan(0);
+      expect(
+        band.bottom,
+        `band ends at ${band.bottom.toFixed(1)} but the floor is ${band.laneFloor.toFixed(1)} — it must clear it by the lane gap`,
+      ).toBeLessThanOrEqual(band.laneFloor - LANE_GAP_PX + 0.01);
+    });
+
+    it(`is placed on the corridor floor only where the footer is bottom-anchored (${name})`, () => {
+      const f = frame!;
+      const band = messageBand(f);
+      // The mode is not incidental: the whole point of the relocation is that
+      // landscape gets the text out of the corridor, and portrait cannot have
+      // it (it would drag the toast lane off the bottom of the screen). Pin
+      // which frames are in which mode, or "bottom-anchored" can quietly become
+      // "always" or "never" and every other assertion still passes — both of
+      // which this caught.
+      // "Did it actually land flush on its floor" is the observable, and it
+      // works on a frame too cramped to clear the ceiling by any absolute
+      // margin — 844x390 has 47px between header and quip lane, so no
+      // `headerPx + N` predicate can tell the modes apart there.
+      const landedOnTheFloor = band.bottom >= band.laneFloor - LANE_GAP_PX - 0.01;
+      expect(
+        landedOnTheFloor,
+        `${name} (footer ${f.anchoredTop ? "top" : "bottom"}-anchored): band ends at ${band.bottom.toFixed(1)}, floor ${band.laneFloor.toFixed(1)}`,
+      ).toBe(!f.anchoredTop);
+    });
+
+    it(`never claims a floor below the lanes it must clear at ${name}`, () => {
+      const frame_ = frame!;
+      const band = messageBand(frame_);
+      const obstruction = Math.min(frame_.quipY, frame_.slopeY);
+      expect(
+        band.laneFloor,
+        "the floor must be the lower of the footer edge and the lanes below, so the band cannot land inside them",
+      ).toBeLessThanOrEqual(obstruction + 0.01);
+    });
+  }
 });

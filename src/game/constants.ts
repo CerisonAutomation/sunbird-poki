@@ -496,7 +496,25 @@ export const TERRAIN_FACE_DEPTH = 42;
 export const VISIBLE_CHUNKS_BACK = 4;
 export const VISIBLE_CHUNKS_FWD = 14;
 
-export let DAYLIGHT_MAX = 52;
+/**
+ * The day, in seconds of flight.
+ *
+ * This is not a free choice: an island is `ISLAND_PERIOD` metres away, and the
+ * day has to be long enough to REACH one, or the island refill is unreachable
+ * and "each new island refills it" is a promise the player never sees kept.
+ * That is exactly what was wrong. At 52 s and 1,912 m, a flight needs ~64 s to
+ * cross an island at the ~30 m/s the sim sustains, so instrumented runs died at
+ * 1.17-1.74 km — short of the 1.91 km boundary — and the bar only ever went
+ * down. The refill logic was correct and simply never ran.
+ *
+ * It also has to be long enough to CHAIN. Arriving at an island costs `cost`
+ * seconds; the refill returns 29% of the cap, so the run can continue only if
+ * `(max - cost) + 0.29*max >= cost` — that is `max >= 1.55 * cost`. At 30 m/s
+ * that is 99 s, and the margin only holds while the player keeps moving: 120 s
+ * still fails a flight that dawdles, splashes, or stalls, which is the fail
+ * state this meter exists to create.
+ */
+export let DAYLIGHT_MAX = 120;
 /**
  * What crossing an island gives back, as a share of your current day.
  *
@@ -602,7 +620,7 @@ export const SAVE_KEY = "sunbird.save.v2";
  *  never destroyed by the corruption-recovery path. */
 export const SAVE_KEY_CORRUPT = "sunbird.save.corrupt";
 
-export const DAYLIGHT_MAX_GOLD = 62;
+export const DAYLIGHT_MAX_GOLD = 130;
 export const CONTINUE_COST = 80;
 export const CONTINUE_DAYLIGHT = 16;
 export const CONTINUE_TIMEOUT = 15;

@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { DAYLIGHT_ISLAND_REFILL_FRACTION, DAYLIGHT_MAX } from "../constants";
+import { DAYLIGHT_ISLAND_REFILL_FRACTION, DAYLIGHT_MAX, ISLAND_PERIOD } from "../constants";
 import { islandEntry } from "../hud/islandRefill";
 
 /** A fresh run on the base day, halfway through. */
@@ -47,9 +47,27 @@ describe("an island fills the sun back up", () => {
     ).toBeLessThan(0.01);
   });
 
-  it("is unchanged at base stats, so an unupgraded run plays exactly as before", () => {
-    // The fraction was chosen so the new payout rounds to the old flat one.
-    expect(Math.round(DAYLIGHT_MAX * DAYLIGHT_ISLAND_REFILL_FRACTION)).toBe(15);
+  it("leaves a day long enough to actually reach the next island", () => {
+    // The property that was broken, stated as arithmetic on the two constants
+    // that decide it. A day shorter than the crossing means the island refill
+    // is unreachable — the code runs perfectly and the player never sees it,
+    // which is exactly how this shipped.
+    //
+    //   island cost   = ISLAND_PERIOD / pace
+    //   reach island  => DAYLIGHT_MAX >= cost
+    //   chain islands => (DAYLIGHT_MAX - cost) + 0.29 * DAYLIGHT_MAX >= cost
+    //
+    // The pace is a measured, deliberately conservative one: instrumented
+    // flights sustain roughly 30 m/s, and a player who flies well goes faster,
+    // so this is the floor the design has to hold at. If you change either
+    // constant, re-derive this — that is the point of the test.
+    const REFERENCE_PACE = 30;
+    const cost = ISLAND_PERIOD / REFERENCE_PACE;
+    expect(DAYLIGHT_MAX, `a ${DAYLIGHT_MAX}s day cannot cross a ${ISLAND_PERIOD}m island (${cost.toFixed(0)}s)`).toBeGreaterThanOrEqual(cost);
+    expect(
+      DAYLIGHT_MAX * (1 + DAYLIGHT_ISLAND_REFILL_FRACTION),
+      "a full day plus one refill must cover two crossings, or the chain stops after island one",
+    ).toBeGreaterThanOrEqual(cost * 2);
   });
 
   it("never hands back more than a full day", () => {

@@ -5129,7 +5129,10 @@ export class Game {
         // sheet on mobile (one-tap to any messenger), clipboard otherwise.
         // Gated behind the challengeShare flag so a rollout can be held back.
         if (!flag("challengeShare")) break;
-        const dist = Math.max(1, Math.round(this.lastRunDistance()));
+        // Reported, not live: this mark is what a rival is asked to beat, so it
+        // has to be the flight the results card and the score submission agree
+        // on. The bird is still coasting under this very screen.
+        const dist = Math.max(1, Math.round(this.reportedRunDistance(this.lastRunDistance())));
         const mode = flag("modeAwareChallenge") ? this.modeId : undefined;
         const url = buildChallengeUrl(this.seed, dist, this.pilotName, mode);
         const text = `Beat my ${dist} m flight on these hills → ${url}`;
@@ -6393,7 +6396,12 @@ export class Game {
       // Fuse the two viral halves: the image card carries its own beat-me
       // link, so one share (not card + separate link) is the whole loop.
       // Gated behind challengeShare like throw-challenge — rollout-safe.
-      const dist = Math.max(0, this.bird.x - this.startX);
+      //
+      // The distance is the REPORTED one, not the bird's live position: this
+      // button lives on the results card, the bird is still coasting under it,
+      // and a share that claimed a longer flight than the results card (and the
+      // leaderboard submission) is the game overstating a score in public.
+      const dist = this.reportedRunDistance(this.lastRunDistance());
       const challengeUrl = flag("challengeShare")
         ? buildChallengeUrl(this.seed, Math.max(1, Math.round(dist)), this.pilotName, flag("modeAwareChallenge") ? this.modeId : undefined)
         : undefined;
@@ -6420,6 +6428,8 @@ export class Game {
           return;
         }
       }
+      // Portal builds must not initiate downloads, so `allowDownload` is the
+      // negation of "we are on a portal" — not the portal flag itself.
       const result = await shareOrDownload(card, undefined, !this.portalEnabled());
       this.telemetry.track("share_run", { result });
       if (this.disposed) return;
@@ -7927,6 +7937,34 @@ export class Game {
     return Math.max(0, this.bird.x - this.startX);
   }
 
+  /**
+   * The distance this run is REPORTED at — the one number every surface that
+   * shows or publishes a flight has to agree on.
+   *
+   * Mid-flight that is just where the bird is. On the results screen it is the
+   * value `finishRun()` froze into `resultDistance`, because `bird.asleep` only
+   * damps velocity: the bird goes on coasting for a couple of seconds under the
+   * card. The HUD already read the frozen value (which is why the card stopped
+   * climbing past the number that was scored and submitted), but the two paths
+   * that PUBLISH the run still re-read the live position:
+   *
+   *   • the share card and its share text — "I flew 870m" beside a results card
+   *     that said 851m, so the viral payload claimed a flight the leaderboard
+   *     was never credited with;
+   *   • the challenge link, which encodes the distance a rival has to beat.
+   *
+   * Both are on the solo results card, which is the only surface that renders
+   * the share and challenge actions (`renderVersusResult` has neither), so
+   * `resultDistance` is always the frozen run when this answers with it.
+   *
+   * `live` is passed in rather than read here: a caller that already holds the
+   * in-flight number (a `RunStats` it is about to spread) must not be handed a
+   * second, subtly different read of the same subtraction.
+   */
+  private reportedRunDistance(live: number): number {
+    return this.state === "gameover" ? this.resultDistance : live;
+  }
+
   private runStats(): RunStats {
     return {
       clouds: this.runClouds,
@@ -8118,11 +8156,10 @@ export class Game {
     // when the deployed SDK actually offers it.
     portalLeaderboard: this.platform?.capabilities().includes("leaderboard") ?? false,
     version: this.uiVersion,
-    // gameover reads the frozen finishRun() number (see resultDistance):
-    // the bird keeps coasting under the results card, and re-reading its
-    // live position here made the results distance climb past the number
-    // that was actually scored and submitted to the leaderboard.
-    distance: this.state === "gameover" ? this.resultDistance : stats.distance,
+    // One home for the run's reported distance — see reportedRunDistance().
+    // Reading the live bird position here made the results distance climb past
+    // the number that was actually scored and submitted to the leaderboard.
+    distance: this.reportedRunDistance(stats.distance),
     coins: this.runCoins,
     multiplierClaimed: this.multiplierClaimed,
     daylight: this.daylight,

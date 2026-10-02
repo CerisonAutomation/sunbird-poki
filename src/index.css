@@ -2320,6 +2320,22 @@ fieldset.squad-fields {
      shorter window ever needs the gauge more than the header does, the header
      is the thing to cut, not this. */
   .play-hud .alt-gauge { display: none; }
+  /* The medal line goes last, and for the reason the `.stat-sub` rule already
+     gives above: on the shortest frame the coaching band is pinned to its
+     CEILING — `headerPx + 4` — because the quip lane 42px above the footer
+     leaves it no room to prefer `--hud-chain-clear`. So the band's position is
+     a direct function of the header's height, and every header pixel is a
+     pixel the band is pushed down and away from the footer.
+
+     Measured at 568x320 with the emote picker open: `.stat-medal` is 13.2px in
+     the 53.2px distance block, and dropping it takes the header from 128.2px to
+     115px (`--hud-header-height` 132.19 → 119.19) and the corridor between the
+     band and the footer's top edge from 9.1px to 22.1px. `.mid-meta` could have
+     bought 25px more, but it is the only place the island, biome and multiplier
+     are read mid-flight and nothing else carries them, so the medal line — a
+     distance readout of a threshold the medal screen also states — is the
+     cheaper of the two by a wide margin. */
+  .hud-header .stat-medal { display: none; }
 }
 @media (max-height: 500px) and (min-width: 641px) {
   .hud-header .stat-sub, .hud-header .sun-caption { display: none; }
@@ -2658,17 +2674,19 @@ fieldset.squad-fields {
    Playwright reported "element is outside of the viewport" after scrolling,
    because the overflow was inside the wheel rather than the page.
 
-   Wrapping is not the fix either: it made the footer 364px tall in a 320px
-   window, so it grew *upward* off the top of the screen (`.flight-footer` at
-   y-56) and the header ended up inside it. A picker that cannot fit is not a
-   picker that should reflow the thing it is measuring against.
+   Wrapping is not the fix either, and the reason it cannot be is a width fact
+   rather than a height one. In flight `design-polish.css` narrows the footer
+   to the lower-left: `left: clamp(12px, 2.5vw, 28px); width: min(340px, 40vw)`
+   — 227.2px at 568 wide. The toggle beside it is 78.9px, so the picker gets
+   142.3px, and six buttons at their 44px floor wrap into three rows of 196px.
+   A picker that cannot fit is not a picker that should reflow the thing it is
+   measuring against, so `max-height: 360px` gives it the footer's full width on
+   a row of its own instead — see the short-frame block below.
 
-   So on a short screen the picker is a compact one-row strip: 11px labels, no
-   minimum width, tight padding. Six of those measure ~366px against a 400px
-   footer, so it fits on one line and the footer grows by ~30px instead of
-   110px. The `aria-label` on every button still carries "Send Wave" etc., so
-   nothing is lost for a screen reader or for the test that finds the button by
-   its accessible name. */
+   Everywhere else the labels stay: they are what makes an emote readable when
+   the glyph does not render. The `aria-label` on every button carries "Send
+   Wave" etc. regardless, so nothing is lost to a screen reader or to the test
+   that finds the button by its accessible name. */
 .flight-footer .emote-options {
   display: flex;
   flex-wrap: wrap;
@@ -2682,17 +2700,6 @@ fieldset.squad-fields {
   border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
-@media (max-height: 360px) {
-  .flight-footer .emote-options { gap: 4px; padding: 3px 4px; }
-  .flight-footer .emote-options button {
-    min-width: 0;
-    min-height: 30px;
-    height: 30px;
-    padding: 0 6px;
-    border-radius: 15px;
-    font-size: 11px;
-  }
-}
 .flight-footer .emote-options button {
   min-width: 44px;
   min-height: 44px;
@@ -2703,6 +2710,73 @@ fieldset.squad-fields {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 .flight-footer .emote-options.hidden { display:none; }
+/* The emote picker, compacted for the shortest frame the game ships.
+
+   THIS BLOCK HAS TO STAY AFTER THE TWO RULES ABOVE, and that is not a
+   style preference — it is the whole bug. A media query adds no specificity, so
+   an identical selector written EARLIER in the file loses on order however
+   carefully it is scoped: the version of this block that sat above
+   `.flight-footer .emote-options button` was silently overridden on every
+   property the base rule names, and `min-height: 44px` then overrode its own
+   `height: 30px` besides. The buttons stayed at exactly 44px and the "compact
+   picker" was dead code. The file says the same thing about the emote PILL at
+   `.flight-footer .emote-wheel button`; it is stated here because the second
+   occurrence is the one that shipped broken.
+
+   So, measured at 568x320 in the AI-race practice lobby with the picker open:
+   the footer was 255.5px of a 320px screen — goal strip 55.5, gap 4, emote
+   wheel 196, of which the picker alone was 196 — and its top edge at y 52.5 was
+   inside the header's 4..132.2 box, overlapping it by 227x79px. Worse than the
+   overlap: a bottom-anchored footer whose top sits within `headerPx + 16` of
+   the play area's top is read by `footerAnchoredTop()` as the PORTRAIT
+   top-anchored footer, so `--hud-footer-height` became the whole 308px screen
+   and the coaching band was published at y 316 — 4px below the bottom of the
+   viewport. That is the second reason this is a root-cause fix and not a
+   cosmetic one: the orientation test could not be satisfied by a footer that
+   tall at all.
+
+   Three changes, and each one is measured:
+
+   1. The picker takes the footer's full 227.2px instead of the 142.3px left
+      beside the toggle, by wrapping onto a row of its own. Six buttons share
+      that row evenly (`flex: 1 1 0` + `nowrap`), so it is one row at any width
+      — 32.9px each here — rather than three rows of 44px.
+   2. `min-width`/`min-height` go to 0. The base 44px floors are what made a
+      30px row impossible even when the compaction did apply.
+   3. The word goes and the glyph stays. Six labels need ~330px against a
+      227.2px footer; six glyphs need 210px. `.emote-label` is the span around
+      the word, so this hides exactly the text and nothing else, and `title` +
+      `aria-label` keep the name reachable on hover and to assistive tech.
+
+   Result: picker 196px → 38px, emote wheel 196px → 68px, footer 255.5px →
+   127.5px, top edge y 52.5 → y 180.5 — clear of the 115px header, and past the
+   `headerPx + 16` boundary the orientation test needs. */
+@media (max-height: 360px) {
+  .flight-footer .emote-wheel { flex-wrap: wrap; row-gap: 4px; }
+  .flight-footer .emote-options {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 3px 4px;
+  }
+  .flight-footer .emote-options button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    height: 30px;
+    padding: 0;
+    border-radius: 15px;
+    font-size: 11px;
+  }
+  /* `.icon-sm` is sized in `em`, and the button's own font-size is the word's
+     11px, so the glyph comes out at 13.2px inside a 30px button. Stated in px
+     because that is what the row is dimensioned against. */
+  .flight-footer .emote-options .icon-sm { width: 16px; height: 16px; vertical-align: middle; }
+  .flight-footer .emote-label { display: none; }
+}
 /* The sender's own emote — pops the instant the wheel button is pressed, so
    the button never reads as dead (the in-world bubble needs the sim clock,
    which is frozen in the lobby). */

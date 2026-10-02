@@ -68,6 +68,21 @@ export interface MessageBand {
   footerBottom: number;
 }
 
+/**
+ * `--hud-footer-bottom`: the footer's reservation measured from the BOTTOM.
+ *
+ * Separate from `--hud-footer-height` because that one means different things
+ * by orientation. It is a function of its own, so it is named here rather than
+ * written at the call site: `messageBand` needs it, and so does anything that
+ * has to publish it BEFORE measuring the lanes that hang off it — `.quips` is
+ * `bottom: calc(var(--hud-footer-bottom) + 42px)`, so a caller that reads the
+ * quip lane's position and then publishes this has measured the previous pass's
+ * value. See `HUD.publishMessageBand`.
+ */
+export function footerBottomReservation({ anchoredTop, footerPx }: Pick<MessageBandInput, "anchoredTop" | "footerPx">): number {
+  return anchoredTop ? 0 : footerPx;
+}
+
 export function messageBand(input: MessageBandInput): MessageBand {
   const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx } = input;
   // Nothing may start above the header, and in portrait nothing may start above
@@ -93,7 +108,7 @@ export function messageBand(input: MessageBandInput): MessageBand {
   const maxPx = Math.max(0, Math.min(naturalBandPx, laneFloor - top - LANE_GAP_PX));
   const bottom = top + maxPx;
   const stackBottom = bottom + LANE_GAP_PX + (handPx > 0 ? handPx + LANE_GAP_PX : 0);
-  return { top, maxPx, bottom, stackBottom, laneFloor, chainClear: ceiling, footerBottom: anchoredTop ? 0 : footerPx };
+  return { top, maxPx, bottom, stackBottom, laneFloor, chainClear: ceiling, footerBottom: footerBottomReservation(input) };
 }
 
 /** How far below the header the top-anchored footer is parked. `design-polish.css`

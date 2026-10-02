@@ -43,7 +43,7 @@ import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
 import { renderAd, renderContinue, renderGameOver } from "./hud/run";
 import { renderProgress, renderPass, renderTrophies, renderAccount, renderCampaign, renderCups } from "./hud/meta";
 import { renderLive, renderRank, renderSquad, renderPractice, renderModes } from "./hud/race";
-import { LANE_GAP_PX, footerAnchoredTop, messageBand } from "./hud/messageBand";
+import { LANE_GAP_PX, footerAnchoredTop, footerBottomReservation, messageBand } from "./hud/messageBand";
 
 // The view-model, the shared chrome and the screens now live under ./hud/.
 // This module keeps its public face by re-exporting what Game.ts and the test
@@ -174,6 +174,17 @@ const EMOTE_CHOICES: readonly (readonly [string, SmIconName, string])[] = [
   ["👑", "crown", "Crown"],
   ["🤝", "handshake", "GG"],
 ];
+
+/** How many extra frames `publishStack` publishes for, and when it may stop
+ *  early. Two is the floor because a `transition` reports its START value for
+ *  two frames, not one: the frame the change is first recalculated in, and the
+ *  frame after it. Measured at 568x320, the first two settling passes both read
+ *  the quip lane at y 180.5 and only the third read y 138.5 — so a loop that
+ *  stops as soon as two passes agree stops exactly one frame too early, which
+ *  is the defect it was written to remove. Four is the ceiling, so a header
+ *  that reflows on every coin cannot spend the run re-measuring. */
+const STACK_SETTLE_MIN_PASSES = 2;
+const STACK_SETTLE_MAX_PASSES = 4;
 
 export class HUD {
   readonly root: HTMLDivElement;
@@ -435,7 +446,15 @@ export class HUD {
         <div class="emote-bubble hidden" data-ref="emoteBubble" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="emote-wheel hidden" data-ref="emoteWheel">
           <button class="emotes-toggle" data-ui data-action="toggle-emotes" aria-expanded="false" aria-controls="flight-emotes">${menuIconSm("chat")} ${t("hud.emotes.label", undefined, "Emotes")}</button>
-          <div class="emote-options hidden" id="flight-emotes">${EMOTE_CHOICES.map(([id, icon, label]) => `<button data-ui data-action="emote" data-id="${id}" aria-label="Send ${label}" title="Send ${label}">${menuIconSm(icon)} ${label}</button>`).join("")}</div>
+          <!-- The word is in its own span so the short-frame block in index.css
+               can hide exactly the label and leave the glyph, the title and the
+               aria-label alone. Without the span the only way to drop it was
+               "font-size: 0", which also collapses .icon-sm — it is sized in em
+               — and takes the glyph with it. The space stays OUTSIDE the span
+               for the same reason: it separates the glyph from the word at
+               every other size, and a flex container does not turn
+               whitespace into an item, so it costs nothing on the short frame. -->
+          <div class="emote-options hidden" id="flight-emotes">${EMOTE_CHOICES.map(([id, icon, label]) => `<button data-ui data-action="emote" data-id="${id}" aria-label="Send ${label}" title="Send ${label}">${menuIconSm(icon)} <span class="emote-label">${label}</span></button>`).join("")}</div>
         </div>
         <div class="mid-meta">
           <div class="island-chip" data-ref="island">${t("hud.ui.I1", undefined, "Island 1")}</div>
@@ -615,32 +634,88 @@ export class HUD {
     // Observe only these small flow containers, not the full scene or per-frame
     // positions. Header/footer wrapping automatically reserves feedback space.
     this.resizeObs = new ResizeObserver(() => {
-      // Measure the FULL offset from the play-hud edge so that absolutely-
-      // positioned elements cleared by this variable actually sit below the
-      // header (or above the footer). contentRect.height omits the play-hud
-      // padding, causing the elements to land inside the header/footer.
-      const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
-      const headerPx = header.getBoundingClientRect().bottom - hudRect.top;
-      // The footer is bottom-anchored on landscape and TOP-anchored in the
-      // portrait override (design-polish.css), so the reserved band must be
-      // measured from whichever edge it actually sits against. Measuring
-      // always from the bottom returned most of the viewport in portrait —
-      // a 740px `--hud-footer-height` at 390x844, should be ~115 — and that
-      // bogus number clamped the altitude gauge to its floor and pushed the
-      // toast lane to `top: -15px`, half off-screen.
-      const fRect = footer.getBoundingClientRect();
-      const anchoredTop = footerAnchoredTop({ footerTop: fRect.top, hudTop: hudRect.top, headerPx });
-      const footerPx = anchoredTop
-        ? Math.max(0, fRect.bottom - hudRect.top)
-        : Math.max(0, hudRect.bottom - fRect.top);
-      for (const [name, px] of [["header", headerPx], ["footer", footerPx]] as [string, number][]) {
-        this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
-      }
-      this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx);
+      this.stackSignature = "";
+      this.publishStack();
     });
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
     this.resizeObs.observe(this.quipLayer);
+  }
+
+  /**
+   * Measure the header and the footer, publish their reservations, and publish
+   * the message stack off them. Extracted from the `ResizeObserver` so that the
+   * settling loop below can run the identical measurement on later frames.
+   *
+   * The extra frames are not belt and braces. `.quips` and `.slope-chain` are
+   * anchored to `--hud-footer-bottom`, which this method publishes, and every
+   * lane carries the project-wide `transition: all 0.00001s` — the rule that
+   * makes transitions observable at all. A transitioned property keeps
+   * reporting its previous value until the frame in which the transition
+   * renders has been committed, so writing `--hud-footer-bottom` and reading
+   * `.quips` in the same task measures the lane one frame too low. And because
+   * `.quips` is an empty 0x0 box, moving it fires no ResizeObserver, so nothing
+   * ever came back to correct it.
+   *
+   * Measured at 568x320 in the practice lobby: opening the emote picker grows
+   * the footer from an 85.5px card to 127.5px, and the band was published with
+   * the quip lane at y 180.5 when it settles at y 138.5 — a 42px error, and
+   * `messageBand`'s `room` term is `quipY - 60`, so 0.5px of that error was the
+   * whole difference between the band sitting on its ceiling and sitting 62px
+   * lower, inside the footer.
+   *
+   * So the stack is republished until the measured inputs stop moving, one
+   * frame at a time, and the signature is what stops it: a pass that reads the
+   * same numbers as the pass before it has nothing left to correct. The floor
+   * is there because a transition reports its start value for two frames, not
+   * one, so agreeing early is the failure mode rather than the success one —
+   * see `STACK_SETTLE_MIN_PASSES`.
+   */
+  private publishStack(): void {
+    const header = this.root.querySelector<HTMLElement>(".hud-header")!;
+    const footer = this.root.querySelector<HTMLElement>(".flight-footer")!;
+    // Measure the FULL offset from the play-hud edge so that absolutely-
+    // positioned elements cleared by this variable actually sit below the
+    // header (or above the footer). contentRect.height omits the play-hud
+    // padding, causing the elements to land inside the header/footer.
+    const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
+    const headerPx = header.getBoundingClientRect().bottom - hudRect.top;
+    // The footer is bottom-anchored on landscape and TOP-anchored in the
+    // portrait override (design-polish.css), so the reserved band must be
+    // measured from whichever edge it actually sits against. Measuring
+    // always from the bottom returned most of the viewport in portrait —
+    // a 740px `--hud-footer-height` at 390x844, should be ~115 — and that
+    // bogus number clamped the altitude gauge to its floor and pushed the
+    // toast lane to `top: -15px`, half off-screen.
+    const fRect = footer.getBoundingClientRect();
+    const anchoredTop = footerAnchoredTop({ footerTop: fRect.top, hudTop: hudRect.top, headerPx });
+    const footerPx = anchoredTop
+      ? Math.max(0, fRect.bottom - hudRect.top)
+      : Math.max(0, hudRect.bottom - fRect.top);
+    for (const [name, px] of [["header", headerPx], ["footer", footerPx]] as [string, number][]) {
+      this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
+    }
+    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx);
+    const signature = [
+      headerPx,
+      footerPx,
+      anchoredTop,
+      this.quipLayer.getBoundingClientRect().top - hudRect.top,
+      this.messagesEl.offsetHeight,
+    ].join("|");
+    if (
+      this.stackPasses >= STACK_SETTLE_MAX_PASSES
+      || (this.stackPasses >= STACK_SETTLE_MIN_PASSES && signature === this.stackSignature)
+    ) {
+      this.stackPasses = 0;
+      return;
+    }
+    this.stackSignature = signature;
+    this.stackPasses += 1;
+    this.stackFrame = requestAnimationFrame(() => {
+      this.stackFrame = 0;
+      this.publishStack();
+    });
   }
 
   /**
@@ -691,6 +766,16 @@ export class HUD {
     // as past the bottom of the play area and `Math.min` ignores it.
     const hudPx = Math.max(0, hudRect.bottom - hudRect.top);
     const slopeChain = this.root.querySelector<HTMLElement>(".slope-chain")!;
+    // The footer's BOTTOM reservation is published before the quip lane is
+    // measured, because `.quips` hangs off this value —
+    // `bottom: calc(var(--hud-footer-bottom, 90px) + 42px)` — and `messageBand`
+    // reads `quipY` as one of the two obstructions that place the band. The
+    // read still has to wait for the frame: every lane carries a project-wide
+    // `transition: all 0.00001s`, so a transitioned property reports its
+    // previous value until the frame ends. `publishStack` is what supplies that
+    // frame, and it is documented there.
+    const footerBottom = footerBottomReservation({ anchoredTop, footerPx });
+    this.root.style.setProperty("--hud-footer-bottom", `${footerBottom}px`);
     const band = messageBand({
       hudPx,
       headerPx,
@@ -713,7 +798,6 @@ export class HUD {
       ["stack-bottom", band.stackBottom],
       ["lane-floor", band.laneFloor],
       ["chain-clear", band.chainClear],
-      ["footer-bottom", band.footerBottom],
       // The gap the lanes are offset BY, published so the stylesheet's `top`
       // expressions and the arithmetic above are one number and not two that
       // happen to agree.
@@ -2057,6 +2141,12 @@ export class HUD {
     this.timers.delete(timer);
   }
   private resizeObs: ResizeObserver | null = null;
+  /** The settling loop `publishStack` runs: the handle that cancels the armed
+   *  frame if the HUD is disposed mid-flight, the signature that says "the last
+   *  pass read what this one read", and the passes used so far. */
+  private stackFrame = 0;
+  private stackSignature = "";
+  private stackPasses = 0;
   private readonly menuContinuity = new MenuContinuity();
   private readonly resultsContinuity = new MenuContinuity();
   private copyDialog: HTMLElement | null = null;
@@ -2065,6 +2155,10 @@ export class HUD {
 
   dispose(): void {
     this.resizeObs?.disconnect();
+    // The settling pass is armed on a frame; a disposed HUD must not publish
+    // into a detached root on the next one.
+    if (this.stackFrame) cancelAnimationFrame(this.stackFrame);
+    this.stackFrame = 0;
     this.menuSky.dispose();
     this.overlayNavigation.dispose();
     for (const timer of this.timers) window.clearTimeout(timer);

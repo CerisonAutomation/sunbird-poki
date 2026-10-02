@@ -121,14 +121,41 @@ let scoreSubmit: ((leaderboard: string, score: number) => void) | null = null;
  */
 let booted = false;
 
+/** Subscribers waiting for `markPokiBooted`, drained in registration order. */
+const bootWaiters: Array<() => void> = [];
+
 /** Record that `PokiSDK.init()` resolved. Only the boot path calls this. */
 export function markPokiBooted(): void {
+  if (booted) return;
   booted = true;
+  // Drain into a fresh list first: a waiter may legitimately register another
+  // (a deferred call that then finds itself pre-boot again after a re-init),
+  // and mutating the array being iterated would skip the tail of it.
+  const due = bootWaiters.splice(0, bootWaiters.length);
+  for (const run of due) run();
 }
 
 /** Whether Poki's init handshake has completed. See `booted` above. */
 export function pokiSdkBooted(): boolean {
   return booted;
+}
+
+/**
+ * Run `fn` once the SDK has booted — immediately if it already has.
+ *
+ * The ad entry points do not need this: a break requested too early is a
+ * documented no-op ("not every commercialBreak() triggers an ad"), so simply
+ * not asking is the correct, complete answer. The LIFECYCLE calls are the
+ * opposite case, because Poki refuses them rather than ignoring them:
+ * `gameplayStart()` is what arms the core's `startAdsAfter` timer, so a start
+ * that lands during boot is not merely refused but LOST, and the session then
+ * never auto-serves a break no matter how long it plays. Those calls are
+ * therefore deferred to boot rather than dropped — see `PokiAdapter`'s
+ * lifecycle block.
+ */
+export function onPokiBooted(fn: () => void): void {
+  if (booted) fn();
+  else bootWaiters.push(fn);
 }
 
 /** Options for the boot path's `PokiSDK.init()` — the leaderboard handshake. */
@@ -198,8 +225,47 @@ export class PokiAdapter implements PlatformAdapter {
   readonly ready = true;
   /** Container currently holding a display ad, so it can be torn down. */
   private banner: HTMLElement | null = null;
+  /**
+   * Loading phase asked for before the SDK booted; delivered at boot.
+   *
+   * Two slots rather than one: the two markers are independent one-shots, so a
+   * single slot would let a `loadingStart` that arrived before a
+   * `loadingFinished` be overwritten and silently lost.
+   */
+  private pendingLoadingStart = false;
+  private pendingLoadingFinished = false;
+  /** Gameplay state asked for before the SDK booted; delivered at boot. */
+  private pendingGameplay: "start" | "stop" | null = null;
 
-  constructor(private readonly events: PlatformEvents = {}) {}
+  constructor(private readonly events: PlatformEvents = {}) {
+    // Deferred lifecycle calls are delivered here, at the moment boot
+    // completes. Registering from the constructor (rather than from each
+    // pre-boot call) keeps the queue to at most one flush per adapter: the
+    // pending slots below are state, not callbacks, so a burst of pre-boot
+    // calls cannot grow an unbounded waiter list.
+    onPokiBooted(() => this.flushPendingSdkCalls());
+  }
+
+  /**
+   * Deliver whatever the game asked of the portal while `init()` was still in
+   * flight.
+   *
+   * Collapses a burst to the final state rather than replaying it: a pause and
+   * resume during boot is one `gameplayStop` then one `gameplayStart`, and
+   * sending the stop alone would leave Poki believing gameplay never resumed.
+   */
+  private flushPendingSdkCalls(): void {
+    const loadingStart = this.pendingLoadingStart;
+    const loadingFinished = this.pendingLoadingFinished;
+    this.pendingLoadingStart = false;
+    this.pendingLoadingFinished = false;
+    if (loadingStart) this.loadingStart();
+    if (loadingFinished) this.loadingFinished();
+    const gameplay = this.pendingGameplay;
+    this.pendingGameplay = null;
+    if (gameplay === "start") this.gameplayStart();
+    else if (gameplay === "stop") this.gameplayStop();
+  }
 
   portalLanguage(): string | null { return this.getLanguage()?.toLowerCase() ?? null; }
 
@@ -286,6 +352,10 @@ export class PokiAdapter implements PlatformAdapter {
     // this delegate exists for interface symmetry — re-sending a phase
     // marker is harmless.
     if (this.loadingStartSent) return;
+    // Not dropped, held: pre-boot this would be refused by the core, and the
+    // one-shot flag below would then record a phase marker that never reached
+    // the portal. See `flushPendingSdkCalls`.
+    if (!pokiSdkBooted()) { this.pendingLoadingStart = true; return; }
     this.loadingStartSent = true;
     this.sdk?.gameLoadingStart?.();
   }
@@ -296,6 +366,7 @@ export class PokiAdapter implements PlatformAdapter {
     // Phase markers are one-shot: Poki's "no consecutive duplicates" rule
     // (enforced by the Inspector) is applied to the loading signal too.
     if (this.loadingFinishedSent) return;
+    if (!pokiSdkBooted()) { this.pendingLoadingFinished = true; return; }
     this.loadingFinishedSent = true;
     this.sdk?.gameLoadingFinished?.();
   }
@@ -307,10 +378,16 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   gameplayStart(): void {
+    // The field bug this guards is louder than a console line: the core's
+    // `gameplayStart` arms `startAdsAfter`, and before boot it refuses and
+    // logs "The Poki SDK was not yet booted" instead — so the session loses
+    // automatic breaks for its whole life. Held and replayed, not skipped.
+    if (!pokiSdkBooted()) { this.pendingGameplay = "start"; return; }
     this.sdk?.gameplayStart?.();
   }
 
   gameplayStop(): void {
+    if (!pokiSdkBooted()) { this.pendingGameplay = "stop"; return; }
     this.sdk?.gameplayStop?.();
   }
 

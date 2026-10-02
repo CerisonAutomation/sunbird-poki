@@ -1,5 +1,6 @@
 /**
- * Ad calls must wait for `PokiSDK.init()`, not for the SDK object to exist.
+ * Every SDK call must wait for `PokiSDK.init()`, not for the SDK object to
+ * exist.
  *
  * The field evidence: a phone e2e run logged a page error "The Poki SDK was not
  * yet booted" and a console error "Requesting ad before PokiSDK.init() is done".
@@ -11,6 +12,11 @@
  * The HTML5 doc is explicit that init must complete first, and explicit that
  * "not every commercialBreak() triggers an ad" — so a break requested too early
  * must quietly do nothing, not throw into the player.
+ *
+ * The LIFECYCLE calls are the other half of that same window and need the
+ * opposite treatment: a refused `gameplayStart` is not free, because that call
+ * is what arms the core's `startAdsAfter` timer. So the ad entry points wait by
+ * not asking, and the lifecycle entry points wait by asking later.
  *
  * The flag is module state that only ever moves forward, which is why these
  * cases live in their own file: `poki-breaks.test.ts` and
@@ -131,7 +137,7 @@ describe("a Poki build whose SDK script never finishes init", () => {
     const platform = await import("../platform");
     const { pokiSdkBooted: booted } = await import("../poki");
     const asked: string[] = [];
-    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+    (window as unknown as { PokiSDK: Record<string, unknown> }).PokiSDK = {
       ...(window as unknown as { PokiSDK: Record<string, unknown> }).PokiSDK,
       commercialBreak: (onStart?: () => void) => { asked.push("commercialBreak"); onStart?.(); return Promise.resolve(); },
     };
@@ -146,5 +152,101 @@ describe("a Poki build whose SDK script never finishes init", () => {
     // init()'s own handshake timer is now due; fire it and let the boot path finish.
     await vi.advanceTimersByTimeAsync(30_000);
     expect(booted()).toBe(true);
+  });
+
+  /**
+   * The same boot window, but for the LIFECYCLE calls — and this one is the
+   * field failure an e2e run reported as `The Poki SDK was not yet booted`.
+   *
+   * Unlike a break, a pre-boot lifecycle call is not a harmless no-op: the core
+   * refuses it AND logs, and `gameplayStart` is what arms `startAdsAfter`, so
+   * the refusal costs the session its automatic breaks. The calls therefore
+   * have to be held and replayed, not merely skipped.
+   */
+  describe("lifecycle calls made while init is still in flight", () => {
+    /** Lifecycle calls the live core receives, in order. */
+    const sdkCalls = (calls: string[]): Record<string, unknown> => ({
+      init: () => new Promise<void>((resolve) => { setTimeout(resolve, 30_000); }),
+      gameLoadingStart: () => { calls.push("gameLoadingStart"); },
+      gameLoadingFinished: () => { calls.push("gameLoadingFinished"); },
+      gameplayStart: () => { calls.push("gameplayStart"); },
+      gameplayStop: () => { calls.push("gameplayStop"); },
+      movePill: () => {},
+    });
+
+    async function bootingAdapter(calls: string[]) {
+      vi.resetModules();
+      (window as unknown as { PokiSDK?: unknown }).PokiSDK = sdkCalls(calls);
+      const platform = await import("../platform");
+      const { pokiSdkBooted: booted, markPokiBooted } = await import("../poki");
+      const pending = platform.initPlatform(events);
+      await vi.advanceTimersByTimeAsync(5_000);
+      const adapter = await pending;
+      expect(booted(), "the 4 s load cap released the game before init resolved").toBe(false);
+      return { adapter, markPokiBooted };
+    }
+
+    it("never asks the SDK for gameplay before init resolves", async () => {
+      const calls: string[] = [];
+      const { adapter } = await bootingAdapter(calls);
+
+      // A pause and a resume inside the boot window — what a cold, slow-
+      // network session actually does. The SDK double is the thing that has to
+      // stay untouched: it is the call the real core answers with
+      // "The Poki SDK was not yet booted".
+      adapter.gameplayStop();
+      adapter.gameplayStart();
+      expect(calls, "pre-boot lifecycle calls are what the core refuses").toEqual([]);
+    });
+
+    it("delivers the deferred gameplayStart once init resolves, so breaks can arm", async () => {
+      const calls: string[] = [];
+      const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
+
+      adapter.gameplayStart();
+      expect(calls).toEqual([]);
+
+      // The point of holding rather than dropping: without this replay the
+      // core's `startAdsAfter` timer is never armed for the whole session.
+      boot();
+      expect(calls).toEqual(["gameplayStart"]);
+    });
+
+    it("collapses a pre-boot stop/start burst to the final gameplay state", async () => {
+      const calls: string[] = [];
+      const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
+
+      adapter.gameplayStop();
+      adapter.gameplayStart();
+      boot();
+      // Replaying both would tell the portal gameplay stopped and then started
+      // again, arming an ad timer for a session that is already in flight.
+      expect(calls).toEqual(["gameplayStart"]);
+    });
+
+    it("holds the loading phase markers too, and sends each exactly once", async () => {
+      const calls: string[] = [];
+      const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
+
+      adapter.loadingStart();
+      adapter.loadingFinished();
+      adapter.loadingFinished();
+      boot();
+      expect(calls).toEqual(["gameLoadingStart", "gameLoadingFinished"]);
+      // Re-sending a phase marker is what Poki's Inspector rejects.
+      adapter.loadingFinished();
+      expect(calls).toEqual(["gameLoadingStart", "gameLoadingFinished"]);
+    });
+
+    it("passes lifecycle calls straight through once the SDK has booted", async () => {
+      const calls: string[] = [];
+      const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
+
+      boot();
+      adapter.gameplayStart();
+      adapter.gameplayStop();
+      adapter.loadingStart();
+      expect(calls).toEqual(["gameplayStart", "gameplayStop", "gameLoadingStart"]);
+    });
   });
 });

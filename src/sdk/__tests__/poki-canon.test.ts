@@ -27,7 +27,7 @@ import { relative, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { PokiAdapter } from "../poki";
+import { PokiAdapter, markPokiBooted } from "../poki";
 import {
   MEASURE_CATEGORIES,
   MEASURE_INTERACTION_ACTIONS,
@@ -45,6 +45,13 @@ import {
 afterEach(() => {
   delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
 });
+
+// This file pins WHICH canonical member each adapter method reaches, not when
+// it is allowed to reach it — so it runs against a booted SDK, the same
+// convention `poki-breaks.test.ts` uses. The boot-order refusals are a
+// deliberately separate file (`poki-boot-order.test.ts`), because that flag
+// only ever moves one way and cannot be undone between cases here.
+markPokiBooted();
 
 const root = resolve(__dirname, "../../..");
 const read = (p: string): string => readFileSync(resolve(root, p), "utf8");

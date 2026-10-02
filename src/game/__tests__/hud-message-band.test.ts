@@ -32,7 +32,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { FOOTER_TOP_ANCHOR_SLACK_PX, LANE_GAP_PX, footerAnchoredTop, messageBand, type MessageBandInput } from "../hud/messageBand";
+import { FOOTER_TOP_ANCHOR_SLACK_PX, LANE_GAP_PX, footerAnchoredTop, footerBottomReservation, messageBand, type MessageBandInput } from "../hud/messageBand";
 import { messageHoldMs } from "../MessageTiming";
 import { TOAST_MIN_VISIBLE_MS, decideToast } from "../toastFloor";
 
@@ -183,6 +183,21 @@ describe("the footer's reservation is measured from the edge it is anchored to",
     // lane 278px up a 844px screen, i.e. in the middle of the flight field.
     expect(messageBand(FRAMES["390x844"]!).footerBottom).toBe(0);
     expect(messageBand(FRAMES["1200x762"]!).footerBottom).toBe(162);
+  });
+
+  it("is the same number whether the band reports it or the caller publishes it", () => {
+    // `HUD.publishMessageBand` has to write `--hud-footer-bottom` BEFORE it
+    // reads `.quips`, which is anchored to it. Two expressions of one value is
+    // two numbers waiting to disagree, so the caller uses this and `messageBand`
+    // uses this; the test below fails the day one of them stops.
+    for (const [vp, frame] of Object.entries(FRAMES)) {
+      expect(
+        footerBottomReservation(frame),
+        `${vp}: publishMessageBand and messageBand disagree about the footer's bottom reservation`,
+      ).toBe(messageBand(frame).footerBottom);
+    }
+    expect(footerBottomReservation({ anchoredTop: true, footerPx: 346 })).toBe(0);
+    expect(footerBottomReservation({ anchoredTop: false, footerPx: 162 })).toBe(162);
   });
 
   it("every bottom-anchored lane reads the orientation-correct variable", () => {

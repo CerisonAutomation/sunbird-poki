@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BIG_LAUNCH_QUIPS, BOP_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, THUD_QUIPS, SurpriseEngine, pickSurprise, quip } from "../Surprises";
+import { BIG_LAUNCH_QUIPS, BOP_QUIPS, SLEEP_QUIPS, SPLASH_QUIPS, THUD_QUIPS, SurpriseEngine, pickSurprise, quip, quipKey } from "../Surprises";
 
 describe("surprise engine", () => {
   it("never fires early in a run", () => {
@@ -38,22 +38,29 @@ describe("surprise engine", () => {
 
   it("quips are deterministic and in-pool", () => {
     expect(quip(SPLASH_QUIPS, 4)).toBe(quip(SPLASH_QUIPS, 4));
-    expect(SPLASH_QUIPS).toContain(quip(SPLASH_QUIPS, 7));
-    expect(SLEEP_QUIPS).toContain(quip(SLEEP_QUIPS, 123));
-    expect(BIG_LAUNCH_QUIPS).toContain(quip(BIG_LAUNCH_QUIPS, 999));
+    // Membership is a property of the KEY the pick landed on; `quip()` returns
+    // resolved copy, so asking the key-pool to contain English would compare a
+    // key with a sentence.
+    expect(SPLASH_QUIPS).toContain(quipKey(SPLASH_QUIPS, 7));
+    expect(SLEEP_QUIPS).toContain(quipKey(SLEEP_QUIPS, 123));
+    expect(BIG_LAUNCH_QUIPS).toContain(quipKey(BIG_LAUNCH_QUIPS, 999));
   });
 
   it("thud/bop pools rotate without repeating until exhausted", () => {
     for (const pool of [THUD_QUIPS, BOP_QUIPS]) {
       expect(pool.length).toBeGreaterThan(0);
-      for (const w of pool) expect(w).toMatch(/!$/);
-      const seen = new Set(pool.map((_, i) => quip(pool, i)));
+      // The pools hold i18n KEYS now, so the shouted-`!` contract has to be
+      // asserted on the RESOLVED text — which is what the player reads and what
+      // the copy actually promises. Asserting it on the key would only prove
+      // that `quips.thud.0` ends in a digit.
+      for (const w of pool) expect(quip([w], 0)).toMatch(/!$/);
+      const seen = new Set(pool.map((_, i) => quipKey(pool, i)));
       expect(seen.size).toBe(pool.length);
       // rotation wraps cleanly back to the start
-      expect(quip(pool, pool.length)).toBe(quip(pool, 0));
+      expect(quipKey(pool, pool.length)).toBe(quipKey(pool, 0));
     }
-    expect(THUD_QUIPS).toContain(quip(THUD_QUIPS, 1)); // THUNK! follows THUD!
-    expect(BOP_QUIPS[0]).toBe("BOP!");
+    expect(THUD_QUIPS).toContain(quipKey(THUD_QUIPS, 1)); // THUNK! follows THUD!
+    expect(quip(BOP_QUIPS, 0)).toBe("BOP!");
   });
 });
 

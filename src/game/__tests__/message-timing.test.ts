@@ -22,8 +22,12 @@ describe("message timing model", () => {
   it("gives the corpus's real median quip enough time to read", () => {
     // Straight from the quip pool, not a synthetic string.
     const surprises = readFileSync("src/game/Surprises.ts", "utf8");
-    const pools = [...surprises.matchAll(/export const \w*QUIPS\s*=\s*\[([\s\S]*?)\];/g)];
-    const quips = pools.flatMap((p) => [...p[1]!.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!));
+    // The pools hold i18n KEYS now; the English the player actually reads lives
+    // in the QUIP_FALLBACK map beside them. Measuring the keys would compute the
+    // median length of `quips.splash.0` — every entry the same length — and the
+    // read-time model would be sized off a string the game never shows.
+    const fallbacks = surprises.slice(surprises.indexOf("QUIP_FALLBACK"));
+    const quips = [...fallbacks.matchAll(/"quips\.[a-z]+\.\d+":\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!);
     expect(quips.length, "corpus not found").toBeGreaterThan(100);
 
     // Literal 450 / 415, NOT the imported constants. Comparing the production

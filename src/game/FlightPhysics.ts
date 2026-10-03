@@ -51,6 +51,17 @@ export function dampClimbAtCeiling(vy: number, altitude: number): number {
  * rather than constant: at 12 m/s the same press buys 0.9 m of rise, at 62 m/s
  * it buys 15 m.
  */
+/**
+ * How much climb a release buys, in m/s.
+ *
+ * UNCHANGED at 15, deliberately, and the reason is worth recording because the
+ * obvious-looking reduction was tried and reverted: at 11 a level release
+ * measured 7.9 m/s instead of the 9 the suite requires, which is the original
+ * reported bug ("release does nothing") coming back through the back door.
+ * The height complaint is real, but it is a CEILING problem, not a kick
+ * problem — see `RELEASE_MAX_RISE`. A 15 m/s release is 15^2/32 = 7.0 m of
+ * altitude, about an eighth of a ridge; that is a launch and it is earned.
+ */
 export let RELEASE_KICK = 15;
 
 /**
@@ -62,7 +73,18 @@ export let RELEASE_KICK = 15;
  * its full kick rather than being clipped by the limiter, and only a bird that
  * is already rocketing loses anything.
  */
-export let RELEASE_MAX_RISE = 40;
+/**
+ * Ceiling on the climb a release can buy, in m/s.
+ *
+ * Down from 40. The ceiling is what turns a release into a jet: at 40 the bird
+ * leaves a release at +40 m/s and, against GRAVITY_GLIDE of 16, that is
+ * 40^2/32 = 50 m of altitude from a single input — more than the height of the
+ * ridges it is flying over. 32 is still above the hardest launch ever measured
+ * across 57 ramp launches (+31.3, with the 90th percentile at +25.8), so a real
+ * ramp launch is never clipped by this and loses nothing; only a bird that is
+ * already rocketing is bounded, and it now tops out at 32 m instead of 50.
+ */
+export let RELEASE_MAX_RISE = 32;
 
 /**
  * Seconds before another release can buy a kick.

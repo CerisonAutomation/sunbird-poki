@@ -319,14 +319,20 @@ describe("a release can never hurt the bird", () => {
     // slammed to -14 in one frame. A 44 m/s discontinuity in a single 8.3 ms
     // step. The kick adds to it instead.
     //
-    // +30 + 22 = 52 overshoots `RELEASE_MAX_RISE`, so the result is the ceiling
+    // +30 + kick overshoots `RELEASE_MAX_RISE` (32), so the result is the ceiling
     // — but note the SHAPE of that clip. The old code clipped DOWNWARD, to a
     // value below where the bird already was. This clips upward, to a value
     // above it. That asymmetry is the entire fix, so both halves are asserted.
     const after = releaseFrom(30, "mid-climb-probe");
     expect(after, "a rising bird must not be slammed downward").toBeGreaterThan(30);
     expect(after, "clipped to the ceiling, not down to the brake's bound").toBeLessThanOrEqual(RELEASE_MAX_RISE);
-    expect(after, "and unmistakably a launch").toBeGreaterThan(35);
+    // Was `> 35`, an absolute number that only meant anything while the ceiling
+    // was 40; it silently became a ceiling test rather than a launch test, and
+    // capping the launch to 32 failed it for the right reason at the wrong
+    // altitude. What actually needs pinning is that the overshoot clips ONTO
+    // the ceiling — not up to somewhere in between, and certainly not down.
+    expect(after, "the overshoot must clip onto the ceiling itself")
+      .toBeCloseTo(RELEASE_MAX_RISE, 0);
 
     // Below the ceiling the kick is added in full, with nothing clipped.
     // Below the ceiling the kick is added in full, with nothing clipped. Stated

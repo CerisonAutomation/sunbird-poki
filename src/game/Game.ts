@@ -966,7 +966,7 @@ export class Game {
     this.audio.setOnTrackChange((name) => {
       // A quiet "now playing" cue at rest and in flight — never while paused
       // or during an ad, when the game (and audio) is muted or on hold.
-      if (this.state === "menu" || this.state === "playing") this.hud.toast(`♪ ${name}`, "info");
+      if (this.state === "menu" || this.state === "playing") this.hud.toast(`${name}`, "info", "sparkle");
     });
 
     this.terrain = new TerrainSystem(this.seed, worldTierFor(this.deviceProfile.tier));
@@ -1013,7 +1013,7 @@ export class Game {
         this.modeId = rival.mode as ModeId;
         this.mode = modeById(this.modeId);
       }
-      this.hud.toast(`${iconGlyph("swords")} ${rival.name} challenged you: beat ${rival.distance} m on their hills`, "quest");
+      this.hud.toast(`${rival.name} challenged you: beat ${rival.distance} m on their hills`, "quest", "swords");
       this.telemetry.track("rival_received", { distance: rival.distance, mode: this.modeId });
     }
 
@@ -1084,7 +1084,7 @@ export class Game {
       if (this.konamiBuffer.length > KONAMI.length) this.konamiBuffer.shift();
       if (this.konamiBuffer.join(",") === KONAMI.join(",")) {
         this.konamiBuffer = [];
-        this.hud.toast(`${iconGlyph("star")} Cheat mode activated — you found the secret!`, "gold");
+        this.hud.toast(`Cheat mode activated — you found the secret!`, "gold", "star");
         this.save.addCoins(500);
         if (this.state === "playing") this.particles.emitConfetti(0, 0);
       }
@@ -1161,7 +1161,7 @@ export class Game {
       if (this.disposed) return;
       if (this.save.recoveredFromCorruption) this.hud.toast("Save couldn't be read — kept a backup, starting fresh", "warn");
       if (streakReward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${streakReward} coins`, "gold");
-      if (streakMilestone) this.hud.toast(`🔥 ${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold");
+      if (streakMilestone) this.hud.toast(`${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold", "fire");
       if (vipGift > 0) this.hud.toast(`VIP daily gift · +${vipGift} coins`, "vip");
     }, 700);
     this.telemetry.track("session_start", {
@@ -1245,7 +1245,7 @@ export class Game {
         this.joiningRemoteRoom = true;
         this.pendingRoomInvite = portalInvite;
         this.telemetry.track("portal_invite", { code: portalInvite });
-        this.hud.toast(`${iconGlyph("bird")} Invited to room ${portalInvite}`, "quest");
+        this.hud.toast(`Invited to room ${portalInvite}`, "quest", "bird");
       }
 
       // Portal identity → pilot name. The portal user's handle is their
@@ -1269,7 +1269,7 @@ export class Game {
       }
       this.bump();
     });
-    if (seasonEnd) this.hud.toast(`${iconGlyph("swords")} Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
+    if (seasonEnd) this.hud.toast(`Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold", "swords");
     // Warm the embedded main-menu leaderboard on boot so it isn't empty on
     // the first frame. EA-05: this is background work — it is queued as idle
     // work so the first interactive frame (and the boot bar's last stage) does
@@ -1450,7 +1450,7 @@ export class Game {
       this.roomCode = code;
       this.setScreen("live");
       this.preseatLobby();
-      this.hud.toast(`${iconGlyph("badge")} Invited to room ${code} — ready up together to race`, "gold");
+      this.hud.toast(`Invited to room ${code} — ready up together to race`, "gold", "badge");
       this.telemetry.track("room_invite_opened", { room: code });
     }
     // Club chat: light polling only while the Squad screen is on screen, and
@@ -1869,7 +1869,7 @@ export class Game {
         this.save.state.firstFlightDone = true;
         this.save.addCoins(50);
         this.save.persist();
-        this.hud.toast(`${iconGlyph("bird")} First flight complete · +50 coins — the sky is yours`, "gold");
+        this.hud.toast(`First flight complete · +50 coins — the sky is yours`, "gold", "bird");
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
       }
     }
@@ -1880,7 +1880,7 @@ export class Game {
       const rx = this.rivalGhostPlayer.update(this.runTime, dt);
       if (rx !== null && !this.rivalGhostPassed && this.bird.x > rx + 0.5 && this.runTime > 4) {
         this.rivalGhostPassed = true;
-        this.hud.toast(`${iconGlyph("ghost")} Passed ${this.rivalGhostName}'s flight!`, "gold");
+        this.hud.toast(`Passed ${this.rivalGhostName}'s flight!`, "gold", "ghost");
         this.audio.ding();
         this.bonus += 60;
       }
@@ -1896,7 +1896,7 @@ export class Game {
           const newTrophies = this.achievements.checkNew();
           for (const t of newTrophies) this.hud.toast(`Trophy: ${t.title}`, "gold");
           if (newTrophies.length > 0) this.audio.trophy();
-          this.hud.toast(`Passed your ghost! ${iconGlyph("ghost")}`, "quest");
+          this.hud.toast(`Passed your ghost!`, "quest", "ghost");
           this.audio.ding();
           this.bonus += 30;
           this.awardXp(XP_RULES.ghostBeat);
@@ -2035,7 +2035,7 @@ export class Game {
             this.nextKnockoutDist += 500;
             const standings = this.massRace.standings(this.bird.x, this.startX, this.pilotName, 40);
             if (standings.place === standings.total) {
-              this.hud.toast(`${iconGlyph("fire")} ELIMINATED at ${targetDist}m!`, "warn");
+              this.hud.toast(`ELIMINATED at ${targetDist}m!`, "warn", "fire");
               this.audio.rivalDown();
               this.finishRun();
             } else {
@@ -2047,11 +2047,11 @@ export class Game {
                 this.raceField = standings.total;
                 this.raceFinishTime = this.runTime;
                 this.save.noteRacePlace(1, standings.total);
-                this.hud.toast(`${iconGlyph("crown")} ROYALE VICTORY! SOLE SURVIVOR!`, "gold");
+                this.hud.toast(`ROYALE VICTORY! SOLE SURVIVOR!`, "gold", "crown");
                 this.audio.fanfare();
                 this.finishRun();
               } else {
-                this.hud.toast(`${iconGlyph("fire")} ELIMINATED: ${victim.name}! ${remaining} remain`, "gold");
+                this.hud.toast(`ELIMINATED: ${victim.name}! ${remaining} remain`, "gold", "fire");
                 this.audio.ding();
                 this.haptic(10);
               }
@@ -2068,7 +2068,7 @@ export class Game {
         const place = this.massRace.standings(this.bird.x, this.startX, this.pilotName, 8).place;
         if (this.lastPlace > 0 && place > 0 && place < this.lastPlace) {
           const gain = this.lastPlace - place;
-          this.hud.toast(place === 1 ? `${iconGlyph("crown")} LEAD! Hold it!` : `P${this.lastPlace} → P${place}!`, "gold");
+          this.hud.toast(place === 1 ? `LEAD! Hold it!` : `P${this.lastPlace} → P${place}!`, "gold", place === 1 ? "crown" : "flock");
           if (place === 1) {
             this.flash("perfect");
             this.popupAtBird(`${iconGlyph("crown")} P1 LEAD!`, "fever");
@@ -2336,7 +2336,7 @@ export class Game {
         this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
         this.audio.island();
         this.audio.duckMusic(0.5, 0.6);
-        this.hud.toast(`${iconGlyph(b.emoji)} ${b.name}`, "island");
+        this.hud.toast(`${b.name}`, "island", b.emoji);
         this.flash("island");
         this.glow(0.75);
         this.shake(0.7);
@@ -2372,7 +2372,7 @@ export class Game {
     // is already a first-class, tested flag in Weather; this is the cheapest
     // real compensation the game has, and it costs the world nothing.
     this.weather.ward = true;
-    this.hud.toast(`${iconGlyph("shield")} Climb Breaker — ${bonus}s sun and the weather is on your side`, "power");
+    this.hud.toast(`Climb Breaker — ${bonus}s sun and the weather is on your side`, "power", "shield");
     this.audio.fanfare();
     this.glow(1);
   }
@@ -2489,7 +2489,7 @@ export class Game {
     if (!this.distanceRecordCrossed && this.bestAtStart > 0 && runDist > this.bestAtStart) {
       this.distanceRecordCrossed = true;
       this.audio.fanfare();
-      this.hud.toast(`${iconGlyph("crown")} NEW DISTANCE RECORD — keep flying!`, "gold");
+      this.hud.toast(`NEW DISTANCE RECORD — keep flying!`, "gold", "crown");
       this.flash("perfect");
       this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
       this.glow(0.9);
@@ -2504,14 +2504,14 @@ export class Game {
         this.weather.windMult *= 1.25;
         this.audio.storm();
         this.shake(0.5);
-        this.hud.toast("⛈ PHASE II — the storm tightens. Wind +25%", "warn");
+        this.hud.toast("PHASE II — the storm tightens. Wind +25%", "warn", "storm");
       } else if (this.stormPhase === 2 && runDist >= 2200) {
         this.stormPhase = 3;
         this.weather.windMult *= 1.25;
         this.audio.storm();
         this.shake(0.8);
         this.camera.punch(2);
-        this.hud.toast(`${iconGlyph("spiral")} EYE WALL — survive to the line. Coins ×2 from here`, "warn");
+        this.hud.toast(`EYE WALL — survive to the line. Coins ×2 from here`, "warn", "spiral");
       }
     }
     // The moment you pass a rival's posted mark, gloat immediately — don't
@@ -2519,7 +2519,7 @@ export class Game {
     if (this.rival && !this.rivalBeatenToast && this.seed === this.rival.seed && runDist >= this.rival.distance) {
       this.rivalBeatenToast = true;
       this.audio.rivalDown();
-      this.hud.toast(`${iconGlyph("swords")} Passed ${this.rival.name}'s mark — keep flying!`, "gold");
+      this.hud.toast(`Passed ${this.rival.name}'s mark — keep flying!`, "gold", "swords");
     }
 
     // Finish line (Race / Mass Race) — reached by distance, not by clock.
@@ -2575,13 +2575,13 @@ export class Game {
             won ? `${iconGlyph("swords")} Duel won! +${res.delta} rating` : `${iconGlyph("swords")} Duel lost · ${res.delta} rating`,
             won ? "gold" : "warn",
           );
-          if (won && res.streak > 0 && res.streak % 5 === 0) this.hud.toast(`${iconGlyph("fire")} ${res.streak} duel wins in a row!`, "gold");
+          if (won && res.streak > 0 && res.streak % 5 === 0) this.hud.toast(`${res.streak} duel wins in a row!`, "gold", "fire");
           // Duel prize skin: 10 lifetime duel wins earns the Hummingbird.
           if (this.save.state.duel.wins >= 10 && !this.save.state.ownedSkins.includes("hummingbird")) {
             this.save.ownSkin("hummingbird");
-            this.hud.toast(`${iconGlyph("bird")} Jewel Hummingbird unlocked — 10 duel wins!`, "gold");
+            this.hud.toast(`Jewel Hummingbird unlocked — 10 duel wins!`, "gold", "bird");
           }
-          if (won && this.save.ownTrail("trail_duelist")) this.hud.toast("✨ Duelist trail unlocked!", "gold");
+          if (won && this.save.ownTrail("trail_duelist")) this.hud.toast("Duelist trail unlocked!", "gold", "sparkle");
           this.audio.purchase();
         } else if (this.rankedRace) {
           const live = this.massRace.remoteCount > 0;
@@ -2615,7 +2615,7 @@ export class Game {
       if (goldenNow && !this.goldenHour) {
         this.goldenHour = true;
         this.audio.goldenHour();
-        this.hud.toast(`${iconGlyph("half_day")} GOLDEN HOUR — coins are worth double`, "gold");
+        this.hud.toast(`GOLDEN HOUR — coins are worth double`, "gold", "half_day");
         this.flash("fever");
         this.glow(0.8);
       } else if (!goldenNow && this.goldenHour) {
@@ -2740,7 +2740,7 @@ export class Game {
       // a long chain does not re-fire it every step.
       if (isFrenzyMoment(this.perfectChain, this.frenzySeen)) {
         this.frenzySeen = true;
-        this.hud.toast(`${iconGlyph("lightning")} FRENZY — ${this.perfectChain} perfect launches in a row!`, "apex");
+        this.hud.toast(`FRENZY — ${this.perfectChain} perfect launches in a row!`, "apex", "lightning");
         this.audio.fanfare();
         this.glow(1.4);
         this.flash("island");
@@ -2793,7 +2793,7 @@ export class Game {
     this.particles.emitConfetti(this.bird.x, this.bird.y + 1);
     this.popupAtBird(this.bopWord(), "bop");
     this.camera.punch(4);
-    this.hud.toast(`${iconGlyph("sun")} Sunflower bounce +80`, "gold");
+    this.hud.toast(`Sunflower bounce +80`, "gold", "sun");
     this.glow(0.55);
     this.haptic([20, 10, 40]);
     this.telemetry.track("sunflower", {});
@@ -2949,7 +2949,7 @@ export class Game {
     this.popupAtBird(this.bopWord(), "bop");
     this.camera.punch(6);
     this.shake(0.3);
-    this.hud.toast(`${iconGlyph("star")} Balloon bounce! +150`, "gold");
+    this.hud.toast(`Balloon bounce! +150`, "gold", "star");
     this.flash("fever");
     this.glow(0.7);
     this.haptic([20, 10, 40, 20, 60]);
@@ -3061,7 +3061,7 @@ export class Game {
     this.flash("perfect");
     this.glow(0.7);
     this.haptic([50, 30, 50, 30, 120]);
-    this.hud.toast(`${iconGlyph("star")} WISH GRANTED — ${PICKUP_STYLE[wish].label}`, "gold");
+    this.hud.toast(`WISH GRANTED — ${PICKUP_STYLE[wish].label}`, "gold", "star");
   }
 
   private onPickup(kind: PickupKind, x: number, y: number): void {
@@ -3095,7 +3095,7 @@ export class Game {
         this.shake(0.55);
       }
       this.particles.burstRing(x, y, 0xffffff);
-      this.hud.toast(`${iconGlyph("lightning")} OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "apex");
+      this.hud.toast(`OVERCHARGE II — ${PICKUP_STYLE[kind].label}`, "apex", "lightning");
       this.shake(0.3);
       return;
     }
@@ -3103,7 +3103,7 @@ export class Game {
       case "sun":
         this.daylight = Math.min(this.daylightMax(), this.daylight + PICKUP_SUN_TIME);
         this.particles.burstRing(x, y, 0xffd24a);
-        this.hud.toast(`+${PICKUP_SUN_TIME}s Daylight ☀`, "power");
+        this.hud.toast(`+${PICKUP_SUN_TIME}s Daylight`, "power", "sun");
         break;
       case "rocket":
         this.boostTimer = BOOST_TIME;
@@ -3111,32 +3111,32 @@ export class Game {
         this.bird.vy += 7;
         this.particles.burstRing(x, y, 0xff5a3a);
         this.audio.boost();
-        this.hud.toast(`${iconGlyph("rocket")} Rocket Speed`, "power");
+        this.hud.toast(`Rocket Speed`, "power", "rocket");
         this.shake(0.55);
         break;
       case "magnet":
         this.magnetTimer = MAGNET_TIME;
         this.particles.burstRing(x, y, 0x8a6cff);
         this.audio.magnetOn();
-        this.hud.toast(`${iconGlyph("magnet")} Coin Magnet ${MAGNET_TIME}s`, "power");
+        this.hud.toast(`Coin Magnet ${MAGNET_TIME}s`, "power", "magnet");
         break;
       case "shield":
         this.shield = Math.min(2, this.shield + 1);
         this.powers.shield = this.shield;
         this.particles.burstRing(x, y, 0x5ad8ff);
-        this.hud.toast(`${iconGlyph("shield")} Sea Shield Active`, "power");
+        this.hud.toast(`Sea Shield Active`, "power", "shield");
         break;
       case "longglide":
         this.particles.burstRing(x, y, 0x7fe8c8);
-        this.hud.toast(`${iconGlyph("glide")} Long Glide · Low Drag`, "power");
+        this.hud.toast(`Long Glide · Low Drag`, "power", "glide");
         break;
       case "wingboost":
         this.particles.burstRing(x, y, 0xffa8e0);
-        this.hud.toast(`${iconGlyph("bird")} Wing Boost · Super Lift`, "power");
+        this.hud.toast(`Wing Boost · Super Lift`, "power", "bird");
         break;
       case "feather":
         this.particles.burstRing(x, y, 0xfff0c0);
-        this.hud.toast(`${iconGlyph("feather")} Feather · Butter Landings`, "power");
+        this.hud.toast(`Feather · Butter Landings`, "power", "feather");
         break;
       case "goldenwings":
         this.particles.burstRing(x, y, 0xffd76a);
@@ -3145,11 +3145,11 @@ export class Game {
         this.glow(1.0);
         this.audio.island();
         this.camera.punch(7);
-        this.hud.toast("✨ GOLDEN WINGS ✨", "gold");
+        this.hud.toast("GOLDEN WINGS", "gold", "sparkle");
         break;
       case "cloudboost":
         this.particles.burstRing(x, y, 0xc8e8ff);
-        this.hud.toast("Cloud Boost ☁ Wind Lift", "power");
+        this.hud.toast("Cloud Boost Wind Lift", "power", "cloud");
         break;
       default:
         break;
@@ -3612,7 +3612,7 @@ export class Game {
     if (this.sessionRuns === 2 && !this.save.state.seenShop) {
       // The cheapest bird is 225 coins; a player on their second run has a
       // double-digit wallet. Point at the first thing they CAN buy.
-      this.hud.toast("Next step: the Hangar — boosts start at ●40, birds at ●225", "gold");
+      this.hud.toast("Next step: the Hangar — boosts start at 40, birds at 225", "gold", "coin");
     }
     this.exitVersus();
     this.mode = modeById(this.modeId);
@@ -3710,7 +3710,7 @@ export class Game {
     this.save.beginRun();
     this.weather.windMult = (this.eventRun ? this.weeklyMods.windMult : 1) * (this.stormfront ? 1.7 : 1);
     this.weather.stormfront = this.stormfront;
-    if (this.stormfront) this.hud.toast("⛈ STORMFRONT — same storm for every pilot. Survive and outfly.", "warn");
+    if (this.stormfront) this.hud.toast("STORMFRONT — same storm for every pilot. Survive and outfly.", "warn", "storm");
     // Mass Race & PvP Variants: build the 40-bird grid on the *same* seed so the field is
     // identical for anyone flying this race. Real players take over slots as
     // they join; unfilled slots keep flying as local squadron pilots.
@@ -3732,7 +3732,7 @@ export class Game {
         this.massRace.setFieldSkill(duelSkillFor(rivalRating));
         const r = this.massRace.rivals[0];
         if (r) r.name = opp.name;
-        this.hud.toast(`⚔ Duel vs ${opp.name} · first to the line`, "gold");
+        this.hud.toast(`Duel vs ${opp.name} · first to the line`, "gold", "swords");
       } else {
         this.massRace.setFieldSkill(this.roomSkill === "ace" ? 1.25 : this.roomSkill === "chill" ? 0.7 : 1);
       }
@@ -3773,16 +3773,16 @@ export class Game {
     for (const id of armed) this.applyBoost(id);
     if (this.eventRun) {
       const ev = weeklyEvent();
-      this.hud.toast(`${iconGlyph(ev.icon)} ${ev.name} · fly ${ev.target.toLocaleString()} m`, "quest");
+      this.hud.toast(`${ev.name} · fly ${ev.target.toLocaleString()} m`, "quest", ev.icon);
       this.audio.eventStinger();
     }
     if (this.challengeRun === "daily") {
       const c = this.todaysDaily();
-      this.hud.toast(`${iconGlyph(c.modifier.icon)} ${c.title} · ${c.modifier.label}`, "quest");
+      this.hud.toast(`${c.title} · ${c.modifier.label}`, "quest", c.modifier.icon);
     } else if (this.challengeRun.startsWith("gauntlet")) {
       const idx = Number(this.challengeRun.slice(8)) || 0;
       const st = weeklyGauntlet(weekKey()).stages[idx];
-      if (st) this.hud.toast(`${iconGlyph("lightning")} Gauntlet ${idx + 1}/3 · ${st.label}`, "quest");
+      if (st) this.hud.toast(`Gauntlet ${idx + 1}/3 · ${st.label}`, "quest", "lightning");
     }
     // A GO countdown before the clock starts.
     //
@@ -3907,7 +3907,7 @@ export class Game {
       default:
         return;
     }
-    if (def) this.hud.toast(`${iconGlyph(def.icon)} ${def.name} armed`, "power");
+    if (def) this.hud.toast(`${def.name} armed`, "power", def.icon);
   }
 
   /**
@@ -4034,7 +4034,7 @@ export class Game {
     });
     if (this.sessionRuns === 1) {
       // Said "spend your coins" on a first run that yields ~10-30 of them.
-      this.hud.toast("Flight logged ✦ Your first coins are in — ●40 buys your first boost", "quest");
+      this.hud.toast("Flight logged Your first coins are in — 40 buys your first boost", "quest", "crystal");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
       this.hud.toast("Ready for the social sky? Challenge a rival or try today's course", "quest");
@@ -4046,7 +4046,7 @@ export class Game {
       this.duelResult = "lost";
       this.duelDelta = res.delta;
       this.lastRatingDelta = res.delta;
-      this.hud.toast(`${iconGlyph("swords")} Duel lost — never reached the line · ${res.delta} rating`, "warn");
+      this.hud.toast(`Duel lost — never reached the line · ${res.delta} rating`, "warn", "swords");
     }
 
     // A friend's ghost-race challenge (SocialSystem) resolves the moment this
@@ -4056,7 +4056,7 @@ export class Game {
       const result = this.social.completeChallenge(ch.id, stats.distance);
       if (result) {
         const label = result === "won" ? `Beat ${ch.challengerName}'s ghost!` : result === "lost" ? `Fell short of ${ch.challengerName}'s ghost.` : `Tied ${ch.challengerName}'s ghost.`;
-        this.hud.toast(`${iconGlyph("ghost")} Ghost challenge — ${label}`, result === "won" ? "gold" : "info");
+        this.hud.toast(`Ghost challenge — ${label}`, result === "won" ? "gold" : "info", "ghost");
       }
       this.activeFriendChallenge = null;
     }
@@ -4121,7 +4121,7 @@ export class Game {
       perfects: this.perfects,
       coins: this.runCoins,
     });
-    for (const cup of improvedCups) this.hud.toast(`${iconGlyph(cup.icon)} ${cup.name} — new personal best`, "gold");
+    for (const cup of improvedCups) this.hud.toast(`${cup.name} — new personal best`, "gold", cup.icon);
     if (improvedCups.length > 0) this.audio.personalBest();
     this.save.persist();
 
@@ -4190,18 +4190,18 @@ export class Game {
             pushChallenge({ variant: "gauntletStage", icon: "lightning", label: st.label, coins: st.reward });
             if (res === "clear") {
               this.save.addCoins(g.clearBonus);
-              this.hud.toast(`${iconGlyph("trophy")} GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold");
+              this.hud.toast(`GAUNTLET CLEARED · +${g.clearBonus} coins`, "gold", "trophy");
               // The whole-week clear is its own beat, not a second stage beat:
               // `beatCopy` gives it the dedicated "GAUNTLET CLEARED" key and
               // it outranks everything except a record and a rank-up.
               pushChallenge({ variant: "gauntlet", icon: "trophy", label: g.week, coins: g.clearBonus });
               this.platform?.measure("quest", "gauntlet-clear", "complete");
               this.platform?.happyTime();
-              if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("✨ Stormline trail unlocked!", "gold");
+              if (this.save.ownTrail("trail_gauntlet")) this.hud.toast("Stormline trail unlocked!", "gold", "sparkle");
               // Gauntlet prize skin: 5 lifetime clears earns the Stormcrow.
               if (this.save.state.challenges.gauntletsCleared >= 5 && !this.save.state.ownedSkins.includes("stormcrow")) {
                 this.save.ownSkin("stormcrow");
-                this.hud.toast(`${iconGlyph("bird")} Stormcrow unlocked — 5 gauntlets cleared!`, "gold");
+                this.hud.toast(`Stormcrow unlocked — 5 gauntlets cleared!`, "gold", "bird");
               }
               this.audio.island();
             }
@@ -4230,10 +4230,10 @@ export class Game {
         const th = monthlyTheme();
         if (counts.month >= THEME_TRAIL_CLEARS && this.save.claimThemeTrail(th.month)) {
           if (this.save.ownTrail(th.prizeTrail)) {
-            this.hud.toast(`${iconGlyph(th.icon)} ${th.name} · ${iconGlyph("star")} ${TRAILS[th.prizeTrail]?.label ?? th.prizeTrail} trail unlocked!`, "gold");
+            this.hud.toast(`${th.name} · ${TRAILS[th.prizeTrail]?.label ?? th.prizeTrail} trail unlocked!`, "gold", "star");
           } else {
             this.save.addCoins(300);
-            this.hud.toast(`${iconGlyph(th.icon)} ${th.name} complete · trail owned, +300 coins`, "gold");
+            this.hud.toast(`${th.name} complete · trail owned, +300 coins`, "gold", th.icon);
           }
         }
       } else {
@@ -4257,7 +4257,7 @@ export class Game {
         coins: mastery.coins,
       };
       if (mastery.skill) {
-        this.hud.toast(`★ ${this.mode.name} MASTERED · skill unlocked: ${mastery.skill.name} (${mastery.skill.desc}) · +${mastery.coins} coins`, "gold");
+        this.hud.toast(`${this.mode.name} MASTERED · skill unlocked: ${mastery.skill.name} (${mastery.skill.desc}) · +${mastery.coins} coins`, "gold", "star");
         this.audio.chapterFanfare();
       } else {
         // A live mass race equalises flight equipment, so the mastery perk is
@@ -4296,7 +4296,7 @@ export class Game {
       this.rankUpT = 3.2;
       this.audio.fanfare();
       this.particles.emitConfetti(this.bird.x, this.bird.y + 4);
-      this.hud.toast(`${iconGlyph(promo.icon)} ${promo.name.toUpperCase()} — lifetime rank earned`, "gold");
+      this.hud.toast(`${promo.name.toUpperCase()} — lifetime rank earned`, "gold", promo.icon);
       this.telemetry.track("wings_promo", { tier: promo.id });
       progress.wings = { tierId: promo.id, icon: promo.icon, name: promo.name };
     }
@@ -4378,7 +4378,7 @@ export class Game {
     const div = divisionFor(this.save.state.rival.rating);
     if (div.id === "legend" && !this.save.state.ownedSkins.includes("solstice")) {
       this.save.ownSkin("solstice");
-      this.hud.toast(`${iconGlyph("bird")} Solstice unlocked — welcome to Sunbird Legend!`, "gold");
+      this.hud.toast(`Solstice unlocked — welcome to Sunbird Legend!`, "gold", "bird");
       this.flash("perfect");
     }
   }
@@ -4418,12 +4418,12 @@ export class Game {
     const gift = this.save.claimVipDaily(today);
     // Monthly ranked season rollover: soft reset + peak-division reward.
     const seasonEnd = this.save.ensureRankSeason();
-    if (seasonEnd) this.hud.toast(`${iconGlyph("swords")} Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold");
+    if (seasonEnd) this.hud.toast(`Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold", "swords");
     // Only swap hills while resting in the menu — a midnight rollover mid-run
     // must never yank the terrain out from under a live flight.
     if (this.state === "menu" && this.seedMode === "today") this.rebuildWorld(today);
     if (reward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${reward} coins`, "gold");
-    if (streakMilestone) this.hud.toast(`🔥 ${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold");
+    if (streakMilestone) this.hud.toast(`${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold", "fire");
     if (gift > 0) this.hud.toast(`VIP daily gift · +${gift} coins`, "vip");
     this.hud.toast("New hills today", "island");
     this.telemetry.track("day_rollover", { date: today });
@@ -4667,7 +4667,7 @@ export class Game {
         this.save.recordWheelSpin(this.today);
         if (sector.kind === "coins" && typeof sector.value === "number") {
           this.save.addCoins(sector.value);
-          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${sector.label}! +● ${sector.value}`, "gold");
+          this.hud.toast(`Wheel landed on ${sector.label}! +● ${sector.value}`, "gold", "spin");
         } else if (sector.kind === "boost") {
           // The sector names the boost it pays. This used to arm a Sun Flask
           // whatever landed, so the wheel announced "Coin Magnet!" and handed
@@ -4677,13 +4677,13 @@ export class Game {
           const boost = BOOSTS.find((b) => b.id === sector.value);
           if (!boost) break;
           this.save.grantBoost(boost.id);
-          this.hud.toast(`${iconGlyph("spin")} Wheel landed on ${boost.name}! Armed for your next flight!`, "gold");
+          this.hud.toast(`Wheel landed on ${boost.name}! Armed for your next flight!`, "gold", "spin");
         } else if (sector.kind === "vault") {
           // The wheel is free, so this hatch is free. It used to call the 150
           // -coin purchase: a player who spun for nothing was either charged
           // 150 coins or told they had won a prize they never received.
           this.hatchMysteryVault();
-          this.hud.toast(`${iconGlyph("castle")} Wheel landed on a Mystery Vault hatch!`, "gold");
+          this.hud.toast(`Wheel landed on a Mystery Vault hatch!`, "gold", "castle");
         }
         this.audio.fanfare();
         this.bump();
@@ -4693,7 +4693,7 @@ export class Game {
         const smashed = this.save.smashPiggyBank();
         if (smashed > 0) {
           this.audio.fanfare();
-          this.hud.toast(`${iconGlyph("piggy")} Smashed Piggy Bank! +● ${smashed} coins!`, "gold");
+          this.hud.toast(`Smashed Piggy Bank! +● ${smashed} coins!`, "gold", "piggy");
         } else {
           this.hud.toast("Piggy Bank is empty!", "info");
         }
@@ -4704,7 +4704,7 @@ export class Game {
         if (this.save.performPrestige()) {
           this.audio.chapterFanfare();
           const p = this.save.state.prestige?.multiplier ?? 1.0;
-          this.hud.toast(`${iconGlyph("crown")} Reborn with Solar Crown! Permanent ×${p.toFixed(1)} Coin Multiplier!`, "gold");
+          this.hud.toast(`Reborn with Solar Crown! Permanent ×${p.toFixed(1)} Coin Multiplier!`, "gold", "crown");
         } else {
           // The gate is five Nest levels, not a coin total — the old message sent
           // players after the wrong currency entirely.
@@ -4753,7 +4753,7 @@ export class Game {
           if (circuit) {
             this.selectedPvpMode = circuit;
             this.mode = modeById(circuit);
-            this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name} selected — ranked, casual, a room, or the AI flock`, "gold");
+            this.hud.toast(`${this.mode.name} selected — ranked, casual, a room, or the AI flock`, "gold", this.mode.icon);
           }
           this.setScreen("challenges");
           this.bump();
@@ -4778,7 +4778,7 @@ export class Game {
         this.disconnectRace();
         this.roomCode = "";
         this.rankedRace = false;
-        this.hud.toast(`${iconGlyph("flock")} AI PvP · ${iconGlyph(m.icon)} ${m.name} vs the flock`, "info");
+        this.hud.toast(`AI PvP · ${m.name} vs the flock`, "info", "robot");
         this.launchMatch({ ranked: false, storm: m.id === "pvp_typhoon" }, true);
         break;
       }
@@ -5047,11 +5047,11 @@ export class Game {
         // Easter egg: secret pilot names
         const nameLower = next.toLowerCase();
         if (nameLower === "icarus") {
-          this.hud.toast(`${iconGlyph("island")} Too close to the sun, Icarus…`, "warn");
+          this.hud.toast(`Too close to the sun, Icarus…`, "warn", "island");
         } else if (nameLower === "phoenix") {
-          this.hud.toast(`${iconGlyph("fire")} Rise from the ashes, Phoenix!`, "gold");
+          this.hud.toast(`Rise from the ashes, Phoenix!`, "gold", "fire");
         } else if (nameLower === "sunbird") {
-          this.hud.toast(`${iconGlyph("star")} You ARE the Sunbird.`, "gold");
+          this.hud.toast(`You ARE the Sunbird.`, "gold", "star");
           this.save.addCoins(DAILY_STIPEND);
         } else {
           this.hud.toast(`Welcome, ${next}!`, "info");
@@ -5098,7 +5098,7 @@ export class Game {
         this.save.state.rankPrizeSeason = season;
         this.save.persist();
         this.save.addCoins(reward.coins);
-        this.hud.toast(`Claimed ${reward.coins} Coins for ${reward.division.name} Rank! ${iconGlyph("trophy")}`, "achievement");
+        this.hud.toast(`Claimed ${reward.coins} Coins for ${reward.division.name} Rank!`, "achievement", "trophy");
         this.audio.fanfare();
         this.bump();
         break;
@@ -5332,7 +5332,7 @@ export class Game {
           this.runShareBusy = false;
           if (code) {
             this.shareCode = code;
-            this.hud.toast(`${iconGlyph("check")} Run shared — send the code to a friend`, "gold");
+            this.hud.toast(`Run shared — send the code to a friend`, "gold", "check");
           } else {
             // Platform-neutral copy: this string ships in every edition, and
             // the isolation gates reject the platform's name in other builds.
@@ -5388,7 +5388,7 @@ export class Game {
           }
           // Count the play — the AUDS counter endpoint is public by design.
           void countSharePlay(code);
-          this.hud.toast(`${iconGlyph("swords")} ${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest");
+          this.hud.toast(`${run.name} flew ${run.distance.toLocaleString()} m here — beat it`, "quest", "swords");
           this.telemetry.track("shared_run_loaded", { mode: this.modeId, distance: run.distance });
           this.bump();
         });
@@ -5676,10 +5676,10 @@ export class Game {
           this.roomCode = this.roomCode ? makeRoomCode() : "";
           if (this.roomCode) {
             this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
+            this.hud.toast(`New room ${this.roomCode} · ${this.mode.name}`, "gold", this.mode.icon);
           }
         }
-        this.hud.toast(`${iconGlyph(this.mode.icon)} ${this.mode.name}`, "gold");
+        this.hud.toast(`${this.mode.name}`, "gold", this.mode.icon);
         this.bump();
         return true;
       }
@@ -5695,10 +5695,10 @@ export class Game {
           this.roomCode = this.roomCode ? makeRoomCode() : "";
           if (this.roomCode) {
             this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
+            this.hud.toast(`New room ${this.roomCode} · ${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
           }
         }
-        this.hud.toast(`${iconGlyph(this.selectedCourse.emoji)} ${this.selectedCourse.name}`, "gold");
+        this.hud.toast(`${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
         this.bump();
         return true;
       }
@@ -5712,7 +5712,7 @@ export class Game {
         this.selectedCourse = w;
         this.modeId = m.id;
         this.mode = m;
-        this.hud.toast(`${iconGlyph("dice")} ${iconGlyph(m.icon)} ${m.name} on ${iconGlyph(w.emoji)} ${w.name}`, "gold");
+        this.hud.toast(`${m.name} on ${w.name}`, "gold", "dice");
         this.bump();
         return true;
       }
@@ -5761,7 +5761,7 @@ export class Game {
         if (this.net) {
           const isReady = !this.net.info().ready;
           this.net.sendReady(isReady);
-          this.hud.toast(isReady ? "You are ready! ✓" : "Ready cancelled", "gold");
+          this.hud.toast(isReady ? "You are ready!" : "Ready cancelled", "gold", "check");
         } else {
           this.hud.toast("Starting race flock…", "info");
           this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, true);
@@ -5785,7 +5785,7 @@ export class Game {
         if (this.net?.state === "lobby") {
           const nowReady = !this.net.info().ready;
           this.net.sendReady(nowReady);
-          this.hud.toast(nowReady ? "You are ready! ✓" : "Ready cancelled", "gold");
+          this.hud.toast(nowReady ? "You are ready!" : "Ready cancelled", "gold", "check");
           this.bump();
         }
         return true;
@@ -6092,7 +6092,7 @@ export class Game {
       // 3s grace here would let a losing duelist dodge rating by quitting fast.
       if (this.duelActive && this.duelResult === "" && !this.runRecorded) {
         const res = this.save.recordDuelResult(false, this.today);
-        this.hud.toast(`⚔ Duel forfeited · ${res.delta} rating`, "warn");
+        this.hud.toast(`Duel forfeited · ${res.delta} rating`, "warn", "swords");
       }
       // A graceful retreat still deserves a punchline.
       this.hud.quip(quip(SURRENDER_QUIPS, Math.round(this.bird.x)), "cloud");
@@ -6146,7 +6146,7 @@ export class Game {
     const def = skinById(id);
     const st = this.save.state;
     if (def.prizeOnly && !st.ownedSkins.includes(id)) {
-      this.hud.toast(`${iconGlyph("trophy")} Earn it: ${def.prizeOnly}`, "info");
+      this.hud.toast(`Earn it: ${def.prizeOnly}`, "info", "trophy");
       return;
     }
     if ((def.goldOnly && !st.gold) || (def.vipOnly && !st.vip)) {
@@ -6218,7 +6218,7 @@ export class Game {
       this.save.armBoost(id, 1);
     }
     this.audio.purchase();
-    this.hud.toast(`${iconGlyph(def.icon)} ${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power");
+    this.hud.toast(`${def.name} ${def.permanent ? "unlocked" : "armed"}`, "power", def.icon);
     this.telemetry.track("boost_bought", { id, price });
     this.bump();
   }
@@ -6270,7 +6270,7 @@ export class Game {
     const runs = this.save.state.runsPlayed;
     if (runs < 3 || runs > 12) return;
     this.starterNudged = true;
-    this.hud.toast(`${iconGlyph("star")} First Flight Pack · ${STARTER_PACK.price} — 1,200 coins + Goldleaf trail`, "gold");
+    this.hud.toast(`First Flight Pack · ${STARTER_PACK.price} — 1,200 coins + Goldleaf trail`, "gold", "star");
     this.telemetry.track("starter_nudge", { runs });
   }
 
@@ -6302,7 +6302,7 @@ export class Game {
     this.save.equipTrail(STARTER_PACK.trailId);
     this.save.grantBoost("sunflask");
     this.audio.fanfare();
-    this.hud.toast(`${iconGlyph("star")} First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold");
+    this.hud.toast(`First Flight Pack — +${STARTER_PACK.coins} coins, Goldleaf trail, Sun Flask armed`, "gold", "star");
     this.telemetry.track("purchase_ok", { sku: "sunbird_starter", source });
     this.bump();
   }
@@ -6455,7 +6455,7 @@ export class Game {
     this.save.ownSkin("phoenix");
     this.audio.purchase();
     this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
-    this.hud.toast("Welcome to Gold ✦", "gold");
+    this.hud.toast("Welcome to Gold", "gold", "crystal");
     this.telemetry.track("gold_granted", { source });
     this.bump();
   }
@@ -6487,7 +6487,7 @@ export class Game {
 
   private grantVip(source: string): void {
     this.applyVipEntitlement();
-    this.hud.toast("Welcome to VIP ♛", "vip");
+    this.hud.toast("Welcome to VIP", "vip", "crown");
     this.telemetry.track("vip_granted", { source });
     this.bump();
   }
@@ -6511,7 +6511,7 @@ export class Game {
     const price = VIP.coinPrice;
     if (!this.spendCoins(price)) return;
     this.applyVipEntitlement();
-    this.hud.toast("VIP flight unlocked with coins ♛", "vip");
+    this.hud.toast("VIP flight unlocked with coins", "vip", "crown");
     this.telemetry.track("vip_granted", { source: "portal_coins", price });
     this.bump();
   }
@@ -6547,17 +6547,17 @@ export class Game {
       const pick = unownedSkins[Math.floor(Math.random() * unownedSkins.length)]!;
       this.save.ownSkin(pick);
       const skinDef = skinById(pick);
-      this.hud.toast(`${iconGlyph("egg")} Vault Hatched: ${skinDef.name} Bird Skin!`, "gold");
+      this.hud.toast(`Vault Hatched: ${skinDef.name} Bird Skin!`, "gold", "egg");
       this.audio.eggHatch();
     } else if (rng < 0.70 && unownedTrails.length > 0) {
       const pick = unownedTrails[Math.floor(Math.random() * unownedTrails.length)]!;
       this.save.ownTrail(pick);
-      this.hud.toast(`${iconGlyph("egg")} Vault Hatched: ${pick.replace("trail_", "").toUpperCase()} Trail!`, "gold");
+      this.hud.toast(`Vault Hatched: ${pick.replace("trail_", "").toUpperCase()} Trail!`, "gold", "egg");
       this.audio.eggHatch();
     } else {
       const reward = 300 + Math.floor(Math.random() * 300);
       this.save.addCoins(reward);
-      this.hud.toast(`${iconGlyph("egg")} Vault Jackpot: +● ${reward} bonus coins!`, "gold");
+      this.hud.toast(`Vault Jackpot: +● ${reward} bonus coins!`, "gold", "egg");
     }
     this.bump();
   }
@@ -7383,7 +7383,7 @@ export class Game {
     for (const e of net.drainEvents()) {
       switch (e.type) {
         case "join":
-          this.hud.toast(`${iconGlyph("bird")} ${e.name} joined the race`, "island");
+          this.hud.toast(`${e.name} joined the race`, "island", "bird");
           this.audio.chirp();
           this.recordRoomPilots();
           break;
@@ -7391,14 +7391,14 @@ export class Game {
           this.hud.toast(`${e.name} left`, "warn");
           break;
         case "ready":
-          this.hud.toast(`✅ ${e.name} is ready`, "cloud");
+          this.hud.toast(`${e.name} is ready`, "cloud", "badge");
           break;
         case "finish":
           // While we're still flying, every rival's finish matters. After we
           // cross, the pack keeps finishing behind the results card — up to
           // ~40 toasts that each re-render the whole card. The referee's
           // official ordering already landed via `myPlace`, so stay silent.
-          if (this.state === "playing") this.hud.toast(`${iconGlyph("flag")} ${e.name} finished P${e.place}`, "gold");
+          if (this.state === "playing") this.hud.toast(`${e.name} finished P${e.place}`, "gold", "flag");
           break;
         case "interrupted":
           this.serverPlaceApplied = false;
@@ -7510,7 +7510,7 @@ export class Game {
     const grant = (id: string, msg: string): void => {
       if (st.ownedSkins.includes(id)) return;
       this.save.ownSkin(id);
-      this.hud.toast(`${iconGlyph("bird")} ${msg}`, "gold");
+      this.hud.toast(`${msg}`, "gold", "bird");
       this.audio.fanfare();
     };
     if (st.lifetime.ghostBeats >= 10) grant("ghost", "Ghost unlocked — 10 ghost wins!");
@@ -7532,7 +7532,7 @@ export class Game {
       const bonus = 100 + members.length * 25;
       this.save.addCoins(bonus);
       this.save.persist();
-      this.hud.toast(`${iconGlyph(c.icon)} ${c.name} collection complete · +${bonus} coins`, "gold");
+      this.hud.toast(`${c.name} collection complete · +${bonus} coins`, "gold", c.icon);
       this.audio.fanfare();
     }
   }
@@ -7554,7 +7554,7 @@ export class Game {
     // One toast, not one per tier: a jump from nothing to diamond pays four
     // prizes and the player should read one line, not four stacked banners.
     const extra = grants.length > 1 ? ` + ${grants.length - 1} more tier${grants.length > 2 ? "s" : ""}` : "";
-    this.hud.toast(`${iconGlyph(top.prize.icon)} ${top.prize.label} — ${top.tier} in ${top.cup}${extra}`, "gold");
+    this.hud.toast(`${top.prize.label} — ${top.tier} in ${top.cup}${extra}`, "gold", top.prize.icon);
     this.checkPrizeSkins();
     this.bump();
   }
@@ -7714,7 +7714,7 @@ export class Game {
       const payout = Math.min(SHOP_AD_COINS, 60);
       this.save.addCoins(payout);
       this.audio.chapterFanfare();
-      this.hud.toast(`${iconGlyph("coin")} Here's a little flying fuel — +● ${payout} coins`, "gold");
+      this.hud.toast(`Here's a little flying fuel — +● ${payout} coins`, "gold", "coin");
       this.bump();
     } else {
       this.hud.toast("No reward this time — try again next hour", "info");

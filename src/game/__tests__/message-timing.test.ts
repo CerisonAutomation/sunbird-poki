@@ -26,9 +26,21 @@ describe("message timing model", () => {
     // in the QUIP_FALLBACK map beside them. Measuring the keys would compute the
     // median length of `quips.splash.0` — every entry the same length — and the
     // read-time model would be sized off a string the game never shows.
+    // The corpus is now the union of two shapes, because pools arrive at their
+    // own pace: a translated pool holds keys and keeps its English in the
+    // QUIP_FALLBACK map, while a pool still awaiting translation holds the raw
+    // line itself. Measuring only one of them would silently shrink the corpus
+    // every time a pool is translated — the median would drift toward whichever
+    // shape happens to be left, and the read-time model would be sized off a
+    // sample that no longer represents the corpus.
     const fallbacks = surprises.slice(surprises.indexOf("QUIP_FALLBACK"));
-    const quips = [...fallbacks.matchAll(/"quips\.[a-z]+\.\d+":\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!);
-    expect(quips.length, "corpus not found").toBeGreaterThan(100);
+    const fromKeys = [...fallbacks.matchAll(/"quips\.[a-z]+\.\d+":\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!);
+    const fromPools = [...surprises.matchAll(/export const \w*QUIPS = \[([^\]]*)\]/g)]
+      .flatMap((p) => [...p[1]!.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!))
+      // The key entries in a translated pool are not copy; drop them.
+      .filter((t) => !t.startsWith("quips."));
+    const quips = [...fromKeys, ...fromPools];
+    expect(quips.length, "corpus not found").toBeGreaterThan(200);
 
     // Literal 450 / 415, NOT the imported constants. Comparing the production
     // function against values it imports from the same module is satisfied by

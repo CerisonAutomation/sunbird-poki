@@ -277,7 +277,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
         ? `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${t("hud.renderCampaign.ATheirRequest", undefined, "Accept their request")}</button>`
         : lookup.outgoing
           ? `<span class="fineprint">${t("hud.renderCampaign.RSentWaitingThem", undefined, "Request sent — waiting for them")}</span>`
-          : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${menuIconSm("wing")} Add wingman</button>`;
+          : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${menuIconSm("wing")} ${t("hud.pvp.addWingman", undefined, "Add wingman")}</button>`;
     return `
       <div class="pilot-card">
         <div class="pilot-card-head">

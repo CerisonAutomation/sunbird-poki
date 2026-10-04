@@ -6031,3 +6031,21 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   .pf-row { flex-wrap: wrap; }
   .pf-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Moved here from design-polish.css: audit-ui.mjs gates on unstyled BUTTON
+   classes and only reads the component stylesheets, so a rule for
+   `.results-shop-cta` living in design-polish.css read as no rule at all.
+   After the score table, a wide Shop button anchors the bottom of the card —
+   a natural exit when the player has coins to spend. */
+.results-shop-cta {
+  display: block;
+  width: 100%;
+  padding: 4px 0 2px;
+  border-top: 1px solid rgba(200, 160, 80, 0.18);
+  margin-top: 6px;
+}
+.results-shop-cta.soft-btn {
+  border-radius: 10px;
+  font-size: 15px;
+  justify-content: center;
+}

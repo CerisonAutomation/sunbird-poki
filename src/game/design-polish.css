@@ -949,18 +949,12 @@
    After the score table, a wide Shop button anchors the bottom of the
    card — a natural exit when the player has coins to spend.
    --------------------------------------------------------------------- */
-.results-shop-cta {
-  display: block;
-  width: 100%;
-  padding: 4px 0 2px;
-  border-top: 1px solid rgba(200, 160, 80, 0.18);
-  margin-top: 6px;
-}
-.results-shop-cta.soft-btn {
-  border-radius: 10px;
-  font-size: 15px;
-  justify-content: center;
-}
+/* `.results-shop-cta` is a BUTTON class, and audit-ui.mjs (which gates the
+   build) requires every button class to carry a rule in the component
+   stylesheets. It lived here, which is why the audit reported
+   "unstyled button class(es): results-shop-cta" against a class that was
+   plainly styled. Moved to ui.css beside the other results-surface rules. */
+
 
 /* ---------------------------------------------------------------------
    D-28  New-player shop CTA on results screen.

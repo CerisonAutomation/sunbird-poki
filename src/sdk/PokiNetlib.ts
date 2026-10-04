@@ -128,6 +128,24 @@ export class PokiNetlibClient implements NetTransport {
   isAutonomous = false;
   private localReady = false;
   private requestedCode = "";
+  /**
+   * "Create a room" rather than "join this code".
+   *
+   * Netlib has NO way to create a lobby under a chosen code: `LobbySettings`
+   * is `{codeFormat, codeLength, maxPlayers, password, public, customData,
+   * canUpdateBy}` — there is no `code` key — and `create()` RETURNS the code
+   * the service minted. So the only way to get a code is to call `create()`
+   * and read it back.
+   *
+   * `Game` used to satisfy "Create Private Room" by inventing a code locally
+   * (`makeRoomCode()`) and passing it to `connect()`, which here read any
+   * non-empty code as "I am a guest" and called `join()`. Netlib resolved
+   * `undefined` for the room nobody had created, so every press of that button
+   * produced the red banner "Room H7K2P is not available", an empty roster and
+   * a `copy-invite` link to a room that did not exist. Hosting has to be an
+   * explicit request, which is what this flag is.
+   */
+  private hostRoom = false;
   private requestedSeed = "";
   private heartbeat = 0;
   private autoReadyTimer: number | null = null;
@@ -218,9 +236,17 @@ export class PokiNetlibClient implements NetTransport {
     }
   }
 
-  connect(code: string, seed: string): void {
+  /**
+   * `codeIsRemote` is accepted and ignored. It is a POSITIONAL parameter and
+   * `Game.announceToRoom` calls `connect(code, seed, remote)` on whichever
+   * transport it built, so dropping it here would slide `hostRoom` into the
+   * remote flag's slot. `RealtimeClient` is the transport that needs it (the
+   * relay server tells a guest the host's seed is authoritative); on Netlib
+   * that is decided by `!this.amHost` at the `welcome` site instead.
+   */
+  connect(code: string, seed: string, _codeIsRemote = false, hostRoom = false): void {
     const requested = code.toUpperCase();
-    const same = requested === this.requestedCode && this.netReady;
+    const same = requested === this.requestedCode && this.netReady && hostRoom === this.hostRoom;
     if (same && this.net?.currentLobby) return;
 
     this.disconnect();
@@ -228,12 +254,19 @@ export class PokiNetlibClient implements NetTransport {
     this.requestedCode = requested;
     this.requestedSeed = seed;
     this.roomCode = requested;
+    this.hostRoom = hostRoom;
     this.seed = seed;
     this.myPlace = 0;
     this.localReady = false;
     this.state = "connecting";
     this.errorText = "";
-    this.amHost = !requested; // empty code → we are creating a public lobby
+    // `hostRoom` wins over the code: "create a room and give me its code" and
+    // "join THIS code" are different requests and Netlib spells them
+    // differently — `create()` returns the code, `join()` consumes it. The
+    // old `amHost = !requested` made any locally-invented code read as a JOIN,
+    // which is why "Create Private Room" always failed on Poki (see the
+    // `hostRoom` field's own comment).
+    this.amHost = hostRoom || !requested;
     this.finishOrder = 0;
     this.finishedPeers.clear();
 
@@ -254,6 +287,33 @@ export class PokiNetlibClient implements NetTransport {
         this.selfId = network.id || this.deviceId;
         this.state = "lobby";
         this.errorText = "";
+        // One definition of "make me a room", shared by the explicit-host path
+        // and by quick-match's last resort. It existed only inline in the
+        // quick-match arm, which is why hosting could not reach it.
+        const createRoom = (): void => {
+          network.create({
+            public: true,
+            maxPlayers: this.capacity,
+            customData: { seed: this.seed, mode: "sunbird-race", v: PROTOCOL_VERSION, phase: "lobby" },
+            codeFormat: "short",
+            codeLength: 5,
+          }).then((lobbyCode: string) => {
+            // create() resolves "" — it does NOT reject — when the service
+            // declines. Adopting that gave roomCode "", amHost true and no
+            // error: a host with no lobby, waiting for peers forever.
+            if (!lobbyCode) {
+              this.fail("The Poki lobby service would not create a room");
+              return;
+            }
+            this.roomCode = lobbyCode.toUpperCase();
+            this.requestedCode = this.roomCode;
+            this.amHost = true;
+            this.leaderId = network.id;
+            this.armLobbyWatchdog();
+          }).catch((err) => {
+            this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
+          });
+        };
         try {
           if (this.requestedCode) {
             // join() returns the LobbyListEntry for the lobby we joined
@@ -294,6 +354,14 @@ export class PokiNetlibClient implements NetTransport {
             }).catch((err) => {
               this.fail(`Could not join room ${this.requestedCode}: ${String(err).slice(0, 80)}`, false);
             });
+          } else if (this.hostRoom) {
+            // HOST A ROOM: create one outright. Skipping the public lobby
+            // browser is the whole point — "Create Private Room" means "give
+            // ME a room and its code", not "put me in someone else's". This
+            // branch is new; before it, hosting fell into the QUICK MATCH arm
+            // below (because the code we invented made `requestedCode` truthy)
+            // or asked the signaller to join a room that did not exist.
+            createRoom();
           } else {
             // QUICK MATCH: browse public lobbies before creating. Join the
             // first non-full sunbird-race lobby (preferring the lowest
@@ -378,30 +446,7 @@ export class PokiNetlibClient implements NetTransport {
             } catch {
               /* list or join failed — fall through to create */
             }
-            if (!joined) {
-              network.create({
-                public: true,
-                maxPlayers: this.capacity,
-                customData: { seed: this.seed, mode: "sunbird-race", v: PROTOCOL_VERSION, phase: "lobby" },
-                codeFormat: "short",
-                codeLength: 5,
-              }).then((lobbyCode: string) => {
-                // create() resolves "" — it does NOT reject — when the service
-                // declines. Adopting that gave roomCode "", amHost true and no
-                // error: a host with no lobby, waiting for peers forever.
-                if (!lobbyCode) {
-                  this.fail("The Poki lobby service would not create a room");
-                  return;
-                }
-                this.roomCode = lobbyCode.toUpperCase();
-                this.requestedCode = this.roomCode;
-                this.amHost = true;
-                this.leaderId = network.id;
-                this.armLobbyWatchdog();
-              }).catch((err) => {
-                this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
-              });
-            }
+            if (!joined) createRoom();
           }
         } catch (err) {
           this.fail(String(err).slice(0, 120));

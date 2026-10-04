@@ -579,6 +579,15 @@ export class Game {
   /** Single-flight transport creation (see ensureNet) — Poki's client is async. */
   private netPending: Promise<AnyRealtimeClient> | null = null;
   private roomCode = "";
+  /** "Create a room" rather than "join room `roomCode`".
+   *
+   *  The Poki transport mints the code server-side (`create()` RETURNS it), so
+   *  a host cannot know the code before asking. This flag is how "host a room"
+   *  survives that: `roomCode` stays "" until the transport reports a real one,
+   *  and `pumpNetwork` adopts it. Passing a locally-invented code instead is
+   *  what made "Create Private Room" fail on every press — the transport read
+   *  it as a join request for a room nobody had created. */
+  private hostingLobby = false;
   /** True when the current roomCode was entered/invited by another player
    *  (vs. generated locally by host-room or by quick-match shuffle). Only
    *  remote codes cause the client to adopt the host's seed on welcome —
@@ -923,12 +932,12 @@ export class Game {
       if (this.state === "playing") this.setState("paused");
       this.audio.setHiddenMuted(true);
       this.watchdog.suspend(); // rAF stops with the context — not a stall
-      this.hud.toast("Graphics context lost — restoring…");
+      this.hud.toast(t("hud.gpu.contextLost", undefined, "Graphics context lost — restoring…"));
       this.telemetry.track("webgl_context_lost", {});
       // If the GPU never comes back, say so instead of leaving a dead canvas.
       window.setTimeout(() => {
         if (this.contextLost && !this.disposed) {
-          this.hud.toast("Graphics could not be restored — reload the page to keep flying");
+          this.hud.toast(t("hud.gpu.unrecovered", undefined, "Graphics could not be restored — reload the page to keep flying"));
           this.telemetry.track("webgl_context_lost_unrecovered", {});
         }
       }, 8000);
@@ -943,7 +952,7 @@ export class Game {
       this.last = performance.now();
       this.acc = 0;
       this.resize();
-      this.hud.toast("Graphics restored");
+      this.hud.toast(t("hud.gpu.restored", undefined, "Graphics restored"));
       this.telemetry.track("webgl_context_restored", {});
     };
     canvas.addEventListener("webglcontextlost", this.onContextLost, false);
@@ -1320,7 +1329,7 @@ export class Game {
   private announceToRoom(client: AnyRealtimeClient, seed: string, remote: boolean): void {
     this.massRace.attachTransport(client);
     client.setIdentity(this.racedName(), this.skin.id, 0.06);
-    client.connect(this.roomCode, seed, remote);
+    client.connect(this.roomCode, seed, remote, this.hostingLobby);
   }
 
   private ensureNet(seed: string, remote: boolean): void {
@@ -5627,14 +5636,18 @@ export class Game {
         }
         this.disconnectRace();
         this.localRace = false;
-        this.roomCode = makeRoomCode();
+        // No invented code. The Poki transport creates the lobby and reports
+        // the code back (see `hostingLobby`), so this stays "" until then and
+        // `pumpNetwork` adopts the real one.
+        this.roomCode = "";
+        this.hostingLobby = true;
         this.joiningRemoteRoom = false;
         this.modeId = this.selectedPvpMode;
         this.mode = modeById(this.selectedPvpMode);
         this.rankedRace = false;
         this.setScreen("live");
         this.preseatLobby();
-        this.hud.toast(`Flock room ${this.roomCode} ready!`, "gold");
+        this.hud.toast("Creating your room — the code appears in a moment", "gold");
         this.bump();
         return true;
       }
@@ -5672,14 +5685,17 @@ export class Game {
         // flying Sprint while your invitees queued for Slalom. Same safety
         // applies mid-matchmaking: tear down so the next preseating uses the
         // new seed.
-        if (this.roomCode || this.mmOpts) {
+        // Read "were we seated" BEFORE cancelMatchmaking(), which now clears the
+        // room code. Re-hosting is a create-and-read-the-code request, so the
+        // code is minted by the transport rather than invented here.
+        const wasSeated = Boolean(this.roomCode) || Boolean(this.mmOpts);
+        if (wasSeated) {
           this.cancelMatchmaking();
           this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.mode.name}`, "gold", this.mode.icon);
-          }
+          this.roomCode = "";
+          this.hostingLobby = true;
+          this.preseatLobby();
+          this.hud.toast(`New ${this.mode.name} room — the code appears in a moment`, "gold", this.mode.icon);
         }
         this.hud.toast(`${this.mode.name}`, "gold", this.mode.icon);
         this.bump();
@@ -5691,14 +5707,14 @@ export class Game {
         this.selectedCourse = PVP_WORLDS.find((w) => w.id === wId) ?? PVP_WORLDS[0]!;
         // Same reseed safety as select-pvp-mode: changing the world while
         // seated pins a fresh room code so the seed reflects the new course.
-        if (this.roomCode || this.mmOpts) {
+        const wasSeated = Boolean(this.roomCode) || Boolean(this.mmOpts);
+        if (wasSeated) {
           this.cancelMatchmaking();
           this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
-          }
+          this.roomCode = "";
+          this.hostingLobby = true;
+          this.preseatLobby();
+          this.hud.toast(`New ${this.selectedCourse.name} room — the code appears in a moment`, "gold", this.selectedCourse.emoji);
         }
         this.hud.toast(`${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
         this.bump();
@@ -5753,8 +5769,11 @@ export class Game {
       }
       case "start-room":
       case "ready-room": {
+        // No room yet means "host one". Inventing a code here read as a join
+        // request for a room that does not exist; see `hostingLobby`.
         if (!this.roomCode) {
-          this.roomCode = makeRoomCode();
+          this.roomCode = "";
+          this.hostingLobby = true;
         }
         this.modeId = this.selectedPvpMode;
         this.mode = modeById(this.selectedPvpMode);
@@ -7108,6 +7127,13 @@ export class Game {
     this.mmRooms = "";
     this.net?.sendReady(false);
     this.disconnectRace();
+    // A quick-match GUEST adopts the host's code from the `welcome` frame, so
+    // by the time a search is cancelled `roomCode` is routinely populated.
+    // It was left set here, and `renderLive` branches on it — so cancelling
+    // stranded the player on a room card for a room with nobody in it,
+    // captioned "1 connected · 0 ready" (the `Math.max(1, …)` floor on a
+    // `roomCount` of 0). Leaving the room means leaving its code.
+    this.roomCode = "";
     this.hud.setMatchmaking(false, 0, this.roomSize, 0);
     this.bump();
   }
@@ -7342,6 +7368,11 @@ export class Game {
   private disconnectRace(): void {
     this.net?.disconnect();
     this.massRace.attachTransport(null);
+    // Leaving a room ends the hosting intent too. Every exit path already
+    // funnels through here — matchmaking, cancel, room-close, back-to-menu,
+    // race replay — so this is the one place that has to remember, rather
+    // than ten call sites that each have to.
+    this.hostingLobby = false;
   }
 
   /** Per-frame network pump: cadence, inbound emotes, outbound state. */
@@ -7362,6 +7393,17 @@ export class Game {
     const net = this.net;
     if (!net) return;
     net.tick(raw);
+    // Adopt the code the transport actually holds. A host's room is created
+    // server-side and its code only exists once `create()` resolves, so the
+    // lobby card, "copy invite" and the seat count all read from here rather
+    // than from whatever we hoped for when the button was pressed.
+    if (this.hostingLobby && !this.roomCode) {
+      const live = net.info().code;
+      if (live) {
+        this.roomCode = live;
+        this.bump();
+      }
+    }
     // Server-authoritative result: the DO ordered every live pilot's finish.
     // Blend it with the local bot field — humans ranked by the referee, bots
     // by simulation — and correct the shown place if the estimate was off.

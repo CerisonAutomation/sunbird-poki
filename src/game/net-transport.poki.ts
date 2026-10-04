@@ -26,7 +26,19 @@ let netlib: Promise<typeof import("../sdk/PokiNetlib")> | null = null;
 
 function loadNetlib(): Promise<typeof import("../sdk/PokiNetlib")> {
   const pending = (netlib ??= import("../sdk/PokiNetlib"));
-  void pending.catch(() => { if (netlib === pending) netlib = null; });
+  void pending.catch((error) => {
+    if (netlib === pending) netlib = null;
+    // Previously swallowed with an empty handler. That is why "PvP isn't
+    // working" was undiagnosable: a rejected import fell through to the
+    // WebSocket client, then to local AI pilots, and the player got a race
+    // against eight bots with nothing on screen and nothing in the logs to say
+    // it was not multiplayer. The report has to be louder than the failure.
+    console.error(
+      "[netlib] transport chunk failed to load — falling back to the local AI field. Live PvP is OFF.",
+      error,
+    );
+    window.dispatchEvent(new CustomEvent("sunbird:netlib-unavailable", { detail: error }));
+  });
   return pending;
 }
 

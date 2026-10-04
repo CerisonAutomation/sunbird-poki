@@ -176,9 +176,10 @@ if (POKI_MULTIPLAYER) prewarmNetTransport();
 export type GameState = UiState;
 type AdReason = "continue" | "interstitial";
 
+const _hslScratch = new THREE.Color();
 function hsl(h: number, s: number, l: number): [number, number, number] {
-  const c = new THREE.Color().setHSL(h, s, l);
-  return [c.r, c.g, c.b];
+  _hslScratch.setHSL(h, s, l);
+  return [_hslScratch.r, _hslScratch.g, _hslScratch.b];
 }
 
 /** Seconds a ring chain stays open — one number for the rule and the meter. */
@@ -4033,8 +4034,7 @@ export class Game {
       momentRecap: this.moments.recapLine(),
     });
     if (this.sessionRuns === 1) {
-      // Said "spend your coins" on a first run that yields ~10-30 of them.
-      this.hud.toast("Flight logged Your first coins are in — 40 buys your first boost", "quest", "crystal");
+      this.hud.toast("Flight logged! Scroll down to open the Shop and spend your coins", "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
       this.hud.toast("Ready for the social sky? Challenge a rival or try today's course", "quest");
@@ -4849,6 +4849,7 @@ export class Game {
           this.save.state.seenPvp = true;
           this.save.persist();
           this.telemetry.track("onboarding_pvp_opened");
+          this.hud.toast("Race Lobby — match up against real pilots on the same hills, ranked or casual", "gold", "flock");
         }
         // Human rivals. The Race Lobby is the matchmaking hub: quick match
         // against live pilots, the format/world picker, and the invite paths.
@@ -4862,6 +4863,7 @@ export class Game {
           this.save.state.seenPve = true;
           this.save.persist();
           this.telemetry.track("onboarding_pve_opened");
+          this.hud.toast("Practice Arena — fly with AI flocks, challenge ghosts, or run today's course solo", "quest", "bird");
         }
         // AI rivals. This is the same split the home menu shows — one tap to
         // a human lobby, one tap to the offline flock — so the two need

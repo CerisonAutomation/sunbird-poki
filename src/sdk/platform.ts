@@ -549,10 +549,6 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
         // anyway: it is the right place to register consent plumbing, and the
         // same handshake shape as init degrades cleanly on older builds.
         try { getPoki()?.enableEventTracking?.(); } catch { /* events optional */ }
-        // gameLoadingStart() fires exactly once, right after init, before
-        // any asset/3D scene work begins. Game.loadingFinished() is called
-        // by the Game constructor once the renderer/HUD/terrain are ready.
-        getPoki()?.gameLoadingStart?.();
       } catch { /* preserve playable build in sandbox */ }
       // Mobile: move the Poki pill out of the flight-HUD so it never covers
       // the score/altitude/distance chips. The 0,0 default has it in the
@@ -591,6 +587,10 @@ export async function initPlatform(events: PlatformEvents): Promise<PlatformAdap
   if (TARGET === "poki") {
     await bootstrapSdk();
     adapter = new PokiAdapter(events);
+    // Signal loading start through the adapter queue so it is deferred and
+    // replayed correctly if init() has not yet resolved. Per Poki spec this
+    // must fire as early as possible — before the game renders its first frame.
+    adapter.loadingStart();
   } else {
     // Direct/web build: no portal, so cloud saves fall back to localStorage and
     // every portal-only call is an honest no-op.

@@ -583,7 +583,7 @@ export const CLIMB_REFILL_MULT = 0.6;
 export const SOLO_START_COUNTDOWN = 3;
 
 export const FEVER_NEED = 3;
-export const FEVER_DURATION = 9;
+export const FEVER_DURATION = 11;
 export const NEST_MULT_PER_LEVEL = 0.12;
 
 export let COIN_VALUE = 1;
@@ -622,8 +622,8 @@ export const SAVE_KEY_CORRUPT = "sunbird.save.corrupt";
 
 export const DAYLIGHT_MAX_GOLD = 130;
 export const CONTINUE_COST = 80;
-export const CONTINUE_DAYLIGHT = 16;
-export const CONTINUE_TIMEOUT = 15;
+export const CONTINUE_DAYLIGHT = 22;
+export const CONTINUE_TIMEOUT = 20;
 /**
  * Longest a sponsored break may hold the game before the game abandons it.
  *

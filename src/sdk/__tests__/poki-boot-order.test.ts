@@ -208,8 +208,9 @@ describe("a Poki build whose SDK script never finishes init", () => {
 
       // The point of holding rather than dropping: without this replay the
       // core's `startAdsAfter` timer is never armed for the whole session.
+      // initPlatform() also queues a loadingStart, so it replays before gameplay.
       boot();
-      expect(calls).toEqual(["gameplayStart"]);
+      expect(calls).toEqual(["gameLoadingStart", "gameplayStart"]);
     });
 
     it("collapses a pre-boot stop/start burst to the final gameplay state", async () => {
@@ -221,7 +222,8 @@ describe("a Poki build whose SDK script never finishes init", () => {
       boot();
       // Replaying both would tell the portal gameplay stopped and then started
       // again, arming an ad timer for a session that is already in flight.
-      expect(calls).toEqual(["gameplayStart"]);
+      // initPlatform() also queues a loadingStart, so it replays first.
+      expect(calls).toEqual(["gameLoadingStart", "gameplayStart"]);
     });
 
     it("holds the loading phase markers too, and sends each exactly once", async () => {
@@ -242,11 +244,13 @@ describe("a Poki build whose SDK script never finishes init", () => {
       const calls: string[] = [];
       const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
 
+      // initPlatform() queued a loadingStart; boot() flushes it first.
       boot();
       adapter.gameplayStart();
       adapter.gameplayStop();
       adapter.loadingStart();
-      expect(calls).toEqual(["gameplayStart", "gameplayStop", "gameLoadingStart"]);
+      // loadingStart is deduped — initPlatform's queued call already sent it.
+      expect(calls).toEqual(["gameLoadingStart", "gameplayStart", "gameplayStop"]);
     });
   });
 });

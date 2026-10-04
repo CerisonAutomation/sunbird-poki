@@ -19,7 +19,7 @@ import { escapeHtml, sectionTitle } from "./kit";
 import { type HudSnapshot } from "./types";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderScoreTable } from "./parts";
 
-export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
+export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "firstSteps" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
   const deltaTxt =
@@ -101,8 +101,18 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
 
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
-    <h2>${escapeHtml(END_REASON_TITLE[s.endReason] ?? "Flight completed")}</h2>
-    <p class="end-reason">${escapeHtml(END_REASON_LINE[s.endReason] ?? "")}</p>
+    <h2>${escapeHtml(
+      s.massRace
+        ? s.racePlace === 1
+          ? "Race won!"
+          : s.racePlace <= 3 && s.racePlace > 0
+            ? "Podium finish!"
+            : s.racePlace > 0
+              ? "Race finished"
+              : "Knocked out"
+        : (END_REASON_TITLE[s.endReason] ?? "Flight completed")
+    )}</h2>
+    <p class="end-reason">${escapeHtml(s.massRace ? "" : (END_REASON_LINE[s.endReason] ?? ""))}</p>
     <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
@@ -128,6 +138,10 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
       <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
     </div>
+    ${!s.firstSteps.shop ? `<div class="reward-strip new-player-shop-cta">
+      <b>${menuIconSm("coin")} You have ${formatNumberLocalized(s.wallet)} coins</b> — spend them in the Shop: boosts from 40, birds from 150
+      <button class="soft-btn wide gold-tint" style="margin-top:8px" data-ui data-action="open-shop">${menuIcon("shop")} Open Shop</button>
+    </div>` : ""}
     ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
 
     ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
@@ -163,6 +177,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${renderMissions(s.missions, s.newlyCompleted)}
     <h3 class="table-title">${t("hud.renderGameOver.HGlides", undefined, "High glides")}</h3>
     ${renderScoreTable(s.highScores.slice(0, 5))}</details>
+    <button class="soft-btn wide results-shop-cta" data-ui data-action="open-shop">${menuIcon("shop")} Shop — birds, boosts &amp; trails</button>
   `;
 }
 
@@ -391,6 +406,13 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
           // on its own the instant the countdown lands (see Game.fixedUpdate),
           // so there is nothing here to press: this is a read-only status
           // chip, not a control.
+          // `adSkippable` is `!portalEnabled()` (Game.ts), so this chip only ever
+          // renders on a PLACEHOLDER break — one the game times itself — and
+          // `adTimer` is therefore a real countdown on exactly this path. It
+          // was briefly swapped for a flat "Second Wind loading…" when
+          // adReason === "continue", which hid the only number that says when
+          // a self-timed break ends. The portal path never reaches this branch;
+          // it takes the escape hatch below, which has no number to show.
           ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>Continues in <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
           // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
           // so this used to render enabled with a flat "Return to flight" from

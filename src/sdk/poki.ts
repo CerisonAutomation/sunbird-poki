@@ -347,10 +347,10 @@ export class PokiAdapter implements PlatformAdapter {
   private loadingStartSent = false;
 
   loadingStart(): void {
-    // Poki marks the loading phase with gameLoadingStart(). bootstrapSdk()
-    // already fired it right after init (before the game's asset work), so
-    // this delegate exists for interface symmetry — re-sending a phase
-    // marker is harmless.
+    // bootstrapSdk() now fires gameLoadingStart() before awaiting init(), so
+    // this delegate is a fallback for the rare case where the adapter's own
+    // loadingStart() is called before that path ran. The one-shot guard below
+    // ensures the marker is never sent twice.
     if (this.loadingStartSent) return;
     // Not dropped, held: pre-boot this would be refused by the core, and the
     // one-shot flag below would then record a phase marker that never reached

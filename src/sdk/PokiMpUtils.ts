@@ -14,7 +14,6 @@
 // variable is read.
 import { pokiNetlibGameId } from "./env";
 
-const IS_POKI: boolean = (import.meta.env.VITE_PORTAL_TARGET as string) === "poki";
 
 /**
  * Poki Netlib game id.
@@ -34,7 +33,7 @@ export function isNetlibGameId(value: string | undefined): boolean {
 }
 
 /** Random v4 UUID reserved for this repo's dev/preview builds. */
-const DEV_NETLIB_GAME_ID = "33c4c5a6-ee70-4726-aa1f-ced8a9578254";
+export const DEV_NETLIB_ID = "33c4c5a6-ee70-4726-aa1f-ced8a9578254";
 
 /**
  * Submission supplies `VITE_POKI_NETLIB_GAME_ID` (the id Poki issues); a
@@ -44,11 +43,9 @@ const DEV_NETLIB_GAME_ID = "33c4c5a6-ee70-4726-aa1f-ced8a9578254";
  * treated as absent rather than shipped — Netlib rejects bad ids in
  * production, and failing at build time is better than failing in a lobby.
  */
-export const POKI_NETLIB_GAME_ID: string = IS_POKI
-  ? isNetlibGameId(pokiNetlibGameId() || undefined)
-    ? pokiNetlibGameId()
-    : DEV_NETLIB_GAME_ID
-  : "";
+export const POKI_NETLIB_GAME_ID: string = isNetlibGameId(pokiNetlibGameId() || undefined)
+  ? pokiNetlibGameId()
+  : DEV_NETLIB_ID;
 
 /**
  * Can we actually offer Poki Netlib multiplayer on this browser?
@@ -57,7 +54,17 @@ export const POKI_NETLIB_GAME_ID: string = IS_POKI
  * is the canonical feature probe.
  */
 export function isPokiMultiplayerAvailable(): boolean {
-  if (!IS_POKI) return false;
+  // NOT gated on IS_POKI, and the docs are why:
+  //   "The Poki Networking Library (Netlib) is a peer-to-peer library utilizing
+  //    WebRTC datachannels [...] available for use regardless of whether the
+  //    game is hosted on Poki."  (developers.poki.com/guide/game-dev-tools)
+  //
+  // Gating on IS_POKI made live PvP impossible to test anywhere except a portal
+  // build — not on localhost, not on a self-hosted preview — which is exactly
+  // where it is easiest to debug. Netlib ships its own ICE servers
+  // (stun.l.google.com, turn.rtc.poki.com), so it needs no Poki runtime; the
+  // only host-specific input is the game id, and an unconfigured build now
+  // falls back to the shared DEV id so every tester reaches the same lobbies.
   try {
     return typeof RTCPeerConnection !== "undefined" && typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function";
   } catch {

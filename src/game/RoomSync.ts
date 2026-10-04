@@ -35,27 +35,28 @@ export type Track = {
   ready: boolean;
     lastSeen: number;
   };
-  
-  /** A fresh track for a peer we have just heard from but know nothing about. */
-  export function newTrack(id: string, now: number): Track {
-    return {
-      id,
-      name: "Pilot",
-      hue: Math.random(),
-      skin: "sunbird",
-      buffer: [],
-      distance: 0,
-      finished: false,
-      finishTime: 0,
-      place: 0,
-      emote: "",
-      emoteAt: -99,
-      ready: false,
-      lastSeen: now,
-    };
-  }
-  
-  export type PresenceState = "offline" | "connecting" | "lobby" | "racing" | "error";
+
+/** A fresh track for a peer we have just heard from but know nothing about. */
+export function newTrack(id: string, now: number): Track {
+  return {
+    id,
+    name: "Pilot",
+    hue: Math.random(),
+    skin: "sunbird",
+    buffer: [],
+    distance: 0,
+    finished: false,
+    finishTime: 0,
+    place: 0,
+    emote: "",
+    emoteAt: -99,
+    ready: false,
+    lastSeen: now,
+  };
+}
+
+export type PresenceState = "offline" | "connecting" | "lobby" | "racing" | "error";
+
 
 export type RoomPeer = {
   id: string;
@@ -137,4 +138,61 @@ export function sampleTrack(buffer: readonly Keyframe[], renderAt: number): Samp
     y: a.y + (c.y - a.y) * u,
     rotation: a.rot + (c.rot - a.rot) * u,
   };
+}
+
+/**
+ * What the AI-fallback lobby needs in order to run its ready sequence.
+ *
+ * Every member is a readonly callback, so nothing here is a writable field and
+ * there is no write-through to get wrong — the caller closes over its own
+ * `this` and the hexagon never learns a field name. Keeping `schedule` and
+ * `Date.now()` on this side is what lets this module stay free of clocks and
+ * DOM; it is pure logic over injected effects.
+ */
+export interface AutonomousLobbyPorts {
+  /** The peers to seat. Mutated in place as each one readies. */
+  readonly tracks: Map<string, Track>;
+  /** Is the local player still ready right now? Re-read inside each timer. */
+  readonly isLocalReady: () => boolean;
+  /** Drop any pending auto-start timer. */
+  readonly cancelStart: () => void;
+  /** Arm a timer — `window.setTimeout` at the call site. */
+  readonly schedule: (fn: () => void, ms: number) => void;
+  /** Publish a presence event (ready / start) to the game. */
+  readonly emit: (event: PresenceEvent) => void;
+  /** Everyone has readied: set `startsAt`, then race one second later. */
+  readonly onAllReady: () => void;
+}
+
+/**
+ * Seat the AI-fallback lobby when there is no real room behind the transport.
+ *
+ * Both transports fall back to this — an empty room is a dead end otherwise, and
+ * the whole point of multiplayer is best-effort (see the class headers). It was
+ * a byte-identical 28-line block in each adapter, which is the exact shape of
+ * bug this module exists to prevent: a tuning change to the stagger would land
+ * in one copy and silently miss the other.
+ *
+ * Peers readied in a 350ms stagger, 400ms apart, so the lobby looks like a room
+ * filling up rather than everyone clicking at once.
+ */
+export function runAutonomousReady(ports: AutonomousLobbyPorts, ready: boolean): void {
+  ports.cancelStart();
+
+  if (!ready) {
+    for (const peer of ports.tracks.values()) peer.ready = false;
+    return;
+  }
+
+  let delay = 350;
+  const peers = Array.from(ports.tracks.values());
+  for (const peer of peers) {
+    ports.schedule(() => {
+      if (!ports.isLocalReady()) return;
+      peer.ready = true;
+      ports.emit({ type: "ready", name: peer.name });
+      if (peers.every((p) => p.ready)) ports.onAllReady();
+    }, delay);
+    delay += 400;
+  }
 }

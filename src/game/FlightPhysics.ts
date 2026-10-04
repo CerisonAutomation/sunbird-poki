@@ -1,5 +1,13 @@
 import { clamp, lerp } from "./math";
-import { ALT_CEILING, ALT_CEILING_FADE, FLARE_MAX_RISE, GLIDE_LIFT_SPEED } from "./constants";
+import {
+  ALT_CEILING,
+  ALT_CEILING_FADE,
+  FLARE_MAX_RISE,
+  GLIDE_EXCHANGE,
+  GLIDE_EXCHANGE_ALT_CAP,
+  GLIDE_EXCHANGE_MAX,
+  GLIDE_LIFT_SPEED,
+} from "./constants";
 
 /** Anti-bore lift decay: a good launch stays exciting through a 2.5s plateau,
  * then lift decays to a 0.32 floor over the next 4s (fully decayed by ~6.5s),
@@ -28,6 +36,60 @@ export function dampClimbAtCeiling(vy: number, altitude: number): number {
   if (vy <= 0) return vy;
   const fade = clamp((altitude - (ALT_CEILING - ALT_CEILING_FADE)) / ALT_CEILING_FADE, 0, 1);
   return vy * (1 - fade);
+}
+
+/* ------------------------------------------------------- the energy exchange */
+
+/**
+ * Forward acceleration a descending glider earns by trading height for speed.
+ *
+ * THE GAP THIS FILLS. Lift in this model cancels gravity and nothing else, and
+ * drag only ever removes speed, so before this existed a released bird was a
+ * one-way street: it sank, and it decelerated, and the climb a release bought
+ * was never converted into the distance it was supposed to be worth. Every
+ * other number in the flight model was re-tuned around that hole; this is the
+ * term that closes it.
+ *
+ * WHY IT IS SCALED BY THE HEIGHT BANK, NOT BY `vy` ALONE. The first version of
+ * this was `GLIDE_EXCHANGE * -vy` and it measured a large, real ratio gain —
+ * and it was WRONG, and the mistake is the most instructive one in this file.
+ * "Stick released" and "gliding" are mechanically the same state, so a player
+ * who NEVER touches the button is permanently released and collects the payout
+ * on 100% of its airtime, while the expert policy is airborne only ~49% of the
+ * time and collects it the rest. The change paid the COASTER more than the
+ * expert, and it collapsed `mean(hold) > mean(coast) * 1.3` in
+ * skill-ceiling.test.ts from 1.370x to 1.221x — i.e. it erased the proof that
+ * the button does anything at all, while flattering the headline ratio. A
+ * lever that improves the number and destroys the design is not a lever.
+ *
+ * Altitude fixes it, because altitude is what distinguishes the two. Measured
+ * mean height while airborne, same seeds and policy: expert 27.7 m, coast
+ * 11.2 m, hold 12.8 m. Height is precisely the resource a pilot must EARN — by
+ * launching off crests and popping — and a bird that never presses the button
+ * never accumulates one. So scaling by height pays the thing the skill gap is
+ * made of and not the thing that ignores the game.
+ *
+ *   - `vy >= 0` returns exactly 0. A climbing or level bird is not descending
+ *     and has no height to spend, so the apex of an arc is not a free launch.
+ *   - `altitude <= 0` returns exactly 0. Nothing to trade.
+ *   - Both factors are read at call time, so the dev panel's slider moves the
+ *     very next frame with no re-import.
+ *   - Capped at `GLIDE_EXCHANGE_MAX`, and `Bird.step` still clamps total speed
+ *     to `cap`, so the exchange cannot push the bird past `MAX_SPEED`.
+ *
+ * Gated at the call site on `!diving`: a diving bird is already being paid in
+ * `GROUND_G_DIVE` and is deliberately spending energy downward.
+ */
+export function glideExchangeAccel(vy: number, altitude: number): number {
+  if (vy >= 0 || GLIDE_EXCHANGE <= 0) return 0;
+  // The DEADBAND is the mechanic's real skill gate: below it there is no bank
+  // to spend and a bird that never presses the button — which is permanently
+  // released, and therefore collects a naive `!diving` payout on every step it
+  // spends airborne — is paid nothing. See GLIDE_EXCHANGE_ALT_FLOOR for the
+  // measurement that forced it.
+  const bank = Math.min(altitude, GLIDE_EXCHANGE_ALT_CAP) - GLIDE_EXCHANGE_ALT_FLOOR;
+  if (bank <= 0) return 0;
+  return Math.min(GLIDE_EXCHANGE * -vy * bank, GLIDE_EXCHANGE_MAX);
 }
 
 /* ------------------------------------------------------------------ release */

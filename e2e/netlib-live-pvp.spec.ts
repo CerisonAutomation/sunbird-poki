@@ -54,8 +54,18 @@ import { SunbirdPage } from "./SunbirdPage";
 /** Netlib's signalling service. Its reachability is the whole test's premise. */
 const SIGNALING_HOST = "netlib.poki.io";
 
-/** The 5-char code `create({codeFormat:"short", codeLength:5})` must return. */
-const ROOM_CODE = /^[A-Z2-9]{5}$/;
+/**
+ * The room code Netlib actually mints.
+ *
+ * NOT `[A-Z2-9]{5}`: the transport asks for `codeFormat: "short",
+ * codeLength: 5`, and the signalling service ignores `codeLength` and returns
+ * a FOUR-character code — verified directly against
+ * `wss://netlib.poki.io/v0/signaling` (`{"type":"joined","lobbyInfo":{"code":
+ * "C7JH",…}}`) and again through the running game. So the authoritative shape
+ * is "whatever the service returned", and this regex is deliberately the
+ * permissive envelope around it rather than a locally invented contract.
+ */
+const ROOM_CODE = /^[A-Z2-9]{4,5}$/;
 
 /**
  * Room-lobby budget. Generous because the chain is genuinely long and every

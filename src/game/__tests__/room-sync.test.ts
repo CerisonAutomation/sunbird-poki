@@ -5,8 +5,11 @@ import {
   SEND_DT,
   STALE_AFTER,
   newTrack,
+  runAutonomousReady,
   sampleTrack,
+  type AutonomousLobbyPorts,
   type Keyframe,
+  type PresenceEvent,
 } from "../RoomSync";
 
 /**
@@ -147,5 +150,96 @@ describe("newTrack", () => {
 
   it("defaults emoteAt to the past so a new peer never pops an emote", () => {
     expect(newTrack("p1", 0).emoteAt).toBeLessThan(0);
+  });
+});
+
+describe("runAutonomousReady — AI-fallback lobby", () => {
+  const peer = (name: string) => {
+    const t = newTrack(name, 0);
+    t.name = name;
+    return t;
+  };
+
+  function harness(names: string[]) {
+    const tracks = new Map(names.map((n) => [n, peer(n)]));
+    const timers: { fn: () => void; ms: number }[] = [];
+    const events: PresenceEvent[] = [];
+    let localReady = true;
+    let cancelled = 0;
+    let allReady = 0;
+
+    const ports: AutonomousLobbyPorts = {
+      tracks,
+      isLocalReady: () => localReady,
+      cancelStart: () => { cancelled++; },
+      schedule: (fn, ms) => { timers.push({ fn, ms }); },
+      emit: (e) => { events.push(e); },
+      onAllReady: () => { allReady++; },
+    };
+    return {
+      tracks, timers, events, ports,
+      setLocalReady: (v: boolean) => { localReady = v; },
+      cancels: () => cancelled,
+      allReadyCalls: () => allReady,
+      fire: (i: number) => timers[i]!.fn(),
+    };
+  }
+
+  it("always cancels a pending start, readied or not", () => {
+    const h = harness(["a"]);
+    runAutonomousReady(h.ports, true);
+    expect(h.cancels()).toBe(1);
+    const h2 = harness(["a"]);
+    runAutonomousReady(h2.ports, false);
+    expect(h2.cancels()).toBe(1);
+  });
+
+  it("un-readies every peer when the player backs out", () => {
+    const h = harness(["a", "b"]);
+    h.tracks.get("a")!.ready = true;
+    h.tracks.get("b")!.ready = true;
+    runAutonomousReady(h.ports, false);
+    expect(h.tracks.get("a")!.ready).toBe(false);
+    expect(h.tracks.get("b")!.ready).toBe(false);
+    expect(h.timers.length).toBe(0);
+  });
+
+  it("staggers peers 350ms then 400ms apart", () => {
+    const h = harness(["a", "b", "c"]);
+    runAutonomousReady(h.ports, true);
+    expect(h.timers.map((t) => t.ms)).toEqual([350, 750, 1150]);
+  });
+
+  it("readies a peer and announces it when its timer fires", () => {
+    const h = harness(["a"]);
+    runAutonomousReady(h.ports, true);
+    h.fire(0);
+    expect(h.tracks.get("a")!.ready).toBe(true);
+    expect(h.events).toEqual([{ type: "ready", name: "a" }]);
+  });
+
+  it("does nothing if the player un-readied before the timer fired", () => {
+    const h = harness(["a"]);
+    runAutonomousReady(h.ports, true);
+    h.setLocalReady(false);
+    h.fire(0);
+    expect(h.tracks.get("a")!.ready).toBe(false);
+    expect(h.events).toEqual([]);
+  });
+
+  it("starts the race only once every peer has readied", () => {
+    const h = harness(["a", "b"]);
+    runAutonomousReady(h.ports, true);
+    h.fire(0);
+    expect(h.allReadyCalls()).toBe(0);
+    h.fire(1);
+    expect(h.allReadyCalls()).toBe(1);
+  });
+
+  it("handles an empty lobby without arming anything", () => {
+    const h = harness([]);
+    runAutonomousReady(h.ports, true);
+    expect(h.timers.length).toBe(0);
+    expect(h.allReadyCalls()).toBe(0);
   });
 });

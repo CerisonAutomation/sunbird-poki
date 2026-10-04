@@ -36,7 +36,9 @@ import {
   SEND_DT,
   STALE_AFTER,
   newTrack,
+  runAutonomousReady,
   sampleTrack,
+  type AutonomousLobbyPorts,
   type PresenceEvent,
   type PresenceState,
   type RoomPeer as NetRoomPeer,
@@ -999,37 +1001,11 @@ private broadcastReliable(msg: NetMsg): void {
   }
 
   sendReady(ready: boolean): boolean {
-    if (this.isAutonomous) {
-      this.localReady = ready;
-      if (this.autoReadyTimer !== null) {
-        window.clearTimeout(this.autoReadyTimer);
-        this.autoReadyTimer = null;
+      if (this.isAutonomous) {
+        this.localReady = ready;
+        runAutonomousReady(this.autonomousLobbyPorts(), ready);
+        return true;
       }
-      if (ready) {
-        let delay = 350;
-        const peers = Array.from(this.tracks.values());
-        for (const peer of peers) {
-          window.setTimeout(() => {
-            if (!this.localReady) return;
-            peer.ready = true;
-            this.pendingEvents.push({ type: "ready", name: peer.name });
-            if (peers.every((p) => p.ready)) {
-              this.startsAt = Date.now() + 1000;
-              this.autoReadyTimer = window.setTimeout(() => {
-                if (this.localReady && this.state === "lobby") {
-                  this.state = "racing";
-                  this.pendingEvents.push({ type: "start" });
-                }
-              }, 1000);
-            }
-          }, delay);
-          delay += 400;
-        }
-      } else {
-        for (const peer of this.tracks.values()) peer.ready = false;
-      }
-      return true;
-    }
     if (!this.connected || this.state !== "lobby") return false;
     this.localReady = ready;
     this.broadcastReliable({ type: "ready", ready });
@@ -1242,6 +1218,31 @@ private broadcastReliable(msg: NetMsg): void {
       this.tracks.set(id, t);
     }
     return t;
+  }
+
+  /** Bind this instance's lobby fields to the shared AI-fallback sequence. */
+  private autonomousLobbyPorts(): AutonomousLobbyPorts {
+    return {
+      tracks: this.tracks,
+      isLocalReady: () => this.localReady,
+      cancelStart: () => {
+        if (this.autoReadyTimer !== null) {
+          window.clearTimeout(this.autoReadyTimer);
+          this.autoReadyTimer = null;
+        }
+      },
+      schedule: (fn, ms) => window.setTimeout(fn, ms),
+      emit: (event) => this.pendingEvents.push(event),
+      onAllReady: () => {
+        this.startsAt = Date.now() + 1000;
+        this.autoReadyTimer = window.setTimeout(() => {
+          if (this.localReady && this.state === "lobby") {
+            this.state = "racing";
+            this.pendingEvents.push({ type: "start" });
+          }
+        }, 1000);
+      },
+    };
   }
 }
 

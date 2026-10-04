@@ -161,11 +161,21 @@ writable one an accessor pair — never a plain `modeId: this.modeId` copy.
 **The multiplayer hexagon already exists and is separate from this pattern.** `NetTransport`
 (`MassRace.ts`) is the port; `RealtimeClient` (`game/Realtime.ts`, WebSocket) and `PokiNetlibClient`
 (`sdk/PokiNetlib.ts`, WebRTC P2P) are its two adapters. Their shared *domain* logic — the keyframe
-vocabulary, the 15 Hz / 120 ms cadence constants, `newTrack`, and the interpolation routine — now
-lives once in `game/RoomSync.ts`, a pure leaf with no clocks, sockets, or DOM. Only the wire stays in
-the adapters. **When adding shared multiplayer logic, put it in `RoomSync.ts`, not in both
-transports** — the whole reason it exists is that two identical copies of `poll()`'s interpolation
-had to be kept in sync by hand, and nothing in CI caught one being fixed and not the other.
+vocabulary, the 15 Hz / 120 ms cadence constants, `newTrack`, `sampleTrack`, and the AI-fallback
+lobby sequence — now lives once in `game/RoomSync.ts`, a pure leaf with no clocks, sockets, or DOM.
+Only the wire stays in the adapters. **When adding shared multiplayer logic, put it in
+`RoomSync.ts`, not in both transports** — the whole reason it exists is that two identical copies of
+`poll()`'s interpolation had to be kept in sync by hand, and nothing in CI caught one being fixed
+and not the other.
+
+**Where the hexagon stops.** Each adapter keeps its own `autonomousLobbyPorts()` — ~25 lines that
+bind its `tracks`/`localReady`/`autoReadyTimer`/`startsAt`/`pendingEvents` fields to
+`runAutonomousReady`. That looks like the duplication this module was built to kill, and it is not:
+those lines *are* the adapter's half of the port. Removing them means moving the lobby state onto a
+shared base class, which is an architecture change, not a cleanup — don't do it to chase a line
+count. The rule is that *logic* is shared and *wiring* is per-adapter. `runAutonomousReady` takes
+`window.setTimeout` and `Date.now()` as injected callbacks (`schedule`, `onAllReady`) precisely so
+the module stays clock-free and DOM-free; keep it that way.
 
 ### Data & network → `src/game/resilience/`
 - Game data calls (leaderboard, ghosts, directory, entitlements) go through `fetchJson` with a

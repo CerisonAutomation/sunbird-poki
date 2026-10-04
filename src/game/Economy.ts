@@ -392,6 +392,21 @@ const BASE_SKINS: SkinDef[] = [
     collection: "premium",
   },
   {
+    id: "glasswing",
+    name: "Glasswing",
+    perk: "+4 s daylight · fever +2 s",
+    price: 620,
+    body: 0x8a5cc8,
+    wing: 0xb98ae8,
+    belly: 0xe0d0ff,
+    beak: 0xffd76a,
+    speedMult: 1.0,
+    feverBonus: 2,
+    daylightBonus: 4,
+    magnetAlways: false,
+    collection: "cosmic",
+  },
+  {
     id: "aurora",
     name: "Aurora",
     perk: "VIP exclusive · rainbow fever trail",
@@ -701,6 +716,7 @@ const BASE_SHOP_TRAILS: ShopTrailDef[] = [
   { id: "trail_shadow",  label: "Shadowrift", desc: "Dark matter in your wake",   price: 460, css: ["#1a0030", "#4a0080", "#9060c8"] },
   { id: "trail_cherry",  label: "Sakuradrift",desc: "Cherry blossom flurry",      price: 360, css: ["#ffb7c5", "#ff85a1", "#fff0f5"] },
   { id: "trail_cosmic",  label: "Cosmicray",  desc: "Supernova particle stream",  price: 500, css: ["#ff6ec7", "#845ef7", "#4cc9f0"] },
+  { id: "trail_amethyst", label: "Amethystveil", desc: "Violet glass shattered in your wake", price: 520, css: ["#b98ae8", "#8a5cc8", "#e0d0ff"] },
 ];
 
 export const SHOP_TRAILS: ShopTrailDef[] = BASE_SHOP_TRAILS.map((trail) => ({

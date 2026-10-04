@@ -72,11 +72,20 @@ export function decideToast(
   oldestAgeMs: number,
   queueLength: number,
   holdMs: number = TOAST_MIN_VISIBLE_MS,
+  mustShow = false,
 ): ToastDecision {
   // Room to spare: nothing to arbitrate.
   if (visibleCount < cap) return { action: "show" };
-  // A cap of zero or less means the surface is suppressed entirely.
+  // A cap of zero or less means the surface is suppressed entirely — even a
+  // strategic message cannot show on a surface that is switched off (only the
+  // mustShow caller decides that, and it never targets a suppressed surface).
   if (cap <= 0) return { action: "drop" };
+  // Strategic, once-per-run messages (the golden-hour pre-cue and its payoff)
+  // must never be dropped: they fire in the busiest late-run stretch — exactly
+  // when the queue is most likely to be saturated — and losing one costs the
+  // player the reason to fly to sundown. Evicting the incumbent early is the
+  // lesser harm: routine traffic is replaceable, the once-per-run cue is not.
+  if (mustShow) return { action: "show" };
   // The incumbent has had its look — the newcomer is more current, so it wins.
   const age = Number.isFinite(oldestAgeMs) ? oldestAgeMs : Number.POSITIVE_INFINITY;
   if (age >= holdMs) return { action: "show" };

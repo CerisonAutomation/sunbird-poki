@@ -49,8 +49,8 @@ describe("PvP Variants and Offline Neural AI Engine", () => {
     expect(isRaceMode("pvp_endurance")).toBe(true);
   });
 
-  it("catalogs all 9 distinct world tracks with progressive difficulty", () => {
-    expect(PVP_WORLDS).toHaveLength(9);
+  it("catalogs all 11 distinct world tracks with progressive difficulty", () => {
+    expect(PVP_WORLDS).toHaveLength(11);
     for (let i = 0; i < PVP_WORLDS.length; i++) {
       const course = PVP_WORLDS[i]!;
       expect(course.island).toBe(i);

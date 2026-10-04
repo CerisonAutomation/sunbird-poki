@@ -40,9 +40,11 @@ export function dampClimbAtCeiling(vy: number, altitude: number): number {
  * door and "release at the top of the ramp" is a tip the game does not honour.
  *
  * 22 was too much, and the player said so: one release bought 26 m of rise at
- * cruising speed, against `START_ALTITUDE` of 14 — one button press was worth
- * nearly two full opening drop-ins, and at 62+ m/s it crossed `ALT_SKY` in a
- * single press. 15 still clears the "a real launch, not a nudge" bar (the
+ * cruising speed — against the old 14 m opening drop-in (runs now start
+ * grounded, so the reference arc is a ramp launch, not a drop-in) one button
+ * press was worth nearly two full opening drop-ins, and at 62+ m/s it crossed
+ * `ALT_SKY` in a single press. 15 still clears the "a real launch, not a
+ * nudge" bar (the
  * reported bug was this value reading 0) while the rise at cruise drops from
  * ~15 m to ~9 m.
  *

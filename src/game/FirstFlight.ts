@@ -2,7 +2,7 @@
  * First-flight coach: a ~15-second interactive tutorial that teaches THE
  * mechanic — dive on the downslope, release on the upslope, soar.
  *
- * Not a video, not a modal wall: three steps verified by real play signals
+ * Not a video, not a modal wall: four steps verified by real play signals
  * (Poki: hook understood in 10 seconds, no text wall). Runs once ever
  * (per save), pays 50 coins on completion, and gets out of the way the
  * moment the player demonstrates each skill.
@@ -20,7 +20,7 @@ export type CoachState = {
   justCompleted: boolean;
 };
 
-const STEPS = 3;
+const STEPS = 4;
 
 export class FirstFlight {
   private step = 0;
@@ -29,6 +29,9 @@ export class FirstFlight {
   private celebration = 0;
   private completed = false;
   private active: boolean;
+  /** Island the player was on when the sun step began: the step completes on
+   *  crossing to the NEXT island, which is real progression, not a timer. */
+  private sunStepIsland: number | null = null;
 
   constructor(alreadyDone: boolean) {
     this.active = !alreadyDone;
@@ -39,7 +42,7 @@ export class FirstFlight {
   }
 
   /** Feed play signals each frame while the run is live. */
-  update(dt: number, sig: { diving: boolean; grounded: boolean; slope: number; justLaunched: boolean; airborne: boolean }): void {
+  update(dt: number, sig: { diving: boolean; grounded: boolean; slope: number; justLaunched: boolean; airborne: boolean; islandIndex: number }): void {
     if (!this.active) {
       if (this.celebration > 0) this.celebration -= dt;
       return;
@@ -64,7 +67,17 @@ export class FirstFlight {
         // Teach the soar: stay airborne long enough to feel the glide.
         if (sig.airborne) this.airTime += dt;
         else this.airTime = 0;
-        if (this.airTime >= 1.4) {
+        if (this.airTime >= 1.4) this.step = 3;
+        break;
+      case 3:
+        // Teach the CLOCK. Daytrip's run ends when daylight runs out, and the
+        // 2026-10-04 fit test showed players losing the run at the sun without
+        // ever learning that islands refill it. The step completes only when
+        // the pilot crosses onto the NEXT island — the exact move the line
+        // teaches — so the last coach beat ends on forward motion, the same
+        // note the flight itself ends on.
+        if (this.sunStepIsland === null) this.sunStepIsland = sig.islandIndex;
+        if (sig.islandIndex > this.sunStepIsland) {
           this.active = false;
           this.completed = true;
           this.celebration = 3;
@@ -105,6 +118,7 @@ export class FirstFlight {
           ? t("onboarding.tapSoar", undefined, "Soar — stay airborne!")
           : t("onboarding.soarInAir", undefined, "Soar — stay airborne!")
       }`,
+      t("onboarding.chaseTheSun", undefined, "The sun is your clock — reach the next island to refill daylight ☀"),
     ][this.step]!;
     return { text, step: this.step, steps: STEPS, justCompleted: false };
   }

@@ -140,9 +140,26 @@ export type BiomeDef = {
 };
 
 /**
- * Nine hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
+ * Eleven hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
  * V2 anti-bore: tighter rhythm, distinct thermals, unique hazards, no long flat.
  */
+/**
+ * First-visit coin reward for charting a world (2026-10-04 "worlds & rewards"
+ * directive). Exploration is the whole point of the endless chain, but the
+ * only thing a new biome ever paid was a toast. Now the first arrival in each
+ * of the nine worlds pays a charting bonus that scales with depth, so the
+ * pull toward "one more island" is economic as well as scenic.
+ *
+ * Pure so the scale is pinned by a unit test next to the grammar tests.
+ */
+export function chartingBonus(biomeId: string): number {
+  const idx = BIOMES.findIndex((b) => b.id === biomeId);
+  // Unknown ids (a future biome, a remixed lap variant) still pay a fair
+  // minimum — a new world that pays nothing is a regression nobody notices
+  // until a player asks why the chart stopped mattering.
+  return idx < 0 ? 25 : 25 + 15 * idx;
+}
+
 export const BIOMES: BiomeDef[] = [
   {
     id: "green",
@@ -450,6 +467,82 @@ export const BIOMES: BiomeDef[] = [
     glow: false,
     musicMode: "canyon",
   },
+  {
+    // The tenth world (2026-10-04 "more worlds" directive): a violet glass
+    // rift where the air itself floats you. Long crystalline faces reward the
+    // glide the first nine worlds taught, chicane walls make the corridors
+    // read like a cathedral, and everything glows — it is the reward world,
+    // the one the atlas says exists before the laps begin.
+    id: "amethyst",
+    liftMult: 1.06,
+    name: "Amethyst Hollow",
+    tagline: "Violet glass, floaty air — chain the spires into one long glide",
+    emoji: "crystal",
+    amp: 1.35,
+    wave: 1.15,
+    skew: 0.25,      // crystal faces: fast rise, slow glassy drop
+    roughness: 0.30, // faceted — textured but periodic, so it stays readable
+    terrain: grammar({ relief: 1.05, lenScale: 1.18, rampEvery: 2, rampChance: 0.7, chicane: 0.3, padSpacing: 1.05, troughEvery: 4, troughDepth: 0.3, islandScale: 1.05 }),
+    top: 0xb98ae8,
+    ridge: 0x8a5cc8,
+    mid: 0x5c3a94,
+    deep: 0x32205e,
+    sand: 0xe0d0ff,
+    farA: 0x9a78d8,
+    farB: 0x6a4aa8,
+    farC: 0x3e2a6e,
+    skyTop: 0x2a1a4a,
+    skyHorizon: 0xc8a8ff,
+    skyMix: 0.55,
+    cloudTint: 0xd8c8f8,
+    cloudDensity: 0.3,
+    snowLine: 0,
+    deco: "crystal",
+    decoDensity: 1.0,
+    hazard: "gust",
+    thermals: 7,
+    fogTint: 0x4a3878,
+    glow: true,
+    musicMode: "amethyst",
+  },
+  {
+    // The eleventh world (2026-10-04 "more worlds" directive): a long autumn
+    // goldade. The longest islands and gentlest faces in the chain — a
+    // cruiser's world that repays everything the first ten taught with room
+    // to use it. One glide can cross the whole grove; the game's reward for
+    // getting good is finally having somewhere to be good at.
+    id: "grove",
+    liftMult: 1.02,
+    name: "Gilded Grove",
+    tagline: "Long golden glades — carve the whole grove in one glide",
+    emoji: "star",
+    amp: 1.15,
+    wave: 1.25,
+    skew: 0.35,      // gold dunes of trees: fast rise, long amber drop
+    roughness: 0.12, // smooth — read-ahead is the point of a cruiser world
+    terrain: grammar({ relief: 0.95, lenScale: 1.35, rampEvery: 2, rampChance: 0.72, chicane: 0.15, padSpacing: 0.95, islandScale: 1.15 }),
+    top: 0xe8c86a,
+    ridge: 0xc8a03c,
+    mid: 0x9a7428,
+    deep: 0x644a18,
+    sand: 0xf8ecc8,
+    farA: 0xd8b060,
+    farB: 0xa88040,
+    farC: 0x705228,
+    skyTop: 0x3a5a8a,
+    skyHorizon: 0xffd88a,
+    skyMix: 0.4,
+    cloudTint: 0xfff0d0,
+    cloudDensity: 0.34,
+    snowLine: 0,
+    deco: "tree",
+    decoDensity: 1.1,
+    hazard: "gust",
+    thermals: 5,
+    fogTint: 0xd8c090,
+    glow: false,
+    musicMode: "grove",
+  },
 ];
 
 function shade(hex: number, amt: number): number {
@@ -467,7 +560,7 @@ const clampF = (v: number, lo: number, hi: number): number => (v < lo ? lo : v >
 export function biomeForIsland(island: number): BiomeDef {
   const i = Math.max(0, Math.floor(island));
   if (i < BIOMES.length) return BIOMES[i]!;
-  // UNLIMITED LEVELS: deterministic remix past the hand-tuned six.
+  // UNLIMITED LEVELS: deterministic remix past the hand-tuned eleven.
   // Same seed => same island forever, new hue shift + amp/wave drift per lap.
   const cached = _wildCache.get(i);
   if (cached) return cached;

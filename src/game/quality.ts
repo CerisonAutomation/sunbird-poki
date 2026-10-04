@@ -6,8 +6,13 @@
  * to pull into a test just to exercise an arithmetic decision.
  */
 
-/** Frame time above this means the 60 fps budget is blown: step down. */
-export const STEP_DOWN_FRAME_SECONDS = 1 / 40;
+/** Frame time above this means the 60 fps budget is blown: step down.
+ *  Tightened from 1/40 to 1/50 (2026-10-04 "max fps" directive): at 1/40 a
+ *  device could sit at 41-45 fps forever without ever shedding resolution —
+ *  technically stable, visibly not the 60 the game is tuned for. 1/50 means
+ *  the ladder reacts to any frame rate the player can actually perceive as
+ *  below target, and trades a quarter step of resolution for it. */
+export const STEP_DOWN_FRAME_SECONDS = 1 / 50;
 /** Frame time below this means there is real headroom: step up. */
 export const STEP_UP_FRAME_SECONDS = 1 / 57;
 /**

@@ -19,7 +19,7 @@ import { escapeHtml, sectionTitle } from "./kit";
 import { type HudSnapshot } from "./types";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderScoreTable } from "./parts";
 
-export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "firstSteps" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
+export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "firstSteps" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "runOutcome" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
   const deltaTxt =
@@ -101,19 +101,9 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
 
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
-    <h2>${escapeHtml(
-      s.massRace
-        ? s.racePlace === 1
-          ? "Race won!"
-          : s.racePlace <= 3 && s.racePlace > 0
-            ? "Podium finish!"
-            : s.racePlace > 0
-              ? "Race finished"
-              : "Knocked out"
-        : (END_REASON_TITLE[s.endReason] ?? "Flight completed")
-    )}</h2>
-    <p class="end-reason">${escapeHtml(s.massRace ? "" : (END_REASON_LINE[s.endReason] ?? ""))}</p>
-    <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
+    <h2>${escapeHtml(recapTitle(s))}</h2>
+    <p class="end-reason">${escapeHtml(recapLine(s))}</p>    <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
+    ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
     ${s.newBest ? `<div class="new-best">${menuIconSm("crown")} ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
@@ -133,6 +123,9 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
 
+    ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
+    ${renderNextFlight(s)}
+
     <div class="btn-row result-links">
       <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
       <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
@@ -144,9 +137,6 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     </div>` : ""}
     ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
 
-    ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
-
-    ${renderNextFlight(s)}
     <details class="result-details"><summary>${t("hud.renderGameOver.FDetails", undefined, "Flight details ")}<span>Landmarks &amp; skill</span></summary><div class="over-stats">
       <div><span>Perfects</span><b>${s.perfects}</b></div>
       <div><span>${t("hud.renderGameOver.SMoments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
@@ -159,7 +149,6 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! ${menuIconSm("ghost")}` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
     ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}
     ${s.newlyCompleted.length ? `<div class="reward-strip nest">Nest upgraded → Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score</div>` : ""}
-    ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
     ${s.challengeOutcome ? `<div class="reward-strip ${s.challengeOutcome.includes("missed") ? "nest" : ""}">${escapeHtml(s.challengeOutcome)}</div>` : ""}
     ${duelStrip}
     ${raceStrip}
@@ -360,23 +349,23 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   // exit — never hidden, never the only way out.
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
-    <h2>${t("hud.renderContinue.SWind", undefined, "Second wind?")}</h2>
-    <p class="tagline">Sunbird is dozing off at ${distanceText(s.distance)}.</p>
+    <h2>${t("hud.renderContinue.SWind", undefined, "How far can you get?")}</h2>
+    <p class="tagline">${t("hud.renderContinue.Landed", undefined, "You landed at")} ${distanceText(s.distance)} — ${t("hud.renderContinue.DayNotOver", undefined, "the day isn't over yet")}</p>
     ${s.continueReason ? `<p class="continue-reason${s.continueHighlight ? " is-highlight" : ""}">${escapeHtml(s.continueReason)}</p>` : ""}
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
       <div><span>Score</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
-    <div class="result-actions">
-      <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
-      <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
-    </div>
     ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("clapper")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("clapper")} ${portal ? "Watch for Second Wind" : t("hud.renderContinue.WatchAd", undefined, "Watch a short ad · keep flying")} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s ${t("hud.renderContinue.ToDecide", undefined, "to decide")} ${clockSvg()}</button></div>`
       : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
-    ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ Gold · free wake-up</button>` : ""}
-    <p class="fineprint replay-note">Sleep ends the flight and shows your recap. Waking up keeps this run alive from where it landed.</p>
+    <div class="result-actions">
+      <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>${t("hud.renderContinue.KeepFlying", undefined, "Keep flying")} · ● ${s.continueCost} <small>(${t("hud.renderContinue.YouHave", undefined, "you have")} ${s.wallet})</small></button>
+      <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "End the flight")}</button>
+    </div>
+    ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ ${t("hud.renderContinue.GoldFree", undefined, "Gold members fly on — free")}</button>` : ""}
+    <p class="fineprint replay-note">${t("hud.renderContinue.Note", undefined, "Ending the flight shows your recap. Continuing picks up exactly where you landed.")}</p>
   `;
 }
 
@@ -385,13 +374,13 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
     ? `${PORTAL_DISPLAY_NAME} · sponsored break`
-    : `Sponsored break · ${s.adReason === "continue" ? "your second wind is loading…" : "back to flying in a moment"}`;
+    : `Sponsored break · ${s.adReason === "continue" ? "earns your second wind" : "back to flying in a moment"}`;
   const header = portal
     ? `Advertisement`
     : `Your ad is loading`;
   const subtext = portal
     ? `Your run is paused while the portal serves this break.`
-    : `Back to flying in a moment.`;
+    : `This break plays in full — it can't be skipped. Your flight resumes on its own.`;
   return `
     <div class="ad-label">${label}</div>
     <div class="portal-ad-wait"><div class="spinner"></div><h3>${header}</h3><p>${subtext}</p></div>
@@ -407,13 +396,13 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
           // so there is nothing here to press: this is a read-only status
           // chip, not a control.
           // `adSkippable` is `!portalEnabled()` (Game.ts), so this chip only ever
-          // renders on a PLACEHOLDER break — one the game times itself — and
-          // `adTimer` is therefore a real countdown on exactly this path. It
-          // was briefly swapped for a flat "Second Wind loading…" when
-          // adReason === "continue", which hid the only number that says when
-          // a self-timed break ends. The portal path never reaches this branch;
+          // renders on a PLACEHOLDER break — one the game times itself —
+          // and `adTimer` is therefore a real countdown on exactly this path.
+          // The copy states the unskippable contract ("plays in full") while
+          // keeping the number: it is the only thing that says when a
+          // self-timed break ends. The portal path never reaches this branch;
           // it takes the escape hatch below, which has no number to show.
-          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>Continues in <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
+          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>${t("hud.renderAd.PlaysInFull", undefined, "Ad plays in full · continues in")} <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
           // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
           // so this used to render enabled with a flat "Return to flight" from
           // the first frame of every break — one click skipped a real ad. It is
@@ -430,7 +419,18 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
               }</button>`;
             })()
       }
-      ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
+      ${
+        // The upsell must not read as a skip either. It renders disabled with
+        // its own countdown until the break has played out — the handler gates
+        // the action independently (see handleAction/adBreakCanEnd), so this
+        // is honesty in the view, not the enforcement.
+        canRemoveBreaks
+          ? (() => {
+              const ready = s.adTimer <= 0;
+              return `<button class="mini-btn gold" data-ui data-action="ad-gold"${ready ? "" : " disabled"}>✦ Remove breaks${ready ? "" : ` · in ${Math.ceil(Math.max(0, s.adTimer))}s`}</button>`;
+            })()
+          : ""
+      }
     </div>
   `;
 }
@@ -461,12 +461,38 @@ export function resultsPrimaryAction(
 }
 
 /**
- * How each ending is named on the results card.
- *
- * Three deaths used to produce one card reading "Flight completed" — including
- * a settle-death that fires with most of the daylight still on the meter, which
- * cannot be read as "the sun won" by any player.
+ * The recap headline is outcome-aware (playbook §3). The old maps framed
+ * every end reason as a defeat — "The sun beat you" greeted a player who
+ * flew the whole day trip to sundown, which is the mode *completing*, not
+ * losing. `runOutcome` (same contract the Poki funnel reports) now decides
+ * the frame: completed runs get earned-pride copy so the retry reads as
+ * "go further" instead of "erase a failure"; only genuine fails coach.
  */
+const recapTitle = (s: { endReason: HudSnapshot["endReason"]; runOutcome: HudSnapshot["runOutcome"]; massRace?: HudSnapshot["massRace"]; racePlace?: HudSnapshot["racePlace"] }): string => {
+  // Races keep their own headline (merged from the portal session's copy):
+  // a podium is a podium, not "you flew to sundown".
+  if (s.massRace) {
+    if (s.racePlace === 1) return "Race won!";
+    if (s.racePlace !== undefined && s.racePlace > 0 && s.racePlace <= 3) return "Podium finish!";
+    if (s.racePlace !== undefined && s.racePlace > 0) return "Race finished";
+    return "Knocked out";
+  }
+  if (s.runOutcome === "complete") {
+    if (s.endReason === "settled") return "Flight complete — landed clean";
+    return "You flew to sundown";
+  }
+  return END_REASON_TITLE[s.endReason] ?? "Flight completed";
+};
+
+const recapLine = (s: { endReason: HudSnapshot["endReason"]; runOutcome: HudSnapshot["runOutcome"]; massRace?: HudSnapshot["massRace"] }): string => {
+  if (s.massRace) return "";
+  if (s.runOutcome === "complete") {
+    if (s.endReason === "settled") return "You brought the glide home yourself. Full card, full flight.";
+    return "The day ran its course and you flew all of it — that's a complete flight.";
+  }
+  return END_REASON_LINE[s.endReason] ?? "";
+};
+
 const END_REASON_TITLE: Record<string, string> = {
   daylight: "The sun beat you",
   water: "You washed out",

@@ -1,7 +1,7 @@
 import { buildStamp } from "./version";
 import { skinShape } from "./Sunbird";
 import { biomeClimb } from "./FlightProgression";
-import { islandTemplate } from "./Biomes";
+import { chartingBonus, islandTemplate } from "./Biomes";
 import { FRENZY_AT, chainBonus, chainLabel, chainPulse, chainScale, chainTier, isFrenzyMoment } from "./ChainFlair";
 import { splitLayout, splitViews } from "./Viewport";
 import { iconGlyph } from "./MenuIcons";
@@ -23,6 +23,7 @@ import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, S
 import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Moments";
 import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
+import { outcomeForNaturalEnd } from "./runOutcome";
 import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
@@ -214,6 +215,8 @@ const BIOME_INTRO_HINTS: Record<string, string> = {
   aurora:  "Ice faces are steep — HOLD hard, RELEASE hard",
   volcano: "Jagged spikes — tiny timing windows, maximum rewards",
   canyon:  "Plateau then cliff — hold steady, explode off the lip",
+  amethyst:"Floaty air — long faces, chain the spires into one glide",
+  grove:   "Long golden glades — one glide can cross the whole grove",
 };
 
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };
@@ -645,6 +648,8 @@ export class Game {
   private weeklyMods = { coinMult: 1, gravityMult: 1, windMult: 1, daylightMult: 1 };
   /** Golden Hour: the last stretch of daylight — 2× coins, amber world. */
   private goldenHour = false;
+  /** One-shot pre-cue for golden hour (see the daylight block in the run loop). */
+  private goldenCued = false;
   private nextMilestone = 500;
   private rivalBeatenToast = false;
 
@@ -1874,6 +1879,7 @@ export class Game {
         slope: this.terrain.slopeAt(this.bird.x),
         justLaunched: this.bird.justLaunched,
         airborne: !this.bird.grounded,
+        islandIndex: this.island,
       });
       if (this.coach.done) {
         this.save.state.firstFlightDone = true;
@@ -2111,7 +2117,16 @@ export class Game {
     if (biomeNow.id !== this.lastBiomeId) {
       this.lastBiomeId = biomeNow.id;
       const isNew = this.save.markBiomeSeen(biomeNow.id);
-      if (isNew) this.hud.toast(`New shores charted: ${biomeNow.name}`, "island");
+      if (isNew) {
+        // Charting bonus: the first arrival in a world pays coins that scale
+        // with depth (see Biomes.chartingBonus). runCoins is the run tally
+        // paid once by recordRun() — same path as surprise coins, so the
+        // recap total and the wallet can never disagree with the toast.
+        const bonus = chartingBonus(biomeNow.id);
+        this.runCoins += bonus;
+        this.hud.toast(t("hud.toast.biomeCharted", { name: biomeNow.name, bonus: String(bonus) }, `New shores charted: ${biomeNow.name} · +${bonus}\u25cf`), "gold");
+        this.telemetry.track("biome_charted", { biome: biomeNow.id, bonus });
+      }
       // Set a short gameplay hint so the player knows what's different here.
       this.biomeHint = BIOME_INTRO_HINTS[biomeNow.id] ?? "";
       this.biomeHintTimer = this.biomeHint ? 9 : 0;
@@ -2622,10 +2637,23 @@ export class Game {
       // GOLDEN HOUR — the last 22% of the day. The world turns amber, the
       // music opens, and every coin is worth double. Deep runs get a reason.
       const goldenNow = this.daylight > 0 && this.daylight < this.daylightMax() * 0.22;
+      // ANTICIPATION CUE — a soft heads-up while there is still daylight to
+      // spend: "golden hour soon" tells the player the run has a late-game
+      // payoff worth flying to, which is exactly the stretch where new
+      // players quit (the 2026-10-04 fit test lost most runs mid-flight).
+      // Once per run, one line, no siren: the payoff itself still lands as
+      // the surprise when the hour arrives.
+      if (
+        !this.goldenCued && !this.goldenHour && this.daylight > 0 &&
+        this.daylight < this.daylightMax() * 0.35 && this.daylight >= this.daylightMax() * 0.22
+      ) {
+        this.goldenCued = true;
+        this.hud.toast("Golden hour soon — coins ×2 while the sun sets", "info", "half_day", { mustShow: true });
+      }
       if (goldenNow && !this.goldenHour) {
         this.goldenHour = true;
         this.audio.goldenHour();
-        this.hud.toast(`GOLDEN HOUR — coins are worth double`, "gold", "half_day");
+        this.hud.toast(`GOLDEN HOUR — coins are worth double`, "gold", "half_day", { mustShow: true });
         this.flash("fever");
         this.glow(0.8);
       } else if (!goldenNow && this.goldenHour) {
@@ -2821,14 +2849,12 @@ export class Game {
     } else if (q < 0.8) {
       // A player's very first touchdown is absorbed rather than punished.
       //
-      // The opening is deterministic: startX is 64 for every non-race mode, so
-      // everyone touches down on the same terrain feature, and the coach's own
-      // first instruction is "HOLD to dive" with the thumb already down. Held,
-      // that is GRAVITY_DIVE from START_ALTITUDE, measured at ~0.70 s to a
-      // touchdown with landingQuality ~0.45 and ~19% of the speed gone. So the
-      // tutorial was punishing the exact input it had just asked for, on the
-      // first frame of the first run, identically for every player — and the
-      // result card for that run then reads as a bad one.
+      // (The original trigger — the held-dive touchdown 0.70 s into every run
+      // from the old 14 m airborne start — is gone now that runs start
+      // grounded; the guard stays as a net for a genuinely rough first-run
+      // landing mid-flight.) The combo and the hit-stop are what teach
+      // "land well"; neither has anything to say to a player who has not yet
+      // flown.
       //
       // The combo and the hit-stop are what teach "land well"; neither has
       // anything to say to a player who has not yet flown.
@@ -3627,8 +3653,9 @@ export class Game {
     this.exitVersus();
     this.mode = modeById(this.modeId);
     // Portal game events: open this attempt's measurement span. The run is a
-    // `fail` until the goal is actually reached (death/sun-out/elimination
-    // all keep it a fail).
+    // `fail` until its goal is actually reached — a finish line, OR (in the
+    // no-finish-line modes) a natural end after a real flight; see
+    // `runOutcome.ts` for the full contract.
     this.runOutcome = "fail";
     this.platform?.measure("run", this.modeId, "start");
     // Snapshot the record to beat BEFORE this run writes anything, so the
@@ -3686,6 +3713,7 @@ export class Game {
     if (this.eventRun) this.weeklyMods = weeklyEvent().mods;
     this.serverPlaceApplied = false;
     this.goldenHour = false;
+    this.goldenCued = false;
     this.nextMilestone = 500;
     this.rivalBeatenToast = false;
     this.stormPhase = 1;
@@ -3933,6 +3961,20 @@ export class Game {
     this.bird.asleep = true;
     this.endReason = reason;
     this.daylight = 0;
+    // An honest outcome for a mode with no finish line: the flight IS the
+    // goal, so sunset after a real flight or choosing to land and rest is the
+    // run COMPLETING, while ditching in the sea or a no-show launch stays a
+    // fail. Finish-line modes keep their own rule (cross = complete, anything
+    // else = fail) — this branch only fires where `finish === 0`, where the
+    // old rule reported every run in the game's DEFAULT mode as a fail (the
+    // recap screen celebrated a flight the funnel said 0 % of players ever
+    // completed). See runOutcome.ts for the full contract.
+    if (this.mode.finish === 0 && this.runOutcome !== "complete") {
+      this.runOutcome = outcomeForNaturalEnd(reason, {
+        distance: this.bird.x - this.startX,
+        runTime: this.runTime,
+      });
+    }
     // Death drama: the sun wins in slow motion. Reuses the zenith slow-mo
     // plumbing so time restores itself automatically.
     this.timeScale = 0.35;
@@ -4025,7 +4067,9 @@ export class Game {
     // the server's official-place echo still needs the local finish times.
     if (this.massRace.active) this.massRace.group.visible = false;
     // Portal game events: one outcome per attempt — `complete` when the run
-    // reached its goal, `fail` when it ended by death/elimination/sun-out.
+    // reached its goal (crossed its finish line, or — in a no-finish-line
+    // mode — flew a real flight to its natural end), `fail` when it fell
+    // short (ditched, eliminated, or a no-show launch).
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
     this.platform?.measure("run", this.modeId, this.runOutcome);
@@ -4052,7 +4096,11 @@ export class Game {
       this.hud.toast("Flight logged! Scroll down to open the Shop and spend your coins", "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
-      this.hud.toast("Ready for the social sky? Challenge a rival or try today's course", "quest");
+      // A concrete, time-limited next goal beats a vague social nudge for a
+      // player two runs in: the daily course is live content with a payout,
+      // and naming it is the CTA (playbook lever 9). The social sky keeps its
+      // own surfaces — the lobby, the recap's challenge buttons.
+      this.hud.toast("Today's Daily Challenge is live — bonus coins on the daily course", "gold", "sun");
     }
 
     // A duel abandoned short of the line is a loss — no free retries on rating.
@@ -4484,11 +4532,20 @@ export class Game {
     this.terrain.setDifficulty(!isRaceMode(this.modeId) && this.seed.startsWith("fly-") ? this.flow.difficulty() : 1);
     const course = isRaceMode(this.modeId) ? this.courseForRace() : null;
     this.startX = course ? course.island * ISLAND_PERIOD + 64 : 64;
-    // Start in flight, not on the surface. See START_ALTITUDE: parked on the
-    // terrain the bird "landed" again 0.3 s into every run and the opening frame
-    // showed a bird sunk into the grass.
-    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + START_ALTITUDE;
+    // Start ON the ground — perched on the opening hill, matching the flock
+    // (MassRace spawns rivals at heightAt + BIRD_RADIUS) and the tutorial's
+    // first cue, which teaches the dive FROM the ground. See START_ALTITUDE
+    // for the full history: the old 14 m drop-in opened every run with a fall
+    // the player never chose and handed the climb goal free altitude.
+    // grounded + wasGrounded are set AFTER reset so the first physics step
+    // reads ground→ground: no phantom "justLanded" beat, no landing quality
+    // scored for existing, no sunk-into-the-grass frame.
+    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + 0.5 + START_ALTITUDE;
     this.bird.reset(this.startX, y);
+    if (START_ALTITUDE <= 0.5) {
+      this.bird.grounded = true;
+      this.bird.wasGrounded = true;
+    }
     // Re-seed the render-interpolation snapshot. `visX` is
     // `lerp(prevBirdX, bird.x, interp)`, and `interp` is 0 whenever the
     // accumulator is empty — which is the ENTIRE start countdown, because
@@ -7309,18 +7366,12 @@ private liveCount(): number {
     this.startRun({ storm: this.stormfront });
   }
 
-  /** Instantiates the appropriate multiplayer backend for this build:
-   *  Poki uses WebRTC P2P via @poki/netlib; direct/crazy/generic keep the
-   *  existing WebSocket relay. The two classes share the same public API
-   *  so Game.ts doesn't need to branch elsewhere.
+  /** Pre-seats the lobby so the Race screen shows live pilots immediately.
    *
-   *  The Poki client is loaded via a DYNAMIC import guarded by a
-   *  compile-time constant (`VITE_PORTAL_TARGET === "poki"`). Rollup
-   *  can statically evaluate this: in non-Poki builds the branch is
-   *  dead-code-eliminated along with the dynamic import, so @poki/netlib
-   *  (~34 KB gz, with WebRTC + the wss:// signalling URL) is NEVER
-   *  emitted into direct/crazy/generic/none bundles. */
-  /** Pre-seats the lobby so the Race screen shows live pilots immediately. */
+   *  The transport itself comes from `createNetTransport()` (net-transport.ts):
+   *  the Poki build gets the Netlib P2P client behind a dynamic import, and a
+   *  browser without WebRTC gets the WebSocket relay client. Both classes
+   *  share the same public API so this file does not branch anywhere. */
   private preseatLobby(): void {
     // Warm the ghost source too so the next grid can seat real names.
     void this.refreshBoard();
@@ -7819,8 +7870,12 @@ private liveCount(): number {
         if (this.continuesUsed < max) this.doContinue("portal_rewarded");
         else this.setState("continue");
       } else {
+        // The break did not pay: the player closed the portal's ad early (the
+        // SDK resolves earned=false), or the SDK had nothing to serve. Either
+        // way the rule is the ad plays to the end or there is no second wind —
+        // say the rule, so "skip" never looks like it might have worked.
         this.setState("continue");
-        this.hud.toast("No reward this time — try coins or rest", "warn");
+        this.hud.toast("The ad has to play to the end — try again, or use coins", "warn");
       }
     } finally {
       this.continueRewardBusy = false;
@@ -8407,7 +8462,9 @@ private liveCount(): number {
     biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
     atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
     farthestIsland: Math.max(st.farthestIsland, this.island),
+    fps: this.frameEma > 0 ? Math.round(1 / this.frameEma) : 0,
     endReason: this.endReason,
+    runOutcome: this.runOutcome,
     launchBanner: this.launchBannerText,
     launchBannerT: this.launchBannerT,
     launchRating: this.lastLaunch?.rating ?? "none",

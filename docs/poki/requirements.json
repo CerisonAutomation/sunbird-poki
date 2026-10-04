@@ -478,9 +478,9 @@
       "verify": {
         "type": "grep",
         "path": "src/game/hud/run.ts",
-        "pattern": "Let it sleep"
+        "pattern": "End the flight"
       },
-      "evidence": "Free restart and free 'let it sleep' paths always exist; no mode is ad-gated."
+      "evidence": "Free restart and free 'End the flight' paths always exist; no mode is ad-gated. (2026-10-04 copy pass: 'Let it sleep' became 'End the flight' — same plain exit, plainer words.)"
     },
     {
       "id": "MON-04",

@@ -316,8 +316,34 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 
 /* Visible home navigation replaces the catch-all Explore dropdown. */
 .menu-hero { container-type: inline-size; }
-.home-launch { width:100%; margin:8px 0 16px; min-height:64px; }
+.home-launch-row { display:flex; gap:8px; align-items:stretch; margin:8px 0 16px; }
+.home-launch { flex:1 1 auto; min-width:0; margin:0; min-height:64px; }
 .home-launch span { display:block; font-size:12px; font-weight:500; letter-spacing:0; text-transform:none; margin-top:4px; }
+/* ── Quick loadout: the pre-flight shop chip beside "Fly now" ──────────────
+   The player's ask: a way to change bird, trail and boosters at the exact
+   moment of launching, not three screens deep. One compact card next to the
+   big button — the equipped bird IS the art, the trail and staged boosts are
+   the state, and the whole thing is one tap into the Loadout screen. */
+/* The chip carries `destination` in its class list, so the paper palette
+   (border, background, ink, hover) comes from `.destination` — zero new raw
+   colours; this block is layout only, which keeps the colour ratchet flat. */
+.loadout-quick {
+  flex:0 0 auto; display:flex; align-items:center; gap:8px;
+  min-width:118px; max-width:170px; padding:8px 12px; min-height:64px;
+}
+.loadout-quick .lq-art { display:flex; align-items:center; }
+.loadout-quick .lq-art svg { display:block; }
+.loadout-quick .lq-copy { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.loadout-quick .lq-copy small { display:block; font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
+.loadout-quick .lq-copy b { display:block; font-size:13px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loadout-quick .lq-copy > span { display:block; font-size:11px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:0; }
+.loadout-quick .lq-go { margin-left:auto; display:flex; align-items:center; }
+.loadout-quick .lq-go { margin-left:auto; color:#b68a63; display:flex; align-items:center; }
+/* Short screens: keep the pair but let the chip shrink to icon + name. */
+@media (max-height:520px), (max-width:360px) {
+  .loadout-quick { max-width:120px; padding:6px 10px; }
+  .loadout-quick .lq-copy > span { display:none; }
+}
 /* Full-width rows. The 2-up grid left a dead cell next to every odd tile and
    made half-width tiles on a phone, which read as gaps rather than a menu;
    one column means every destination spans the card edge to edge. */
@@ -342,6 +368,28 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .home-section-title { text-align:left; font-size:11px; font-weight:800; color:#a08060; letter-spacing:.08em; text-transform:uppercase; margin:22px 0 10px; }
 .progress-destinations .destination { min-height:60px; background:rgba(255,255,255,0.5); border-color:#e8dfd0; }
 .home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid #dfd0bd; padding-top:14px; }
+/* The status bar variant: the home sheet's first row, sticky, so the wallet
+   is on screen for the whole scroll instead of being the last thing found.
+   Paper gradient + bottom border, because content scrolling under a
+   transparent bar turns the numbers into noise. */
+.home-status-bar {
+  position: sticky; top: 0; z-index: 6;
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: nowrap; justify-content: flex-start;
+  /* Right padding clears the absolutely-positioned mute button (44px) that
+     shares the top row, so the Pass chip can never slide under it. */
+  margin: 0 -18px 10px; padding: 10px 62px 9px 18px;
+  background: linear-gradient(180deg, #fffaf1 78%, rgba(255, 250, 241, 0.9));
+  border-bottom: 1px solid #dfd0bd;
+  font-size: 12px; color: var(--muted-rose); text-align: left;
+}
+.home-status-bar .record-wallet { margin-left: 0; font: 600 16px var(--display); color: #976425; }
+.home-status-bar .record-wallet small { font: 500 10px var(--body); }
+.home-status-bar .record-pass { margin-left: auto; flex-shrink: 0; }
+.home-status-bar .record-best { display: flex; align-items: center; gap: 4px; }
+.home-status-bar .record-best b { font: 600 14px var(--display); color: #3e5642; }
+.home-status-bar .record-art { flex: 0 0 auto; width: 18px; height: 18px; }
+@media (max-width: 380px) { .home-status-bar .record-best small, .home-status-bar .record-best span:not(.record-art) { font-size: 11px; } .home-status-bar { gap: 7px; } }
 .onboarding-route { margin: 0 0 14px; padding: 12px; border: 1px solid #e1bd67; border-radius: 16px; background: linear-gradient(145deg,#fff7d6,#fffdf4); text-align: left; box-shadow: 0 4px 0 rgba(180,130,30,.12); }
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
 .onboarding-route-head span { font:800 10px/1 var(--body); letter-spacing:.14em; }

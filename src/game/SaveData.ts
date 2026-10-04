@@ -68,6 +68,8 @@ export type Settings = {
    */
   tapToggleDive: boolean;
   quality: Quality;
+  /** Show a live FPS counter in the flight HUD (perf transparency, off by default). */
+  showFps: boolean;
   /** Distance unit preference: "km" (default) or "mi". */
   distUnit: "km" | "mi";
   /**
@@ -307,6 +309,7 @@ const DEFAULT_SETTINGS: Settings = {
   bigText: false,
   tapToggleDive: false,
   quality: "auto",
+  showFps: false,
   distUnit: "km",
   autoShop: true,
   dismissedOnboarding: false,
@@ -650,6 +653,7 @@ export class SaveData {
           bigText: Boolean(p.settings?.bigText),
           tapToggleDive: Boolean(p.settings?.tapToggleDive),
           quality: quality === "high" || quality === "low" ? quality : "auto",
+          showFps: Boolean(p.settings?.showFps),
           distUnit: p.settings?.distUnit === "mi" ? "mi" : "km",
           // Undefined (a save from before this existed) means on, matching
           // DEFAULT_SETTINGS — an explicit `false` is respected.

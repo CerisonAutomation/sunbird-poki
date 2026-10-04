@@ -122,6 +122,24 @@ export const PVP_WORLDS: PvpWorldCourse[] = [
     tagline: "Vast red canyon walls with extreme vertical descents",
     difficulty: "★★★★★",
   },
+  {
+    id: "hollow",
+    name: "Hollow Crown",
+    biomeId: "amethyst",
+    island: 9,
+    emoji: "gem",
+    tagline: "Violet glass spires hanging in slow, weightless air",
+    difficulty: "★★★★★",
+  },
+  {
+    id: "gilded",
+    name: "Gilded Mile",
+    biomeId: "grove",
+    island: 10,
+    emoji: "star",
+    tagline: "Endless golden glades — one glide can cross the whole grove",
+    difficulty: "★★★★☆",
+  },
 ];
 
 export const MODES: ModeDef[] = [

@@ -292,8 +292,16 @@ export type HudSnapshot = {
   farthestIsland: number;
   showTutorialHand: boolean;
   /* --- momentum / flight readouts --- */
+  /** Live frame rate (from the adaptive-quality EMA), 0 before the first
+   *  measured frame. Rendered by the optional FPS chip (settings.showFps). */
+  fps: number;
   /** How the run ended, so the card can say so. */
   endReason: "daylight" | "water" | "settled";
+  /** Whether the run actually ended in failure. A run that simply ran its
+   *  course (daylight out, or a settled landing after a full card) is a
+   *  complete run, and the recap headline must celebrate it, not mourn it —
+   *  shaming successful players is how a recap loses the retry. */
+  runOutcome: "complete" | "fail";
   launchBanner: string;
   launchBannerT: number;
   launchRating: string;

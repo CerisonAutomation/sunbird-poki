@@ -14,19 +14,22 @@
  * ACQUIRE_MS is the cost of a PERIPHERAL novel target on a moving background.
  * The fovea — the only region with reading acuity — is 1.5-2 degrees of visual
  * field, and a one-button game pins gaze to the bird, so anything off the bird
- * is read at a discount. MS_PER_WORD is 415 ms: 238 wpm from Brysbaert's 2019
- * meta-analysis of 190 studies, reduced for peripheral placement, for divided
- * attention, and for reading an isolated phrase rather than connected prose.
+ * is read at a discount. MS_PER_WORD is 470 ms: Brysbaert's 2019 meta-analysis
+ * (190 studies) puts silent reading at 238 wpm (415 ms/word); raised for the
+ * 2026-10-04 directive, because Poki's audience is global and much of it
+ * reads the game's English as a second language, where reading rates run
+ * 30-50% under the meta-analytic mean. Peripheral placement and divided
+ * attention are priced on top of that.
  *
  * WORDS, not characters, because a character is the wrong unit — a two-letter
  * word costs more per character than a seven-letter one, so a character model
  * misprices both ends.
  */
 export const TOAST_ACQUIRE_MS = 450;
-export const TOAST_MS_PER_WORD = 415;
-export const TOAST_FLOOR_MS = 1100;
+export const TOAST_MS_PER_WORD = 470;
+export const TOAST_FLOOR_MS = 1400;
 /** The layer can be occupied; an unbounded hold deadlocks it. */
-export const TOAST_CEIL_MS = 6000;
+export const TOAST_CEIL_MS = 7500;
 
 /**
  * Extra wall-clock a message may be WAITED while its lane is closed, on top of

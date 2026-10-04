@@ -333,3 +333,81 @@ test("the Poki leaderboard overlay is offered once the SDK reports it", async ({
     .toBe(true);
   expect(app.errors).toEqual([]);
 });
+
+/**
+ * The PvP wiring contract, proven on the SHIPPING BUILD.
+ *
+ * For the whole life of this fork `net-transport.poki.ts` existed and nothing
+ * imported it: the Poki zip resolved `./net-transport` to the neutral module
+ * and got the WebSocket relay client, which — with `VITE_MULTIPLAYER_URL`
+ * shipped empty — answered every race with "No multiplayer server configured"
+ * while the menu advertised live PvP. Every source-level audit passed, because
+ * each checked the transport file in isolation and none checked that anything
+ * resolves to it.
+ *
+ * The only witness that cannot lie is the bundle's own network behaviour:
+ * opening the Race Lobby must open a Netlib signalling socket
+ * (`wss://netlib.poki.io/v0/signaling`) — an attempt, whether or not the
+ * sandbox can reach it — and must never dial a self-hosted relay. A revert to
+ * the neutral transport fails here with zero sockets opened.
+ */
+test("opening the Race Lobby races over Poki Netlib, not a dead relay", async ({ page }) => {
+  // Count WebSocket CONSTRUCTIONS inside the page, not `page.on("websocket")`:
+  // in this headless build sockets that die during establishment (the harness
+  // has no egress to poki.io) never surface as Playwright websocket events,
+  // while the constructor call is an unconditional fact about the bundle.
+  await page.addInitScript(() => {
+    const Original = window.WebSocket;
+    const w = window as unknown as { __wsDials: string[] };
+    w.__wsDials = [];
+    const Wrapped = function (this: unknown, url: string | URL, protocols?: string | string[]) {
+      w.__wsDials.push(String(url));
+      return protocols === undefined ? new Original(url) : new Original(url, protocols);
+    } as unknown as typeof WebSocket;
+    Wrapped.prototype = Original.prototype;
+    Object.assign(Wrapped, Original);
+    window.WebSocket = Wrapped;
+  });
+
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.openMenu("open-live", "Race Lobby");
+
+  // The lobby screen itself does not connect — hosting a private room does
+  // (host-room → Game.preseatLobby → createNetTransport →
+  // PokiNetlibClient.connect → `new Network()` → signalling socket). The
+  // prewarm import may dial too; either way, a Netlib dial must happen.
+  await page.getByRole("button", { name: "Create Private Room", exact: true }).click();
+
+  const netlibDials = () =>
+    page.evaluate(() =>
+      ((window as unknown as { __wsDials?: string[] }).__wsDials ?? []).filter((u) =>
+        /wss?:\/\/netlib\.poki\.io/.test(u),
+      ).length,
+    );
+  await expect
+    .poll(netlibDials, {
+      timeout: 30_000,
+      message: "no Netlib signalling dial was ever made — the shipped bundle is not using the Poki transport",
+    })
+    .toBeGreaterThan(0);
+
+  // And the other direction: a Poki build has no relay to dial. The broken
+  // wiring dialled nothing at all, and a *mis*wired one would try ws(s)://…/mp
+  // — either way this assertion names the regression.
+  const relays = await page.evaluate(
+    () => ((window as unknown as { __wsDials?: string[] }).__wsDials ?? []).filter((u) => !/netlib\.poki\.io/.test(u)),
+  );
+  expect(relays, "the Poki build must not dial any non-Netlib WebSocket").toEqual([]);
+
+  // The signalling socket cannot connect in this harness (no egress to
+  // poki.io), so the client must degrade honestly — an AI-fallback room or an
+  // error state — without the GAME throwing. The browser's own "WebSocket
+  // connection failed" console line is the environment talking, not the game:
+  // on the real portal the socket connects. Filter it before judging.
+  const realErrors = app.errors.filter(
+    (e) => !/WebSocket connection to ['"]wss:\/\/(netlib\.poki\.io|auds\.poki\.io)/.test(e),
+  );
+  expect(realErrors, "the game itself must not throw while the transport degrades").toEqual([]);
+});
+

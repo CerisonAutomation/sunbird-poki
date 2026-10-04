@@ -113,7 +113,6 @@ export const KNOBS: readonly Knob[] = [
   tune("DROP_START", "Drop-in start", "World", 200, 5000, 10, { unit: "m", scope: "layout", note: "where the entry slope begins" }),
 
   tune("START_SPEED", "Start speed", "Flight", 5, 200, 1, { unit: "m/s", scope: "run" }),
-  tune("START_ALTITUDE", "Start altitude", "Flight", 0, 200, 1, { unit: "m", scope: "run", note: "the run peak scores the climb goal, so this hands out part of it" }),
   tune("ALT_CEILING", "Altitude ceiling", "Flight", 30, 900, 5, { unit: "m", note: "Star Wish sits at 153-207 m; below that and the band clips them" }),
 
   tune("CAMERA_BASE_Z", "Camera distance", "Camera", 4, 200, 0.5, { unit: "m" }),

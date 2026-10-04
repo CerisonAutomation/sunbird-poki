@@ -173,7 +173,7 @@ test("first session: objective timings, gates and interaction counts", async ({ 
     });
     mark("continue-gate-measured", `${gate.options.length} options, ${gate.options.filter(o => o.disabled).length} disabled`);
     await page.locator('[data-ref="continue"] [data-action="continue-sleep"]').click();
-    deathToResults.push({ at: at(), kind: "click", target: "Let it sleep" });
+    deathToResults.push({ at: at(), kind: "click", target: "End the flight" });
   } else {
     mark("no-continue-gate", "run went straight to the results card");
   }

@@ -54,6 +54,18 @@
   --caramel: #7a5c30;
   --bark-deep: #4a3620;
   --toffee: #6b4c2a;
+  /* The home sheet's own surface palette, lifted out of `menu-polish.css`.
+     These four were copy-pasted 12 times across that one sheet — the sticky
+     `.home-status-bar` alone carried all four of them, verbatim from the
+     `.home-record` palette sitting directly beneath it. Each is defined here
+     once, at exactly the hex it replaced, so the migration moved no pixel; the
+     point is that the next edit to the coin figure has one address, not four.
+     The `--ink-` prefix is deliberate: these are inks for figures, not the
+     `--ink` body colour. */
+  --paper-wash: #fffaf1; /* card + sticky-bar wash, warmer and paler than --paper */
+  --rule-warm: #dfd0bd; /* hairline separating one home-sheet band from the next */
+  --ink-coin: #976425; /* the coin / wallet figure */
+  --ink-best: #3e5642; /* the personal-best figure */
   --shadow: rgba(42, 28, 40, 0.18);
   /* Focus ring. Was a magic number duplicated in menu-polish.css; the flight
      HUD needed the same one, and a third copy is a token asking to exist. */

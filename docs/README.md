@@ -76,11 +76,25 @@ markdown — so this stays true instead of being true once.
 
 ## Snapshots — evidence, not guidance
 
-* [`audits/`](./audits/) — 15 dated audits. Each carries a `Status:` line saying
+* [`audits/`](./audits/) — 21 dated audits. Each carries a `Status:` line saying
   whether its findings were resolved, and what replaced it for live status.
 * [`archive/`](./archive/) — 11 superseded or parked documents (old extracts,
   one-shot agent prompts, a migration plan whose premise is now false, and the
   non-Poki backlog parked on 2026-09-23). Kept for provenance.
+
+<!-- canonical-claims
+These numbers are measured from disk by `pnpm docs:audit` and must match it.
+Adding a test file, a translation key or an audit means updating this block —
+that is the point. Do not hand-edit the prose figures above without this.
+tests: 2878
+testFiles: 232
+barrelKeys: 604
+locales: 36
+nonEnglishCells: 21140
+englishCells: 635
+audits: 21
+archive: 11
+-->
 
 ## Verification chain
 
@@ -95,15 +109,16 @@ pnpm poki:audit      # 131 extracted rules → 116 satisfied / 5 human actions /
 pnpm docs:audit      # doc link / orphan / snapshot-status gate (run separately)
 ```
 
-Numbers as of 2026-09-29: **2,358 unit tests** across 162 files (9 skipped —
-the live-socket suites that need a running room server, which is in the parent
-monorepo), **36 locales × 484 barrel keys** with 100% pack coverage and **250 of 16,940**
-non-English cells still holding English — **1.48%**, down from 55% before the
-translation pass. What remains is correct by design and will not be translated:
-the brand name `Sunbird`, the mode/onomatopoeia names (`FRENZY`, `BOING`,
-`BONK`, `PERFECT`, `RECORD`), acronyms (`AI PvP`), and cognates where the
-English word *is* the native word (`Pilot` in de/tr/pl, `Shop` in de,
-`Account` in it/nl, `Distance`/`Score` in fr).
+Numbers as of 2026-10-04: **2,878 declared unit tests** across 232 files (the
+live-socket suites that need a running room server are skipped in CI-less
+sandboxes — the room server lives in the parent monorepo), **36 locales × 604
+barrel keys** with 100% pack coverage and **635 of 21,140** non-English cells
+still holding English — **3.0%**, down from 55% before the translation pass.
+What remains is correct by design and will not be translated: the brand name
+`Sunbird`, the mode/onomatopoeia names (`FRENZY`, `BOING`, `BONK`, `PERFECT`,
+`RECORD`), acronyms (`AI PvP`), and cognates where the English word *is* the
+native word (`Pilot` in de/tr/pl, `Shop` in de, `Account` in it/nl,
+`Distance`/`Score` in fr).
 
 The locale packs are **fetched, not bundled**. They were once `import.meta.glob`ed
 into lazy chunks that `vite-plugin-singlefile` then inlined whole, so every

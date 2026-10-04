@@ -163,7 +163,7 @@ test("the second-wind card always shows the standard alternatives beside the clo
   expect(app.errors).toEqual([]);
 });
 
-test("\"Let it sleep\" completes the run to the full results card", async ({ page }) => {
+test("\"End the flight\" completes the run to the full results card", async ({ page }) => {
   const app = new SunbirdPage(page);
   await app.open();
   await app.ready();

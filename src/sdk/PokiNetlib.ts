@@ -28,13 +28,21 @@ import { MOVEMENT_LIMITS, PROTOCOL_VERSION } from "../game/protocol/v1";
 import { isPokiMultiplayerAvailable, makePokiRoomCode as makeRoomCode, POKI_NETLIB_GAME_ID as NETLIB_GAME_ID } from "./PokiMpUtils";
 import { gradeStateCadence } from "../game/Racer";
 import { normalizeRooms, sortRooms, type LiveRoom } from "../game/RoomBrowser";
+// The multiplayer domain core, shared with the WebSocket transport: cadence
+// constants, the keyframe vocabulary and the interpolation routine. Only the
+// wire differs between the two, so only the wire lives in this adapter.
+import {
+  INTERP_DELAY,
+  SEND_DT,
+  STALE_AFTER,
+  newTrack,
+  sampleTrack,
+  type PresenceEvent,
+  type PresenceState,
+  type RoomPeer as NetRoomPeer,
+  type Track,
+} from "../game/RoomSync";
 
-/** Outbound state rate — same 15 Hz cadence as the WS transport. */
-const SEND_HZ = 15;
-const SEND_DT = 1 / SEND_HZ;
-/** Render remote pilots this far in the past so we always interpolate. */
-const INTERP_DELAY = 0.12;
-const STALE_AFTER = 6;
 const MAX_CAPACITY = 40;
 /**
  * How long a host waits for the first peer before falling back to a local race.
@@ -43,23 +51,11 @@ const MAX_CAPACITY = 40;
  */
 const LOBBY_WATCHDOG_MS = 45_000;
 
-export type PresenceState = "offline" | "connecting" | "lobby" | "racing" | "error";
-
-export type RoomPeer = {
-  id: string;
-  name: string;
-  hue: number;
-  skin: string;
-  distance: number;
-  place: number;
-  finished: boolean;
-  finishTime: number;
-  emote: string;
-  emoteAt: number;
-  ready: boolean;
+/** This adapter's peer view is the shared room vocabulary plus the one signal
+ *  WebRTC has and a relay does not: measured round-trip latency. */
+export type RoomPeer = NetRoomPeer & {
   /** Round-trip latency in ms from the control channel ping (0 if unavailable). */
   latencyMs: number;
-  you: boolean;
 };
 
 export type RoomInfo = {
@@ -84,33 +80,7 @@ export type RoomInfo = {
   linkNote?: string;
 };
 
-export type PresenceEvent =
-  | { type: "join"; name: string }
-  | { type: "leave"; name: string }
-  | { type: "ready"; name: string }
-  | { type: "finish"; name: string; place: number }
-  | { type: "start" }
-  | { type: "welcome"; roomCode: string; seed: string }
-  | { type: "interrupted"; message: string };
-
-type Keyframe = { t: number; x: number; y: number; rot: number; vx?: number; vy?: number };
-
-type Track = {
-  id: string;
-  name: string;
-  hue: number;
-  skin: string;
-  buffer: Keyframe[];
-  distance: number;
-  finished: boolean;
-  finishTime: number;
-  /** Finish place as agreed in this room (0 until the host assigns one). */
-  place: number;
-  emote: string;
-  emoteAt: number;
-  ready: boolean;
-  lastSeen: number;
-};
+export type { PresenceEvent, PresenceState };
 
 /** Reliable messages between peers. */
 type NetMsg =
@@ -1158,43 +1128,20 @@ private broadcastReliable(msg: NetMsg): void {
     }
   }
 
-  /** Interpolated snapshots for the renderer. */
+  /** Interpolated snapshots for the renderer. Shares the sampling routine with
+   *  the WebSocket transport, so a pilot looks identical on either backend. */
   poll(): RemoteSnapshot[] {
     const out: RemoteSnapshot[] = [];
     const renderAt = (this.serverClock || this.clock) - INTERP_DELAY;
     for (const t of this.tracks.values()) {
-      const b = t.buffer;
-      if (b.length === 0) continue;
-      let a = b[0]!;
-      let c = b[b.length - 1]!;
-      for (let i = 0; i < b.length - 1; i++) {
-        if (b[i]!.t <= renderAt && b[i + 1]!.t >= renderAt) {
-          a = b[i]!;
-          c = b[i + 1]!;
-          break;
-        }
-      }
-      let rx: number;
-      let ry: number;
-      let rrot: number;
-      if (renderAt > c.t) {
-        const ahead = Math.min(0.2, renderAt - c.t);
-        rx = c.x + (c.vx ?? 0) * ahead;
-        ry = c.y + (c.vy ?? 0) * ahead;
-        rrot = c.rot;
-      } else {
-        const span = Math.max(1e-4, c.t - a.t);
-        const u = Math.max(0, Math.min(1, (renderAt - a.t) / span));
-        rx = a.x + (c.x - a.x) * u;
-        ry = a.y + (c.y - a.y) * u;
-        rrot = a.rot + (c.rot - a.rot) * u;
-      }
+      const pose = sampleTrack(t.buffer, renderAt);
+      if (!pose) continue;
       out.push({
         id: t.id,
         name: t.name,
-        x: rx,
-        y: ry,
-        rotation: rrot,
+        x: pose.x,
+        y: pose.y,
+        rotation: pose.rotation,
         finished: t.finished,
       });
     }
@@ -1291,21 +1238,7 @@ private broadcastReliable(msg: NetMsg): void {
   private track(id: string): Track {
     let t = this.tracks.get(id);
     if (!t) {
-      t = {
-        id,
-        name: "Pilot",
-        hue: Math.random(),
-        skin: "sunbird",
-        buffer: [],
-        distance: 0,
-        finished: false,
-        finishTime: 0,
-        place: 0,
-        emote: "",
-        emoteAt: -99,
-        ready: false,
-        lastSeen: this.clock,
-      };
+      t = newTrack(id, this.clock);
       this.tracks.set(id, t);
     }
     return t;

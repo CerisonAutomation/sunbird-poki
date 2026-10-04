@@ -146,6 +146,27 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
   because the rules already live in `SaveData`; if a port approaches the size of `Game`, the seam is
   in the wrong place.
 
+**State of the extraction (audited 2026-10-04).** `handleAction` dispatches six table handlers
+before its own switch: `shopAction` (27 verbs, 9 members), `settingsAction` (17 verbs, 9 members),
+`journeyAction` (8 verbs, 14 members), plus `handleSocialEvent`/`handleRoomEvent`/`handleContinueEvent`
+which are still methods on `Game`. The inline `switch` still carries **55 cases spanning ~550
+lines** — the bulk of it a block of `open-*` navigation verbs. Measured: **zero verbs are handled by
+both a table and the switch**, so the extractions left no duplicated logic behind.
+
+Every writable data member on every port already uses a `get`/`set` pair (`journeyContext` and
+`settingsContext`; `shopContext` has none because all its data members are `readonly`). The next
+table should follow that shape: data members `readonly` unless genuinely rewritten, and each
+writable one an accessor pair — never a plain `modeId: this.modeId` copy.
+
+**The multiplayer hexagon already exists and is separate from this pattern.** `NetTransport`
+(`MassRace.ts`) is the port; `RealtimeClient` (`game/Realtime.ts`, WebSocket) and `PokiNetlibClient`
+(`sdk/PokiNetlib.ts`, WebRTC P2P) are its two adapters. Their shared *domain* logic — the keyframe
+vocabulary, the 15 Hz / 120 ms cadence constants, `newTrack`, and the interpolation routine — now
+lives once in `game/RoomSync.ts`, a pure leaf with no clocks, sockets, or DOM. Only the wire stays in
+the adapters. **When adding shared multiplayer logic, put it in `RoomSync.ts`, not in both
+transports** — the whole reason it exists is that two identical copies of `poll()`'s interpolation
+had to be kept in sync by hand, and nothing in CI caught one being fixed and not the other.
+
 ### Data & network → `src/game/resilience/`
 - Game data calls (leaderboard, ghosts, directory, entitlements) go through `fetchJson` with a
   `breakerKeyFor` key. Never a bare `fetch` for them.

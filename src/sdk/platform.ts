@@ -62,6 +62,27 @@ export type PlatformSystemInfo = {
   applicationType: string | null;
 };
 
+/**
+ * The "we know nothing yet" answer, shared by every adapter.
+ *
+ * Both the local and the Poki adapter began with their own copy of this
+ * literal. Each adapter starts from it and fills in whatever its SDK actually
+ * knows, so an unknown field reads as `null` rather than `undefined` leaking
+ * into a comparison. Adapters spread it (`{ ...EMPTY_INFO }`) rather than hand
+ * back the shared object, so a caller mutating the result cannot corrupt every
+ * later caller.
+ */
+export const EMPTY_INFO: PlatformSystemInfo = {
+  countryCode: null,
+  locale: null,
+  deviceType: null,
+  osName: null,
+  osVersion: null,
+  browserName: null,
+  browserVersion: null,
+  applicationType: null,
+};
+
 /** Invite params passed via portal invite links (roomName, region, …). */
 export type InviteParams = Record<string, string>;
 

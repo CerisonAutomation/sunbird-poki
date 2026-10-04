@@ -9,7 +9,14 @@
  * src/sdk/poki.ts (or crazygames.ts) when building for a different
  * portal, so the real adapter module never reaches Rollup at all.
  */
-import type { PlatformAdapter, PlatformEvents, PlatformIdentity, PlatformSystemInfo, InviteParams } from "./platform";
+import {
+  EMPTY_INFO,
+  type PlatformAdapter,
+  type PlatformEvents,
+  type PlatformIdentity,
+  type PlatformSystemInfo,
+  type InviteParams,
+} from "./platform";
 
 /** Stub adapter used when this SDK isn't the build target. */
 class StubAdapter implements PlatformAdapter {
@@ -45,8 +52,8 @@ class StubAdapter implements PlatformAdapter {
   async hasCloud(_key: string): Promise<boolean> { return false; }
   async getIdentity(): Promise<PlatformIdentity | null> { return null; }
   getSystemInfo(): PlatformSystemInfo {
-    return { countryCode: null, locale: null, deviceType: null, osName: null, osVersion: null, browserName: null, browserVersion: null, applicationType: null };
-  }
+      return { ...EMPTY_INFO };
+    }
   async submitPlatformScore(_score: number): Promise<void> {}
   showLeaderboard(_id?: number | null): void {}
   playtestSetCanvas(_canvas: HTMLCanvasElement | HTMLCanvasElement[] | null): void {}

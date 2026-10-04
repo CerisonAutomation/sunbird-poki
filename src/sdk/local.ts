@@ -6,11 +6,12 @@
  * Serves: local dev and the direct/web build ("none"), and a portal
  * builds that boot outside their portal (CrazyGames environment "disabled").
  */
-import type {
-  InviteParams,
-  PlatformAdapter,
-  PlatformIdentity,
-  PlatformSystemInfo,
+import {
+  EMPTY_INFO,
+  type InviteParams,
+  type PlatformAdapter,
+  type PlatformIdentity,
+  type PlatformSystemInfo,
 } from "./platform";
 import { storage, type StorageLike } from "../game/Storage";
 
@@ -74,17 +75,6 @@ export const localCloudFallback = {
       return Promise.resolve(false);
     }
   },
-};
-
-const EMPTY_INFO: PlatformSystemInfo = {
-  countryCode: null,
-  locale: null,
-  deviceType: null,
-  osName: null,
-  osVersion: null,
-  browserName: null,
-  browserVersion: null,
-  applicationType: null,
 };
 
 export class LocalAdapter implements PlatformAdapter {

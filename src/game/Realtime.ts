@@ -3,6 +3,20 @@ import { truncate } from "./math";
 import { gradeStateCadence, type LinkQuality } from "./Racer";
 import { PROTOCOL_VERSION } from "./protocol/v1";
 import { normalizeRooms, roomListUrl, type LiveRoom } from "./RoomBrowser";
+// The multiplayer domain core: cadence constants, the keyframe vocabulary and
+// the interpolation routine, shared with the WebRTC adapter. Only the wire
+// differs between the two transports, so only the wire lives here.
+import {
+  INTERP_DELAY,
+  SEND_DT,
+  STALE_AFTER,
+  newTrack,
+  sampleTrack,
+  type PresenceEvent,
+  type PresenceState,
+  type RoomPeer,
+  type Track,
+} from "./RoomSync";
 import { POKI_MULTIPLAYER } from "./edition";
 // PokiMpUtils is a tiny, dependency-free module so importing it here does
 // not pull @poki/netlib into non-Poki bundles. The heavy PokiNetlibClient
@@ -35,30 +49,7 @@ import {
 // via VITE_MULTIPLAYER_URL (portals ship with it explicitly emptied).
 const URL_BASE = (import.meta.env.VITE_MULTIPLAYER_URL ?? (import.meta.env.DEV ? "/mp" : "")).trim();
 
-/** Outbound state rate. 15 Hz is plenty given client-side interpolation. */
-const SEND_HZ = 15;
-const SEND_DT = 1 / SEND_HZ;
-/** Render remote pilots this far in the past so we always interpolate. */
-const INTERP_DELAY = 0.12;
-const STALE_AFTER = 6;
 const MAX_BACKOFF = 15000;
-
-export type PresenceState = "offline" | "connecting" | "lobby" | "racing" | "error";
-
-export type RoomPeer = {
-  id: string;
-  name: string;
-  hue: number;
-  skin: string;
-  distance: number;
-  place: number;
-  finished: boolean;
-  finishTime: number;
-  emote: string;
-  emoteAt: number;
-  ready: boolean;
-  you: boolean;
-};
 
 export type RoomInfo = {
   code: string;
@@ -78,34 +69,10 @@ export type RoomInfo = {
   linkNote?: string;
 };
 
-/** A live multiplayer signal, surfaced as an in-flight toast by the game. */
-export type PresenceEvent =
-  | { type: "join"; name: string }
-  | { type: "leave"; name: string }
-  | { type: "ready"; name: string }
-  | { type: "finish"; name: string; place: number }
-  | { type: "start" }
-  | { type: "welcome"; roomCode: string; seed: string }
-  | { type: "interrupted"; message: string };
-
-type Keyframe = { t: number; x: number; y: number; rot: number; vx?: number; vy?: number };
-
-type Track = {
-  id: string;
-  name: string;
-  hue: number;
-  skin: string;
-  buffer: Keyframe[];
-  distance: number;
-  finished: boolean;
-  finishTime: number;
-  /** Server-assigned finish place (0 until this pilot finishes). */
-  place: number;
-  emote: string;
-  emoteAt: number;
-  ready: boolean;
-  lastSeen: number;
-};
+/** The room vocabulary and the presence signal are this module's public face —
+ *  `pilots.ts` and the HUD import them from here. They now live in the domain
+ *  core, re-exported so this module's surface is unchanged. */
+export type { PresenceEvent, PresenceState, RoomPeer };
 
 type ServerMsg =
   | { type: "welcome"; id: string; room: string; seed: string; capacity: number }
@@ -606,21 +573,7 @@ export class RealtimeClient implements NetTransport {
   private track(id: string): Track {
     let t = this.tracks.get(id);
     if (!t) {
-      t = {
-        id,
-        name: "Pilot",
-        hue: Math.random(),
-        skin: "sunbird",
-        buffer: [],
-        distance: 0,
-        finished: false,
-        finishTime: 0,
-        place: 0,
-        emote: "",
-        emoteAt: -99,
-        ready: false,
-        lastSeen: this.clock,
-      };
+      t = newTrack(id, this.clock);
       this.tracks.set(id, t);
     }
     return t;
@@ -723,47 +676,21 @@ export class RealtimeClient implements NetTransport {
   /**
    * Interpolated snapshots for the renderer. We sample `INTERP_DELAY` behind
    * the newest packet, which converts jittery 15 Hz network data into smooth
-   * 60 Hz motion.
+   * 60 Hz motion. The sampling itself lives in the domain core, so the WebRTC
+   * adapter renders remote birds identically for free.
    */
   poll(): RemoteSnapshot[] {
     const out: RemoteSnapshot[] = [];
     const renderAt = this.serverClock - INTERP_DELAY;
     for (const t of this.tracks.values()) {
-      const b = t.buffer;
-      if (b.length === 0) continue;
-
-      let a = b[0]!;
-      let c = b[b.length - 1]!;
-      for (let i = 0; i < b.length - 1; i++) {
-        if (b[i]!.t <= renderAt && b[i + 1]!.t >= renderAt) {
-          a = b[i]!;
-          c = b[i + 1]!;
-          break;
-        }
-      }
-      let rx: number;
-      let ry: number;
-      let rrot: number;
-      if (renderAt > c.t) {
-        // Dead reckoning: extrapolate from last keyframe using stored velocity.
-        // Cap at 200ms ahead so a stalled remote bird doesn't fly off to infinity.
-        const ahead = Math.min(0.2, renderAt - c.t);
-        rx = c.x + (c.vx ?? 0) * ahead;
-        ry = c.y + (c.vy ?? 0) * ahead;
-        rrot = c.rot;
-      } else {
-        const span = Math.max(1e-4, c.t - a.t);
-        const u = Math.max(0, Math.min(1, (renderAt - a.t) / span));
-        rx = a.x + (c.x - a.x) * u;
-        ry = a.y + (c.y - a.y) * u;
-        rrot = a.rot + (c.rot - a.rot) * u;
-      }
+      const pose = sampleTrack(t.buffer, renderAt);
+      if (!pose) continue;
       out.push({
         id: t.id,
         name: t.name,
-        x: rx,
-        y: ry,
-        rotation: rrot,
+        x: pose.x,
+        y: pose.y,
+        rotation: pose.rotation,
         finished: t.finished,
       });
     }

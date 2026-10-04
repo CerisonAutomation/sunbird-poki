@@ -32,12 +32,13 @@
  * 1 MB gamesave budget; `src/game/Storage.ts` keeps caches out of that sync
  * with the documented `poki_ignore` key prefix.
  */
-import type {
-  InviteParams,
-  PlatformAdapter,
-  PlatformEvents,
-  PlatformIdentity,
-  PlatformSystemInfo,
+import {
+  EMPTY_INFO,
+  type InviteParams,
+  type PlatformAdapter,
+  type PlatformEvents,
+  type PlatformIdentity,
+  type PlatformSystemInfo,
 } from "./platform";
 import { localCloudFallback } from "./local";
 import { setLoadingNet } from "./net";
@@ -189,17 +190,6 @@ declare global {
     PokiSDK?: PokiSdk;
   }
 }
-
-const EMPTY_INFO: PlatformSystemInfo = {
-  countryCode: null,
-  locale: null,
-  deviceType: null,
-  osName: null,
-  osVersion: null,
-  browserName: null,
-  browserVersion: null,
-  applicationType: null,
-};
 
 /** Dismissed share sheet = the surface was shown; report it as handled. */
 function shareDismissed(error: unknown): boolean {

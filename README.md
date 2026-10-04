@@ -52,10 +52,13 @@ Sunbird is a complete HTML5 arcade game: 8 flight modes, 40-pilot races, daily/w
 corepack enable
 pnpm install --frozen-lockfile
 pnpm dev            # game on :5173
-cargo run --release -p sunbird-server   # optional: multiplayer rooms on :8080
 ```
 
-Open `http://localhost:5173`. The dev server proxies `/mp` to the Rust room server.
+Open `http://localhost:5173`. **Multiplayer needs no server**: this edition
+races over Poki Netlib (WebRTC P2P), so live rooms work in dev against the
+same signalling the shipped build uses — open the Race Lobby and host a room.
+(There is no Rust server in this fork and none is needed; the self-hosted
+authoritative server lives in the parent monorepo.)
 
 ## Environment variables
 

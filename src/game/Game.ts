@@ -23,6 +23,7 @@ import { BIG_LAUNCH_QUIPS, BOP_QUIPS, FEVER_QUIPS, GEM_QUIPS, MILESTONE_QUIPS, S
 import { MOMENTS, MomentLedger, momentShouldReact, type MomentKind } from "./Moments";
 import { MusicMomentGate, momentMusic } from "./MusicMoments";
 import { Funnel, type FunnelStage } from "./Funnel";
+import { outcomeForNaturalEnd } from "./runOutcome";
 import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
@@ -3617,8 +3618,9 @@ export class Game {
     this.exitVersus();
     this.mode = modeById(this.modeId);
     // Portal game events: open this attempt's measurement span. The run is a
-    // `fail` until the goal is actually reached (death/sun-out/elimination
-    // all keep it a fail).
+    // `fail` until its goal is actually reached — a finish line, OR (in the
+    // no-finish-line modes) a natural end after a real flight; see
+    // `runOutcome.ts` for the full contract.
     this.runOutcome = "fail";
     this.platform?.measure("run", this.modeId, "start");
     // Snapshot the record to beat BEFORE this run writes anything, so the
@@ -3923,6 +3925,20 @@ export class Game {
     this.bird.asleep = true;
     this.endReason = reason;
     this.daylight = 0;
+    // An honest outcome for a mode with no finish line: the flight IS the
+    // goal, so sunset after a real flight or choosing to land and rest is the
+    // run COMPLETING, while ditching in the sea or a no-show launch stays a
+    // fail. Finish-line modes keep their own rule (cross = complete, anything
+    // else = fail) — this branch only fires where `finish === 0`, where the
+    // old rule reported every run in the game's DEFAULT mode as a fail (the
+    // recap screen celebrated a flight the funnel said 0 % of players ever
+    // completed). See runOutcome.ts for the full contract.
+    if (this.mode.finish === 0 && this.runOutcome !== "complete") {
+      this.runOutcome = outcomeForNaturalEnd(reason, {
+        distance: this.bird.x - this.startX,
+        runTime: this.runTime,
+      });
+    }
     // Death drama: the sun wins in slow motion. Reuses the zenith slow-mo
     // plumbing so time restores itself automatically.
     this.timeScale = 0.35;
@@ -4009,7 +4025,9 @@ export class Game {
     // the server's official-place echo still needs the local finish times.
     if (this.massRace.active) this.massRace.group.visible = false;
     // Portal game events: one outcome per attempt — `complete` when the run
-    // reached its goal, `fail` when it ended by death/elimination/sun-out.
+    // reached its goal (crossed its finish line, or — in a no-finish-line
+    // mode — flew a real flight to its natural end), `fail` when it fell
+    // short (ditched, eliminated, or a no-show launch).
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
     this.platform?.measure("run", this.modeId, this.runOutcome);
@@ -7248,18 +7266,12 @@ export class Game {
     this.startRun({ storm: this.stormfront });
   }
 
-  /** Instantiates the appropriate multiplayer backend for this build:
-   *  Poki uses WebRTC P2P via @poki/netlib; direct/crazy/generic keep the
-   *  existing WebSocket relay. The two classes share the same public API
-   *  so Game.ts doesn't need to branch elsewhere.
+  /** Pre-seats the lobby so the Race screen shows live pilots immediately.
    *
-   *  The Poki client is loaded via a DYNAMIC import guarded by a
-   *  compile-time constant (`VITE_PORTAL_TARGET === "poki"`). Rollup
-   *  can statically evaluate this: in non-Poki builds the branch is
-   *  dead-code-eliminated along with the dynamic import, so @poki/netlib
-   *  (~34 KB gz, with WebRTC + the wss:// signalling URL) is NEVER
-   *  emitted into direct/crazy/generic/none bundles. */
-  /** Pre-seats the lobby so the Race screen shows live pilots immediately. */
+   *  The transport itself comes from `createNetTransport()` (net-transport.ts):
+   *  the Poki build gets the Netlib P2P client behind a dynamic import, and a
+   *  browser without WebRTC gets the WebSocket relay client. Both classes
+   *  share the same public API so this file does not branch anywhere. */
   private preseatLobby(): void {
     // Warm the ghost source too so the next grid can seat real names.
     void this.refreshBoard();

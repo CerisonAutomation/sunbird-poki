@@ -623,7 +623,17 @@ export const SAVE_KEY_CORRUPT = "sunbird.save.corrupt";
 export const DAYLIGHT_MAX_GOLD = 130;
 export const CONTINUE_COST = 80;
 export const CONTINUE_DAYLIGHT = 16;
-export const CONTINUE_TIMEOUT = 15;
+/**
+ * Seconds the second-wind offer stays open. 10, not 15: the countdown is a
+ * decision window and the platform's strongest games keep it tight. A player
+ * who wants the revive taps within the first seconds; a player who does not
+ * is held in front of a ticking clock at the exact moment they choose between
+ * "one more run" and leaving — the first-session audit measured the whole
+ * average session at ~95 s, so five seconds of extra forced waiting here is
+ * ~5 % of the average player's entire stay. "Let it sleep" skips it instantly
+ * for anyone who reads; this protects everyone else.
+ */
+export const CONTINUE_TIMEOUT = 10;
 /**
  * Longest a sponsored break may hold the game before the game abandons it.
  *

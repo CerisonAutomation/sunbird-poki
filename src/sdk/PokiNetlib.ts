@@ -165,6 +165,8 @@ export class PokiNetlibClient implements NetTransport {
   private boundHandlers: Array<() => void> = [];
   private closedByUs = false;
   private lobbyWatchdog: ReturnType<typeof setTimeout> | null = null;
+  /** Signalling-connect timeout (see CONNECT_TIMEOUT_MS). */
+  private connectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly deviceId: string,
@@ -821,8 +823,17 @@ export class PokiNetlibClient implements NetTransport {
     }
   }
 
+  /** Disarm the signalling-connect timeout (connected, shut down, or fired). */
+  private clearConnectTimer(): void {
+    if (this.connectTimer !== null) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
   private shutdownNet(): void {
     this.clearLobbyWatchdog();
+    this.clearConnectTimer();
     for (const off of this.boundHandlers) {
       try { off(); } catch { /* */ }
     }
@@ -835,6 +846,12 @@ export class PokiNetlibClient implements NetTransport {
       // `_closing`, so it must run before close() sets it.
       try { void this.net.leave?.()?.catch?.(() => undefined); } catch { /* */ }
       try { this.net.removeAllListeners(); } catch { /* */ }
+      // netlib console.errors `signallingerror not handled` whenever the event
+      // has zero listeners, and its internal retry ladder can emit one last
+      // error in the window between removeAllListeners() and the socket
+      // actually dying — a red console line in playtest recordings for a
+      // shutdown WE chose. One silent listener closes that window.
+      try { this.net.on("signalingerror", () => { /* teardown: nothing to report */ }); } catch { /* */ }
       try { this.net.close("leave"); } catch { /* */ }
     }
     this.net = null;
@@ -1199,6 +1216,34 @@ function lobbyToRoomInput(l: LobbyListEntry): Record<string, unknown> {
 /** Cached signalling connection used only to *browse* public lobbies. */
 let browseNet: Network | null = null;
 let browseReady = false;
+/**
+ * Do not redial the signalling service more often than this after a failure.
+ *
+ * The room watcher polls every 6 s and `listPublicLobbies` waits up to 8 s
+ * for a connection that, when the service is unreachable (no egress sandbox,
+ * captive portal, signalling outage), will NEVER come. Without a cooldown
+ * each poll dropped the dead connection and built a fresh one, so the browser
+ * logged a WebSocket failure and an unhandled-signallingerror line every few
+ * seconds for as long as the lobby was open — noise a playtest recording
+ * shows the player, and noise the Poki Inspector surfaces as console errors.
+ * During cooldown the call resolves [] immediately: the honest "no rooms
+ * visible right now" answer, not a spinner backed by a redial loop.
+ */
+const BROWSE_RETRY_COOLDOWN_MS = 15_000;
+let browseCooldownUntil = 0;
+
+/** A Network the browse path can safely drop: it never rethrows, and netlib
+ *  gets a `signalingerror` listener so it does not console.error on dial
+ *  failures (netlib logs "signallingerror not handled" whenever the event has
+ *  zero listeners — the browse connection had none, which is where the
+ *  console spam came from). */
+function makeBrowseNetwork(gameId: string): Network {
+  const net = new Network(gameId);
+  net.on("signalingerror", () => {
+    /* handled: the dial's own `failed`/timeout path reports the outcome */
+  });
+  return net;
+}
 
 /**
  * Public lobbies, straight from the P2P signalling service's listing API.
@@ -1213,7 +1258,8 @@ export async function listPublicLobbies(
   timeoutMs = 8000,
 ): Promise<LiveRoom[]> {
   if (!isPokiMultiplayerAvailable()) return [];
-  const net = browseNet ?? new Network(gameId);
+  if (Date.now() < browseCooldownUntil) return [];
+  const net = browseNet ?? makeBrowseNetwork(gameId);
   browseNet = net;
   try {
     if (!browseReady) {
@@ -1236,14 +1282,15 @@ export async function listPublicLobbies(
         });
       });
     }
-    // See `listPublic` — `{public:true}` is not a legal filter key here and made
+  // See `listPublic` — `{public:true}` is not a legal filter key here and made
   // the browser return nothing.
   const entries = await net.list({ mode: { $eq: "sunbird-race" } }, { createdAt: -1 }, 20);
     return sortRooms(normalizeRooms(entries.map(lobbyToRoomInput)));
   } catch (err) {
     // Drop the connection so the next attempt starts clean instead of reusing
-    // a network that will never become ready.
+    // a network that will never become ready, and cool down before redialling.
     closeLobbyBrowser();
+    browseCooldownUntil = Date.now() + BROWSE_RETRY_COOLDOWN_MS;
     throw err;
   }
 }

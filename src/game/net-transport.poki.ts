@@ -1,22 +1,28 @@
 /**
  * Realtime transport factory — Poki edition: WebRTC P2P through Poki Netlib.
  *
+ * Selected by `src/game/net-transport.ts`, the one dispatcher a race
+ * transport comes from: when `POKI_BUILD` is set and the browser has WebRTC,
+ * `createNetTransport()` awaits this module and returns the Netlib client.
+ * (The dispatcher — not a vite alias, and not a module nothing imports — is
+ * what guarantees the shipped Poki zip actually races over Netlib.)
+ *
  * Every other edition talks to a WebSocket relay (`VITE_MULTIPLAYER_URL`). The
  * Poki build ships with that URL deliberately emptied, so it must use Poki's
- * own transport — Netlib — for live PvP. Until this module existed the Poki
- * build advertised live multiplayer (`isMultiplayerConfigured()` is true there)
- * while `createNetTransport()` still built the empty-URL WebSocket client, so
- * every "live" race silently degraded to the local squadron. That is the
- * mismatch this file closes.
+ * own transport — Netlib — for live PvP. If this module is ever bypassed the
+ * Poki build advertises live multiplayer (`isMultiplayerConfigured()` is true
+ * there) while the WebSocket client answers every room with "No multiplayer
+ * server configured" — the exact mismatch this arrangement exists to close.
  *
  * Netlib is loaded with a DYNAMIC import: the menu boots and stays interactive
  * without it, and the ~34 KB gz library (plus WebRTC signalling) is fetched
  * only when a race actually needs a transport.
  *
  * Degradation is explicit. `isPokiMultiplayerAvailable()` is false in local
- * dev, in an id-less preview build, and in browsers without WebRTC; in those
- * cases the WebSocket client is returned and behaves exactly as before, so the
- * game never ends up holding a client that can never connect.
+ * dev without WebRTC, in an id-less preview build, and in browsers without
+ * WebRTC; in those cases the WebSocket client is returned and behaves exactly
+ * as before, so the game never ends up holding a client that can never
+ * connect.
  */
 import { RealtimeClient, type AnyRealtimeClient } from "./Realtime";
 import { isPokiMultiplayerAvailable } from "../sdk/PokiMpUtils";

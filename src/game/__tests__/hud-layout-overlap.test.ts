@@ -27,6 +27,9 @@ const read = (file: string): string => readFileSync(join(process.cwd(), "src", .
 /** Comments out — a `--token:` or a hex inside prose is not a declaration. */
 const code = (file: string): string => read(file).replace(/\/\*[\s\S]*?\*\//g, "");
 
+/** Every stylesheet the cascade is read from, in import order — later wins. */
+const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css"] as const;
+
 /**
  * All declarations that apply to `selector`, in sheet order, later wins.
  *
@@ -37,7 +40,7 @@ const code = (file: string): string => read(file).replace(/\/\*[\s\S]*?\*\//g, "
  */
 function declarationsFor(selector: string): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const file of ["index.css", "game/ui.css", "game/menu-polish.css"]) {
+  for (const file of SHEETS) {
     for (const block of code(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const selectors = block[1]!.split(",").map((s) => s.trim().replace(/\s+/g, " "));
       // Exact, or an ancestor-qualified instance of the same selector — so
@@ -291,28 +294,49 @@ describe("the short-viewport header grid spans every lane that wraps", () => {
    * phone each wrapped to two lines and returned the vertical space the grid had
    * just been introduced to reclaim.
    *
-   * The lane set is DERIVED from the stylesheet, not written out by hand. The
-   * bug being guarded is "a lane exists but was never told to span", and a
-   * hardcoded list cannot notice a lane added after this test was written.
-   */
-  it("no wrapping lane is left sitting in a single column", () => {
-    const lanes = new Set<string>();
-    for (const block of code("index.css").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      if (!/flex-wrap:\s*wrap/.test(block[2]!)) continue;
-      for (const sel of block[1]!.split(",").map((s) => s.trim().replace(/\s+/g, " "))) {
-        if (/^(?:\.play-hud )?\.hud-header \.[a-z-]+$/.test(sel)) lanes.add(sel);
-      }
-    }
-    // Guard against a derivation that silently matches nothing and passes
-    // vacuously — the failure mode of every "loop over what I found" assertion.
-    expect(lanes.size, "the header must still have wrapping lanes").toBeGreaterThan(0);
-    expect([...lanes]).toContain(".hud-header .mid-meta");
-    expect([...lanes]).toContain(".hud-header .power-chips");
-
-    for (const lane of lanes) {
-      expect(final(lane, "grid-column"), `${lane} wraps, so it must span both columns`).toBe("1 / -1");
-    }
-  });
+   * The lane set is DERIVED, not written out by hand: the bug being guarded is
+      * "a lane exists but was never told to span", and a hardcoded list cannot
+      * notice a lane added after this test was written. Both halves are needed —
+      * CSS alone cannot say what is a child of `.hud-header`, and the wrapping
+      * rules are not written in one shape: index.css says
+      * `.hud-header .mid-meta { flex-wrap: wrap }` while ui.css says bare
+      * `.mid-meta { flex-wrap: wrap; row-gap: 4px }`, under the comment "allow
+      * wrap so biome+mult+gold+vip can't overflow a row". Reading only index.css,
+      * or only the `.hud-header`-qualified form, silently misses half the evidence.
+      */
+     it("no wrapping lane is left sitting in a single column", () => {
+       const lanes = new Set(
+         [...(read("game/HUD.ts").match(/lane\(\s*"hud-header"\s*,\s*\[([^\]]*)\]/)?.[1]?.matchAll(/"\.([a-z-]+)"/g) ?? [])]
+           .map((m) => m[1]!),
+       );
+       expect(lanes.size, "the header lane list must be readable from HUD.ts").toBeGreaterThan(0);
+   
+       const wrapping = new Set<string>();
+       for (const file of SHEETS) {
+         for (const block of code(file).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+           if (!/flex-wrap:\s*wrap/.test(block[2]!)) continue;
+           for (const sel of block[1]!.split(",").map((s) => s.trim().replace(/\s+/g, " "))) {
+             // The LAST compound identifies the element: `.mid-meta`,
+             // `.hud-header .mid-meta` and `.play-hud .mid-meta` are one lane, and
+             // ui.css writes the first of those three.
+             const last = /\.([a-z-]+)$/.exec(sel)?.[1];
+             if (last && lanes.has(last)) wrapping.add(last);
+           }
+         }
+       }
+       // Guard against a derivation that silently matches nothing and passes
+       // vacuously — the failure mode of every "loop over what I found" assertion.
+       expect(wrapping.size, "the header must still have wrapping lanes").toBeGreaterThan(0);
+       expect([...wrapping].sort()).toEqual(["mid-meta", "power-chips", "power-strip"]);
+   
+       for (const lane of wrapping) {
+         // `.${lane}` — `lane` is a bare class name, so interpolating it directly
+         // would ask for `.hud-header mid-meta` and match nothing.
+         expect(final(`.hud-header .${lane}`, "grid-column"), `${lane} wraps, so it must span both columns`).toBe(
+           "1 / -1",
+         );
+       }
+     });
 
   it("spans the lanes that do not wrap but still occupy a cell", () => {
       // `.combo` is deliberately NOT in the list above: a single small pill that
@@ -323,15 +347,32 @@ describe("the short-viewport header grid spans every lane that wraps", () => {
       for (const lane of [".hud-header .roster-bar", ".hud-header .power-strip"]) {
         expect(final(lane, "grid-column"), `${lane} must span the short-viewport grid`).toBe("1 / -1");
       }
-      // `.top-bar` is absent on purpose. Versus mode replaces the header's
-      // template with its own two-track grid and pins `.top-bar` to `column: 2`
-      // against a `.versus-bar` in column 1, hiding every other child — a
-      // different layout mode entirely, not a refinement of this one. Because
-      // `declarationsFor` also reads ancestor-qualified instances of a selector,
-      // the versus rule is what `final(".hud-header .top-bar", …)` reports, and
-      // asserting `1 / -1` here would be asserting against the wrong mode.
-      expect(final(".hud-header .top-bar", "grid-column")).toBe("2");
-    });
+      // `.top-bar` is absent from the lists above on purpose. Versus mode
+            // replaces the header's template with its own two-track grid and pins
+            // `.top-bar` to column 2 against a `.versus-bar` in column 1, hiding every
+            // other child — a different layout mode, not a refinement of this one.
+            //
+            // The versus rules are asserted DIRECTLY, by their own selectors, before
+            // the cascade is read. `final()` resolves a bare `.hud-header .X` partly
+            // by suffix-matching ancestor-qualified rules, so if those versus rules
+            // were deleted this expectation would quietly degrade from "2" to the
+            // non-versus "1 / -1" and keep passing — which is how a test ends up
+            // asserting something its author never checked. Naming the source rule
+            // makes the dependency explicit and fails loudly if it disappears.
+            const VS_TOP = ".play-hud.versus .hud-header .top-bar";
+            const VS_BAR = ".play-hud.versus .hud-header .versus-bar";
+            expect(
+              declarationsFor(VS_TOP)["grid-column"] ?? [],
+              `${VS_TOP} must still pin top-bar to column 2`,
+            ).toEqual(["2"]);
+            expect(
+              declarationsFor(VS_BAR)["grid-column"] ?? [],
+              `${VS_BAR} must still hold column 1 — versus mode's own track`,
+            ).toEqual(["1"]);
+            // With that rule in place, the unprefixed selector settles on the versus
+            // placement rather than the short-viewport span.
+            expect(final(".hud-header .top-bar", "grid-column")).toBe("2");
+          });
 });
 
 describe("the loadout steppers meet the same 44px floor as every other control", () => {

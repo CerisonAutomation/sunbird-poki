@@ -20,18 +20,22 @@ import { PHYS_DT } from "../constants";
  *             screen teaches. If the game's own advice loses to mashing, the
  *             tutorial is lying.
  * `random`    50/50. The control: does skill beat *noise*, or does nothing
- *             beat noise?
- * `expert`    tucks the descent, releases the climb. This USED to be
- *             `distanceToCrest(b.x) > 70` and it was a broken instrument; see
- *             "THE CREST HEURISTIC" below. It is now the same slope rule as
- *             `tutorial`, and the fact that the two rows now agree is itself
- *             the finding: across 45 held-out seeds nothing a pilot can read
- *             off the terrain beats "hold while the ground falls away".
- *
- * ── THE CREST HEURISTIC ──────────────────────────────────────────────────────
- * `expert` was `distanceToCrest(b.x) > 70`, on the reasoning that a crest is
- * more than 70 m away while you are on the approach and inside 70 m once you
- * are at the lip. Measured, that reasoning is wrong in three separate ways:
+  *             beat noise?
+  *
+  * There is deliberately no fourth policy. There USED to be an `expert` row
+  * carrying a smarter release rule, and the search for one ended where this
+  * header now ends: across 45 held-out seeds, nothing a pilot can read off the
+  * terrain beat "hold while the ground falls away" — the rule the tutorial
+  * already teaches. Keeping the row anyway would have printed the same number
+  * twice under two names, which reads as "experts do something extra" and is the
+  * most flattering available way to be wrong about your own game. If a stronger
+  * policy is ever found, it belongs here as a genuinely distinct rule.
+  *
+  * ── THE CREST HEURISTIC ──────────────────────────────────────────────────────
+  * The removed `expert` policy was `distanceToCrest(b.x) > 70`, on the reasoning
+  * that a crest is more than 70 m away while you are on the approach and inside
+  * 70 m once you are at the lip. Measured, that reasoning is wrong in three
+  * separate ways:
  *
  *  1. IT IS NOT A SLOPE PROXY. `distanceToCrest` answers "where is the next
  *     launch lip", which TerrainSystem documents as the AI's per-tick
@@ -76,7 +80,23 @@ function lcg(seed: number): () => number {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
 
-function fly(seed: string, policy: Policy, seconds = SECONDS): number {
+/**
+ * One flight, run once. Every measurement in this file goes through here.
+ *
+ * `onTick` sees the policy's decision and the bird's state BEFORE the step that
+ * consumes them, which is what a transition counter needs. It used to have its
+ * own copy of the loop, and a copy is a second instrument: the day the spawn x,
+ * the launch impulse or the `BirdStepOpts` shape changed, the release counter
+ * would keep flying a slightly different flight than `measure()` reported, and
+ * the `>= 5` gate below would be quietly validating the wrong simulation. One
+ * runner makes that divergence impossible rather than unlikely.
+ */
+function simulate(
+  seed: string,
+  policy: Policy,
+  seconds: number,
+  onTick?: (diving: boolean, bird: Bird) => void,
+): Bird {
   const terrain = new TerrainSystem(seed);
   const bird = new Bird();
   bird.reset(64, terrain.heightAt(64) + 0.9);
@@ -85,14 +105,16 @@ function fly(seed: string, policy: Policy, seconds = SECONDS): number {
   const steps = Math.round(seconds / PHYS_DT);
   for (let i = 0; i < steps; i++) {
     t += PHYS_DT;
-    bird.step(
-      PHYS_DT,
-      { diving: policy(bird, terrain, t, rng), fever: false, speedMult: 1, boost: false },
-      terrain,
-    );
+    const diving = policy(bird, terrain, t, rng);
+    onTick?.(diving, bird);
+    bird.step(PHYS_DT, { diving, fever: false, speedMult: 1, boost: false }, terrain);
   }
   terrain.dispose();
-  return bird.x;
+  return bird;
+}
+
+function fly(seed: string, policy: Policy, seconds = SECONDS): number {
+  return simulate(seed, policy, seconds).x;
 }
 
 const POLICIES: Record<string, Policy> = {
@@ -102,11 +124,6 @@ const POLICIES: Record<string, Policy> = {
   tutorial: (_b, tr, _t, _r) => tr.slopeAt(_b.x) < 0,
   // The control.
   random: (_b, _tr, _t, rng) => rng() < 0.5,
-  // Tuck the descent, release the climb. Same rule as `tutorial`, and that is
-  // the point — see "THE CREST HEURISTIC" in the header. Dimensionless, and
-  // robust where the metre-constant version was not: over 45 held-out seeds
-  // this averages 1.30x with a WORST seed of 1.205x.
-  expert: (_b, tr, _t, _r) => tr.slopeAt(_b.x) < 0,
 };
 
 const SEEDS = ["2026-09-16", "2026-09-17", "2026-09-18"];
@@ -121,26 +138,12 @@ const SEEDS = ["2026-09-16", "2026-09-17", "2026-09-18"];
  * its own; only counting the verb can.
  */
 function airborneReleases(seed: string, policy: Policy, seconds = SECONDS): number {
-  const terrain = new TerrainSystem(seed);
-  const bird = new Bird();
-  bird.reset(64, terrain.heightAt(64) + 0.9);
-  const rng = lcg(0x5eed);
-  let t = 0;
   let count = 0;
   let wasDiving = false;
-  const steps = Math.round(seconds / PHYS_DT);
-  for (let i = 0; i < steps; i++) {
-    t += PHYS_DT;
-    const diving = policy(bird, terrain, t, rng);
+  simulate(seed, policy, seconds, (diving, bird) => {
     if (wasDiving && !diving && !bird.grounded) count++;
     wasDiving = diving;
-    bird.step(
-      PHYS_DT,
-      { diving, fever: false, speedMult: 1, boost: false },
-      terrain,
-    );
-  }
-  terrain.dispose();
+  });
   return count;
 }
 
@@ -167,8 +170,8 @@ function measure(): { means: Record<string, number>; seedSpread: number; table: 
 
 describe("skill gap: the instrument", () => {
   it("is deterministic — same seed and policy reproduce the same metre", () => {
-    const a = fly(SEEDS[0], POLICIES.expert);
-    const b = fly(SEEDS[0], POLICIES.expert);
+    const a = fly(SEEDS[0], POLICIES.tutorial);
+        const b = fly(SEEDS[0], POLICIES.tutorial);
     expect(a).toBe(b);
   });
 
@@ -180,7 +183,7 @@ describe("skill gap: the instrument", () => {
   });
 
   it("reacts to terrain — different seeds must not fly identically", () => {
-    expect(fly(SEEDS[0], POLICIES.expert)).not.toBe(fly(SEEDS[1], POLICIES.expert));
+    expect(fly(SEEDS[0], POLICIES.tutorial)).not.toBe(fly(SEEDS[1], POLICIES.tutorial));
   });
 
   /**
@@ -218,28 +221,32 @@ describe("skill gap: the measurement", () => {
   const { means, seedSpread, table } = measure();
 
   /**
-   * The headline gate, and the only one that can fail today.
-   *
-   * The expert policy must beat the masher outright. It does — but by a
-   * margin far too small to matter, and that margin is the finding.
-   *
-   * TARGET, once balance work lands: `expert / masher >= 1.8`. Until then this
-   * assertion is deliberately the *floor* it is today, not the target, so the
-   * suite stays green while the number is carried upward. Flip the constant
-   * below as the ratio improves; do not weaken it.
-   */
-  const MIN_RATIO = 1.05;
-
-  it("releasing at the crest beats holding forever", () => {
-    const ratio = means.expert / means.masher;
-    expect(
-      ratio,
-      `expert/masher = ${ratio.toFixed(3)}x (want >= ${MIN_RATIO}x; product target is 1.8x)\n` +
-        `  ${table}\n` +
-        `  seed spread on the masher alone: ${seedSpread.toFixed(0)}m — if the gap is ` +
-        `smaller than this, the "gap" is terrain noise, not skill.`,
-    ).toBeGreaterThanOrEqual(MIN_RATIO);
-  });
+     * The headline gate, and the only one that can fail today.
+     *
+     * The taught rule must beat the masher outright, and the size of the margin
+     * is the finding — so read the number rather than the green.
+     *
+     * TARGET, once balance work lands: `tutorial / masher >= 1.8`. Until then this
+     * assertion is deliberately the *floor* it is today, not the target, so the
+     * suite stays green while the number is carried upward. Flip the constant
+     * below as the ratio improves; do not weaken it.
+     *
+     * This is the only skill row the suite has, so it measures the rule the
+     * tutorial teaches rather than a stronger one — see "why these policies" in
+     * the header for why the search for a stronger policy came back empty.
+     */
+    const MIN_RATIO = 1.05;
+  
+    it("the taught rule beats holding forever", () => {
+      const ratio = means.tutorial / means.masher;
+      expect(
+        ratio,
+        `tutorial/masher = ${ratio.toFixed(3)}x (want >= ${MIN_RATIO}x; product target is 1.8x)\n` +
+          `  ${table}\n` +
+          `  seed spread on the masher alone: ${seedSpread.toFixed(0)}m — if the gap is ` +
+          `smaller than this, the "gap" is terrain noise, not skill.`,
+      ).toBeGreaterThanOrEqual(MIN_RATIO);
+    });
 
   it("does not leave a policy stranded", () => {
     // A policy that cannot move at all is a broken instrument or a broken

@@ -640,6 +640,18 @@ export class HUD {
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
     this.resizeObs.observe(this.quipLayer);
+    // The band ITSELF, and this is not belt-and-braces. `--hud-messages-max`
+    // and `--hud-stack-bottom` are both derived from the band's own height, but
+    // nothing used to re-publish when that height changed — only the header,
+    // the footer and the quip lane were watched. A coaching cue that rewraps
+    // from one line to two therefore grew the band from 30px to 46px while
+    // the published maximum still said 30, so the stack the toast lane hangs
+    // from stayed 16px short and the toasts rode up over the text.
+    //
+    // Measured at 390x844, the most common phone frame: the band reported
+    // `--hud-messages-max: 30px` and occupied 347..392 while the toasts were
+    // placed from a `stackBottom` computed for the old height.
+    this.resizeObs.observe(this.messagesEl);
   }
 
   /**

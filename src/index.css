@@ -2123,13 +2123,18 @@ fieldset.squad-fields {
       )
     )
   );
-  /* Deliberately NO `max-height` here, and none on the children either. The
-     band's placement is measured, but its HEIGHT is its text: capping it in CSS
-     is what clipped 16px off a two-line cue, and capping it from the measured
-     ceiling is worse still — `--hud-messages-max` is legitimately 0 when the
-     corridor between the top-anchored footer and the quip lane is closed (the
-     slope chain hidden reports its top as 0), and a 0px band is a coaching cue
-     nobody is told. The band lays out; the measurement decides where it goes. */
+  /* The band IS capped by its own measured ceiling, and that is a correction
+     rather than a repeat of the bug this comment used to describe.
+     `--hud-messages-max` is the height the HUD measured FOR THIS TEXT — the
+     band is in the ResizeObserver, so the value is recomputed the moment the
+     cue rewraps. Uncapped, the band was free to be taller than the number
+     every lane below it is placed from: at 390x844 it reported a 30px maximum
+     while occupying 46, so `--hud-stack-bottom` was 16px short and the toasts
+     rode up over the text. At 568x320 the same thing, 14px of it.
+     When there is room, `maxPx` IS the natural height and nothing is clipped;
+     it only binds in the corridor too tight to hold the cue, which is the one
+     case where showing it in full would put it into the toast lane. */
+  max-height: var(--hud-messages-max, none);
   left: 50%; transform: translateX(-50%);
   width: min(520px, calc(100% - 100px));
   text-align: center;

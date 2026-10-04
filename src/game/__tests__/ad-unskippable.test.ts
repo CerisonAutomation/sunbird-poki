@@ -191,7 +191,9 @@ describe("the rendered break panel offers nothing that ends the break", () => {
     expect(html).not.toMatch(/<button[^>]*data-action="ad-skip"/);
     expect(html).toContain('class="ad-countdown"');
     expect(html).toContain('role="status"');
-    expect(html).toContain("Continues in");
+    // 2026-10-04: the chip now also states the contract — "plays in full" —
+    // because a bare countdown reads like a loading state being waited out.
+    expect(html).toMatch(/plays in full · continues in/i);
   });
 
   it("renders the portal escape hatch disabled for the whole safety window", async () => {

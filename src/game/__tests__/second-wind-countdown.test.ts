@@ -55,6 +55,19 @@ describe("second wind countdown", () => {
     expect(HUD).toMatch(/s\.state === "continue" && this\.contTimerEl/);
   });
 
+  it("says what it is asking, in plain words (2026-10-04 copy pass)", () => {
+    // The card is read under a ticking clock. The old copy made the player
+    // decode a metaphor first ("Sunbird is dozing off", "Let it sleep") before
+    // they could choose. The headline is now the actual question the card
+    // asks, the exit says what it does, and the coin option says what it
+    // buys — no store pitch smuggled into the decision line.
+    expect(HUD).toMatch(/How far can you get\?/);
+    expect(HUD).toMatch(/End the flight/);
+    expect(HUD).toMatch(/Keep flying/);
+    expect(HUD).not.toMatch(/dozing off/);
+    expect(HUD).not.toMatch(/Let it sleep/);
+  });
+
   it("is not hidden by any stylesheet", () => {
     for (const [path, css] of SHEETS) {
       // Any block that both targets the strip and removes it from layout.

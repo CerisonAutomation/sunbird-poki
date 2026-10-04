@@ -194,36 +194,32 @@ export const MAX_MODE_SPEED_BONUS = 18;
 export const FLARE_MAX_RISE = -14;
 
 /**
- * Where a run begins: already flying, not parked on the tarmac.
+ * Where a run begins: on the ground, perched on the opening hill like the rest
+ * of the flock (MassRace spawns rival birds at `heightAt + BIRD_RADIUS`).
  *
- * `bird.reset()` places the bird at `heightAt + BIRD_RADIUS` with `vx = 11` and
- * `grounded = false`. That reads as airborne to the physics but is neither: the
- * body is sitting *on* the surface, so the very first step satisfies
- * `y <= surf` and it "lands" again 0.3 s into every run. Measured across four
- * seeds that is what the player sees — a bird embedded in the grass with the
- * altitude gauge on 0 m, which is why the run opens by looking broken.
+ * History, because this value has now been both directions. `bird.reset()`
+ * parks the bird at `heightAt + BIRD_RADIUS` with `grounded = false` — that
+ * reads as airborne to the physics while the body sits *on* the surface, so the
+ * first step "landed" again 0.3 s into every run and the opening frame showed
+ * a bird embedded in the grass. The 14 m drop-in was the 2026-09 fix for that,
+ * and it over-corrected: every run opened with a fall the player never chose,
+ * the coach's first cue had to explain a landing nobody made, and the run PEAK
+ * (which scores the climb goal, `Game.maxAltitude`) was handed 14 m of
+ * altitude for free — ~31% of the real first climb goal (45 m scaled per day,
+ * Engagement.ts:79) before the first input.
  *
- * The start is now a shallow drop-in: clear of the terrain by a visible margin
- * and carrying real airspeed, and the opening frame is a bird in flight.
+ * The grounded start fixes all three at once: `Game.startRun` places the bird
+ * ON the surface and marks it `grounded` *after* `reset()` (so the first
+ * physics step reads ground→ground and no phantom landing beat fires), the
+ * tutorial's first instruction — hold to build speed down the drop — starts
+ * exactly where the bird is, and the climb goal starts at zero, where it
+ * belongs. The absorb-first-touchdown guard in `Game.onLanding` stays as a
+ * net for a genuinely rough first-run landing mid-flight.
  *
- * The altitude is deliberately small — it is the run PEAK that scores the climb
- * goal (`Game.maxAltitude`), so a generous start hands out a slice of the goal
- * for doing nothing. It is not, however, as small as an earlier version of this
- * comment claimed: that note divided by a "120 m target" that does not exist
- * anywhere in the codebase and called 14 m "12% of the goal". The real first
- * altitude goal is 45 m scaled per day (Engagement.ts:79) with a 40 m session
- * target (Engagement.ts:101), so 14 m is ~31% of the goal, not 12%. That is a
- * deliberate trade, not an oversight: the run opens with a real arc, and the
- * climb goal is still the majority of the climb ahead.
- *
- * The arc length depends entirely on the input, which is why the earlier "the
- * first arc lasts ~2.8 s" note was misleading — it was measured coasting, the
- * one policy the coach never asks for. Held (what the game DOES ask for, with
- * the thumb already down from tapping "Fly now"), the same 14 m is a ~0.70 s
- * fall at GRAVITY_DIVE. Both are survivable; see Game.onLanding, which absorbs
- * the first-ever touchdown rather than punishing the instruction that caused it.
+ * The tune stays for QA: a positive value re-adds the drop-in offset for
+ * experiments. Default 0 = perched.
  */
-export let START_ALTITUDE = 14;
+export let START_ALTITUDE = 0;
 export let START_SPEED = 48;
 
 /** How long a release stays live and can still spend the flare.
@@ -630,10 +626,15 @@ export const CONTINUE_DAYLIGHT = 16;
  * is held in front of a ticking clock at the exact moment they choose between
  * "one more run" and leaving — the first-session audit measured the whole
  * average session at ~95 s, so five seconds of extra forced waiting here is
- * ~5 % of the average player's entire stay. "Let it sleep" skips it instantly
+ * ~5 % of the average player's entire stay. "End the flight" skips it instantly
  * for anyone who reads; this protects everyone else.
+ *
+ * 2026-10-04: 10 → 14. The card carries three options plus a context reason
+ * line, and the standing readability rule (more time to read on-screen text)
+ * applies hardest at the exact moment a decision is demanded. The skip path is
+ * instant, so the extra seconds cost decided players nothing.
  */
-export const CONTINUE_TIMEOUT = 10;
+export const CONTINUE_TIMEOUT = 14;
 /**
  * Longest a sponsored break may hold the game before the game abandons it.
  *
@@ -645,7 +646,17 @@ export const CONTINUE_TIMEOUT = 10;
  * own callback.
  */
 export const AD_SAFETY_SECONDS = 60;
-export const AD_DURATION = 4;
+/**
+ * Placeholder break length (no-portal builds only; the portal serves its own).
+ *
+ * 4 s was not a break, it was a blink — it ended before a player could read the
+ * panel, which made the "unskippable" contract meaningless in testing: nothing
+ * that short can be skipped, so nothing about it could be verified by feel. 10 s
+ * is a real (small) break: long enough that the unskippable contract and its
+ * escape-hatch countdown are actually observable, short enough to respect the
+ * session budget above.
+ */
+export const AD_DURATION = 10;
 // Poki controls ad frequency on the portal; this applies only to dev/standalone builds.
 export const INTERSTITIAL_EVERY = 3;
 

@@ -345,8 +345,8 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   // exit — never hidden, never the only way out.
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
-    <h2>${t("hud.renderContinue.SWind", undefined, "Second wind?")}</h2>
-    <p class="tagline">Sunbird is dozing off at ${distanceText(s.distance)}.</p>
+    <h2>${t("hud.renderContinue.SWind", undefined, "How far can you get?")}</h2>
+    <p class="tagline">${t("hud.renderContinue.Landed", undefined, "You landed at")} ${distanceText(s.distance)} — ${t("hud.renderContinue.DayNotOver", undefined, "the day isn't over yet")}</p>
     ${s.continueReason ? `<p class="continue-reason${s.continueHighlight ? " is-highlight" : ""}">${escapeHtml(s.continueReason)}</p>` : ""}
     <div class="over-stats result-summary">
       <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
@@ -354,14 +354,14 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
     ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : t("hud.renderContinue.WatchAd", undefined, "Watch a short ad · keep flying")} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s ${t("hud.renderContinue.ToDecide", undefined, "to decide")} ${clockSvg()}</button></div>`
       : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
     <div class="result-actions">
-      <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
-      <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
+      <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>${t("hud.renderContinue.KeepFlying", undefined, "Keep flying")} · ● ${s.continueCost} <small>(${t("hud.renderContinue.YouHave", undefined, "you have")} ${s.wallet})</small></button>
+      <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "End the flight")}</button>
     </div>
-    ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ Gold · free wake-up</button>` : ""}
-    <p class="fineprint replay-note">Sleep ends the flight and shows your recap. Waking up keeps this run alive from where it landed.</p>
+    ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ ${t("hud.renderContinue.GoldFree", undefined, "Gold members fly on — free")}</button>` : ""}
+    <p class="fineprint replay-note">${t("hud.renderContinue.Note", undefined, "Ending the flight shows your recap. Continuing picks up exactly where you landed.")}</p>
   `;
 }
 
@@ -370,13 +370,13 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
     ? `${PORTAL_DISPLAY_NAME} · sponsored break`
-    : `Sponsored break · ${s.adReason === "continue" ? "your second wind is loading…" : "back to flying in a moment"}`;
+    : `Sponsored break · ${s.adReason === "continue" ? "earns your second wind" : "back to flying in a moment"}`;
   const header = portal
     ? `Advertisement`
     : `Your ad is loading`;
   const subtext = portal
     ? `Your run is paused while the portal serves this break.`
-    : `Back to flying in a moment.`;
+    : `This break plays in full — it can't be skipped. Your flight resumes on its own.`;
   return `
     <div class="ad-label">${label}</div>
     <div class="portal-ad-wait"><div class="spinner"></div><h3>${header}</h3><p>${subtext}</p></div>
@@ -391,7 +391,7 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
           // on its own the instant the countdown lands (see Game.fixedUpdate),
           // so there is nothing here to press: this is a read-only status
           // chip, not a control.
-          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>Continues in <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
+          ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>${t("hud.renderAd.PlaysInFull", undefined, "Ad plays in full · continues in")} <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
           // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
           // so this used to render enabled with a flat "Return to flight" from
           // the first frame of every break — one click skipped a real ad. It is
@@ -408,7 +408,18 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
               }</button>`;
             })()
       }
-      ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
+      ${
+        // The upsell must not read as a skip either. It renders disabled with
+        // its own countdown until the break has played out — the handler gates
+        // the action independently (see handleAction/adBreakCanEnd), so this
+        // is honesty in the view, not the enforcement.
+        canRemoveBreaks
+          ? (() => {
+              const ready = s.adTimer <= 0;
+              return `<button class="mini-btn gold" data-ui data-action="ad-gold"${ready ? "" : " disabled"}>✦ Remove breaks${ready ? "" : ` · in ${Math.ceil(Math.max(0, s.adTimer))}s`}</button>`;
+            })()
+          : ""
+      }
     </div>
   `;
 }

@@ -2839,14 +2839,12 @@ export class Game {
     } else if (q < 0.8) {
       // A player's very first touchdown is absorbed rather than punished.
       //
-      // The opening is deterministic: startX is 64 for every non-race mode, so
-      // everyone touches down on the same terrain feature, and the coach's own
-      // first instruction is "HOLD to dive" with the thumb already down. Held,
-      // that is GRAVITY_DIVE from START_ALTITUDE, measured at ~0.70 s to a
-      // touchdown with landingQuality ~0.45 and ~19% of the speed gone. So the
-      // tutorial was punishing the exact input it had just asked for, on the
-      // first frame of the first run, identically for every player — and the
-      // result card for that run then reads as a bad one.
+      // (The original trigger — the held-dive touchdown 0.70 s into every run
+      // from the old 14 m airborne start — is gone now that runs start
+      // grounded; the guard stays as a net for a genuinely rough first-run
+      // landing mid-flight.) The combo and the hit-stop are what teach
+      // "land well"; neither has anything to say to a player who has not yet
+      // flown.
       //
       // The combo and the hit-stop are what teach "land well"; neither has
       // anything to say to a player who has not yet flown.
@@ -4519,11 +4517,20 @@ export class Game {
     this.terrain.setDifficulty(!isRaceMode(this.modeId) && this.seed.startsWith("fly-") ? this.flow.difficulty() : 1);
     const course = isRaceMode(this.modeId) ? this.courseForRace() : null;
     this.startX = course ? course.island * ISLAND_PERIOD + 64 : 64;
-    // Start in flight, not on the surface. See START_ALTITUDE: parked on the
-    // terrain the bird "landed" again 0.3 s into every run and the opening frame
-    // showed a bird sunk into the grass.
-    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + START_ALTITUDE;
+    // Start ON the ground — perched on the opening hill, matching the flock
+    // (MassRace spawns rivals at heightAt + BIRD_RADIUS) and the tutorial's
+    // first cue, which teaches the dive FROM the ground. See START_ALTITUDE
+    // for the full history: the old 14 m drop-in opened every run with a fall
+    // the player never chose and handed the climb goal free altitude.
+    // grounded + wasGrounded are set AFTER reset so the first physics step
+    // reads ground→ground: no phantom "justLanded" beat, no landing quality
+    // scored for existing, no sunk-into-the-grass frame.
+    const y = this.terrain.heightAt(this.startX) + BIRD_RADIUS + 0.5 + START_ALTITUDE;
     this.bird.reset(this.startX, y);
+    if (START_ALTITUDE <= 0.5) {
+      this.bird.grounded = true;
+      this.bird.wasGrounded = true;
+    }
     // Re-seed the render-interpolation snapshot. `visX` is
     // `lerp(prevBirdX, bird.x, interp)`, and `interp` is 0 whenever the
     // accumulator is empty — which is the ENTIRE start countdown, because
@@ -7786,8 +7793,12 @@ export class Game {
         if (this.continuesUsed < max) this.doContinue("portal_rewarded");
         else this.setState("continue");
       } else {
+        // The break did not pay: the player closed the portal's ad early (the
+        // SDK resolves earned=false), or the SDK had nothing to serve. Either
+        // way the rule is the ad plays to the end or there is no second wind —
+        // say the rule, so "skip" never looks like it might have worked.
         this.setState("continue");
-        this.hud.toast("No reward this time — try coins or rest", "warn");
+        this.hud.toast("The ad has to play to the end — try again, or use coins", "warn");
       }
     } finally {
       this.continueRewardBusy = false;

@@ -99,6 +99,11 @@ describe("the break overlay", () => {
     expect(chip?.querySelector("svg"), "every countdown wears a clock").not.toBeNull();
     expect(chip?.innerHTML ?? "", "and it is the shared timer glyph").toContain("timer-glyph");
     expect(card.textContent ?? "").toMatch(/Continues in/i);
+    // 2026-10-04: a break that cannot be skipped must SAY so. "Continues in
+    // 3s" alone reads like a loading state the player is waiting out; the
+    // words "plays in full" are the contract, stated where it is enforced.
+    expect(chip?.textContent ?? "", "the chip says the break plays in full").toMatch(/plays in full/i);
+    expect(card.querySelector(".portal-ad-wait p")?.textContent ?? "", "and so does the body copy").toMatch(/can't be skipped/i);
   });
 
   it("does not get stuck saying 'loading' with an empty bar once our own break finishes", async () => {

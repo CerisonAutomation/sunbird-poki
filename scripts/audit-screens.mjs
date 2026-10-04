@@ -57,7 +57,7 @@ await page.screenshot({ path: "audit-shots/13-shop-audit.png", fullPage: false }
 // eleven race courses live. The audit checks the newest two render.
 await page.locator('[data-action="close"], [data-action="back"], [data-action="dismiss"]').first().click().catch(() => {});
 await page.waitForTimeout(600);
-await page.evaluate(() => { window.history && window.scrollTo(0, 0); });
+await page.evaluate(() => { window.scrollTo(0, 0); });
 const aiBtn = page.locator('[data-action="open-live"]').first();
 if (await aiBtn.isVisible().catch(() => false)) {
   await aiBtn.click();

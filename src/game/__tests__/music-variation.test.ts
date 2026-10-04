@@ -11,7 +11,7 @@ describe("island music uniqueness", () => {
     expect(unique.size).toBe(modes.length);
   });
 
-  it("biomeForIsland returns the correct hand-authored mode for islands 0–8", () => {
+  it("biomeForIsland returns the correct hand-authored mode for islands 0–9", () => {
     const expected: BiomeMusicStyle[] = [
       "bright",   // 0 Green Hills
       "airy",     // 1 Tropical Atoll
@@ -22,6 +22,7 @@ describe("island music uniqueness", () => {
       "crystal",  // 6 Aurora Peaks
       "ember",    // 7 Cinder Forge
       "canyon",   // 8 Skyreach Canyon
+      "amethyst", // 9 Amethyst Hollow
     ];
     for (let i = 0; i < expected.length; i++) {
       expect(biomeForIsland(i).musicMode).toBe(expected[i]);
@@ -30,17 +31,17 @@ describe("island music uniqueness", () => {
 
   it("wild islands beyond the base set inherit a valid musicMode", () => {
     const valid: BiomeMusicStyle[] = [
-      "bright", "warm", "airy", "wide", "night", "crystal", "reef", "ember", "canyon",
+      "bright", "warm", "airy", "wide", "night", "crystal", "reef", "ember", "canyon", "amethyst",
     ];
-    for (const idx of [9, 10, 17, 18, 26]) {
+    for (const idx of [10, 11, 19, 20, 29]) {
       expect(valid).toContain(biomeForIsland(idx).musicMode);
     }
   });
 
-  it("all nine styles are represented in the first 27 wild islands", () => {
+  it("all ten styles are represented in the first 30 islands", () => {
     const modes = new Set<BiomeMusicStyle>();
-    for (let i = 0; i < 27; i++) modes.add(biomeForIsland(i).musicMode as BiomeMusicStyle);
-    // All 9 base styles appear within 3 full laps.
-    expect(modes.size).toBe(9);
+    for (let i = 0; i < 30; i++) modes.add(biomeForIsland(i).musicMode as BiomeMusicStyle);
+    // All 10 base styles appear within 3 full laps.
+    expect(modes.size).toBe(10);
   });
 });

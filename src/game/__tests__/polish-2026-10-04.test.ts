@@ -100,6 +100,16 @@ describe("charting a new world pays (worlds & rewards)", () => {
   it("pays a fair minimum for an unknown or future biome id", () => {
     expect(chartingBonus("a-world-nobody-has-met")).toBe(25);
   });
+
+  it("includes the tenth world, and it pays the deepest charting bonus", () => {
+    // Amethyst Hollow (2026-10-04): the atlas's reward world before the laps.
+    const amethyst = BIOMES.find((b) => b.id === "amethyst");
+    expect(amethyst, "the tenth biome must exist").toBeDefined();
+    expect(amethyst!.liftMult).toBeGreaterThan(1); // floaty air is its identity
+    expect(amethyst!.glow).toBe(true);             // it is a night-glow world
+    expect(BIOMES).toHaveLength(10);
+    expect(chartingBonus("amethyst")).toBe(160);
+  });
 });
 
 describe("the resolution ladder defends 60 fps, not 40", () => {

@@ -140,7 +140,7 @@ export type BiomeDef = {
 };
 
 /**
- * Nine hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
+ * Ten hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
  * V2 anti-bore: tighter rhythm, distinct thermals, unique hazards, no long flat.
  */
 /**
@@ -467,6 +467,44 @@ export const BIOMES: BiomeDef[] = [
     glow: false,
     musicMode: "canyon",
   },
+  {
+    // The tenth world (2026-10-04 "more worlds" directive): a violet glass
+    // rift where the air itself floats you. Long crystalline faces reward the
+    // glide the first nine worlds taught, chicane walls make the corridors
+    // read like a cathedral, and everything glows — it is the reward world,
+    // the one the atlas says exists before the laps begin.
+    id: "amethyst",
+    liftMult: 1.06,
+    name: "Amethyst Hollow",
+    tagline: "Violet glass, floaty air — chain the spires into one long glide",
+    emoji: "crystal",
+    amp: 1.35,
+    wave: 1.15,
+    skew: 0.25,      // crystal faces: fast rise, slow glassy drop
+    roughness: 0.30, // faceted — textured but periodic, so it stays readable
+    terrain: grammar({ relief: 1.05, lenScale: 1.18, rampEvery: 2, rampChance: 0.7, chicane: 0.3, padSpacing: 1.05, troughEvery: 4, troughDepth: 0.3, islandScale: 1.05 }),
+    top: 0xb98ae8,
+    ridge: 0x8a5cc8,
+    mid: 0x5c3a94,
+    deep: 0x32205e,
+    sand: 0xe0d0ff,
+    farA: 0x9a78d8,
+    farB: 0x6a4aa8,
+    farC: 0x3e2a6e,
+    skyTop: 0x2a1a4a,
+    skyHorizon: 0xc8a8ff,
+    skyMix: 0.55,
+    cloudTint: 0xd8c8f8,
+    cloudDensity: 0.3,
+    snowLine: 0,
+    deco: "crystal",
+    decoDensity: 1.0,
+    hazard: "gust",
+    thermals: 7,
+    fogTint: 0x4a3878,
+    glow: true,
+    musicMode: "amethyst",
+  },
 ];
 
 function shade(hex: number, amt: number): number {
@@ -484,7 +522,7 @@ const clampF = (v: number, lo: number, hi: number): number => (v < lo ? lo : v >
 export function biomeForIsland(island: number): BiomeDef {
   const i = Math.max(0, Math.floor(island));
   if (i < BIOMES.length) return BIOMES[i]!;
-  // UNLIMITED LEVELS: deterministic remix past the hand-tuned six.
+  // UNLIMITED LEVELS: deterministic remix past the hand-tuned ten.
   // Same seed => same island forever, new hue shift + amp/wave drift per lap.
   const cached = _wildCache.get(i);
   if (cached) return cached;

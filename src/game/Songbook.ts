@@ -1,7 +1,7 @@
 import { BIOMES } from "./Biomes";
 
 /**
- * The Sunbird songbook: thirty hand-authored songs, played as written.
+ * The Sunbird songbook: thirty-three hand-authored songs, played as written.
  *
  * `Music.ts` *generates* its tracks from a chord progression plus a melody line
  * and infers the arrangement from the family. That is wonderful for endless
@@ -197,6 +197,40 @@ const SPECS: readonly Spec[] = [
     alt: ["A4", 0, "C5", 0, "E5", "D5", "C5", 0, "B4", "G4", 0, "D4", 0, "E4", 0, 0],
     drums: "x...x..x....x...|....s.......s...|..h...h...h...h.",
     use: { bass: true, rhodes: true, uke: true, voice: true },
+  },
+  {
+    // Amethyst Hollow (2026-10-04): suspended in violet glass. The slowest
+    // play song in the book — the world's air floats you, so its theme has
+    // time to breathe. Chime lead, wide pad, almost no drums: cathedral.
+    title: "Violet Glass", role: "play", biomes: ["amethyst"], bpm: 73, steps: 16, swing: 0.12, delay: 0.4, wet: 0.25,
+    bars: [["A2", "A3", "C4", "E4"], ["F2", "F3", "A3", "C4"], ["C3", "G3", "C4", "E4"], ["G2", "D3", "G3", "B3"]],
+    lead: ["E5", 0, "C5", 0, "A4", 0, "C5", "E5", 0, "D5", 0, "C5", 0, "A4", 0, 0],
+    alt: ["A5", 0, "G5", 0, "E5", 0, "G5", "A5", 0, "G5", 0, "E5", 0, "C5", 0, 0],
+    drums: "x.......x.......|....s.......s...|................",
+    use: { bass: true, chime: true, pad: true },
+  },
+  {
+    // The Hollow's second song: the same glass, walking. A brighter bell
+    // figure over the same key so the two shuffle into one another without
+    // either sounding like a reprise of the menu's music box.
+    title: "Hollow Bells", role: "play", biomes: ["amethyst", "aurora"], bpm: 93, steps: 16, swing: 0.08, delay: 0.34, wet: 0.2,
+    bars: [["E2", "E3", "G3", "B3"], ["C3", "C4", "E4", "G4"], ["G2", "G3", "B3", "D4"], ["D3", "A3", "D4", "F#4"]],
+    lead: ["B4", "E5", "G5", 0, "E5", 0, "B4", 0, "D5", "G5", "B5", 0, "A5", 0, "G5", 0],
+    alt: ["G4", "B4", "E5", 0, "D5", 0, "B4", 0, "B4", "D5", "G5", 0, "F#5", 0, "D5", 0],
+    drums: "x...x...x..x....|..s....s..s....s|.h.h.h..h.h.h..h",
+    use: { bass: true, rhodes: true, chime: true, voice: true },
+  },
+  {
+    // The Hollow's third song: a 3/4 walk between the spires. Twelve steps
+    // (three bars of four) so the world's rotation includes a waltz — the
+    // other two are square-time, and a pool that never changes meter is a
+    // pool that stops surprising by the second lap.
+    title: "Spire Walk", role: "play", biomes: ["amethyst"], bpm: 70, steps: 12, swing: 0.1, delay: 0.44, wet: 0.26,
+    bars: [["D3", "D4", "F#4", "A4"], ["B2", "B3", "D4", "F#4"], ["G2", "G3", "B3", "D4"], ["A2", "E3", "A3", "C#4"]],
+    lead: ["F#5", 0, "D5", "A4", 0, "B4", "D5", 0, "F#5", "E5", 0, "D5"],
+    alt: ["A5", 0, "F#5", "D5", 0, "F#5", "A5", 0, "B5", "A5", 0, "F#5"],
+    drums: "x.....x.....x.|......s......s|.h..h..h..h..h",
+    use: { bass: true, chime: true, pad: true, voice: true },
   },
   {
     title: "Fusion Walk", role: "play", biomes: ["volcano", "canyon", "night"], bpm: 92, steps: 16, swing: 0.14, delay: 0.27, wet: 0.14,

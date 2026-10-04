@@ -29,11 +29,11 @@ const TIMBRE: ReadonlyArray<{ key: keyof BiomeMix; min: number; max: number }> =
 
 describe("BIOME_MIX: every world is a place, not a volume", () => {
   it("covers every style exactly once", () => {
-    expect(STYLES).toHaveLength(9);
-    expect(new Set(STYLES).size).toBe(9);
+    expect(STYLES).toHaveLength(10);
+    expect(new Set(STYLES).size).toBe(10);
   });
 
-  it("gives the nine worlds nine distinct timbres", () => {
+  it("gives the ten worlds ten distinct timbres", () => {
     // The regression this guards: with `organ` and `pad` unweighted, every row
     // carried the same bed and the only difference between Midnight Coast and
     // Green Hills was tempo and cutoff. Distinctness is measured over the
@@ -69,6 +69,7 @@ describe("BIOME_MIX: every world is a place, not a volume", () => {
     expect_("airy", "arp", "organ");      // Tropical Atoll: floating
     expect_("night", "pad", "spark");     // Midnight Coast: sparse, everything dim
     expect_("warm", "organ", "spark");    // Sunset Ridge: a warm bed, not a bright one
+    expect_("amethyst", "spark", "organ"); // Amethyst Hollow: glass and glitter, weightless
   });
 
   it("rebalances the bed in every world rather than pushing it one way", () => {

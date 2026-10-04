@@ -164,6 +164,33 @@ and the artifact audit:
   is disarmed until the break demonstrably fails, the upsell waits out the
   timer, portal breaks refuse every game action.
 
+### 3.6 And the rest — onboarding step 4, the tenth world, run-2 CTA proof, home refactor (2026-10-04, third pass)
+
+* **Onboarding teaches the clock now.** The FirstFlight coach gained a fourth
+  step: "The sun is your clock — reach the next island to refill daylight ☀".
+  It completes only when the pilot crosses onto the NEXT island — real
+  progression, not a timer — so the last coach beat ends on forward motion.
+  The fit test's core confusion (runs lost at the sun without ever learning
+  islands refill daylight) is now taught in the first 30 seconds. Localised
+  into all 36 barrel locales.
+* **The tenth world: Amethyst Hollow.** A violet glass rift past Skyreach
+  Canyon — floaty air (lift 1.06), faceted crystal faces, glow collectibles,
+  and the deepest charting bonus (160 ●). Fully integrated, not just a row:
+  its own terrain grammar, its own `amethyst` music style (slowest base tempo
+  in the game, the brightest spark, weightless bed — pinned by the
+  music-identity gates), and THREE hand-authored songs ("Violet Glass",
+  "Hollow Bells", "Spire Walk" — the book's only 3/4 flight waltz) so the
+  world's pool is deep enough to shuffle.
+* **Run-2 CTA proven on the artifact.** `scripts/probe-run2-cta.mjs` boots the
+  real build, flies two full runs, declines the second wind with its plain
+  button, and observes the "Today's Daily Challenge is live" toast at the end
+  of run 2 — the one moment the first-session audit could never reach. PASS.
+* **Home screen extracted to `hud/home.ts`.** The launch cluster, quick rail,
+  daily banner, tournament strip, onboarding route, destination grids and
+  standings strip moved out of the 3,000-line HUD class file into the same
+  pure-renderer pattern as hud/run.ts and hud/loadout.ts. Behaviour-identical:
+  every HUD test, the visual baselines and the artifact audit pass unchanged.
+
 ## 5. What NOT to do (the guide is explicit)
 
 - **Never gate the first flight** — no name entry, no menu between boot and

@@ -214,6 +214,7 @@ const BIOME_INTRO_HINTS: Record<string, string> = {
   aurora:  "Ice faces are steep — HOLD hard, RELEASE hard",
   volcano: "Jagged spikes — tiny timing windows, maximum rewards",
   canyon:  "Plateau then cliff — hold steady, explode off the lip",
+  amethyst:"Floaty air — long faces, chain the spires into one glide",
 };
 
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };
@@ -1867,6 +1868,7 @@ export class Game {
         slope: this.terrain.slopeAt(this.bird.x),
         justLaunched: this.bird.justLaunched,
         airborne: !this.bird.grounded,
+        islandIndex: this.island,
       });
       if (this.coach.done) {
         this.save.state.firstFlightDone = true;

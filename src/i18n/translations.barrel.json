@@ -20668,6 +20668,52 @@
         "uz": "USHLAB TURING · pastga tushadigan qiyalikni tutib oling"
       }
     },
+    "onboarding.chaseTheSun": {
+      "sourceText": "The sun is your clock — reach the next island to refill daylight ☀",
+      "meta": {
+        "file": "src/game/FirstFlight.ts",
+        "context": "FirstFlight coach step 4: the daylight mechanic; completes on reaching the next island"
+      },
+      "placeholders": [],
+      "translations": {
+        "ar": "الشمس هي ساعتك — اصل إلى الجزيرة التالية لتجديد ضوء النهار ☀",
+        "bg": "The sun is your clock — reach the next island to refill daylight ☀",
+        "bn": "The sun is your clock — reach the next island to refill daylight ☀",
+        "cs": "The sun is your clock — reach the next island to refill daylight ☀",
+        "da": "The sun is your clock — reach the next island to refill daylight ☀",
+        "de": "Die Sonne ist deine Uhr — erreiche die nächste Insel, um Tageslicht aufzutanken ☀",
+        "el": "The sun is your clock — reach the next island to refill daylight ☀",
+        "en": "The sun is your clock — reach the next island to refill daylight ☀",
+        "es": "El sol es tu reloj — llega a la próxima isla para reponer la luz ☀",
+        "fi": "The sun is your clock — reach the next island to refill daylight ☀",
+        "fr": "Le soleil est ton horloge — atteins l'île suivante pour recharger la lumière ☀",
+        "he": "השמש היא השעון שלך — הגע לאי הבא כדי למלא את אור היום ☀",
+        "hi": "सूरज ही आपकी घड़ी है — दिन की रोशनी भरने के लिए अगले द्वीप तक पहुँचें ☀",
+        "hu": "The sun is your clock — reach the next island to refill daylight ☀",
+        "id": "Matahari adalah jammu — capai pulau berikutnya untuk mengisi ulang cahaya siang ☀",
+        "it": "Il sole è il tuo orologio — raggiungi l'isola successiva per ricaricare la luce ☀",
+        "ja": "太陽が時計 — 次の島に届くと昼の光が回復 ☀",
+        "ko": "태양이 시계입니다 — 다음 섬에 도달하면 낮이 채워져요 ☀",
+        "ms": "The sun is your clock — reach the next island to refill daylight ☀",
+        "mt": "The sun is your clock — reach the next island to refill daylight ☀",
+        "nl": "De zon is je klok — bereik het volgende eiland om daglicht bij te vullen ☀",
+        "no": "The sun is your clock — reach the next island to refill daylight ☀",
+        "pl": "Słońce to twój zegar — dotrzyj na następną wyspę, by odnowić światło ☀",
+        "pt": "O sol é o seu relógio — chegue à próxima ilha para repor a luz ☀",
+        "ro": "The sun is your clock — reach the next island to refill daylight ☀",
+        "ru": "Солнце — твои часы — доберитесь до следующего острова, чтобы пополнить свет ☀",
+        "sk": "The sun is your clock — reach the next island to refill daylight ☀",
+        "sr": "The sun is your clock — reach the next island to refill daylight ☀",
+        "sv": "The sun is your clock — reach the next island to refill daylight ☀",
+        "th": "ดวงอาทิตย์คือนาฬิกาของคุณ — ไปให้ถึงเกาะถัดไปเพื่อเติมแสงกลางวัน ☀",
+        "tl": "The sun is your clock — reach the next island to refill daylight ☀",
+        "tr": "Güneş senin saatin — gün ışığını doldurmak için bir sonraki adaya ulaş ☀",
+        "uk": "Сонце — це ваш годинник — дістаньтеся наступного острова, щоб поповнити світло ☀",
+        "uz": "The sun is your clock — reach the next island to refill daylight ☀",
+        "vi": "Mặt trời là đồng hồ của bạn — đến đảo tiếp theo để tiếp thêm ánh sáng ban ngày ☀",
+        "zh": "太阳就是你的时钟 — 到达下一座岛补充日光 ☀"
+      }
+    },
     "onboarding.flyNow": {
       "sourceText": "Fly now",
       "meta": {

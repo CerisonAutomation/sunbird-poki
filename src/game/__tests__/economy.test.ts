@@ -145,8 +145,8 @@ describe("portal coin VIP", () => {
 });
 
 describe("worlds", () => {
-  it("has 9 hand-tuned biomes with unique ids", () => {
-    expect(BIOMES.length).toBe(9);
+  it("has 10 hand-tuned biomes with unique ids", () => {
+    expect(BIOMES.length).toBe(10);
     expect(new Set(BIOMES.map((b) => b.id)).size).toBe(BIOMES.length);
   });
 

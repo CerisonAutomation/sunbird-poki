@@ -107,7 +107,7 @@ describe("charting a new world pays (worlds & rewards)", () => {
     expect(amethyst, "the tenth biome must exist").toBeDefined();
     expect(amethyst!.liftMult).toBeGreaterThan(1); // floaty air is its identity
     expect(amethyst!.glow).toBe(true);             // it is a night-glow world
-    expect(BIOMES).toHaveLength(10);
+    expect(BIOMES).toHaveLength(11);
     expect(chartingBonus("amethyst")).toBe(160);
   });
 });

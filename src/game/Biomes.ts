@@ -140,7 +140,7 @@ export type BiomeDef = {
 };
 
 /**
- * Ten hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
+ * Eleven hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
  * V2 anti-bore: tighter rhythm, distinct thermals, unique hazards, no long flat.
  */
 /**
@@ -505,6 +505,44 @@ export const BIOMES: BiomeDef[] = [
     glow: true,
     musicMode: "amethyst",
   },
+  {
+    // The eleventh world (2026-10-04 "more worlds" directive): a long autumn
+    // goldade. The longest islands and gentlest faces in the chain — a
+    // cruiser's world that repays everything the first ten taught with room
+    // to use it. One glide can cross the whole grove; the game's reward for
+    // getting good is finally having somewhere to be good at.
+    id: "grove",
+    liftMult: 1.02,
+    name: "Gilded Grove",
+    tagline: "Long golden glades — carve the whole grove in one glide",
+    emoji: "star",
+    amp: 1.15,
+    wave: 1.25,
+    skew: 0.35,      // gold dunes of trees: fast rise, long amber drop
+    roughness: 0.12, // smooth — read-ahead is the point of a cruiser world
+    terrain: grammar({ relief: 0.95, lenScale: 1.35, rampEvery: 2, rampChance: 0.72, chicane: 0.15, padSpacing: 0.95, islandScale: 1.15 }),
+    top: 0xe8c86a,
+    ridge: 0xc8a03c,
+    mid: 0x9a7428,
+    deep: 0x644a18,
+    sand: 0xf8ecc8,
+    farA: 0xd8b060,
+    farB: 0xa88040,
+    farC: 0x705228,
+    skyTop: 0x3a5a8a,
+    skyHorizon: 0xffd88a,
+    skyMix: 0.4,
+    cloudTint: 0xfff0d0,
+    cloudDensity: 0.34,
+    snowLine: 0,
+    deco: "tree",
+    decoDensity: 1.1,
+    hazard: "gust",
+    thermals: 5,
+    fogTint: 0xd8c090,
+    glow: false,
+    musicMode: "grove",
+  },
 ];
 
 function shade(hex: number, amt: number): number {
@@ -522,7 +560,7 @@ const clampF = (v: number, lo: number, hi: number): number => (v < lo ? lo : v >
 export function biomeForIsland(island: number): BiomeDef {
   const i = Math.max(0, Math.floor(island));
   if (i < BIOMES.length) return BIOMES[i]!;
-  // UNLIMITED LEVELS: deterministic remix past the hand-tuned ten.
+  // UNLIMITED LEVELS: deterministic remix past the hand-tuned eleven.
   // Same seed => same island forever, new hue shift + amp/wave drift per lap.
   const cached = _wildCache.get(i);
   if (cached) return cached;

@@ -31,17 +31,17 @@ describe("island music uniqueness", () => {
 
   it("wild islands beyond the base set inherit a valid musicMode", () => {
     const valid: BiomeMusicStyle[] = [
-      "bright", "warm", "airy", "wide", "night", "crystal", "reef", "ember", "canyon", "amethyst",
+      "bright", "warm", "airy", "wide", "night", "crystal", "reef", "ember", "canyon", "amethyst", "grove",
     ];
-    for (const idx of [10, 11, 19, 20, 29]) {
+    for (const idx of [11, 12, 23, 24, 35]) {
       expect(valid).toContain(biomeForIsland(idx).musicMode);
     }
   });
 
-  it("all ten styles are represented in the first 30 islands", () => {
+  it("all eleven styles are represented in the first 30 islands", () => {
     const modes = new Set<BiomeMusicStyle>();
     for (let i = 0; i < 30; i++) modes.add(biomeForIsland(i).musicMode as BiomeMusicStyle);
-    // All 10 base styles appear within 3 full laps.
-    expect(modes.size).toBe(10);
+    // All 11 base styles appear within 3 full laps.
+    expect(modes.size).toBe(11);
   });
 });

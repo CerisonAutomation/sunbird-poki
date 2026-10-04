@@ -24,7 +24,7 @@
  *   sleep → music-box lullaby
  */
 export type MusicMode = "off" | "menu" | "play" | "fever" | "sleep" | "storm";
-export type BiomeMusicStyle = "bright" | "warm" | "airy" | "wide" | "night" | "crystal" | "reef" | "ember" | "canyon" | "amethyst";
+export type BiomeMusicStyle = "bright" | "warm" | "airy" | "wide" | "night" | "crystal" | "reef" | "ember" | "canyon" | "amethyst" | "grove";
 import { TICK_MS, LOOKAHEAD, MAX_STEPS_PER_TICK } from "./audio-constants";
 import { runPhase as computeRunPhase, arrangement, arrangementGlide, ARR, type ArrangementContext, type RunPhase } from "./MusicArrangement";
 
@@ -705,6 +705,9 @@ export const BIOME_MIX: Record<BiomeMusicStyle, BiomeMix> = {
   //   tempo, the widest pad, the brightest spark. Floaty like `wide`, glassy
   //   like `crystal`, but slower than both — the reward world takes its time.
   amethyst: { bpm: 116, fever: 148, cutoff: 5200, transpose: 5, uke: 0.55, glock: 0.75, bass: 0.78, perc: 0.82, whistle: 1.05, arp: 1.28, organ: 0.55, pad: 1.35, spark: 1.5 },
+  //   grove   Gilded Grove     — autumn woodwind: a warm organ bed, a light
+  //   step, nothing shrill. The cruiser world hums instead of sparkling.
+  grove: { bpm: 120, fever: 146, cutoff: 4800, transpose: -1, uke: 0.9, glock: 0.5, bass: 0.95, perc: 0.9, whistle: 1.1, arp: 0.85, organ: 1.25, pad: 1.05, spark: 0.9 },
 };
 
 /** Keep every biome/night combination inside WebAudio's usable filter range. */

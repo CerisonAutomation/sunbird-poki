@@ -519,6 +519,14 @@ export const TRAILS: Record<string, { label: string; colors: [number, number, nu
       [0.3, 0.79, 0.94],
     ],
   },
+  trail_amethyst: {
+    label: "Amethystveil",
+    colors: [
+      [0.73, 0.54, 0.91],
+      [0.54, 0.36, 0.78],
+      [0.88, 0.82, 1],
+    ],
+  },
 };
 
 /**

@@ -368,6 +368,28 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .home-section-title { text-align:left; font-size:11px; font-weight:800; color:#a08060; letter-spacing:.08em; text-transform:uppercase; margin:22px 0 10px; }
 .progress-destinations .destination { min-height:60px; background:rgba(255,255,255,0.5); border-color:#e8dfd0; }
 .home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid #dfd0bd; padding-top:14px; }
+/* The status bar variant: the home sheet's first row, sticky, so the wallet
+   is on screen for the whole scroll instead of being the last thing found.
+   Paper gradient + bottom border, because content scrolling under a
+   transparent bar turns the numbers into noise. */
+.home-status-bar {
+  position: sticky; top: 0; z-index: 6;
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: nowrap; justify-content: flex-start;
+  /* Right padding clears the absolutely-positioned mute button (44px) that
+     shares the top row, so the Pass chip can never slide under it. */
+  margin: 0 -18px 10px; padding: 10px 62px 9px 18px;
+  background: linear-gradient(180deg, #fffaf1 78%, rgba(255, 250, 241, 0.9));
+  border-bottom: 1px solid #dfd0bd;
+  font-size: 12px; color: var(--muted-rose); text-align: left;
+}
+.home-status-bar .record-wallet { margin-left: 0; font: 600 16px var(--display); color: #976425; }
+.home-status-bar .record-wallet small { font: 500 10px var(--body); }
+.home-status-bar .record-pass { margin-left: auto; flex-shrink: 0; }
+.home-status-bar .record-best { display: flex; align-items: center; gap: 4px; }
+.home-status-bar .record-best b { font: 600 14px var(--display); color: #3e5642; }
+.home-status-bar .record-art { flex: 0 0 auto; width: 18px; height: 18px; }
+@media (max-width: 380px) { .home-status-bar .record-best small, .home-status-bar .record-best span:not(.record-art) { font-size: 11px; } .home-status-bar { gap: 7px; } }
 .onboarding-route { margin: 0 0 14px; padding: 12px; border: 1px solid #e1bd67; border-radius: 16px; background: linear-gradient(145deg,#fff7d6,#fffdf4); text-align: left; box-shadow: 0 4px 0 rgba(180,130,30,.12); }
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
 .onboarding-route-head span { font:800 10px/1 var(--body); letter-spacing:.14em; }

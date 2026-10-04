@@ -237,6 +237,13 @@ export function renderMain(s: HudSnapshot): string {
   const equippedSkin = s.skins.find((v) => v.equipped)?.def ?? s.skins[0]?.def;
   const progressDestinations = PROGRESS_DESTINATIONS;
   return `
+    ${/* The pilot's status line — wallet, best, pass — pinned to the TOP of
+         the sheet (2026-10-04 directive: "move text to top"). It used to be
+         the last row of a 2,600px page, 1,400px below the fold: the coin
+         balance, the number every shop decision needs, was the single least
+         visible element on the screen. Sticky, so it stays while the menu
+         scrolls. */ ""}
+    <div class="home-record home-status-bar" role="status"><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-best"><span class="record-art">${menuIcon("medal")}</span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span></div>
     <button
       class="icon-btn menu-mute"
       data-ui
@@ -283,6 +290,5 @@ export function renderMain(s: HudSnapshot): string {
     ${homeBoardStrip(s)}
     <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="${t("hud.aria.progress", undefined, "Progress")}">${menuLinks(progressDestinations)}</nav>
-    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
   `;
 }

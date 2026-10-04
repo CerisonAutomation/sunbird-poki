@@ -1,5 +1,5 @@
 /**
- * Per-biome identity: can you tell the nine worlds apart with your eyes shut?
+ * Per-biome identity: can you tell the eleven worlds apart with your eyes shut?
  *
  * `BIOME_MIX` used to carry only *level* — bpm, cutoff, transposition and five
  * voice weights. The band's supporting voices (arp, organ, pad, spark) were
@@ -29,11 +29,11 @@ const TIMBRE: ReadonlyArray<{ key: keyof BiomeMix; min: number; max: number }> =
 
 describe("BIOME_MIX: every world is a place, not a volume", () => {
   it("covers every style exactly once", () => {
-    expect(STYLES).toHaveLength(10);
-    expect(new Set(STYLES).size).toBe(10);
+    expect(STYLES).toHaveLength(11);
+    expect(new Set(STYLES).size).toBe(11);
   });
 
-  it("gives the ten worlds ten distinct timbres", () => {
+  it("gives the eleven worlds eleven distinct timbres", () => {
     // The regression this guards: with `organ` and `pad` unweighted, every row
     // carried the same bed and the only difference between Midnight Coast and
     // Green Hills was tempo and cutoff. Distinctness is measured over the
@@ -70,6 +70,7 @@ describe("BIOME_MIX: every world is a place, not a volume", () => {
     expect_("night", "pad", "spark");     // Midnight Coast: sparse, everything dim
     expect_("warm", "organ", "spark");    // Sunset Ridge: a warm bed, not a bright one
     expect_("amethyst", "spark", "organ"); // Amethyst Hollow: glass and glitter, weightless
+    expect_("grove", "organ", "arp");     // Gilded Grove: a warm hum, not inner motion
   });
 
   it("rebalances the bed in every world rather than pushing it one way", () => {

@@ -215,6 +215,7 @@ const BIOME_INTRO_HINTS: Record<string, string> = {
   volcano: "Jagged spikes — tiny timing windows, maximum rewards",
   canyon:  "Plateau then cliff — hold steady, explode off the lip",
   amethyst:"Floaty air — long faces, chain the spires into one glide",
+  grove:   "Long golden glades — one glide can cross the whole grove",
 };
 
 type BeforeInstallPromptEvent = Event & { prompt: () => Promise<void> };

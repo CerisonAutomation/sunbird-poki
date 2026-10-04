@@ -373,8 +373,8 @@ describe("songbook: every song is its own song", () => {
 });
 
 describe("songbook: an island each", () => {
-  it("carries the whole sketch — thirty-three songs, not a shortlist", () => {
-    expect(SONGBOOK.length).toBe(33);
+  it("carries the whole sketch — forty songs, not a shortlist", () => {
+    expect(SONGBOOK.length).toBe(40);
   });
 
   it("leaves no island without music", () => {

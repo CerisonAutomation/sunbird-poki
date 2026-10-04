@@ -31,7 +31,14 @@ const kf = (t: number, x: number, y: number, rot = 0, vx?: number, vy?: number):
 describe("RoomSync cadence", () => {
   it("sends at 15 Hz, well under the 60 Hz render rate", () => {
     expect(SEND_DT).toBeCloseTo(1 / 15, 10);
-    expect(SEND_DT * 60).toBeLessThan(1.2);
+    // In FRAMES between sends, not a fraction of one. 15 Hz against a 60 Hz
+    // render is 4 frames apart, so the real property is that a send can never
+    // happen more than once per rendered frame. The assertion read
+    // `toBeLessThan(1.2)` — less than 1.2 frames — which contradicts the
+    // `1/15` assertion directly above it and could only ever pass if the
+    // transport sent state faster than the renderer could draw it.
+    expect(SEND_DT * 60).toBeGreaterThanOrEqual(1);
+    expect(SEND_DT * 60).toBeLessThan(60);
   });
 
   it("renders behind the newest packet", () => {

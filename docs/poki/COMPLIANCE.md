@@ -78,7 +78,7 @@
 |---|---|---|---|---|
 | `MON-01` | recommendation | Integrate monetization early so rewarded video fits the natural game flow. | ✅ verified | src/game/Game.ts matches /rewardedBreak/ |
 | `MON-02` | recommendation | Engagement first: rewarded video performance follows engagement. | ✅ verified | src/game/SeasonPass.ts |
-| `MON-03` | requirement | Rewarded videos must be optional and never block core gameplay. | ✅ verified | src/game/hud/run.ts matches /Let it sleep/ |
+| `MON-03` | requirement | Rewarded videos must be optional and never block core gameplay. | ✅ verified | src/game/hud/run.ts matches /End the flight/ |
 | `MON-04` | requirement | Every video-triggering element must be clearly labelled, accessible and transparent about the reward. | ✅ verified | src/game/hud/run.ts matches /Watch for Second Wind/ |
 | `MON-05` | requirement | Always provide a standard (non-ad) alternative to a rewarded option. | ✅ verified | e2e/results.spec.ts (pinned: /continue-sleep/) |
 | `MON-06` | requirement | Standard and rewarded options appear simultaneously. | ✅ verified | src/game/hud/run.ts matches /renderContinue/ |
@@ -108,7 +108,7 @@
 | `LOC-01` | recommendation | Localization is essential for engagement outside English-speaking regions. | ✅ verified | src/i18n/translations.barrel.json |
 | `LOC-02` | requirement | Centralize all text into a single file format before translating. | ✅ verified | src/i18n/index.ts matches /export function t\(/ |
 | `LOC-03` | recommendation | Prioritise localization for text-carrying genres/mechanics. | ✅ verified | docs/poki/05-localization.md |
-| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 589 strings complete |
+| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 598 strings complete |
 | `LOC-05` | requirement | Detect the browser language and serve it; a manual selector should exist too. | ✅ verified | src/i18n/__tests__/locales.test.ts |
 
 ## THB — Game thumbnail
@@ -367,7 +367,7 @@
 | `EN-06` | Run outcome, placement visibility/interaction and economy events are all instrumented. |
 | `MON-01` | Rewarded revive wired into the crash flow. |
 | `MON-02` | Deep progression layer independent of ads. |
-| `MON-03` | Free restart and free 'let it sleep' paths always exist; no mode is ad-gated. |
+| `MON-03` | Free restart and free 'End the flight' paths always exist; no mode is ad-gated. (2026-10-04 copy pass: 'Let it sleep' became 'End the flight' — same plain exit, plainer words.) |
 | `MON-04` | Labelled button, aria-labelled, explicit reward wording. |
 | `MON-05` | e2e/results.spec.ts pins the standard and free options beside the rewarded one ('Let it sleep' always rendered). |
 | `MON-06` | All three options render in one pass; nothing gates the ad behind a wizard step. |

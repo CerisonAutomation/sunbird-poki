@@ -34,7 +34,7 @@ import { describe, expect, it } from "vitest";
 
 import { FOOTER_TOP_ANCHOR_SLACK_PX, LANE_GAP_PX, footerAnchoredTop, footerBottomReservation, messageBand, type MessageBandInput } from "../hud/messageBand";
 import { messageHoldMs } from "../MessageTiming";
-import { TOAST_MIN_VISIBLE_MS, decideToast } from "../toastFloor";
+import { TOAST_MIN_VISIBLE_MS, TOAST_QUEUE_CAP, decideToast } from "../toastFloor";
 
 const css = readFileSync(join(process.cwd(), "src/index.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -314,6 +314,36 @@ describe("a message is evicted when it has been READ, not when a constant expire
   it("defaults to the floor for a caller that has no read model to offer", () => {
     expect(decideToast(1, 1, TOAST_MIN_VISIBLE_MS, 0).action).toBe("show");
     expect(decideToast(1, 1, TOAST_MIN_VISIBLE_MS - 1, 0).action).toBe("defer");
+  });
+});
+
+describe("a strategic once-per-run message is never dropped by a busy lane", () => {
+  /**
+   * The golden-hour pre-cue fires once per run, in the busiest late-run
+   * stretch — exactly when the one-pill flight lane and its six-deep queue
+   * are most likely to be saturated. Before `mustShow`, decideToast returned
+   * "drop" there and the cue silently vanished; the 2026-10-04 first-session
+   * audit observed exactly that (cue never seen while the day drained).
+   */
+  it("mustShow shows even when the layer is full, the incumbent is young, and the queue is saturated", () => {
+    const hold = messageHoldMs("Golden hour soon — coins ×2 while the sun sets");
+    expect(
+      decideToast(1, 1, TOAST_MIN_VISIBLE_MS - 1, TOAST_QUEUE_CAP, hold, true).action,
+    ).toBe("show");
+  });
+
+  it("a mustShow message never waits in the backlog — the payoff loses its moment if it queues", () => {
+    const hold = messageHoldMs("GOLDEN HOUR — coins are worth double");
+    expect(decideToast(1, 1, 0, 0, hold, true)).toEqual({ action: "show" });
+  });
+
+  it("a suppressed surface still drops even a mustShow message", () => {
+    expect(decideToast(0, 0, Infinity, 0, undefined, true).action).toBe("drop");
+  });
+
+  it("routine messages keep the old discipline — saturated queue still drops them", () => {
+    const hold = messageHoldMs("Butter landing");
+    expect(decideToast(1, 1, 0, TOAST_QUEUE_CAP, hold).action).toBe("drop");
   });
 });
 

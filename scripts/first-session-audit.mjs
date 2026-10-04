@@ -59,7 +59,7 @@ const sampleHud = async () => {
     }
     const text = await page.evaluate(() => document.body.innerText);
     if (text.includes("Golden hour soon")) leverHits.goldenCue++;
-    if (text.includes("coins worth double")) leverHits.goldenHour++;
+    if (text.includes("coins are worth double")) leverHits.goldenHour++;
   } catch { /* page navigating */ }
 };
 
@@ -100,11 +100,19 @@ if (holding) await page.mouse.up();
 await shot("mid-run");
 
 // Let the sun run out (or crash) — wait for gameover/continue state, sampling
-// for the golden-hour cues while the day drains.
+// for the golden-hour cues while the day drains. The bird keeps getting real
+// pilot input here on purpose: an untouched bird triggers the settle rule and
+// the run ends at ~40% daylight, long before the golden-hour payoff (<22%)
+// can fire — which is exactly what "run may have ended early" used to mean.
+let draining = false;
 for (let waited = 0; waited < 45_000; waited += 2000) {
+  const shouldHold = (waited / 1000) % 2 < 1;
+  if (shouldHold && !draining) { await page.mouse.down(); draining = true; }
+  if (!shouldHold && draining) { await page.mouse.up(); draining = false; }
   await page.waitForTimeout(2000);
   await sampleHud();
 }
+if (draining) await page.mouse.up();
 await shot("after-sunset");
 await page.waitForTimeout(3000);
 await shot("after-sunset-2");
@@ -142,7 +150,7 @@ if (await retry.isVisible().catch(() => false)) {
 
 console.log("=== ENGAGEMENT LEVERS ===");
 console.log(`golden-hour pre-cue ("Golden hour soon") observed: ${leverHits.goldenCue > 0 ? `PASS (${leverHits.goldenCue} samples)` : "FAIL — never seen while the day drained"}`);
-console.log(`golden-hour payoff ("coins worth double") observed: ${leverHits.goldenHour > 0 ? "PASS" : "not seen (run may have ended early)"}`);
+console.log(`golden-hour payoff ("coins are worth double") observed: ${leverHits.goldenHour > 0 ? "PASS" : "not seen (run may have ended early)"}`);
 console.log(`quip pill readable (light text on a real background): ${leverHits.quips === 0 ? "no quip fired during the run (not checkable)" : leverHits.quipStyled ? `PASS (${leverHits.quips} samples)` : "FAIL — dark/unstyled text on the sky"}`);
 
 console.log("=== TIMELINE ===");

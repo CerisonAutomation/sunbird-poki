@@ -242,7 +242,7 @@ export class HUD {
   private overCard!: HTMLElement;
   private toastLayer!: HTMLElement;
   /** Toasts waiting for the incumbent to finish being readable. */
-  private readonly toastQueue: { text: string; kind: string; icon: string }[] = [];
+  private readonly toastQueue: { text: string; kind: string; icon: string; mustShow?: boolean }[] = [];
   private toastDrainTimer: number | null = null;
   private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number; bornAt: number }>();
   /** The quip lane: flavour lines, on their own surface.
@@ -1790,7 +1790,7 @@ export class HUD {
     }
   }
 
-  toast(text: string, kind = "info", icon = ""): void {
+  toast(text: string, kind = "info", icon = "", opts: { mustShow?: boolean } = {}): void {
     // An empty pill is worse than no pill: it occupies the one flight slot,
     // so it evicts a real message and then renders as nothing. Translation can
     // resolve a key to "" (a blank string is a legitimate translation), and
@@ -1829,10 +1829,11 @@ export class HUD {
       incumbent?.ageMs ?? Number.POSITIVE_INFINITY,
       this.toastQueue.length,
       incumbent?.holdMs ?? messageHoldMs(text),
+      opts.mustShow === true,
     );
     if (decision.action === "drop") return;
     if (decision.action === "defer") {
-      this.toastQueue.push({ text, kind, icon });
+      this.toastQueue.push({ text, kind, icon, mustShow: opts.mustShow });
       if (this.toastDrainTimer === null) {
         this.toastDrainTimer = this.after(() => {
           this.toastDrainTimer = null;
@@ -2018,7 +2019,7 @@ export class HUD {
   private drainToastQueue(): void {
     const next = this.toastQueue.shift();
     if (!next) return;
-    this.toast(next.text, next.kind, next.icon);
+    this.toast(next.text, next.kind, next.icon, { mustShow: next.mustShow === true });
     // `toast` re-queues if the floor still is not met, so this terminates:
     // each pass either shows one or re-defers with a strictly shorter wait.
     if (this.toastQueue.length > 0 && this.toastDrainTimer === null) {

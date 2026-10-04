@@ -2638,12 +2638,12 @@ export class Game {
         this.daylight < this.daylightMax() * 0.35 && this.daylight >= this.daylightMax() * 0.22
       ) {
         this.goldenCued = true;
-        this.hud.toast("Golden hour soon — coins ×2 while the sun sets", "info", "half_day");
+        this.hud.toast("Golden hour soon — coins ×2 while the sun sets", "info", "half_day", { mustShow: true });
       }
       if (goldenNow && !this.goldenHour) {
         this.goldenHour = true;
         this.audio.goldenHour();
-        this.hud.toast(`GOLDEN HOUR — coins are worth double`, "gold", "half_day");
+        this.hud.toast(`GOLDEN HOUR — coins are worth double`, "gold", "half_day", { mustShow: true });
         this.flash("fever");
         this.glow(0.8);
       } else if (!goldenNow && this.goldenHour) {

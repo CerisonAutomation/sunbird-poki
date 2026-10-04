@@ -276,6 +276,64 @@ describe("the screen header stays one row", () => {
         });
 });
 
+describe("the short-viewport header grid spans every lane that wraps", () => {
+  /**
+   * At `max-height: 500px` (landscape phones) `.hud-header` stops being a flex
+   * column and becomes `grid-template-columns: minmax(0,1fr) minmax(0,1fr)` —
+   * a change introduced specifically to SHORTEN the header. Grid items that are
+   * not told a `grid-column` auto-place into a single track, i.e. half the
+   * header width.
+   *
+   * That is harmless for a small fixed pill like `.combo`, and a wrap-and-rewrap
+   * for a multi-chip row. `.mid-meta` (island/biome/multiplier/gold/VIP/ghost)
+   * and `.power-chips` (boost/magnet/shield/gust/thermal fallbacks) are both
+   * `flex-wrap: wrap` rows and both were left in column 1, so on a landscape
+   * phone each wrapped to two lines and returned the vertical space the grid had
+   * just been introduced to reclaim.
+   *
+   * The lane set is DERIVED from the stylesheet, not written out by hand. The
+   * bug being guarded is "a lane exists but was never told to span", and a
+   * hardcoded list cannot notice a lane added after this test was written.
+   */
+  it("no wrapping lane is left sitting in a single column", () => {
+    const lanes = new Set<string>();
+    for (const block of code("index.css").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/flex-wrap:\s*wrap/.test(block[2]!)) continue;
+      for (const sel of block[1]!.split(",").map((s) => s.trim().replace(/\s+/g, " "))) {
+        if (/^(?:\.play-hud )?\.hud-header \.[a-z-]+$/.test(sel)) lanes.add(sel);
+      }
+    }
+    // Guard against a derivation that silently matches nothing and passes
+    // vacuously — the failure mode of every "loop over what I found" assertion.
+    expect(lanes.size, "the header must still have wrapping lanes").toBeGreaterThan(0);
+    expect([...lanes]).toContain(".hud-header .mid-meta");
+    expect([...lanes]).toContain(".hud-header .power-chips");
+
+    for (const lane of lanes) {
+      expect(final(lane, "grid-column"), `${lane} wraps, so it must span both columns`).toBe("1 / -1");
+    }
+  });
+
+  it("spans the lanes that do not wrap but still occupy a cell", () => {
+      // `.combo` is deliberately NOT in the list above: a single small pill that
+      // fits a half-width cell without wrapping, so spanning it would only trade a
+      // wrap for dead space. Asserted explicitly so "why isn't this one fixed too"
+      // has an answer in the file rather than in a commit message.
+      expect(final(".hud-header .combo", "grid-column")).toBeUndefined();
+      for (const lane of [".hud-header .roster-bar", ".hud-header .power-strip"]) {
+        expect(final(lane, "grid-column"), `${lane} must span the short-viewport grid`).toBe("1 / -1");
+      }
+      // `.top-bar` is absent on purpose. Versus mode replaces the header's
+      // template with its own two-track grid and pins `.top-bar` to `column: 2`
+      // against a `.versus-bar` in column 1, hiding every other child — a
+      // different layout mode entirely, not a refinement of this one. Because
+      // `declarationsFor` also reads ancestor-qualified instances of a selector,
+      // the versus rule is what `final(".hud-header .top-bar", …)` reports, and
+      // asserting `1 / -1` here would be asserting against the wrong mode.
+      expect(final(".hud-header .top-bar", "grid-column")).toBe("2");
+    });
+});
+
 describe("the loadout steppers meet the same 44px floor as every other control", () => {
   /**
    * `.pf-actions .step` shipped at `width: 28px; min-width: 28px`. Every other

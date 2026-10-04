@@ -3,10 +3,8 @@ import {
   ALT_CEILING,
   ALT_CEILING_FADE,
   FLARE_MAX_RISE,
-  GLIDE_EXCHANGE,
-  GLIDE_EXCHANGE_ALT_CAP,
-  GLIDE_EXCHANGE_MAX,
   GLIDE_LIFT_SPEED,
+  LAUNCH_POP_DRIVE,
 } from "./constants";
 
 /** Anti-bore lift decay: a good launch stays exciting through a 2.5s plateau,
@@ -38,58 +36,45 @@ export function dampClimbAtCeiling(vy: number, altitude: number): number {
   return vy * (1 - fade);
 }
 
-/* ------------------------------------------------------- the energy exchange */
+/* ------------------------------------------------------- the crest-pop split */
 
 /**
- * Forward acceleration a descending glider earns by trading height for speed.
+ * Split a crest-release pop into the vertical and forward parts it pays.
  *
- * THE GAP THIS FILLS. Lift in this model cancels gravity and nothing else, and
- * drag only ever removes speed, so before this existed a released bird was a
- * one-way street: it sank, and it decelerated, and the climb a release bought
- * was never converted into the distance it was supposed to be worth. Every
- * other number in the flight model was re-tuned around that hole; this is the
- * term that closes it.
+ * WHY THE POP IS SPLIT RATHER THAN SCALED. The pop used to be added entirely to
+ * `vy`, which made it buy altitude and no distance at all. The measurement
+ * that forced this: at 60 s the expert policy cruises at 40.5 m/s against the
+ * masher's 30.7, and 40.5/30.7 = 1.32 — almost exactly the 1.29 distance ratio
+ * the skill-gap suite reports. The whole skill gap is a SPEED gap, so a lever
+ * that adds only height cannot close much of it however large it is made.
  *
- * WHY IT IS SCALED BY THE HEIGHT BANK, NOT BY `vy` ALONE. The first version of
- * this was `GLIDE_EXCHANGE * -vy` and it measured a large, real ratio gain —
- * and it was WRONG, and the mistake is the most instructive one in this file.
- * "Stick released" and "gliding" are mechanically the same state, so a player
- * who NEVER touches the button is permanently released and collects the payout
- * on 100% of its airtime, while the expert policy is airborne only ~49% of the
- * time and collects it the rest. The change paid the COASTER more than the
- * expert, and it collapsed `mean(hold) > mean(coast) * 1.3` in
- * skill-ceiling.test.ts from 1.370x to 1.221x — i.e. it erased the proof that
- * the button does anything at all, while flattering the headline ratio. A
- * lever that improves the number and destroys the design is not a lever.
+ * WHY IT IS SAFE IN A WAY A GENERIC "GO FASTER WHEN RELEASED" TERM IS NOT.
+ * That term was built first, measured, and rejected: gated only on `!diving`
+ * it pays a player who NEVER presses the button MORE than the expert, because
+ * "stick released" and "gliding" are the same state and a non-presser is
+ * released 100% of the time. It drove `mean(hold) > mean(coast) * 1.3` in
+ * skill-ceiling.test.ts from 1.370x to 1.221x — improving the headline ratio
+ * while erasing the proof that the button matters at all.
  *
- * Altitude fixes it, because altitude is what distinguishes the two. Measured
- * mean height while airborne, same seeds and policy: expert 27.7 m, coast
- * 11.2 m, hold 12.8 m. Height is precisely the resource a pilot must EARN — by
- * launching off crests and popping — and a bird that never presses the button
- * never accumulates one. So scaling by height pays the thing the skill gap is
- * made of and not the thing that ignores the game.
+ * The pop has no such problem, and the reason is structural rather than tuned.
+ * `launchPopQuality(releaseAge)` is 0 whenever the stick has never been
+ * released, because `releaseAge` sits at `Infinity` for a bird that has only
+ * ever held. Measured over 6 seeds: `hold` took 20 launches and NONE of them
+ * popped; a never-touching `coast` took 75 launches and NONE popped; the
+ * expert took 99, of which 98 popped at mean quality 0.72. So re-aiming the pop
+ * moves the expert and leaves `hold` and `coast` bit-for-bit identical — the
+ * hold/coast margin cannot move at all, and neither can the masher floor the
+ * skill-gap suite gates on.
  *
- *   - `vy >= 0` returns exactly 0. A climbing or level bird is not descending
- *     and has no height to spend, so the apex of an arc is not a free launch.
- *   - `altitude <= 0` returns exactly 0. Nothing to trade.
- *   - Both factors are read at call time, so the dev panel's slider moves the
- *     very next frame with no re-import.
- *   - Capped at `GLIDE_EXCHANGE_MAX`, and `Bird.step` still clamps total speed
- *     to `cap`, so the exchange cannot push the bird past `MAX_SPEED`.
- *
- * Gated at the call site on `!diving`: a diving bird is already being paid in
- * `GROUND_G_DIVE` and is deliberately spending energy downward.
+ * `LAUNCH_POP_DRIVE` of 0 reproduces the shipped behaviour exactly, which is
+ * what makes this a re-aiming of an existing payout rather than a new one.
  */
-export function glideExchangeAccel(vy: number, altitude: number): number {
-  if (vy >= 0 || GLIDE_EXCHANGE <= 0) return 0;
-  // The DEADBAND is the mechanic's real skill gate: below it there is no bank
-  // to spend and a bird that never presses the button — which is permanently
-  // released, and therefore collects a naive `!diving` payout on every step it
-  // spends airborne — is paid nothing. See GLIDE_EXCHANGE_ALT_FLOOR for the
-  // measurement that forced it.
-  const bank = Math.min(altitude, GLIDE_EXCHANGE_ALT_CAP) - GLIDE_EXCHANGE_ALT_FLOOR;
-  if (bank <= 0) return 0;
-  return Math.min(GLIDE_EXCHANGE * -vy * bank, GLIDE_EXCHANGE_MAX);
+export function launchPopSplit(
+  pop: number,
+  drive = LAUNCH_POP_DRIVE,
+): { vy: number; vx: number } {
+  const share = clamp(drive, 0, 1);
+  return { vy: pop * (1 - share), vx: pop * share };
 }
 
 /* ------------------------------------------------------------------ release */

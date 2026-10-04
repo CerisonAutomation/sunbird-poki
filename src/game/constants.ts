@@ -277,6 +277,41 @@ export let LAUNCH_POP_WINDOW = 0.45;
  * drives distance, and distance is what the leaderboard sorts on.
  */
 export let LAUNCH_POP_MAX = 26;
+/**
+ * Share of the crest pop paid as FORWARD speed rather than climb, 0..1.
+ *
+ * WHY THE POP IS RE-AIMED INSTEAD OF MERELY ENLARGED. Raising `LAUNCH_POP_MAX`
+ * was measured first and is a weaker lever than it looks: it adds height, and
+ * height is not what this game is short of. The measurement is that the skill
+ * gap is a SPEED gap — the expert cruises at 40.5 m/s against the masher's
+ * 30.7, and 40.5/30.7 = 1.32 versus the 1.29 distance ratio the suite reports.
+ * Every metre of pop spent on climb has to be flown back down before it earns
+ * anything, and `AIR_DRAG_GLIDE` takes a cut of it on the way.
+ *
+ * Routing part of the same payout into forward speed spends the release on the
+ * axis the leaderboard sorts on. It is the same energy, from the same gesture,
+ * at the same moment; only its direction changes.
+ *
+ * WHY THIS LEVER AND NOT A "GO FASTER WHEN RELEASED" TERM. That term was built
+ * and measured first, and it is wrong in a way worth recording: gating it on
+ * `!diving` pays a player who never touches the button MORE than the expert,
+ * because a non-presser is released on 100% of its steps. It drove
+ * `mean(hold) > mean(coast) * 1.3` from 1.370x to 1.221x — a better headline
+ * ratio with the button's importance deleted.
+ *
+ * The pop is immune to that by construction rather than by tuning:
+ * `launchPopQuality` is 0 while the stick has never been released. Measured
+ * over 6 seeds, `hold` popped on 0 of 20 launches and a never-touching `coast`
+ * on 0 of 75, while the expert popped on 98 of 99. So this constant cannot move
+ * the hold/coast margin or the masher floor at all — the two invariants that
+ * make the headline ratio mean anything.
+ *
+ * `RELEASE_MAX_RISE` is untouched by this: the airborne release ceiling is a
+ * separate constant on a separate code path. The pop has never been subject to
+ * it — a pop fires at the instant of leaving the ground, inside the grounded
+ * branch, which has no `applyReleaseKick` call.
+ */
+export let LAUNCH_POP_DRIVE = 0;
 /** Launch speed at which the pop reaches full strength. */
 export let LAUNCH_POP_SPEED = 70;
 /** Rolling resistance while on the ground. */
@@ -285,75 +320,6 @@ export const GROUND_FRICTION_DIVE = 0.018;
 /** Speed-borne lift while gliding: cancels up to this fraction of gravity. */
 export let GLIDE_LIFT_MAX = 0.55;
 export let GLIDE_LIFT_SPEED = 62;
-/**
- * Forward acceleration a descending glider buys by trading height for speed.
- *
- * THE TERM THE FLIGHT MODEL WAS MISSING. Every lift source in `Bird.step` acts
- * on `vy` only, and drag only ever removes speed, so a released bird was a
- * pure sink: it fell, and it slowed, and nothing it did in the air ever made it
- * go faster. Height was dead weight — the `LAUNCH_POP_MAX` climb bought no
- * distance at all, because there was no mechanism to spend it. A real glider
- * converts potential energy into kinetic energy continuously along its glide
- * path; this model had the exchange rate pinned at zero.
- *
- * THE MEASUREMENT THAT PROVES IT. Baseline, 60 s runs, tuning seeds: the expert
- * policy averages 40.5 m/s and the masher 30.7 m/s, and 40.5/30.7 = 1.32 —
- * almost exactly the 1.29 distance ratio the skill-gap suite reports. The entire
- * skill gap IS a speed gap, and 61% of the expert's run is spent sinking
- * through air that accelerates it not at all. So the headroom is not in making
- * releases buy more height; it is in making the height a release buys actually
- * carry the bird somewhere.
- *
- * WHY IT REWARDS THE RIGHT THING. It scales with how fast the bird is
- * DESCENDING and with the height bank it is actually holding, so it pays for
- * the two things a pilot has to earn — a committed descent, and altitude that
- * a crest launch and a pop built — and pays nothing for merely not touching
- * the button. A player who never presses it is permanently released and so
- * collects this on 100% of its airtime; gating on `!diving` alone was measured
- * paying that player MORE than the expert, and it broke the hold-vs-coast
- * margin in `skill-ceiling.test.ts`. See `glideExchangeAccel`.
- *
- * Bounded by construction: `GLIDE_EXCHANGE_MAX` caps the forward push and
- * `GLIDE_EXCHANGE_ALT_CAP` bounds the altitude factor, so no input can exceed
- * `MAX_SPEED` (which `Bird.step` clamps to regardless).
- */
-export let GLIDE_EXCHANGE = 0;
-/** Ceiling on `GLIDE_EXCHANGE`'s forward acceleration, in m/s^2. */
-export const GLIDE_EXCHANGE_MAX = 26;
-/**
- * Height at which the exchange stops paying further, in metres.
- *
- * A cap rather than a linear term to infinity, because the relationship stops
- * being linear in practice well before that: measured mean height while
- * airborne is 27.7 m for the expert policy and 11.2 m for a player who never
- * presses the button, so everything the mechanic is for is already banked by
- * ~30 m. Above it the extra factor buys nothing the cap clamp would not
- * immediately take back.
- */
-export const GLIDE_EXCHANGE_ALT_CAP = 30;
-/**
- * Height below which the exchange pays NOTHING, in metres.
- *
- * This is the constant that makes the mechanic safe to ship, and it exists
- * because the obvious version of it was measured and rejected.
- *
- * Gating on `!diving` is not sufficient on its own: a player who never touches
- * the button is *permanently* released, so they collect a released-bird payout
- * on every step they are airborne, and coasting birds spend more of the run
- * airborne-and-descending than the expert does. A pure `!diving` exchange
- * therefore flattered the headline ratio while paying the player who ignores
- * the game more than the one playing it — measured, it drove
- * `mean(hold) > mean(coast) * 1.3` in skill-ceiling.test.ts from 1.370x down to
- * 1.221x, which is that file's proof that the button matters at all.
- *
- * A deadband separates them on the thing that is actually different: a height
- * BANK. Altitude has to be earned — by launching off crests and popping — and
- * a bird that never presses the button never accumulates one. Measured mean
- * height while airborne: expert 27.7 m, hold 12.8 m, coast 11.2 m. Clearing the
- * deadband is the mechanic's actual skill gate: fly high enough that you have
- * something to spend.
- */
-export let GLIDE_EXCHANGE_ALT_FLOOR = 14;
 /** Downforce that keeps a diving bird glued through convex crests. */
 export let STICK_ACCEL_DIVE = 190;
 export const STICK_ACCEL_GLIDE = 13;
@@ -833,8 +799,6 @@ const liveApply = {
   STICK_ACCEL_DIVE: (v: number) => { STICK_ACCEL_DIVE = v; },
   GLIDE_LIFT_MAX: (v: number) => { GLIDE_LIFT_MAX = v; },
   GLIDE_LIFT_SPEED: (v: number) => { GLIDE_LIFT_SPEED = v; },
-  GLIDE_EXCHANGE: (v: number) => { GLIDE_EXCHANGE = v; },
-  GLIDE_EXCHANGE_ALT_FLOOR: (v: number) => { GLIDE_EXCHANGE_ALT_FLOOR = v; },
   AIR_DRAG_GLIDE: (v: number) => { AIR_DRAG_GLIDE = v; },
   FLARE_BRAKE: (v: number) => { FLARE_BRAKE = v; },
   FLARE_DURATION: (v: number) => { FLARE_DURATION = v; },
@@ -844,6 +808,7 @@ const liveApply = {
   MIN_KEEP_SPEED: (v: number) => { MIN_KEEP_SPEED = v; },
   GROUND_FRICTION: (v: number) => { GROUND_FRICTION = v; },
   LAUNCH_POP_MAX: (v: number) => { LAUNCH_POP_MAX = v; },
+  LAUNCH_POP_DRIVE: (v: number) => { LAUNCH_POP_DRIVE = v; },
   LAUNCH_POP_SPEED: (v: number) => { LAUNCH_POP_SPEED = v; },
   LAUNCH_POP_WINDOW: (v: number) => { LAUNCH_POP_WINDOW = v; },
   ALT_CEILING: (v: number) => { ALT_CEILING = v; },
@@ -874,10 +839,9 @@ export type LiveTunable = keyof typeof liveApply;
  */
 export const LIVE_TUNE_DEFAULTS: Record<LiveTunable, number> = {
   GRAVITY_GLIDE, GRAVITY_DIVE, GROUND_G_GLIDE_DOWN, GROUND_STICK_DIVE,
-  STICK_ACCEL_DIVE, GLIDE_LIFT_MAX, GLIDE_LIFT_SPEED, GLIDE_EXCHANGE,
-  GLIDE_EXCHANGE_ALT_FLOOR, AIR_DRAG_GLIDE,
+  STICK_ACCEL_DIVE, GLIDE_LIFT_MAX, GLIDE_LIFT_SPEED, AIR_DRAG_GLIDE,
   FLARE_BRAKE, FLARE_DURATION, START_SPEED, START_ALTITUDE, MAX_SPEED,
-  MIN_KEEP_SPEED, GROUND_FRICTION, LAUNCH_POP_MAX, LAUNCH_POP_SPEED,
+  MIN_KEEP_SPEED, GROUND_FRICTION, LAUNCH_POP_MAX, LAUNCH_POP_DRIVE, LAUNCH_POP_SPEED,
   LAUNCH_POP_WINDOW, ALT_CEILING, COIN_VALUE, CLOUD_BONUS, MAGNET_RADIUS,
   DAYLIGHT_MAX, ISLAND_REFILL_CEILING, DAYLIGHT_OCEAN_PENALTY,
   DAYLIGHT_SPLASH_INTERVAL, ISLAND_PERIOD, GAP_START, DROP_START,

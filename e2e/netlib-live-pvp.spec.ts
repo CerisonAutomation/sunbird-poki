@@ -61,11 +61,19 @@ const SIGNALING_HOST = "netlib.poki.io";
  * codeLength: 5`, and the signalling service ignores `codeLength` and returns
  * a FOUR-character code — verified directly against
  * `wss://netlib.poki.io/v0/signaling` (`{"type":"joined","lobbyInfo":{"code":
- * "C7JH",…}}`) and again through the running game. So the authoritative shape
- * is "whatever the service returned", and this regex is deliberately the
- * permissive envelope around it rather than a locally invented contract.
+ * "C7JH",…}}`) and again through the running game. Known service bug, not a
+ * client contract: `createRoom` still asks for 5 because that is what we WANT,
+ * and the service overriding it is not something the client should paper over
+ * by asking for less.
+ *
+ * Pinned to the observed length rather than left as a `{4,5}` envelope. The
+ * envelope could not distinguish "the service returned 4" from "we stopped
+ * sending `codeLength` and it defaulted", and it would stay green if netlib ever
+ * started honouring the request — which is the change we would want to notice,
+ * because it would invalidate this comment. If netlib starts returning 5, this
+ * fails loudly and that comment gets updated; that is the point.
  */
-const ROOM_CODE = /^[A-Z2-9]{4,5}$/;
+const ROOM_CODE = /^[A-Z2-9]{4}$/;
 
 /**
  * Room-lobby budget. Generous because the chain is genuinely long and every

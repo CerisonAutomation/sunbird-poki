@@ -1,4 +1,4 @@
-import { applyReleaseKick, dampClimbAtCeiling, glideExchangeAccel, glideLiftScale, releaseKick, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
+import { applyReleaseKick, dampClimbAtCeiling, glideLiftScale, launchPopSplit, releaseKick, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
 import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
@@ -852,7 +852,10 @@ export class Bird {
         this.popQuality = timing;
         if (timing > 0) {
           const speedFactor = clamp(Math.abs(vt) / LAUNCH_POP_SPEED, 0, 1);
-          this.vy += LAUNCH_POP_MAX * timing * speedFactor;
+          // The pop's energy is SPLIT, not all vertical. See `launchPopSplit`.
+          const pop = launchPopSplit(LAUNCH_POP_MAX * timing * speedFactor);
+          this.vy += pop.vy;
+          this.vx += pop.vx;
           // Spent: one pop per release, so a release cannot also flare into
           // the same take-off and cannot pop twice off a double lip.
           this.releaseAge = Number.POSITIVE_INFINITY;
@@ -998,21 +1001,6 @@ export class Bird {
         // reskins of each other: the terrain changed and the FLIGHT did not.
         : Math.min(0.85, GLIDE_LIFT_MAX * clamp(sp / GLIDE_LIFT_SPEED, 0, 1) * (opts.liftMult ?? 1) * biome.liftMult) * glideLiftScale(this.airTime);
       this.vy -= (diving ? GRAVITY_DIVE : GRAVITY_GLIDE) * gMult * (1 - lift) * dt;
-
-      // The energy exchange: descending converts into forward speed while the
-      // stick is released. This is the only term in the model that makes an
-      // airborne bird FASTER, and it is what turns the height a release buys
-      // into the distance it was worth buying. Without it a glider is a pure
-      // sink — height is dead weight and the skill gap collapses to whatever
-      // the ground terms give you. See `glideExchangeAccel`.
-      //
-      // Gated on `!diving` exactly like `lift` above, and read from `vy` AFTER
-      // this step's gravity so a dive in progress pays nothing: a held stick is
-      // already accelerated by `GROUND_G_DIVE` and is deliberately spending
-      // energy downward.
-      if (!diving) {
-        this.vx += glideExchangeAccel(this.vy, this.altitude) * gMult * dt;
-      }
 
       const k = (diving ? AIR_DRAG_DIVE : AIR_DRAG_GLIDE) * (opts.dragMult ?? 1);
       const decay = Math.max(0, 1 - k * sp * dt);

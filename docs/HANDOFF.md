@@ -25,7 +25,7 @@ Every claim below was produced by a command in this tree, not remembered.
 | `pnpm i18n:audit` | pass — debt **down to 312** (two toast batches, the celebration strip, then batch 3: every screen title — that category is now **0**), ratchet re-blessed |
 | `pnpm docs:audit` | pass — no broken links, no orphans, every snapshot statused |
 | `pnpm typecheck` | pass |
-| `pnpm test` | **2,885 declared**, 9 skipped, 231 files |
+| `pnpm test` | **2,890 declared**, 9 skipped, 231 files |
 | `pnpm verify:prod` | **PRODUCTION READY** — coverage 49.3% + 19 module floors, JS 1.69 / 2.50 MB (positional i18n packs took it down from 1.78 MB), zero debug artifacts in shipped client code |
 | `pnpm build:poki` + `pnpm verify:portals` | **1/1 zip shippable** — poki 945 KB. `build:portals` was replaced by `build:poki` in `f2ce415`; this fork is Poki-only, so there is no CrazyGames or generic build and `verify-portal.mjs` / `audit-zips.mjs` both carry `PORTALS = ["poki"]` |
 | `pnpm audit:zips` · `verify:upload` · `verify:thumbnail` · `isolation:check` | pass |
@@ -56,7 +56,7 @@ keys**, 100% pack coverage, drift-checked by `src/i18n/__tests__/locales.test.ts
 Measured from disk by `pnpm docs:audit`; if a number here is wrong the gate
 fails and tells you the measured value. Keep this block in step with the
 prose figures above and with docs/README.md.
-tests: 2885
+tests: 2890
 testFiles: 231
 barrelKeys: 604
 locales: 36

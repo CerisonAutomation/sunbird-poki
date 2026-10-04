@@ -311,7 +311,7 @@ export let LAUNCH_POP_MAX = 26;
  * it — a pop fires at the instant of leaving the ground, inside the grounded
  * branch, which has no `applyReleaseKick` call.
  */
-export let LAUNCH_POP_DRIVE = 0;
+export let LAUNCH_POP_DRIVE = 0.5;
 /** Launch speed at which the pop reaches full strength. */
 export let LAUNCH_POP_SPEED = 70;
 /** Rolling resistance while on the ground. */

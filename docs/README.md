@@ -86,7 +86,7 @@ markdown — so this stays true instead of being true once.
 These numbers are measured from disk by `pnpm docs:audit` and must match it.
 Adding a test file, a translation key or an audit means updating this block —
 that is the point. Do not hand-edit the prose figures above without this.
-tests: 2885
+tests: 2890
 testFiles: 231
 barrelKeys: 604
 locales: 36
@@ -109,7 +109,7 @@ pnpm poki:audit      # 131 extracted rules → 116 satisfied / 5 human actions /
 pnpm docs:audit      # doc link / orphan / snapshot-status gate (run separately)
 ```
 
-Numbers as of 2026-10-04: **2,885 declared unit tests** across 231 files (the
+Numbers as of 2026-10-04: **2,890 declared unit tests** across 231 files (the
 live-socket suites that need a running room server are skipped in CI-less
 sandboxes — the room server lives in the parent monorepo), **36 locales × 604
 barrel keys** with 100% pack coverage and **635 of 21,140** non-English cells

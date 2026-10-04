@@ -384,6 +384,9 @@ export type HudSnapshot = {
   netState: string;
   linkQuality: "unknown" | "good" | "fair" | "poor";
   netError: string;
+  /** Non-fatal link degradation (a signaling blip we are riding out). Shown
+   *  beside the room, never as an error — the room and its peers are intact. */
+  netLinkNote: string;
   draft: number;
   finishRemaining: number;
   nemesis: string;

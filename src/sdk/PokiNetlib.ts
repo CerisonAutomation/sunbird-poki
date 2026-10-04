@@ -78,6 +78,10 @@ export type RoomInfo = {
    * `lobbyRivals` promises never to do. Callers use it to label them as AI.
    */
   aiFallback: boolean;
+  /** A signaling blip we are riding out. Deliberately NOT `error`: the room is
+   *  intact and peers are connected, so this must not read as a failure — see
+   *  `onSignalingError`. Empty when the link is healthy. */
+  linkNote?: string;
 };
 
 export type PresenceEvent =
@@ -127,6 +131,9 @@ export class PokiNetlibClient implements NetTransport {
   startsAt = 0;
   isAutonomous = false;
   private localReady = false;
+  /** Last signaling blip, kept for the link badge. Not an error state — see
+   *  `onSignalingError` for why it must not tear the room down. */
+  private signalingError = "";
   private requestedCode = "";
   /**
    * "Create a room" rather than "join this code".
@@ -146,6 +153,9 @@ export class PokiNetlibClient implements NetTransport {
    * explicit request, which is what this flag is.
    */
   private hostRoom = false;
+  /** True when this room was chosen by its code (friend invite / code entry)
+   *  rather than picked by quick-match. Gates AI degradation in `fail`. */
+  private joinedByCode = false;
   private requestedSeed = "";
   private heartbeat = 0;
   private autoReadyTimer: number | null = null;
@@ -255,6 +265,10 @@ export class PokiNetlibClient implements NetTransport {
     this.requestedSeed = seed;
     this.roomCode = requested;
     this.hostRoom = hostRoom;
+    // "We were told this exact code" — distinct from quick-match, which picks
+    // its own room. Decides whether a failure may fall back to AI pilots; see
+    // `fail`.
+    this.joinedByCode = requested !== "" && !hostRoom;
     this.seed = seed;
     this.myPlace = 0;
     this.localReady = false;
@@ -521,7 +535,25 @@ export class PokiNetlibClient implements NetTransport {
       };
 
       const onSignalingError = (e: { message?: string }) => {
-        this.fail(`Lobby error: ${e?.message ?? "unknown"}`);
+        // NOT FATAL. Netlib emits `signalingerror` on EVERY signaling socket
+        // close, including the routine ones it is about to recover from
+        // itself (its own `onClose` raises it, then schedules a reconnect with
+        // a 42-attempt exponential backoff and fires `signalingreconnected`
+        // when it succeeds). Established WebRTC peer connections survive a
+        // signaling socket drop entirely — only NEW peers and lobby listings
+        // need it.
+        //
+        // This used to call `fail()`, which tore the room down and dropped the
+        // player into 4 AI pilots. So a mobile network handover, a laptop
+        // sleep, or a Poki CDN socket rotation silently replaced real humans
+        // with bots — and it destroyed netlib's recovery too, because
+        // `close()` sets `_closing`, which makes its own `reconnect()` return
+        // early. One blip, permanently. The neighbouring `reconnecting`
+        // handler already had the right instinct; this fired first.
+        //
+        // `failed` is the escalation point: netlib raises it only after its
+        // retries are exhausted. Surface the blip, keep the room.
+        this.signalingError = e?.message ?? "unknown";
       };
 
       const onMessage = (peer: Peer, channel: string, data: string | Blob | ArrayBuffer | ArrayBufferView) => {
@@ -615,16 +647,9 @@ export class PokiNetlibClient implements NetTransport {
                 this.pendingEvents.push({ type: "ready", name: t.name });
               }
               // Host: when all peers (including us) are ready, broadcast a start.
-              // Six seconds — the same shared countdown the relay server gives —
-              // so a race never launches "instantly" the moment a pilot readies.
-              if (this.amHost && this.localReady && this.allReady() && this.state === "lobby") {
-                const at = Date.now() + 6000;
-                const seed = this.seed;
-                this.broadcastReliable({ type: "start", at, seed });
-                this.startsAt = at;
-                this.state = "racing";
-                this.pendingEvents.push({ type: "start" });
-              }
+              // `maybeStartRace` is the shared predicate — see its comment for
+              // why it also runs from `sendReady`.
+              this.maybeStartRace();
               break;
             }
             case "emote": {
@@ -708,6 +733,8 @@ export class PokiNetlibClient implements NetTransport {
       network.on("disconnected", onDisconnected);
       network.on("reconnecting", () => { /* netlib retries; nothing to do */ });
       network.on("reconnected", (peer: Peer) => {
+        // Signaling is back. Drop the blip we were holding for the badge.
+        this.signalingError = "";
         // The peer object is a NEW one after a reconnect — the old datachannels
         // are gone. Nothing was rebuilt, re-announced or re-synced when this was
         // a no-op: `selfId` still pointed at the pre-drop value, and no hello
@@ -775,7 +802,37 @@ export class PokiNetlibClient implements NetTransport {
     return true;
   }
 
-  private broadcastReliable(msg: NetMsg): void {
+  /**
+   * Host-side: launch the race once every seated pilot — us included — is
+   * ready. A no-op for a guest, outside the lobby, or while we are alone.
+   *
+   * This has to be callable from BOTH sides of the ready exchange, and it
+   * used to be inlined in the inbound `ready` handler only. That made the
+   * launch depend on who pressed Ready FIRST:
+   *
+   *   guest readies → the host's `case "ready"` runs, but `this.localReady`
+   *                  is still false, so the all-ready test fails
+   *   host readies → `sendReady` had no all-ready test at all, only
+   *                  `tracks.size === 0` (i.e. "am I alone")
+   *
+   * so nothing started. Everyone's row showed "Ready ✓", the `N ready` count
+   * was correct, and the room sat there until the 15 s heartbeat happened to
+   * re-check. One shared predicate, called wherever a vote lands, closes it.
+   */
+private maybeStartRace(): void {
+    if (!this.amHost || !this.localReady || this.state !== "lobby") return;
+    if (!this.allReady()) return;
+    // Six seconds — the same shared countdown the relay server gives — so a
+    // race never launches "instantly" the moment a pilot readies.
+    const at = Date.now() + 6000;
+    const seed = this.seed;
+    this.broadcastReliable({ type: "start", at, seed });
+    this.startsAt = at;
+    this.state = "racing";
+    this.pendingEvents.push({ type: "start" });
+  }
+
+private broadcastReliable(msg: NetMsg): void {
     if (!this.net || !this.netReady) return;
     try {
       this.net.broadcast("reliable", JSON.stringify(msg));
@@ -810,6 +867,15 @@ export class PokiNetlibClient implements NetTransport {
    */
   private fail(message: string, degrade = true): void {
     this.clearLobbyWatchdog();
+    // A room the player did not choose — they typed a friend's code — must
+    // never silently become a race against bots while the UI still shows that
+    // code. The docstring above has always said so, but the decision was made
+    // on `tracks.size > 0` alone, and a by-code guest has ZERO tracks for
+    // roughly the first second (tracks appear with the first inbound `hello`).
+    // Any close/failure inside that window therefore degraded to 4 AI pilots
+    // with the friend's code still on screen. `degrade: false` was only passed
+    // from the one path that could see `join()` resolve `undefined`.
+    if (this.joinedByCode) degrade = false;
     // Never degrade a room that has something to lose. `activateAutonomousRoom`
     // clears every peer track and resets state to "lobby", so running it while
     // peers are connected would silently replace real humans with local bots
@@ -987,7 +1053,11 @@ export class PokiNetlibClient implements NetTransport {
       this.state = "racing";
       this.broadcastReliable({ type: "start", at, seed: this.seed });
       this.pendingEvents.push({ type: "start" });
+      return true;
     }
+    // Our own vote is a vote. Without this the launch depended on the GUEST
+    // pressing Ready first — see `maybeStartRace`.
+    this.maybeStartRace();
     return true;
   }
 
@@ -1162,6 +1232,7 @@ export class PokiNetlibClient implements NetTransport {
       error: this.errorText,
       ready: this.localReady,
       aiFallback: this.isAutonomous,
+      linkNote: this.signalingError ? `Reconnecting to the lobby service… (${this.signalingError})` : "",
     };
   }
 

@@ -222,5 +222,10 @@ live("live PvP (two real clients, real server)", () => {
 
 if (!LIVE) {
   // A skip that says why, so "0 tests ran" is never mistaken for a pass.
-  it.skip(`live PvP suite skipped — VITE_MULTIPLAYER_URL must be an absolute ws:// URL (got "${LIVE_URL}"). Run: VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp pnpm test:pvp`, () => {});
+  it.skip(
+    `live PvP suite skipped — VITE_MULTIPLAYER_URL must be an absolute ws:// URL (got "${LIVE_URL}"). `
+    + `NOTE: this repository no longer contains the room server (server/src/index.ts is absent — the Rust `
+    + `backend is the parent monorepo's), so the documented command cannot run here. See this file's header.`,
+    () => {},
+  );
 }

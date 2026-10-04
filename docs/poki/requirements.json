@@ -142,7 +142,7 @@
         "type": "test",
         "path": "src/game/__tests__/firstflight.test.ts"
       },
-      "evidence": "3-step play-signal onboarding, progression systems, and 12 locales."
+      "evidence": "3-step play-signal onboarding, progression systems, and 36 locales (src/i18n/locales.ts)."
     },
     {
       "id": "GK-03",
@@ -549,14 +549,14 @@
       "id": "MON-09",
       "group": "MON",
       "kind": "requirement",
-      "rule": "Reward buttons carry a prominent clapperboard icon.",
+      "rule": "Every control that triggers a rewarded break carries the clapperboard icon.",
       "status": "satisfied",
       "verify": {
         "type": "grep",
         "path": "src/game/hud/run.ts",
-        "pattern": "data-action=\"continue-ad\">\\$\\{menuIconSm\\(\"play\"\\)\\}"
+        "pattern": "data-action=\"continue-ad\">\\$\\{menuIconSm\\(\"clapper\"\\)\\}"
       },
-      "evidence": "menuIconSm(\"play\") renders a 20x20 inline SVG clapperboard/play glyph in the game's own palette on the rewarded continue button. The emoji was replaced during the icon set consolidation: emoji rendering varies per platform and reads as a foreign object against the hand-drawn art, so the rule now pins the meaning (a video affordance on the rewarded CTA) rather than one specific glyph. Pinned to the button markup, not to any play icon in the file, so adding a play icon elsewhere cannot satisfy this rule."
+      "evidence": "menuIconSm(\"clapper\") is a dedicated 20x20 inline SVG clapperboard in the game's own palette, added for this rule and distinct from the generic play glyph (a filled disc with a triangle). All three rewarded CTAs now use it: continue-ad (Second Wind) and multiply-run-coins (3x bonus) here, and shop-free-coins in hud/shop.ts. The check pins the ICON NAME in the button markup rather than any icon in the file, so an unrelated play icon elsewhere cannot satisfy it. Emoji were avoided deliberately: 🎬 is emoji-presentation and renders as tofu in toast textContent on some devices, which is the same defect that removed ⏳ from the timer glyph."
     },
     {
       "id": "MON-10",

@@ -211,7 +211,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
         <b>${t("hud.renderShop.FCoins", undefined, "Free Coins")}</b>
         <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/hour)</span>
       </div>
-      <button class="primary-btn gold" data-ui data-action="shop-free-coins">${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
+      <button class="primary-btn gold" data-ui data-action="shop-free-coins">${menuIconSm("clapper")} ${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
     </div>` : ""}
 
     <div class="pc pc--red">

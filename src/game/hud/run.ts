@@ -298,7 +298,7 @@ export function renderCoinMultiplierCard(coins: number, claimed: boolean, reward
         <b>3× Flight Coin Bonus</b>
         <span>Watch a short ad · triple ● ${coins} → ● ${coins * 3}</span>
       </div>
-      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">${menuIconSm("play")} Watch → 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
+      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">${menuIconSm("clapper")} Watch → 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
     </div>`;
   }
   return `<div class="multiplier-cta-card">
@@ -368,13 +368,13 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
       <div><span>Score</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
-    ${s.adAvailable
-      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("play")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
-      : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
     <div class="result-actions">
       <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
       <button class="soft-btn" data-ui data-action="continue-sleep">${t("hud.renderContinue.LSleep", undefined, "Let it sleep")}</button>
     </div>
+    ${s.adAvailable
+      ? `<div role="status"><button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad">${menuIconSm("clapper")} ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left ${clockSvg()}</button></div>`
+      : `<div class="reward-strip wake-strip" role="status">${clockSvg()}<span>Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</span></div>`}
     ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ Gold · free wake-up</button>` : ""}
     <p class="fineprint replay-note">Sleep ends the flight and shows your recap. Waking up keeps this run alive from where it landed.</p>
   `;

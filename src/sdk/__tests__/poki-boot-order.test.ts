@@ -208,9 +208,8 @@ describe("a Poki build whose SDK script never finishes init", () => {
 
       // The point of holding rather than dropping: without this replay the
       // core's `startAdsAfter` timer is never armed for the whole session.
-      // initPlatform() also queues a loadingStart, so it replays before gameplay.
       boot();
-      expect(calls).toEqual(["gameLoadingStart", "gameplayStart"]);
+      expect(calls).toEqual(["gameplayStart"]);
     });
 
     it("collapses a pre-boot stop/start burst to the final gameplay state", async () => {
@@ -222,8 +221,7 @@ describe("a Poki build whose SDK script never finishes init", () => {
       boot();
       // Replaying both would tell the portal gameplay stopped and then started
       // again, arming an ad timer for a session that is already in flight.
-      // initPlatform() also queues a loadingStart, so it replays first.
-      expect(calls).toEqual(["gameLoadingStart", "gameplayStart"]);
+      expect(calls).toEqual(["gameplayStart"]);
     });
 
     it("holds the loading phase markers too, and sends each exactly once", async () => {
@@ -244,13 +242,15 @@ describe("a Poki build whose SDK script never finishes init", () => {
       const calls: string[] = [];
       const { adapter, markPokiBooted: boot } = await bootingAdapter(calls);
 
-      // initPlatform() queued a loadingStart; boot() flushes it first.
       boot();
       adapter.gameplayStart();
       adapter.gameplayStop();
       adapter.loadingStart();
-      // loadingStart is deduped — initPlatform's queued call already sent it.
-      expect(calls).toEqual(["gameLoadingStart", "gameplayStart", "gameplayStop"]);
+      // gameLoadingStart fired once inside bootstrapSdk(), before init() was
+      // awaited, so it is not part of the deferred replay — and it is not a
+      // documented Poki signal in any case (see poki-canon.ts: the shipped
+      // core defines it as an empty function).
+      expect(calls).toEqual(["gameplayStart", "gameplayStop", "gameLoadingStart"]);
     });
   });
 });

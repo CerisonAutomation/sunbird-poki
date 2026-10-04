@@ -16,7 +16,7 @@ import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
 import { aiRivalSection, boardSource } from "./parts";
 import { type HudSnapshot } from "./types";
 
-export function renderLive(s: Pick<HudSnapshot, "firstSteps" | "lobbyRivals" | "multiplayerConfigured" | "netError" | "netState" | "pvpModes" | "pvpWorlds" | "roomAiFallback" | "roomCode" | "roomCount" | "roomReady" | "roomReadyCount" | "roomSize" | "roomSkill" | "selectedPvpMode" | "selectedPvpWorld" | "skins">): string {
+export function renderLive(s: Pick<HudSnapshot, "firstSteps" | "lobbyRivals" | "multiplayerConfigured" | "netError" | "netLinkNote" | "netState" | "pvpModes" | "pvpWorlds" | "roomAiFallback" | "roomCode" | "roomCount" | "roomReady" | "roomReadyCount" | "roomSize" | "roomSkill" | "selectedPvpMode" | "selectedPvpWorld" | "skins">): string {
   const connected = s.netState === "lobby" || s.netState === "racing";
   // The AI fallback seats four generated pilots in the same roster as real
   // ones, so "Connected" and "live" would both be claims about people who are
@@ -55,6 +55,7 @@ export function renderLive(s: Pick<HudSnapshot, "firstSteps" | "lobbyRivals" | "
     </div>` : ""}
     <p class="tagline">Live pilots, private rooms, or the offline AI flock — both rivals live on this one screen.</p>
     ${s.netState === "error" && s.netError ? `<p class="network-notice" role="alert">${escapeHtml(s.netError)}</p>` : ""}
+    ${s.netState !== "error" && s.netLinkNote ? `<p class="network-notice" role="status">${escapeHtml(s.netLinkNote)}</p>` : ""}
     <p class="race-fairness">${menuIcon("medal")} Equal flight equipment · your bird, your timing. Store boosts are saved for solo play.</p>
 
     ${s.roomCode ? `      <section class="race-section private-session" aria-label="${t("hud.renderLive.PRoom", undefined, "Your private room")}">
@@ -75,10 +76,10 @@ export function renderLive(s: Pick<HudSnapshot, "firstSteps" | "lobbyRivals" | "
           <div class="pills-scroll">${worldPills}</div>
         </div>
 
-        <p class="room-presence" role="status">${Math.max(1, s.roomCount)} ${s.roomAiFallback ? "in room · AI pilots" : "connected"} · ${s.roomReadyCount} ready</p>
+        <p class="room-presence" role="status">${s.roomAiFallback ? `${Math.max(1, s.roomCount)} in room · AI pilots` : connected ? `${Math.max(1, s.roomCount)} connected` : "Not connected"} · ${s.roomReadyCount} ready</p>
 
         <div class="room-actions-bar">
-          <button class="primary-btn gold large-btn" data-ui data-action="start-room-now">${menuIconSm("lightning")} Start Race Now (${s.roomCount > 1 ? "Launch Room" : "Fill with AI flock"})</button>
+          <button class="primary-btn gold large-btn" data-ui data-action="start-room-now">${menuIconSm("lightning")} Start Race Now (${s.roomAiFallback ? "Fill with AI flock" : s.roomCount > 1 ? "Launch Room" : "Fill with AI flock"})</button>
           <button class="soft-btn ${s.roomReady ? "on" : ""}" data-ui data-action="ready-room" aria-pressed="${s.roomReady}" ${connected ? "" : "disabled"} title="${connected ? "" : "Race connection lost — close the room to race again"}">${s.roomReady ? "Cancel ready" : "Ready up ✓"}</button>
         </div>
 

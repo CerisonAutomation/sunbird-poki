@@ -30,7 +30,7 @@ import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RA
 import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
 import { MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
-import { fetchPublicRooms, isMultiplayerConfigured, makeRoomCode, type AnyRealtimeClient } from "./Realtime";
+import { fetchPublicRooms, isMultiplayerConfigured, type AnyRealtimeClient } from "./Realtime";
 import { createNetTransport, prewarmNetTransport } from "./net-transport";
 import { photoFinishMessage } from "./Racer";
 import { SlopeChain } from "./SlopeChain";
@@ -3991,6 +3991,12 @@ export class Game {
   }
 
   private doContinue(source: string): void {
+    // Resuming a lost run is the strongest "show intent to continue" signal in
+    // the game, and it went straight back to `playing` with no break offered —
+    // same omission as `startVersus`. The rewarded break that preceded it (for
+    // the gold path) is a DIFFERENT ad; this is the commercial opportunity the
+    // guide asks to be signalled here.
+    this.maybeBreakOnRunStart();
     this.continuesUsed += 1;
     this.bird.asleep = false;
     this.daylight = CONTINUE_DAYLIGHT;
@@ -5647,7 +5653,7 @@ export class Game {
         this.rankedRace = false;
         this.setScreen("live");
         this.preseatLobby();
-        this.hud.toast("Creating your room — the code appears in a moment", "gold");
+        this.hud.toast(t("hud.room.creating", undefined, "Creating your room — the code appears in a moment"), "gold");
         this.bump();
         return true;
       }
@@ -5781,8 +5787,15 @@ export class Game {
         this.preseatLobby();
         if (this.net) {
           const isReady = !this.net.info().ready;
-          this.net.sendReady(isReady);
-          this.hud.toast(isReady ? "You are ready!" : "Ready cancelled", "gold", "check");
+          // `sendReady` returns false when the transport is not in the lobby
+          // (still connecting, or already errored). Ignoring that made the
+          // button a liar: the tap did nothing and the toast said "You are
+          // ready!" anyway.
+          if (this.net.sendReady(isReady)) {
+            this.hud.toast(isReady ? "You are ready!" : "Ready cancelled", "gold", "check");
+          } else {
+            this.hud.toast(t("hud.room.notReadyYet", undefined, "The room is not ready for you yet"), "warn");
+          }
         } else {
           this.hud.toast("Starting race flock…", "info");
           this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, true);
@@ -5805,7 +5818,12 @@ export class Game {
         // seated pilot is ready, then counts down 6s for everyone.
         if (this.net?.state === "lobby") {
           const nowReady = !this.net.info().ready;
-          this.net.sendReady(nowReady);
+          // Same guard as `ready-room`: never confirm a ready-up that was
+          // refused.
+          if (!this.net.sendReady(nowReady)) {
+            this.hud.toast(t("hud.room.notReadyYet", undefined, "The room is not ready for you yet"), "warn");
+            return true;
+          }
           this.hud.toast(nowReady ? "You are ready!" : "Ready cancelled", "gold", "check");
           this.bump();
         }
@@ -7179,9 +7197,24 @@ export class Game {
     return fetchPublicRooms();
   }
 
-  private liveCount(): number {
+  /**
+   * How many REAL, remote pilots are sharing this room. Never includes us, and
+   * never includes the AI fallback.
+   *
+   * `info().count` is `tracks.size + 1`, and in an autonomous room the tracks
+   * ARE the local AI flock — so this used to return 4 for a player with zero
+   * netlib and zero peers. That number reached the search overlay verbatim
+   * ("4 live pilots in this room") and then took the `live > 0` branch at the
+   * end of the window, toasting "4 pilots found — hit Ready to race". The
+   * whole point of `roomAiFallback` (and of `lobbyRivals`, and of the "Fill
+   * with AI flock" label) is that the game never claims bots are people; the
+   * one counter that feeds the search overlay was the exception.
+   */
+private liveCount(): number {
     const info = this.net?.info();
-    return info && this.net?.connected ? Math.max(0, info.count - 1) : 0;
+    if (!info || !this.net?.connected) return 0;
+    if (info.aiFallback) return 0;
+    return Math.max(0, info.count - 1);
   }
 
   /** Called every frame while a search is active. */
@@ -8472,6 +8505,7 @@ export class Game {
     squadQuestsClaimed: st.squadQuestsClaimed ?? {},
     linkQuality: this.net?.connectionQuality ?? "unknown",
     netError: this.net?.info().error ?? "",
+    netLinkNote: this.net?.info().linkNote ?? "",
     draft: this.massRace.draft,
     finishRemaining: this.finishRemaining,
     nemesis: this.nemesis,
@@ -8601,6 +8635,12 @@ export class Game {
   /* ------------------------------------------------------- versus (2P) */
 
   private startVersus(): void {
+    // A versus is a run start like any other, and `maybeBreakOnRunStart` used
+    // to have exactly one caller — inside `startRun()`, which a versus and a
+    // replay both bypass. So this path reached `gameplayStart()` with no
+    // commercial break ever being offered, which is the one thing the HTML5
+    // guide asks for on every "player showed intent to continue" moment.
+    this.maybeBreakOnRunStart();
     this.disconnectRace();
     this.roomCode = "";
     this.versus = true;

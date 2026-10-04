@@ -18,9 +18,44 @@
  *
  *   node scripts/pvp-check.mjs            # scratch port 8795
  *   PVP_PORT=9001 node scripts/pvp-check.mjs
+ *
+ * ⚠ THE ROOM SERVER IS NOT IN THIS REPOSITORY. `isolation:check` says it
+ * plainly — `rust/` "is the parent monorepo's". The backend migrated to a Rust
+ * room server, and `server/` here now holds only `src/anticheat/limits.ts`.
+ * So this script, `test:pvp`, `botsim`, `board:check`, `test:lookup`,
+ * `smoke-social`, `smoke-room-list` and `funnel-report` all reference an entry
+ * point that is absent. Before the guard below, that surfaced as a raw
+ * ERR_MODULE_NOT_FOUND stack trace from `spawn`, or — worse, in the case of
+ * `test:pvp` — as a SILENT SKIP that read as a green suite. The Poki build
+ * never used this path anyway: `build:poki` empties `VITE_MULTIPLAYER_URL`, so
+ * portal multiplayer runs on Netlib P2P and is covered by the unit suites
+ * (`poki-pvp.test.ts`) plus `net-transport.podi.ts`. Run these from the parent
+ * monorepo, where `server/src/index.ts` exists.
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import net from "node:net";
+
+/** Fail loudly and legibly when the backend this script boots is not here. */
+const ROOM_SERVER = join(process.cwd(), "server/src/index.ts");
+if (!existsSync(ROOM_SERVER)) {
+  console.error(
+    [
+      `✖ PvP CHECK CANNOT RUN — the room server is not in this checkout.`,
+      ``,
+      `  expected: ${ROOM_SERVER}`,
+      `  found:    server/ contains only src/anticheat/limits.ts`,
+      ``,
+      `  The backend is the parent monorepo's Rust room server. Run this from`,
+      `  there, or point it at a running server. Nothing about the game build is`,
+      `  wrong: the Poki build ships Netlib P2P and does not use this server.`,
+      ``,
+      `  See scripts/pvp-check.mjs's header, and src/game/__tests__/pvp-live.test.ts.`,
+    ].join("\n"),
+  );
+  process.exit(2);
+}
 
 const PORT = Number(process.env.PVP_PORT || 8795);
 const BASE = `ws://127.0.0.1:${PORT}/mp`;

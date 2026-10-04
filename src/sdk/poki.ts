@@ -347,9 +347,9 @@ export class PokiAdapter implements PlatformAdapter {
   private loadingStartSent = false;
 
   loadingStart(): void {
-    // bootstrapSdk() now fires gameLoadingStart() before awaiting init(), so
-    // this delegate is a fallback for the rare case where the adapter's own
-    // loadingStart() is called before that path ran. The one-shot guard below
+    // bootstrapSdk() already fired gameLoadingStart() right after init and
+    // before any asset work, so this delegate is a fallback for a caller that
+    // reaches it on a path that skipped the bootstrap. The one-shot guard below
     // ensures the marker is never sent twice.
     if (this.loadingStartSent) return;
     // Not dropped, held: pre-boot this would be refused by the core, and the

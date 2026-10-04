@@ -143,6 +143,20 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "src"),
       "./Payments": path.resolve(__dirname, "src/game/Payments.portal.ts"),
+      // The multiplayer transport is swapped per portal, exactly like Payments —
+      // and until this line existed it was NOT swapped at all.
+      //
+      // `net-transport.poki.ts` documented that this swap would happen here, and
+      // nothing in this file ever did it. So the Poki build resolved
+      // `import ... from "./net-transport"` to the NEUTRAL module, whose
+      // `createNetTransport` builds a WebSocket client — against a
+      // `VITE_MULTIPLAYER_URL` that `build:poki` deliberately empties. The
+      // Netlib module was never imported by anything: live PvP could not run,
+      // every "live" race silently degraded to the local AI flock, and no lobby
+      // was ever created for the Netlib dashboard to show.
+      "./net-transport": PORTAL === "poki"
+        ? path.resolve(__dirname, "src/game/net-transport.poki.ts")
+        : path.resolve(__dirname, "src/game/net-transport.ts"),
     },
   },
   define: {

@@ -154,7 +154,7 @@ function renderTrailCard(v: ShopTrailView, wallet: number): string {
     <div class="trail-body"><b>${escapeHtml(d.label)}</b><em>${escapeHtml(d.desc)}</em></div>${action}</div>`;
 }
 
-export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dailyFlash" | "gold" | "nestLevel" | "nestMaxed" | "nestMult" | "nestPrice" | "portalName" | "shopTrails" | "skins" | "stipendClaimed" | "vip" | "wallet" | "wingmanBundle">, browse: ShopBrowse): string {
+export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dailyFlash" | "firstSteps" | "gold" | "nestLevel" | "nestMaxed" | "nestMult" | "nestPrice" | "portalName" | "runsPlayed" | "shopTrails" | "skins" | "stipendClaimed" | "vip" | "wallet" | "wingmanBundle">, browse: ShopBrowse): string {
   const owned = s.skins.filter((v) => v.owned).length;
   const armedBoosts = s.boosts.filter((b) => b.armed);
   const equippedSkin = s.skins.find(v => v.equipped);
@@ -179,8 +179,18 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     ["legendary", "Legendary ★"],
   ] as const;
 
+  const isNewPlayer = s.runsPlayed <= 3 && !s.firstSteps.loadout;
   return `
     ${head(SCREEN.shop, "back", `<span class="pill coin">● ${formatNumberLocalized(s.wallet)}</span>`)}
+    ${isNewPlayer ? `<div class="onboarding-card shop-intro-card">
+      <b>${menuIconSm("crown")} Welcome to the Hangar</b>
+      <ul class="shop-intro-tips">
+        <li><b>${menuIconSm("bird")} Birds</b> — permanent unlocks. Each changes your speed, fever, or daylight. From ● 150.</li>
+        <li><b>${menuIconSm("lightning")} Boosts</b> — one-use power-ups per flight (sun refill, speed burst, score x2). From ● 40.</li>
+        <li><b>${menuIconSm("feather")} Trails</b> — visual cosmetics. Pure style.</li>
+      </ul>
+      <small>You have <b>● ${formatNumberLocalized(s.wallet)}</b> coins — try a boost first!</small>
+    </div>` : ""}
     <p class="shop-intro">${t("hud.renderShop.H", undefined, "YOUR HANGAR ")}<span>${t("hud.renderShop.FWingsMakeThemYours", undefined, "Find your wings. Make them yours.")}</span></p>
 
     <div class="pc pc--gold pc-row">
@@ -201,7 +211,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
         <b>${t("hud.renderShop.FCoins", undefined, "Free Coins")}</b>
         <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/hour)</span>
       </div>
-      <button class="primary-btn gold" data-ui data-action="shop-free-coins">${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
+      <button class="primary-btn gold" data-ui data-action="shop-free-coins">${menuIconSm("clapper")} ${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
     </div>` : ""}
 
     <div class="pc pc--red">

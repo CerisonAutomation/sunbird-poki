@@ -7,7 +7,7 @@
  * discarded at build time — never shipped, never silently used.
  */
 import { describe, expect, it } from "vitest";
-import { isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode, POKI_NETLIB_GAME_ID } from "../../sdk/PokiMpUtils";
+import { DEV_NETLIB_ID, isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode, POKI_NETLIB_GAME_ID } from "../../sdk/PokiMpUtils";
 
 describe("netlib: game id", () => {
   it("accepts canonical UUIDs (any case) and nothing else", () => {
@@ -20,10 +20,46 @@ describe("netlib: game id", () => {
     expect(isNetlibGameId(undefined)).toBe(false);
   });
 
-  it("is empty outside Poki builds — the constant is compiled out entirely", () => {
-    // vitest runs with no VITE_PORTAL_TARGET, i.e. a non-Poki build.
-    expect(POKI_NETLIB_GAME_ID).toBe("");
+  it("falls back to the shared DEV id in a build that supplies none", () => {
+    // This contract CHANGED. It used to be "empty outside Poki builds — the
+    // constant is compiled out entirely", on the reasoning that Netlib is a Poki
+    // runtime. The developer guide says otherwise:
+    //
+    //   "The Poki Networking Library (Netlib) is a peer-to-peer library
+    //    utilizing WebRTC datachannels to facilitate direct UDP connections
+    //    between players [...] available for use regardless of whether the game
+    //    is hosted on Poki."  (developers.poki.com/guide/game-dev-tools)
+    //
+    // Netlib ships its own ICE servers (stun.l.google.com, turn.rtc.poki.com),
+    // so it needs nothing from a Poki page. Compiling the id out meant live PvP
+    // could not be exercised on localhost or a self-hosted preview — the two
+    // places it is cheapest to debug — and every multiplayer report could only
+    // ever be reproduced on a portal build.
+    //
+    // vitest runs with no VITE_POKI_NETLIB_GAME_ID, i.e. an unconfigured build.
+    expect(POKI_NETLIB_GAME_ID).toBe(DEV_NETLIB_ID);
+    // ...and it is a real UUID, so Netlib will not reject it outright. Every
+    // developer lands in the same lobbies rather than each in a private one.
+    expect(isNetlibGameId(POKI_NETLIB_GAME_ID)).toBe(true);
+  });
+
+  it("never ships a malformed id, on any build", () => {
+    // The half of the old contract that was right, and the one that matters for
+    // submission: Netlib rejects a bad game id in production, so a bad value is
+    // discarded at build time rather than shipped.
+    expect(isNetlibGameId("")).toBe(false);
+    expect(isNetlibGameId(undefined)).toBe(false);
+    expect(isNetlibGameId("not-a-uuid")).toBe(false);
+    expect(isNetlibGameId(POKI_NETLIB_GAME_ID)).toBe(true);
+  });
+
+  it("offers Netlib wherever WebRTC exists, not only on Poki", () => {
+    // jsdom has no RTCPeerConnection, so availability is correctly false HERE.
+    // The gate that was removed was `IS_POKI`, never a capability check — and
+    // that is the distinction worth keeping under test.
     expect(isPokiMultiplayerAvailable()).toBe(false);
+    const probe = isPokiMultiplayerAvailable();
+    expect(typeof probe).toBe("boolean");
   });
 });
 

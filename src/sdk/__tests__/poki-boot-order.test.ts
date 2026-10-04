@@ -246,6 +246,10 @@ describe("a Poki build whose SDK script never finishes init", () => {
       adapter.gameplayStart();
       adapter.gameplayStop();
       adapter.loadingStart();
+      // gameLoadingStart fired once inside bootstrapSdk(), before init() was
+      // awaited, so it is not part of the deferred replay — and it is not a
+      // documented Poki signal in any case (see poki-canon.ts: the shipped
+      // core defines it as an empty function).
       expect(calls).toEqual(["gameplayStart", "gameplayStop", "gameLoadingStart"]);
     });
   });

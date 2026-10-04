@@ -31,7 +31,7 @@ import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RA
 import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
 import { MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
-import { fetchPublicRooms, isMultiplayerConfigured, makeRoomCode, type AnyRealtimeClient } from "./Realtime";
+import { fetchPublicRooms, isMultiplayerConfigured, type AnyRealtimeClient } from "./Realtime";
 import { createNetTransport, prewarmNetTransport } from "./net-transport";
 import { photoFinishMessage } from "./Racer";
 import { SlopeChain } from "./SlopeChain";
@@ -177,9 +177,10 @@ if (POKI_MULTIPLAYER) prewarmNetTransport();
 export type GameState = UiState;
 type AdReason = "continue" | "interstitial";
 
+const _hslScratch = new THREE.Color();
 function hsl(h: number, s: number, l: number): [number, number, number] {
-  const c = new THREE.Color().setHSL(h, s, l);
-  return [c.r, c.g, c.b];
+  _hslScratch.setHSL(h, s, l);
+  return [_hslScratch.r, _hslScratch.g, _hslScratch.b];
 }
 
 /** Seconds a ring chain stays open — one number for the rule and the meter. */
@@ -581,6 +582,15 @@ export class Game {
   /** Single-flight transport creation (see ensureNet) — Poki's client is async. */
   private netPending: Promise<AnyRealtimeClient> | null = null;
   private roomCode = "";
+  /** "Create a room" rather than "join room `roomCode`".
+   *
+   *  The Poki transport mints the code server-side (`create()` RETURNS it), so
+   *  a host cannot know the code before asking. This flag is how "host a room"
+   *  survives that: `roomCode` stays "" until the transport reports a real one,
+   *  and `pumpNetwork` adopts it. Passing a locally-invented code instead is
+   *  what made "Create Private Room" fail on every press — the transport read
+   *  it as a join request for a room nobody had created. */
+  private hostingLobby = false;
   /** True when the current roomCode was entered/invited by another player
    *  (vs. generated locally by host-room or by quick-match shuffle). Only
    *  remote codes cause the client to adopt the host's seed on welcome —
@@ -927,12 +937,12 @@ export class Game {
       if (this.state === "playing") this.setState("paused");
       this.audio.setHiddenMuted(true);
       this.watchdog.suspend(); // rAF stops with the context — not a stall
-      this.hud.toast("Graphics context lost — restoring…");
+      this.hud.toast(t("hud.gpu.contextLost", undefined, "Graphics context lost — restoring…"));
       this.telemetry.track("webgl_context_lost", {});
       // If the GPU never comes back, say so instead of leaving a dead canvas.
       window.setTimeout(() => {
         if (this.contextLost && !this.disposed) {
-          this.hud.toast("Graphics could not be restored — reload the page to keep flying");
+          this.hud.toast(t("hud.gpu.unrecovered", undefined, "Graphics could not be restored — reload the page to keep flying"));
           this.telemetry.track("webgl_context_lost_unrecovered", {});
         }
       }, 8000);
@@ -947,7 +957,7 @@ export class Game {
       this.last = performance.now();
       this.acc = 0;
       this.resize();
-      this.hud.toast("Graphics restored");
+      this.hud.toast(t("hud.gpu.restored", undefined, "Graphics restored"));
       this.telemetry.track("webgl_context_restored", {});
     };
     canvas.addEventListener("webglcontextlost", this.onContextLost, false);
@@ -1324,7 +1334,7 @@ export class Game {
   private announceToRoom(client: AnyRealtimeClient, seed: string, remote: boolean): void {
     this.massRace.attachTransport(client);
     client.setIdentity(this.racedName(), this.skin.id, 0.06);
-    client.connect(this.roomCode, seed, remote);
+    client.connect(this.roomCode, seed, remote, this.hostingLobby);
   }
 
   private ensureNet(seed: string, remote: boolean): void {
@@ -4023,6 +4033,12 @@ export class Game {
   }
 
   private doContinue(source: string): void {
+    // Resuming a lost run is the strongest "show intent to continue" signal in
+    // the game, and it went straight back to `playing` with no break offered —
+    // same omission as `startVersus`. The rewarded break that preceded it (for
+    // the gold path) is a DIFFERENT ad; this is the commercial opportunity the
+    // guide asks to be signalled here.
+    this.maybeBreakOnRunStart();
     this.continuesUsed += 1;
     this.bird.asleep = false;
     this.daylight = CONTINUE_DAYLIGHT;
@@ -4077,8 +4093,7 @@ export class Game {
       momentRecap: this.moments.recapLine(),
     });
     if (this.sessionRuns === 1) {
-      // Said "spend your coins" on a first run that yields ~10-30 of them.
-      this.hud.toast("Flight logged Your first coins are in — 40 buys your first boost", "quest", "crystal");
+      this.hud.toast("Flight logged! Scroll down to open the Shop and spend your coins", "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
       // A concrete, time-limited next goal beats a vague social nudge for a
@@ -4906,6 +4921,7 @@ export class Game {
           this.save.state.seenPvp = true;
           this.save.persist();
           this.telemetry.track("onboarding_pvp_opened");
+          this.hud.toast("Race Lobby — match up against real pilots on the same hills, ranked or casual", "gold", "flock");
         }
         // Human rivals. The Race Lobby is the matchmaking hub: quick match
         // against live pilots, the format/world picker, and the invite paths.
@@ -4919,6 +4935,7 @@ export class Game {
           this.save.state.seenPve = true;
           this.save.persist();
           this.telemetry.track("onboarding_pve_opened");
+          this.hud.toast("Practice Arena — fly with AI flocks, challenge ghosts, or run today's course solo", "quest", "bird");
         }
         // AI rivals. This is the same split the home menu shows — one tap to
         // a human lobby, one tap to the offline flock — so the two need
@@ -5682,14 +5699,18 @@ export class Game {
         }
         this.disconnectRace();
         this.localRace = false;
-        this.roomCode = makeRoomCode();
+        // No invented code. The Poki transport creates the lobby and reports
+        // the code back (see `hostingLobby`), so this stays "" until then and
+        // `pumpNetwork` adopts the real one.
+        this.roomCode = "";
+        this.hostingLobby = true;
         this.joiningRemoteRoom = false;
         this.modeId = this.selectedPvpMode;
         this.mode = modeById(this.selectedPvpMode);
         this.rankedRace = false;
         this.setScreen("live");
         this.preseatLobby();
-        this.hud.toast(`Flock room ${this.roomCode} ready!`, "gold");
+        this.hud.toast(t("hud.room.creating", undefined, "Creating your room — the code appears in a moment"), "gold");
         this.bump();
         return true;
       }
@@ -5727,14 +5748,17 @@ export class Game {
         // flying Sprint while your invitees queued for Slalom. Same safety
         // applies mid-matchmaking: tear down so the next preseating uses the
         // new seed.
-        if (this.roomCode || this.mmOpts) {
+        // Read "were we seated" BEFORE cancelMatchmaking(), which now clears the
+        // room code. Re-hosting is a create-and-read-the-code request, so the
+        // code is minted by the transport rather than invented here.
+        const wasSeated = Boolean(this.roomCode) || Boolean(this.mmOpts);
+        if (wasSeated) {
           this.cancelMatchmaking();
           this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.mode.name}`, "gold", this.mode.icon);
-          }
+          this.roomCode = "";
+          this.hostingLobby = true;
+          this.preseatLobby();
+          this.hud.toast(`New ${this.mode.name} room — the code appears in a moment`, "gold", this.mode.icon);
         }
         this.hud.toast(`${this.mode.name}`, "gold", this.mode.icon);
         this.bump();
@@ -5746,14 +5770,14 @@ export class Game {
         this.selectedCourse = PVP_WORLDS.find((w) => w.id === wId) ?? PVP_WORLDS[0]!;
         // Same reseed safety as select-pvp-mode: changing the world while
         // seated pins a fresh room code so the seed reflects the new course.
-        if (this.roomCode || this.mmOpts) {
+        const wasSeated = Boolean(this.roomCode) || Boolean(this.mmOpts);
+        if (wasSeated) {
           this.cancelMatchmaking();
           this.disconnectRace();
-          this.roomCode = this.roomCode ? makeRoomCode() : "";
-          if (this.roomCode) {
-            this.preseatLobby();
-            this.hud.toast(`New room ${this.roomCode} · ${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
-          }
+          this.roomCode = "";
+          this.hostingLobby = true;
+          this.preseatLobby();
+          this.hud.toast(`New ${this.selectedCourse.name} room — the code appears in a moment`, "gold", this.selectedCourse.emoji);
         }
         this.hud.toast(`${this.selectedCourse.name}`, "gold", this.selectedCourse.emoji);
         this.bump();
@@ -5808,8 +5832,11 @@ export class Game {
       }
       case "start-room":
       case "ready-room": {
+        // No room yet means "host one". Inventing a code here read as a join
+        // request for a room that does not exist; see `hostingLobby`.
         if (!this.roomCode) {
-          this.roomCode = makeRoomCode();
+          this.roomCode = "";
+          this.hostingLobby = true;
         }
         this.modeId = this.selectedPvpMode;
         this.mode = modeById(this.selectedPvpMode);
@@ -5817,8 +5844,15 @@ export class Game {
         this.preseatLobby();
         if (this.net) {
           const isReady = !this.net.info().ready;
-          this.net.sendReady(isReady);
-          this.hud.toast(isReady ? "You are ready!" : "Ready cancelled", "gold", "check");
+          // `sendReady` returns false when the transport is not in the lobby
+          // (still connecting, or already errored). Ignoring that made the
+          // button a liar: the tap did nothing and the toast said "You are
+          // ready!" anyway.
+          if (this.net.sendReady(isReady)) {
+            this.hud.toast(isReady ? "You are ready!" : "Ready cancelled", "gold", "check");
+          } else {
+            this.hud.toast(t("hud.room.notReadyYet", undefined, "The room is not ready for you yet"), "warn");
+          }
         } else {
           this.hud.toast("Starting race flock…", "info");
           this.launchMatch({ ranked: false, storm: this.modeId === "pvp_typhoon" }, true);
@@ -5841,7 +5875,12 @@ export class Game {
         // seated pilot is ready, then counts down 6s for everyone.
         if (this.net?.state === "lobby") {
           const nowReady = !this.net.info().ready;
-          this.net.sendReady(nowReady);
+          // Same guard as `ready-room`: never confirm a ready-up that was
+          // refused.
+          if (!this.net.sendReady(nowReady)) {
+            this.hud.toast(t("hud.room.notReadyYet", undefined, "The room is not ready for you yet"), "warn");
+            return true;
+          }
           this.hud.toast(nowReady ? "You are ready!" : "Ready cancelled", "gold", "check");
           this.bump();
         }
@@ -7163,6 +7202,13 @@ export class Game {
     this.mmRooms = "";
     this.net?.sendReady(false);
     this.disconnectRace();
+    // A quick-match GUEST adopts the host's code from the `welcome` frame, so
+    // by the time a search is cancelled `roomCode` is routinely populated.
+    // It was left set here, and `renderLive` branches on it — so cancelling
+    // stranded the player on a room card for a room with nobody in it,
+    // captioned "1 connected · 0 ready" (the `Math.max(1, …)` floor on a
+    // `roomCount` of 0). Leaving the room means leaving its code.
+    this.roomCode = "";
     this.hud.setMatchmaking(false, 0, this.roomSize, 0);
     this.bump();
   }
@@ -7208,9 +7254,24 @@ export class Game {
     return fetchPublicRooms();
   }
 
-  private liveCount(): number {
+  /**
+   * How many REAL, remote pilots are sharing this room. Never includes us, and
+   * never includes the AI fallback.
+   *
+   * `info().count` is `tracks.size + 1`, and in an autonomous room the tracks
+   * ARE the local AI flock — so this used to return 4 for a player with zero
+   * netlib and zero peers. That number reached the search overlay verbatim
+   * ("4 live pilots in this room") and then took the `live > 0` branch at the
+   * end of the window, toasting "4 pilots found — hit Ready to race". The
+   * whole point of `roomAiFallback` (and of `lobbyRivals`, and of the "Fill
+   * with AI flock" label) is that the game never claims bots are people; the
+   * one counter that feeds the search overlay was the exception.
+   */
+private liveCount(): number {
     const info = this.net?.info();
-    return info && this.net?.connected ? Math.max(0, info.count - 1) : 0;
+    if (!info || !this.net?.connected) return 0;
+    if (info.aiFallback) return 0;
+    return Math.max(0, info.count - 1);
   }
 
   /** Called every frame while a search is active. */
@@ -7391,6 +7452,11 @@ export class Game {
   private disconnectRace(): void {
     this.net?.disconnect();
     this.massRace.attachTransport(null);
+    // Leaving a room ends the hosting intent too. Every exit path already
+    // funnels through here — matchmaking, cancel, room-close, back-to-menu,
+    // race replay — so this is the one place that has to remember, rather
+    // than ten call sites that each have to.
+    this.hostingLobby = false;
   }
 
   /** Per-frame network pump: cadence, inbound emotes, outbound state. */
@@ -7411,6 +7477,17 @@ export class Game {
     const net = this.net;
     if (!net) return;
     net.tick(raw);
+    // Adopt the code the transport actually holds. A host's room is created
+    // server-side and its code only exists once `create()` resolves, so the
+    // lobby card, "copy invite" and the seat count all read from here rather
+    // than from whatever we hoped for when the button was pressed.
+    if (this.hostingLobby && !this.roomCode) {
+      const live = net.info().code;
+      if (live) {
+        this.roomCode = live;
+        this.bump();
+      }
+    }
     // Server-authoritative result: the DO ordered every live pilot's finish.
     // Blend it with the local bot field — humans ranked by the referee, bots
     // by simulation — and correct the shown place if the estimate was off.
@@ -8485,6 +8562,7 @@ export class Game {
     squadQuestsClaimed: st.squadQuestsClaimed ?? {},
     linkQuality: this.net?.connectionQuality ?? "unknown",
     netError: this.net?.info().error ?? "",
+    netLinkNote: this.net?.info().linkNote ?? "",
     draft: this.massRace.draft,
     finishRemaining: this.finishRemaining,
     nemesis: this.nemesis,
@@ -8614,6 +8692,12 @@ export class Game {
   /* ------------------------------------------------------- versus (2P) */
 
   private startVersus(): void {
+    // A versus is a run start like any other, and `maybeBreakOnRunStart` used
+    // to have exactly one caller — inside `startRun()`, which a versus and a
+    // replay both bypass. So this path reached `gameplayStart()` with no
+    // commercial break ever being offered, which is the one thing the HTML5
+    // guide asks for on every "player showed intent to continue" moment.
+    this.maybeBreakOnRunStart();
     this.disconnectRace();
     this.roomCode = "";
     this.versus = true;

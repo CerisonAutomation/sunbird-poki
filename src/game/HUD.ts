@@ -710,7 +710,12 @@ export class HUD {
     for (const [name, px] of [["header", headerPx], ["footer", footerPx]] as [string, number][]) {
       this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
     }
-    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx);
+    // In portrait the goal strip moved to the physical bottom (design-polish.css),
+    // so anchoredTop is false — the footer reservation from the bottom is correct.
+    // But coaching text and the toast lane still belong near the header, not pushed
+    // down to the quip lane as landscape bottom-anchored layout would do.
+    const isPortrait = window.matchMedia("(max-aspect-ratio: 3/4)").matches;
+    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx, isPortrait);
     const signature = [
       headerPx,
       footerPx,
@@ -765,6 +770,7 @@ export class HUD {
     headerPx: number,
     anchoredTop: boolean,
     footerPx: number,
+    forceTopLayout = false,
   ): void {
     // The band's height is the one value here that is not arithmetic, and it is
     // measured with the ceiling released first: `--hud-messages-max` is derived
@@ -796,6 +802,7 @@ export class HUD {
       headerPx,
       anchoredTop,
       footerPx,
+      forceTopLayout,
       quipY: this.quipLayer.getBoundingClientRect().top - hudRect.top,
       slopeY: getComputedStyle(slopeChain).display === "none"
         ? hudPx

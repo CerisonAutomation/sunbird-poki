@@ -552,6 +552,15 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
         // gameLoadingStart() fires exactly once, right after init, before
         // any asset/3D scene work begins. Game.loadingFinished() is called
         // by the Game constructor once the renderer/HUD/terrain are ready.
+        //
+        // It is NOT a documented Poki signal and it is not in the SDK's public
+        // typings; `poki-canon.ts` records the shipped core as defining it as
+        // an empty function, so it never opens a loading phase. It is kept
+        // here because it is harmless and costs one call. It was briefly moved
+        // into the adapter's deferred queue to "fire as early as possible",
+        // which changed the observable boot order and required rewriting the
+        // boot-order expectations — all to reorder a documented no-op, and
+        // leaving the comment in `poki.ts` asserting something untrue.
         getPoki()?.gameLoadingStart?.();
       } catch { /* preserve playable build in sandbox */ }
       // Mobile: move the Poki pill out of the flight-HUD so it never covers

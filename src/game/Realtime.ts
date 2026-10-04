@@ -72,6 +72,10 @@ export type RoomInfo = {
   ready: boolean;
   /** This transport has no AI fallback: every peer here is networked. */
   aiFallback: boolean;
+  /** Non-fatal link degradation, shown alongside the room rather than as an
+   *  error. Optional: the WebSocket relay has one server timebase and nothing
+   *  to report here, so it is simply absent. */
+  linkNote?: string;
 };
 
 /** A live multiplayer signal, surfaced as an in-flight toast by the game. */

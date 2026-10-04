@@ -47,6 +47,19 @@ export interface MessageBandInput {
   handPx: number;
   /** The band's height with no ceiling applied, i.e. what its content needs. */
   naturalBandPx: number;
+  /**
+   * Keep the band hung under the header even though the footer is bottom-anchored.
+   *
+   * The two flags used to be the same signal: a bottom-anchored footer implied
+   * the band descends to the corridor floor. They are separate now. In portrait
+   * the goal strip moved to the physical bottom (design-polish.css), so the
+   * footer is genuinely bottom-anchored and the *measurements* above are the
+   * portrait-from-the-top ones — but the band still belongs under the header
+   * there, because descending drags `--hud-stack-bottom` with it and pushes the
+   * toast lane off the bottom of a phone. Only the band's PLACEMENT is forced;
+   * every number above is still derived from the real layout.
+   */
+  forceTopLayout?: boolean;
 }
 
 export interface MessageBand {
@@ -84,7 +97,7 @@ export function footerBottomReservation({ anchoredTop, footerPx }: Pick<MessageB
 }
 
 export function messageBand(input: MessageBandInput): MessageBand {
-  const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx } = input;
+  const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx, forceTopLayout } = input;
   // Nothing may start above the header, and in portrait nothing may start above
   // the TOP-anchored footer either — the same obstruction, stacked under the
   // header instead of against the viewport bottom.
@@ -135,7 +148,7 @@ export function messageBand(input: MessageBandInput): MessageBand {
   // where the sentence was blocking the view, and that is where it now sits —
   // flush above `.quips` and `.slope-chain`, which hang off
   // `--hud-footer-bottom` and did not move.
-  const bottomAnchored = !anchoredTop;
+  const bottomAnchored = !anchoredTop && !forceTopLayout;
   const headroom = Math.max(0, laneFloor - ceiling - LANE_GAP_PX);
   const bottomAnchoredMaxPx = Math.min(naturalBandPx, headroom);
   const top = bottomAnchored

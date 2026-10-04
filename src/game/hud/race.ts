@@ -16,7 +16,7 @@ import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
 import { aiRivalSection, boardSource } from "./parts";
 import { type HudSnapshot } from "./types";
 
-export function renderLive(s: Pick<HudSnapshot, "lobbyRivals" | "multiplayerConfigured" | "netError" | "netState" | "pvpModes" | "pvpWorlds" | "roomAiFallback" | "roomCode" | "roomCount" | "roomReady" | "roomReadyCount" | "roomSize" | "roomSkill" | "selectedPvpMode" | "selectedPvpWorld" | "skins">): string {
+export function renderLive(s: Pick<HudSnapshot, "firstSteps" | "lobbyRivals" | "multiplayerConfigured" | "netError" | "netLinkNote" | "netState" | "pvpModes" | "pvpWorlds" | "roomAiFallback" | "roomCode" | "roomCount" | "roomReady" | "roomReadyCount" | "roomSize" | "roomSkill" | "selectedPvpMode" | "selectedPvpWorld" | "skins">): string {
   const connected = s.netState === "lobby" || s.netState === "racing";
   // The AI fallback seats four generated pilots in the same roster as real
   // ones, so "Connected" and "live" would both be claims about people who are
@@ -42,8 +42,20 @@ export function renderLive(s: Pick<HudSnapshot, "lobbyRivals" | "multiplayerConf
   const activeWorld = s.pvpWorlds.find((w) => w.id === s.selectedPvpWorld) ?? s.pvpWorlds[0] ?? { name: "Emerald Circuit", emoji: "leaf" };
 
   return `${head(SCREEN.raceLobby)}
+    ${!s.firstSteps.pvp ? `<div class="onboarding-card pvp-intro-card">
+      <b>${menuIconSm("flock")} Welcome to the Race Lobby</b>
+      <p>Race live against real players flying <b>the same hills</b>, same seed — pure skill, no luck.</p>
+      <ul class="shop-intro-tips">
+        <li><b>Ranked mode</b> — earn and lose rating. Climb the division ladder.</li>
+        <li><b>Casual mode</b> — no rating at stake. Just racing.</li>
+        <li><b>Private room</b> — share a code to race a friend head-to-head.</li>
+        <li><b>AI flock</b> — always there, even offline. Same screen, just the bottom row.</li>
+      </ul>
+      <small>Store boosts are disabled in races — pure flight only.</small>
+    </div>` : ""}
     <p class="tagline">Live pilots, private rooms, or the offline AI flock — both rivals live on this one screen.</p>
     ${s.netState === "error" && s.netError ? `<p class="network-notice" role="alert">${escapeHtml(s.netError)}</p>` : ""}
+    ${s.netState !== "error" && s.netLinkNote ? `<p class="network-notice" role="status">${escapeHtml(s.netLinkNote)}</p>` : ""}
     <p class="race-fairness">${menuIcon("medal")} Equal flight equipment · your bird, your timing. Store boosts are saved for solo play.</p>
 
     ${s.roomCode ? `      <section class="race-section private-session" aria-label="${t("hud.renderLive.PRoom", undefined, "Your private room")}">
@@ -64,10 +76,10 @@ export function renderLive(s: Pick<HudSnapshot, "lobbyRivals" | "multiplayerConf
           <div class="pills-scroll">${worldPills}</div>
         </div>
 
-        <p class="room-presence" role="status">${Math.max(1, s.roomCount)} ${s.roomAiFallback ? "in room · AI pilots" : "connected"} · ${s.roomReadyCount} ready</p>
+        <p class="room-presence" role="status">${s.roomAiFallback ? `${Math.max(1, s.roomCount)} in room · AI pilots` : connected ? `${Math.max(1, s.roomCount)} connected` : "Not connected"} · ${s.roomReadyCount} ready</p>
 
         <div class="room-actions-bar">
-          <button class="primary-btn gold large-btn" data-ui data-action="start-room-now">${menuIconSm("lightning")} Start Race Now (${s.roomCount > 1 ? "Launch Room" : "Fill with AI flock"})</button>
+          <button class="primary-btn gold large-btn" data-ui data-action="start-room-now">${menuIconSm("lightning")} Start Race Now (${s.roomAiFallback ? "Fill with AI flock" : s.roomCount > 1 ? "Launch Room" : "Fill with AI flock"})</button>
           <button class="soft-btn ${s.roomReady ? "on" : ""}" data-ui data-action="ready-room" aria-pressed="${s.roomReady}" ${connected ? "" : "disabled"} title="${connected ? "" : "Race connection lost — close the room to race again"}">${s.roomReady ? "Cancel ready" : "Ready up ✓"}</button>
         </div>
 
@@ -266,7 +278,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
         ? `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${t("hud.renderCampaign.ATheirRequest", undefined, "Accept their request")}</button>`
         : lookup.outgoing
           ? `<span class="fineprint">${t("hud.renderCampaign.RSentWaitingThem", undefined, "Request sent — waiting for them")}</span>`
-          : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${menuIconSm("wing")} Add wingman</button>`;
+          : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">${menuIconSm("wing")} ${t("hud.pvp.addWingman", undefined, "Add wingman")}</button>`;
     return `
       <div class="pilot-card">
         <div class="pilot-card-head">
@@ -425,11 +437,21 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   `;
 }
 
-export function renderPractice(s: Pick<HudSnapshot, "pvpModes" | "roomSize" | "roomSkill" | "selectedPvpMode">): string {
+export function renderPractice(s: Pick<HudSnapshot, "firstSteps" | "pvpModes" | "roomSize" | "roomSkill" | "selectedPvpMode">): string {
   // The AI-only view. Still reachable from the lobby's "more ways to race" row
   // for a player who wants to skip the lobby chrome entirely, and it renders the
   // same `aiRivalSection` as the combined PvP screen, so the two cannot drift.
   return `${head(SCREEN.aiPvp)}
+    ${!s.firstSteps.pve ? `<div class="onboarding-card pvai-intro-card">
+      <b>${menuIconSm("bird")} Practice Arena — AI Rivals</b>
+      <p>Race against AI pilots that match your skill level. Always available, no internet needed.</p>
+      <ul class="shop-intro-tips">
+        <li><b>Your rating is safe</b> — AI races never affect your ranked score.</li>
+        <li><b>Skill-matched</b> — the flock adjusts to your level over time.</li>
+        <li><b>Same hills</b> — the same procedural terrain as ranked play. Real practice.</li>
+      </ul>
+      <small>Ready for real opponents? Open the Race Lobby when you want to go ranked.</small>
+    </div>` : ""}
     ${aiRivalSection(s)}
     <button class="soft-btn wide" data-ui data-action="open-live">${menuIconSm("globe")} Want human rivals? Open the lobby</button>
     <button class="soft-btn wide" data-ui data-action="open-shop">${t("hud.renderPractice.CLoadout", undefined, "Change loadout")}</button>`;

@@ -579,7 +579,7 @@ export const CLIMB_REFILL_MULT = 0.6;
 export const SOLO_START_COUNTDOWN = 3;
 
 export const FEVER_NEED = 3;
-export const FEVER_DURATION = 9;
+export const FEVER_DURATION = 11;
 export const NEST_MULT_PER_LEVEL = 0.12;
 
 export let COIN_VALUE = 1;
@@ -618,7 +618,7 @@ export const SAVE_KEY_CORRUPT = "sunbird.save.corrupt";
 
 export const DAYLIGHT_MAX_GOLD = 130;
 export const CONTINUE_COST = 80;
-export const CONTINUE_DAYLIGHT = 16;
+export const CONTINUE_DAYLIGHT = 22;
 /**
  * Seconds the second-wind offer stays open. 10, not 15: the countdown is a
  * decision window and the platform's strongest games keep it tight. A player
@@ -633,8 +633,13 @@ export const CONTINUE_DAYLIGHT = 16;
  * line, and the standing readability rule (more time to read on-screen text)
  * applies hardest at the exact moment a decision is demanded. The skip path is
  * instant, so the extra seconds cost decided players nothing.
+ *
+ * 2026-10-04 (merge): 14 → 20 and the daylight grant 16 → 22, taking the
+ * concurrent Poki-portal session's values. The readability rule is the
+ * standing directive and 20 serves it harder; the floor test
+ * (CONTINUE_TIMEOUT >= 14) still holds; the skip path stays instant.
  */
-export const CONTINUE_TIMEOUT = 14;
+export const CONTINUE_TIMEOUT = 20;
 /**
  * Longest a sponsored break may hold the game before the game abandons it.
  *

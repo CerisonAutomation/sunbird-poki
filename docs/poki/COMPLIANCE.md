@@ -84,7 +84,7 @@
 | `MON-06` | requirement | Standard and rewarded options appear simultaneously. | ✅ verified | src/game/hud/run.ts matches /renderContinue/ |
 | `MON-07` | requirement | The standard button is at least as large as the rewarded button and sits above or beside it. | 🖐 attested (no machine check) | CSS audit: .primary-btn (18px type, 12px padding, full width) renders above .soft-btn.wide (14px, 10px padding); pinned by HUD test. |
 | `MON-08` | requirement | Rewarded buttons must not be green. | 🖐 attested (no machine check) | Rewarded CTA uses the warm-neutral .soft-btn surface; the game's action colour is orange and gold is reserved for the Gold pass. |
-| `MON-09` | requirement | Reward buttons carry a prominent clapperboard icon. | ✅ verified | src/game/hud/run.ts matches /data-action="continue-ad">\$\{menuIconSm\("play"\)\}/ |
+| `MON-09` | requirement | Every control that triggers a rewarded break carries the clapperboard icon. | ✅ verified | src/game/hud/run.ts matches /data-action="continue-ad">\$\{menuIconSm\("clapper"\)\}/ |
 | `MON-10` | requirement | One video per reward, maximum. | ✅ verified | src/game/Game.ts matches /rewardedBreak/ |
 | `MON-11` | requirement | Confirm rewards immediately (animation/sound) and apply them automatically. | ✅ verified | src/game/Game.ts matches /doContinue/ |
 | `MON-12` | requirement | No reward when the ad fails or is blocked; handle it silently. | ✅ verified | src/sdk/poki.ts matches /rewardedBreak/ |
@@ -108,7 +108,7 @@
 | `LOC-01` | recommendation | Localization is essential for engagement outside English-speaking regions. | ✅ verified | src/i18n/translations.barrel.json |
 | `LOC-02` | requirement | Centralize all text into a single file format before translating. | ✅ verified | src/i18n/index.ts matches /export function t\(/ |
 | `LOC-03` | recommendation | Prioritise localization for text-carrying genres/mechanics. | ✅ verified | docs/poki/05-localization.md |
-| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 598 strings complete |
+| `LOC-04` | requirement | Phase 1: EFIGS + Turkish. Phase 2: CJK. Phase 3: pt-BR + Russian. | ✅ verified | 10 locales × 604 strings complete |
 | `LOC-05` | requirement | Detect the browser language and serve it; a manual selector should exist too. | ✅ verified | src/i18n/__tests__/locales.test.ts |
 
 ## THB — Game thumbnail
@@ -340,7 +340,7 @@
 | Rule | Evidence |
 |---|---|
 | `GK-01` | Engine decision + device baseline documented; the game uses Three.js with hand-rolled systems (see docs/poki/01-web-game-engines.md §Part 4). |
-| `GK-02` | 3-step play-signal onboarding, progression systems, and 12 locales. |
+| `GK-02` | 3-step play-signal onboarding, progression systems, and 36 locales (src/i18n/locales.ts). |
 | `GK-03` | Rewarded revive is part of the crash flow, with placement analytics. |
 | `GK-04` | Spec-checked thumbnails in assets/submission/ + THB gate. |
 | `GK-05` | This corpus. |
@@ -373,7 +373,7 @@
 | `MON-06` | All three options render in one pass; nothing gates the ad behind a wizard step. |
 | `MON-07` | src/game/HUD.ts renderContinue markup order. |
 | `MON-08` | src/index.css .soft-btn |
-| `MON-09` | menuIconSm("play") renders a 20x20 inline SVG clapperboard/play glyph in the game's own palette on the rewarded continue button. The emoji was replaced during the icon set consolidation: emoji rendering varies per platform and reads as a foreign object against the hand-drawn art, so the rule now pins the meaning (a video affordance on the rewarded CTA) rather than one specific glyph. Pinned to the button markup, not to any play icon in the file, so adding a play icon elsewhere cannot satisfy this rule. |
+| `MON-09` | menuIconSm("clapper") is a dedicated 20x20 inline SVG clapperboard in the game's own palette, added for this rule and distinct from the generic play glyph (a filled disc with a triangle). All three rewarded CTAs now use it: continue-ad (Second Wind) and multiply-run-coins (3x bonus) here, and shop-free-coins in hud/shop.ts. The check pins the ICON NAME in the button markup rather than any icon in the file, so an unrelated play icon elsewhere cannot satisfy it. Emoji were avoided deliberately: 🎬 is emoji-presentation and renders as tofu in toast textContent on some devices, which is the same defect that removed ⏳ from the timer glyph. |
 | `MON-10` | A single grant site; the returned boolean is the only reward source. |
 | `MON-11` | Run resumes in place with a jingle, coin toast and slow-mo restore - no menu detour. |
 | `MON-12` | false/rejected break grants nothing, offers fallbacks, and never mentions ad blocking. |

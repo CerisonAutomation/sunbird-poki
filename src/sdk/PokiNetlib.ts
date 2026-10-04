@@ -78,6 +78,10 @@ export type RoomInfo = {
    * `lobbyRivals` promises never to do. Callers use it to label them as AI.
    */
   aiFallback: boolean;
+  /** A signaling blip we are riding out. Deliberately NOT `error`: the room is
+   *  intact and peers are connected, so this must not read as a failure — see
+   *  `onSignalingError`. Empty when the link is healthy. */
+  linkNote?: string;
 };
 
 export type PresenceEvent =
@@ -127,7 +131,31 @@ export class PokiNetlibClient implements NetTransport {
   startsAt = 0;
   isAutonomous = false;
   private localReady = false;
+  /** Last signaling blip, kept for the link badge. Not an error state — see
+   *  `onSignalingError` for why it must not tear the room down. */
+  private signalingError = "";
   private requestedCode = "";
+  /**
+   * "Create a room" rather than "join this code".
+   *
+   * Netlib has NO way to create a lobby under a chosen code: `LobbySettings`
+   * is `{codeFormat, codeLength, maxPlayers, password, public, customData,
+   * canUpdateBy}` — there is no `code` key — and `create()` RETURNS the code
+   * the service minted. So the only way to get a code is to call `create()`
+   * and read it back.
+   *
+   * `Game` used to satisfy "Create Private Room" by inventing a code locally
+   * (`makeRoomCode()`) and passing it to `connect()`, which here read any
+   * non-empty code as "I am a guest" and called `join()`. Netlib resolved
+   * `undefined` for the room nobody had created, so every press of that button
+   * produced the red banner "Room H7K2P is not available", an empty roster and
+   * a `copy-invite` link to a room that did not exist. Hosting has to be an
+   * explicit request, which is what this flag is.
+   */
+  private hostRoom = false;
+  /** True when this room was chosen by its code (friend invite / code entry)
+   *  rather than picked by quick-match. Gates AI degradation in `fail`. */
+  private joinedByCode = false;
   private requestedSeed = "";
   private heartbeat = 0;
   private autoReadyTimer: number | null = null;
@@ -220,9 +248,17 @@ export class PokiNetlibClient implements NetTransport {
     }
   }
 
-  connect(code: string, seed: string): void {
+  /**
+   * `codeIsRemote` is accepted and ignored. It is a POSITIONAL parameter and
+   * `Game.announceToRoom` calls `connect(code, seed, remote)` on whichever
+   * transport it built, so dropping it here would slide `hostRoom` into the
+   * remote flag's slot. `RealtimeClient` is the transport that needs it (the
+   * relay server tells a guest the host's seed is authoritative); on Netlib
+   * that is decided by `!this.amHost` at the `welcome` site instead.
+   */
+  connect(code: string, seed: string, _codeIsRemote = false, hostRoom = false): void {
     const requested = code.toUpperCase();
-    const same = requested === this.requestedCode && this.netReady;
+    const same = requested === this.requestedCode && this.netReady && hostRoom === this.hostRoom;
     if (same && this.net?.currentLobby) return;
 
     this.disconnect();
@@ -230,12 +266,23 @@ export class PokiNetlibClient implements NetTransport {
     this.requestedCode = requested;
     this.requestedSeed = seed;
     this.roomCode = requested;
+    this.hostRoom = hostRoom;
+    // "We were told this exact code" — distinct from quick-match, which picks
+    // its own room. Decides whether a failure may fall back to AI pilots; see
+    // `fail`.
+    this.joinedByCode = requested !== "" && !hostRoom;
     this.seed = seed;
     this.myPlace = 0;
     this.localReady = false;
     this.state = "connecting";
     this.errorText = "";
-    this.amHost = !requested; // empty code → we are creating a public lobby
+    // `hostRoom` wins over the code: "create a room and give me its code" and
+    // "join THIS code" are different requests and Netlib spells them
+    // differently — `create()` returns the code, `join()` consumes it. The
+    // old `amHost = !requested` made any locally-invented code read as a JOIN,
+    // which is why "Create Private Room" always failed on Poki (see the
+    // `hostRoom` field's own comment).
+    this.amHost = hostRoom || !requested;
     this.finishOrder = 0;
     this.finishedPeers.clear();
 
@@ -256,6 +303,33 @@ export class PokiNetlibClient implements NetTransport {
         this.selfId = network.id || this.deviceId;
         this.state = "lobby";
         this.errorText = "";
+        // One definition of "make me a room", shared by the explicit-host path
+        // and by quick-match's last resort. It existed only inline in the
+        // quick-match arm, which is why hosting could not reach it.
+        const createRoom = (): void => {
+          network.create({
+            public: true,
+            maxPlayers: this.capacity,
+            customData: { seed: this.seed, mode: "sunbird-race", v: PROTOCOL_VERSION, phase: "lobby" },
+            codeFormat: "short",
+            codeLength: 5,
+          }).then((lobbyCode: string) => {
+            // create() resolves "" — it does NOT reject — when the service
+            // declines. Adopting that gave roomCode "", amHost true and no
+            // error: a host with no lobby, waiting for peers forever.
+            if (!lobbyCode) {
+              this.fail("The Poki lobby service would not create a room");
+              return;
+            }
+            this.roomCode = lobbyCode.toUpperCase();
+            this.requestedCode = this.roomCode;
+            this.amHost = true;
+            this.leaderId = network.id;
+            this.armLobbyWatchdog();
+          }).catch((err) => {
+            this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
+          });
+        };
         try {
           if (this.requestedCode) {
             // join() returns the LobbyListEntry for the lobby we joined
@@ -296,6 +370,14 @@ export class PokiNetlibClient implements NetTransport {
             }).catch((err) => {
               this.fail(`Could not join room ${this.requestedCode}: ${String(err).slice(0, 80)}`, false);
             });
+          } else if (this.hostRoom) {
+            // HOST A ROOM: create one outright. Skipping the public lobby
+            // browser is the whole point — "Create Private Room" means "give
+            // ME a room and its code", not "put me in someone else's". This
+            // branch is new; before it, hosting fell into the QUICK MATCH arm
+            // below (because the code we invented made `requestedCode` truthy)
+            // or asked the signaller to join a room that did not exist.
+            createRoom();
           } else {
             // QUICK MATCH: browse public lobbies before creating. Join the
             // first non-full sunbird-race lobby (preferring the lowest
@@ -380,30 +462,7 @@ export class PokiNetlibClient implements NetTransport {
             } catch {
               /* list or join failed — fall through to create */
             }
-            if (!joined) {
-              network.create({
-                public: true,
-                maxPlayers: this.capacity,
-                customData: { seed: this.seed, mode: "sunbird-race", v: PROTOCOL_VERSION, phase: "lobby" },
-                codeFormat: "short",
-                codeLength: 5,
-              }).then((lobbyCode: string) => {
-                // create() resolves "" — it does NOT reject — when the service
-                // declines. Adopting that gave roomCode "", amHost true and no
-                // error: a host with no lobby, waiting for peers forever.
-                if (!lobbyCode) {
-                  this.fail("The Poki lobby service would not create a room");
-                  return;
-                }
-                this.roomCode = lobbyCode.toUpperCase();
-                this.requestedCode = this.roomCode;
-                this.amHost = true;
-                this.leaderId = network.id;
-                this.armLobbyWatchdog();
-              }).catch((err) => {
-                this.fail(`Failed to create room: ${String(err).slice(0, 80)}`);
-              });
-            }
+            if (!joined) createRoom();
           }
         } catch (err) {
           this.fail(String(err).slice(0, 120));
@@ -478,7 +537,25 @@ export class PokiNetlibClient implements NetTransport {
       };
 
       const onSignalingError = (e: { message?: string }) => {
-        this.fail(`Lobby error: ${e?.message ?? "unknown"}`);
+        // NOT FATAL. Netlib emits `signalingerror` on EVERY signaling socket
+        // close, including the routine ones it is about to recover from
+        // itself (its own `onClose` raises it, then schedules a reconnect with
+        // a 42-attempt exponential backoff and fires `signalingreconnected`
+        // when it succeeds). Established WebRTC peer connections survive a
+        // signaling socket drop entirely — only NEW peers and lobby listings
+        // need it.
+        //
+        // This used to call `fail()`, which tore the room down and dropped the
+        // player into 4 AI pilots. So a mobile network handover, a laptop
+        // sleep, or a Poki CDN socket rotation silently replaced real humans
+        // with bots — and it destroyed netlib's recovery too, because
+        // `close()` sets `_closing`, which makes its own `reconnect()` return
+        // early. One blip, permanently. The neighbouring `reconnecting`
+        // handler already had the right instinct; this fired first.
+        //
+        // `failed` is the escalation point: netlib raises it only after its
+        // retries are exhausted. Surface the blip, keep the room.
+        this.signalingError = e?.message ?? "unknown";
       };
 
       const onMessage = (peer: Peer, channel: string, data: string | Blob | ArrayBuffer | ArrayBufferView) => {
@@ -572,16 +649,9 @@ export class PokiNetlibClient implements NetTransport {
                 this.pendingEvents.push({ type: "ready", name: t.name });
               }
               // Host: when all peers (including us) are ready, broadcast a start.
-              // Six seconds — the same shared countdown the relay server gives —
-              // so a race never launches "instantly" the moment a pilot readies.
-              if (this.amHost && this.localReady && this.allReady() && this.state === "lobby") {
-                const at = Date.now() + 6000;
-                const seed = this.seed;
-                this.broadcastReliable({ type: "start", at, seed });
-                this.startsAt = at;
-                this.state = "racing";
-                this.pendingEvents.push({ type: "start" });
-              }
+              // `maybeStartRace` is the shared predicate — see its comment for
+              // why it also runs from `sendReady`.
+              this.maybeStartRace();
               break;
             }
             case "emote": {
@@ -665,6 +735,8 @@ export class PokiNetlibClient implements NetTransport {
       network.on("disconnected", onDisconnected);
       network.on("reconnecting", () => { /* netlib retries; nothing to do */ });
       network.on("reconnected", (peer: Peer) => {
+        // Signaling is back. Drop the blip we were holding for the badge.
+        this.signalingError = "";
         // The peer object is a NEW one after a reconnect — the old datachannels
         // are gone. Nothing was rebuilt, re-announced or re-synced when this was
         // a no-op: `selfId` still pointed at the pre-drop value, and no hello
@@ -732,7 +804,37 @@ export class PokiNetlibClient implements NetTransport {
     return true;
   }
 
-  private broadcastReliable(msg: NetMsg): void {
+  /**
+   * Host-side: launch the race once every seated pilot — us included — is
+   * ready. A no-op for a guest, outside the lobby, or while we are alone.
+   *
+   * This has to be callable from BOTH sides of the ready exchange, and it
+   * used to be inlined in the inbound `ready` handler only. That made the
+   * launch depend on who pressed Ready FIRST:
+   *
+   *   guest readies → the host's `case "ready"` runs, but `this.localReady`
+   *                  is still false, so the all-ready test fails
+   *   host readies → `sendReady` had no all-ready test at all, only
+   *                  `tracks.size === 0` (i.e. "am I alone")
+   *
+   * so nothing started. Everyone's row showed "Ready ✓", the `N ready` count
+   * was correct, and the room sat there until the 15 s heartbeat happened to
+   * re-check. One shared predicate, called wherever a vote lands, closes it.
+   */
+private maybeStartRace(): void {
+    if (!this.amHost || !this.localReady || this.state !== "lobby") return;
+    if (!this.allReady()) return;
+    // Six seconds — the same shared countdown the relay server gives — so a
+    // race never launches "instantly" the moment a pilot readies.
+    const at = Date.now() + 6000;
+    const seed = this.seed;
+    this.broadcastReliable({ type: "start", at, seed });
+    this.startsAt = at;
+    this.state = "racing";
+    this.pendingEvents.push({ type: "start" });
+  }
+
+private broadcastReliable(msg: NetMsg): void {
     if (!this.net || !this.netReady) return;
     try {
       this.net.broadcast("reliable", JSON.stringify(msg));
@@ -767,6 +869,15 @@ export class PokiNetlibClient implements NetTransport {
    */
   private fail(message: string, degrade = true): void {
     this.clearLobbyWatchdog();
+    // A room the player did not choose — they typed a friend's code — must
+    // never silently become a race against bots while the UI still shows that
+    // code. The docstring above has always said so, but the decision was made
+    // on `tracks.size > 0` alone, and a by-code guest has ZERO tracks for
+    // roughly the first second (tracks appear with the first inbound `hello`).
+    // Any close/failure inside that window therefore degraded to 4 AI pilots
+    // with the friend's code still on screen. `degrade: false` was only passed
+    // from the one path that could see `join()` resolve `undefined`.
+    if (this.joinedByCode) degrade = false;
     // Never degrade a room that has something to lose. `activateAutonomousRoom`
     // clears every peer track and resets state to "lobby", so running it while
     // peers are connected would silently replace real humans with local bots
@@ -959,7 +1070,11 @@ export class PokiNetlibClient implements NetTransport {
       this.state = "racing";
       this.broadcastReliable({ type: "start", at, seed: this.seed });
       this.pendingEvents.push({ type: "start" });
+      return true;
     }
+    // Our own vote is a vote. Without this the launch depended on the GUEST
+    // pressing Ready first — see `maybeStartRace`.
+    this.maybeStartRace();
     return true;
   }
 
@@ -1134,6 +1249,7 @@ export class PokiNetlibClient implements NetTransport {
       error: this.errorText,
       ready: this.localReady,
       aiFallback: this.isAutonomous,
+      linkNote: this.signalingError ? `Reconnecting to the lobby service… (${this.signalingError})` : "",
     };
   }
 

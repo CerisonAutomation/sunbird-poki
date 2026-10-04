@@ -255,8 +255,8 @@
    starts working. */
 @media (max-aspect-ratio: 3/4) {
   .hud-root[data-flying="true"] .flight-footer {
-    bottom: auto;
-    top: calc(var(--hud-header-height, 104px) + 8px + env(safe-area-inset-top));
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    top: auto;
     left: clamp(8px, 3vw, 16px);
     width: min(340px, 74vw);
   }
@@ -697,4 +697,244 @@
    what made the collisions invisible during authoring. */
 .hud-root .skin-card {
   overflow: visible;
+}
+
+/* ---------------------------------------------------------------------
+   D-19  Coaching hint: sky-legibility plate.
+
+   The .hint coaching sentence is 26px white text with only a 2-layer
+   text-shadow. Against the crimson/red sky at low daylight, or against
+   bright cloud bursts, the white text reads poorly. A frosted dark pill
+   behind the text gives consistent contrast across every sky state without
+   changing the visual character of the hint (it's still floating text,
+   just readable).
+   --------------------------------------------------------------------- */
+.hint {
+  background: rgba(14, 10, 28, 0.42);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  border-radius: 20px;
+  padding: 6px 20px;
+  /* Let the pill shrink-wrap the text rather than spanning 90% of screen */
+  left: 50%;
+  width: auto;
+  max-width: min(420px, 86vw);
+  transform: translate(-50%, -50%);
+}
+
+/* On reduced-motion, skip the backdrop-filter (it counts as motion) */
+@media (prefers-reduced-motion: reduce) {
+  .hint {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(14, 10, 28, 0.6);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   D-20  Shop flash-sale banner: wraps cleanly on narrow phones.
+
+   The .pc-header inside .pc--red lays out a red badge and a "Resets at
+   Midnight" label side-by-side. On a 375px phone the combined width
+   overflows and clips. Flex-wrap fixes it without touching the wider
+   layout where both fit on one line.
+   --------------------------------------------------------------------- */
+.pc--red .pc-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+/* ---------------------------------------------------------------------
+   D-21  Flight goal cards: lighter frosted glass, visible inner border.
+
+   The .gs cards use rgba(20,16,40,0.42) which reads near-black against
+   the green landscape at the bottom of portrait screens. A lighter base
+   with a subtle bright inner ring reads as frosted glass, not mud.
+   --------------------------------------------------------------------- */
+.gs {
+  background: rgba(14, 10, 28, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* ---------------------------------------------------------------------
+   D-22  Results screen: social action buttons get a warm tint.
+
+   The "Copy score" and "Share this flight" soft-btns at the bottom of
+   the results card are bare white outlines — they look like un-styled
+   placeholders. A warm-paper tint connects them to the results card
+   palette and makes them feel intentional.
+   --------------------------------------------------------------------- */
+.share-run .soft-btn {
+  background: rgba(255, 248, 224, 0.6) !important;
+  border-color: #d5c4a0 !important;
+  color: var(--clay) !important;
+}
+.share-run .soft-btn:active {
+  background: rgba(255, 240, 200, 0.85) !important;
+  transform: translateY(1px);
+}
+
+/* ---------------------------------------------------------------------
+   D-23  "Fly Again" button: beckoning glow pulse on results screen.
+
+   After a run ends, the player reads the recap. The primary CTA ("Fly
+   Again") should gently call their eye back to it rather than sitting
+   static. A slow orange glow pulse signals it's ready, without being
+   distracting during the reading phase (0.8 s delay before it starts).
+   --------------------------------------------------------------------- */
+.result-actions .play-again-btn {
+  animation: flyAgainBeckon 3.2s ease-in-out infinite;
+  animation-delay: 1.2s;
+}
+@keyframes flyAgainBeckon {
+  0%, 55%, 100% { box-shadow: 0 4px 0 rgba(200, 70, 20, 0.32), 0 8px 22px rgba(220, 100, 30, 0.18); }
+  27%            { box-shadow: 0 4px 0 rgba(200, 70, 20, 0.44), 0 8px 32px rgba(255, 130, 40, 0.48), 0 0 0 4px rgba(255, 145, 60, 0.22); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-actions .play-again-btn { animation: none; }
+}
+
+/* ---------------------------------------------------------------------
+   D-24  Results screen heading: warm espresso with subtle letter-spacing.
+
+   The large "The sun beat you" / "New personal best!" headings are
+   already 32px via menu-polish. Tightening letter-spacing and boosting
+   the colour to true espresso makes them read as a premium score reveal.
+   --------------------------------------------------------------------- */
+.results-card h2 {
+  letter-spacing: -0.04em !important;
+  line-height: 1.1 !important;
+}
+.results-card .results-kicker {
+  letter-spacing: 0.14em !important;
+}
+
+/* ---------------------------------------------------------------------
+   D-25  Pause card overlay: deeper scrim + warmer blur.
+
+   When the player pauses, the game world fades behind a dark scrim.
+   The current scrim is a flat translucent fill — no blur, no warmth —
+   so the paused world looks identical to the live world. A stronger,
+   warmer scrim signals "you are outside the game" without obscuring
+   the backdrop completely.
+   --------------------------------------------------------------------- */
+.overlay.pause {
+  backdrop-filter: blur(8px) saturate(0.7) brightness(0.55) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(0.7) brightness(0.55) !important;
+}
+
+/* ---------------------------------------------------------------------
+   D-26  Flight-HUD header: distance readout gets a tiny warm underline.
+
+   The distance number (in metres) is the most-watched stat during a
+   run. A 1px warm-amber underline separates it from the ambient dark
+   and gives it a sense of grounded weight without any layout change.
+   --------------------------------------------------------------------- */
+[data-ref="distance"] {
+  border-bottom: 1px solid rgba(255, 210, 100, 0.30);
+  padding-bottom: 1px;
+}
+
+/* ---------------------------------------------------------------------
+   D-27  Results card: bottom Shop CTA.
+
+   After the score table, a wide Shop button anchors the bottom of the
+   card — a natural exit when the player has coins to spend.
+   --------------------------------------------------------------------- */
+/* `.results-shop-cta` is a BUTTON class, and audit-ui.mjs (which gates the
+   build) requires every button class to carry a rule in the component
+   stylesheets. It lived here, which is why the audit reported
+   "unstyled button class(es): results-shop-cta" against a class that was
+   plainly styled. Moved to ui.css beside the other results-surface rules. */
+
+
+/* ---------------------------------------------------------------------
+   D-28  New-player shop CTA on results screen.
+
+   Shown above the fold on the first results screen so players who
+   finish run #1 immediately see they have coins to spend.
+   --------------------------------------------------------------------- */
+.new-player-shop-cta {
+  background: linear-gradient(135deg, rgba(200, 160, 40, 0.18) 0%, rgba(200, 160, 40, 0.08) 100%);
+  border: 1px solid rgba(200, 160, 40, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 8px 0 6px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.new-player-shop-cta b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+  color: var(--c-gold, #f5c842);
+}
+
+/* ---------------------------------------------------------------------
+   D-29  Onboarding cards (shop, pvp, pvai first-visit welcome).
+
+   Shown once per mode until the player has visited and the firstSteps
+   flag flips. Uses a subtle tinted card so it reads as context, not
+   UI chrome.
+   --------------------------------------------------------------------- */
+.onboarding-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.onboarding-card b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.onboarding-card p {
+  margin: 0 0 8px;
+  opacity: 0.9;
+}
+.onboarding-card small {
+  display: block;
+  margin-top: 8px;
+  opacity: 0.65;
+  font-size: 12px;
+}
+.shop-intro-card {
+  border-color: rgba(200, 160, 40, 0.25);
+  background: rgba(200, 160, 40, 0.07);
+}
+.shop-intro-card b {
+  color: var(--c-gold, #f5c842);
+}
+.pvp-intro-card {
+  border-color: rgba(100, 180, 255, 0.25);
+  background: rgba(100, 180, 255, 0.07);
+}
+.pvp-intro-card b {
+  color: var(--c-sky, #7ec8ff);
+}
+.pvai-intro-card {
+  border-color: rgba(120, 220, 140, 0.25);
+  background: rgba(120, 220, 140, 0.07);
+}
+.pvai-intro-card b {
+  color: var(--c-green, #8de89a);
+}
+.shop-intro-tips {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.shop-intro-tips li {
+  font-size: 13px;
+  opacity: 0.88;
+  padding-left: 4px;
 }

@@ -114,6 +114,12 @@ const smArtwork = {
   photo:      '<path d="M3 6.5h3l1.5-2h5L14 6.5h3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" fill="#9bb7b0"/><circle cx="10" cy="11.5" r="3.2" fill="#5ad8ff"/><circle cx="10" cy="11.5" r="1.4" fill="#eef2f5"/>',
   clipboard:  '<path d="M7 4.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-11a1 1 0 0 0-1-1H13" fill="#f1c285"/><rect x="7" y="2.5" width="6" height="4" rx="1.2" fill="#b9874b"/><path d="M7 10h6M7 13h4" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>',
   play:       '<circle cx="10" cy="10" r="7.5" fill="#5ad8ff"/><path d="M8 6.5l6 3.5-6 3.5Z" fill="#eef2f5"/>',
+  // Clapperboard. Poki's monetization guide requires a prominent video marker
+  // on any control that triggers a rewarded break — the 🎬 convention. The
+  // three rewarded CTAs (shop free coins, 3x multiplier, Second Wind) were all
+  // carrying `play`, which is a filled disc with a triangle: the universal
+  // "play" glyph, so it reads as media-in-general and marks nothing as an AD.
+  clapper:    '<rect x="2.5" y="7" width="15" height="10.5" rx="1.2" fill="#3d4739"/><path d="M2.5 8.6 4 5h3.4l-1.5 3.6M8.4 8.6 6.9 5h3.4l-1.5 3.6M14.3 8.6 12.8 5h3.4l-1.4 3.6" fill="#f5a623"/><path d="M2.5 7.2 4 3.6l1.5 3.6M8 7.2 6.5 3.6 8 0l1.5 3.6" fill="#f1c285"/><path d="m6 10.4 4.6 2.6L6 15.6Z" fill="#eef2f5"/>',
   download:   '<path d="M10 2.5v9M6 8l4 4 4-4" fill="none" stroke="#5ad8ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13.5v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="#8dbfb0" stroke-width="2.2" stroke-linecap="round"/>',
   tv:         '<rect x="2" y="5.5" width="16" height="11" rx="1.8" fill="#3d4739"/><path d="M8.5 8.5l4.5 2.5-4.5 2.5Z" fill="#5ad8ff"/><path d="M7 16.5l-1 2M13 16.5l1 2" stroke="#9bb7b0" stroke-width="1.3" stroke-linecap="round"/>',
   crate:      '<path d="M3 6.5h14v10.5H3Z" fill="#b9874b"/><path d="M3 6.5 5 3.5h10l2 3" fill="#d2bd96"/><path d="M10 3.5v13.5M3 6.5h14" stroke="#695541" stroke-width="1.2" fill="none"/>',
@@ -243,6 +249,10 @@ const smGlyph: Record<SmIconName, string> = {
   mail_in: "✉", mail_out: "↗", save: "▣", globe: "⊙",
   ruler: "◺", search: "⌕", lock: "⊗", boxing: "❋", takeoff: "⇗",
   people: "∷", link: "↔", photo: "▤", clipboard: "▥", play: "▷", download: "⇩",
+  // Text fallback for the clapperboard, for the same reason there is no ⏳ here:
+  // 🎬 is emoji-presentation and renders as tofu in toast textContent on some
+  // devices. ▤ is the striped-top shape in text-presentation form.
+  clapper: "▤",
   tv: "▭", crate: "▢", boom: "✸", p1: "❍", p2: "❒",
   offline: "⊘", cosmos: "✶", tornado: "☴",
   fullscreen: "⛶", fullscreen_exit: "⧉",

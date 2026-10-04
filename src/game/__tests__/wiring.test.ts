@@ -212,8 +212,7 @@ const EXTERNAL: Record<string, string> = {
   "game/ContinueOffer.ts:CONTINUE_OFFER_KINDS": "the kind union is already declared inline",
   "game/HUD.ts:SCREEN_TITLES": "screen-titles.test.ts; note HUD head() recomputes the same expression inline",
   "game/Experiments.ts:ExperimentId": "type with no consumer",
-  "i18n/barrel.types.ts:BarrelRoot": "type in an otherwise-orphaned module",
-};
+  };
 
 /* ------------------------------------------------------------------ the scan */
 

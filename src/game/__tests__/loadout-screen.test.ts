@@ -379,7 +379,73 @@ describe("loadout screen", () => {
     });
   });
 
-  describe("escaping", () => {
+  describe("the screen says what every value is", () => {
+      /**
+       * The failure this pins is a player looking at the summary and not knowing
+       * which name is the bird and which is the trail. It printed
+       * `<b>Sunbird</b><span>Dawn</span>` — two names at two type sizes and no
+       * labels — so the only thing distinguishing them was that one was bolder.
+       * Each half now carries its own label, from the keys the barrel already
+       * ships in all 36 locales (`hud.loadout.Birds` / `hud.loadout.Trails`).
+       */
+      it("labels the equipped bird and trail in the summary", () => {
+        const out = html();
+        const summary = out.split('class="pf-summary"')[1]?.split("</section>")[0] ?? "";
+        expect(summary, "the summary must render").not.toBe("");
+              // Both halves present, each with its own label cell…
+              expect(summary).toMatch(/class="ls-item"[\s\S]*?<em>[^<]*<\/em>\s*<b>Sunbird<\/b>/);
+              expect(summary).toMatch(/class="ls-item ls-trail"[\s\S]*?<em>[^<]*<\/em>\s*<span>Dawn<\/span>/);
+              // …and the labels are words, not empty spans: an unlabelled cell is the
+              // defect this replaces, so it must not be reintroduced silently.
+              expect(summary).not.toMatch(/<em><\/em>/);
+            });
+        
+            /**
+             * `sectionTitle()` interpolates its `sub` argument straight into the markup —
+             * it does not escape it, because every caller passes either a `t()` result,
+             * a display name, or a number. The birds section used to be passed
+             * `` `${ownedBirds.length} owned` ``: an English word baked into a screen
+             * that ships in 36 locales. `locales.test.ts` cannot catch it, because the
+             * word is not inside a `t()` call — it is just a template literal.
+             *
+             * Scoped to the BIRDS note specifically, not every `<small>` on the screen:
+             * the trails note is `loadout.trail`, a proper noun, and asserting "no
+             * letters anywhere" would be wrong.
+             */
+            it("uses a bare count as the birds section note, not a hardcoded English noun", () => {
+              const out = html({
+                skins: [
+                  { def: { id: "a", name: "Swift", price: 0, perk: "" }, owned: true, equipped: true } as unknown as SkinView,
+                  { def: { id: "b", name: "Wren", price: 0, perk: "" }, owned: true, equipped: false } as unknown as SkinView,
+                  { def: { id: "c", name: "Kite", price: 0, perk: "" }, owned: true, equipped: false } as unknown as SkinView,
+                ],
+              });
+              // The note that follows the birds heading is the count, and nothing else.
+                    // Anchored on `section-title`, not on the words: "Your bird" also labels
+                    // the bird cell in the summary above, so splitting on the string alone
+                    // would read the wrong element's next `<small>`.
+                    const note = /class="section-title">[\s\S]*?Your bird\s*<small>([^<]*)<\/small>/.exec(out)?.[1];
+                    expect(note, "the birds section must carry a note").toBeDefined();
+                    expect(note, `birds note must be a bare count, got "${note}"`).toMatch(/^\d+$/);
+                    expect(note).toBe("3");
+            });
+  
+      /**
+       * The per-booster line mixes two kinds of number: OWNED, which is inventory
+       * the player cannot change from this screen, and STAGED, which the steppers
+       * change and the slot cap applies to. They used to render in the same muted
+       * weight, so the actionable number had no more prominence than the fact.
+       */
+      it("gives the staged count its own hook so it can outrank the owned count", () => {
+        const out = html({ boosts: [boostView({ def: SHIELD, stocked: 3, armedCount: 2, spare: 1 })] });
+        // The exact markup the other tests assert is preserved; this only pins the
+        // extra class that lets the stylesheet separate the two numbers.
+        expect(out).toContain(">Staged: <b>2</b></span>");
+        expect(out).toMatch(/class="pf-stock-count pf-stock-live">Staged: <b>2<\/b>/);
+      });
+    });
+  
+    describe("escaping", () => {
     it("escapes booster and cosmetic copy rather than trusting it", () => {
       const out = html({
         boosts: [

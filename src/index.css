@@ -2487,6 +2487,9 @@ fieldset.squad-fields {
   /* The header becomes a 2-column grid here, so the booster row has to be told
      to span it and stay right-aligned rather than taking the left cell. */
   .hud-header .power-strip { grid-column: 1 / -1; justify-self: end; }
+  /* `.mid-meta` and `.power-chips` are the two wrapping chip lanes, and the
+     only ones never told to span these two columns — see the regression test. */
+  .hud-header .mid-meta, .hud-header .power-chips { grid-column: 1 / -1; }
   .hud-header .roster-bar { justify-self: center; margin-top: 2px; }
   .hud-header .stat-sub, .hud-header .sun-caption { display: none; }
   .hud-header .mid-meta .biome-chip, .hud-header .gold-chip, .hud-header .vip-chip, .hud-header .ghost-chip { display: none; }

@@ -2,12 +2,13 @@
  * How long a transient message must stay up to actually be read.
  *
  * This lived as a private formula inside `HUD.scheduleToastOut`, and a second,
- * different, flat 3000 ms lived in `NotificationQueue` beside it. Two layers,
- * two answers to the same question, neither derived from anything — which is
- * how a median six-word quip ended up on screen for 1.73 s, roughly how long six
- * words take to read with nothing left for finding the text first.
- *
- * So: one model, exported, used by both.
+  * different, flat 3000 ms lived in a separate event-notification layer beside
+  * it. Two layers, two answers to the same question, neither derived from
+  * anything — which is how a median six-word quip ended up on screen for 1.73 s,
+  * roughly how long six words take to read with nothing left for finding the
+  * text first.
+  *
+  * So: one model, exported, used everywhere.
  *
  *   need = ACQUIRE + words x MS_PER_WORD
  *

@@ -184,8 +184,15 @@
 .overlay .screen-head > span:empty { display: none; }
 .overlay .screen-head h2 { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
 @media (max-width: 400px) {
-  .overlay .screen-head > span { grid-column: 2 / -1; justify-content: flex-start; }
-  .overlay .screen-head h2 { text-align: left; }
+  /* The trailing slot (wallet pill, board badge) belongs in column 3 of ROW 1.
+     It used to be pinned to `grid-column: 2 / -1` with an AUTO row, and the h2
+     already holds row 1 column 2 — so grid auto-placement had nowhere to put it
+     and dropped it to ROW 2. The header silently became two rows tall, and
+     because `.screen-head` is `position: sticky` inside the scrolling card, the
+     second row pushed the screen body up underneath it. Naming the row
+     explicitly is what makes the header provably one row at every width. */
+  .overlay .screen-head > span { grid-column: 3; grid-row: 1; justify-content: flex-end; align-self: center; }
+  .overlay .screen-head h2 { grid-column: 2; grid-row: 1; text-align: left; }
 }
 .overlay .icon-btn.menu-mute { display: grid; place-items: center; padding: 0; }
 .a11y-color .overlay .toggle.on { background: transparent; }
@@ -3401,12 +3408,22 @@ button.upsell:active,
 .overlay .screen-head > .board-badge,
 .overlay .screen-head > span > .board-badge {
   margin-right: 2px !important;
-  flex-shrink: 0 !important;
+  /* `flex-shrink: 0` here did nothing: the trailing slot is a GRID item, and
+     `flex` is inert outside a flex container. The grid equivalent of "this track
+     does not give way" is to let the `auto` track size to max-content and align
+     the item to the end of it — which is what `justify-self` actually does. */
+  justify-self: end !important;
 }
 /* Ensure h2 truncates before badge does */
 .overlay .screen-head h2 {
   min-width: 0 !important;
-  flex: 1 1 0 !important;
+  /* `flex: 1 1 0 !important` sat here for as long as this rule did. It is inert
+     on a grid item, so it contributed nothing while implying a box model the
+     element does not have. The grid equivalent is an explicit cell plus
+     `min-width: 0` above, which is what actually lets the title shrink before
+     the badge is squeezed. */
+  grid-column: 2;
+  grid-row: 1;
   /* Wraps, on purpose. Forcing one nowrap line left ~13 characters at 320px,
      so a localised title truncated on sight and the bare "‹" gave no label to
      fall back on. */

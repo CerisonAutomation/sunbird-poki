@@ -478,9 +478,9 @@
       "verify": {
         "type": "grep",
         "path": "src/game/hud/run.ts",
-        "pattern": "End the flight"
+        "pattern": "data-action=\"continue-sleep\""
       },
-      "evidence": "Free restart and free 'End the flight' paths always exist; no mode is ad-gated. (2026-10-04 copy pass: 'Let it sleep' became 'End the flight' — same plain exit, plainer words.)"
+      "evidence": "Free restart and free 'end the flight' paths always exist; no mode is ad-gated. The check pins the free, non-ad BUTTON (data-action=\"continue-sleep\"), which renders in the same pass as the rewarded CTA, not its label. The rule is Poki's and says nothing about wording — see docs/poki/04-monetization.md. It used to pin the literal 'Let it sleep'; that was a house proxy, retired 2026-10-04 because run.ts holds only the English FALLBACK while all 36 player-facing strings live in src/i18n/translations.barrel.json, so the pin could never see what a non-English player reads. It also broke on the plain-copy pass that renamed the label to 'End the flight', which forced the choice between this gate and good copy. Pinning the affordance is copy-independent and proves the same obligation."
     },
     {
       "id": "MON-04",

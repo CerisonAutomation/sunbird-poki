@@ -5887,9 +5887,14 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .pf-empty,
 .pf-warn {
   --lo-figure: #b06a10;
-  --lo-label: #7a6040;
-  --lo-muted: #8a7a6a;
-  --lo-good: #2d6a3a;
+    --lo-label: #7a6040;
+    /* Was #8a7a6a: ≈4.26:1 against the .pf-row surface at 12px, which is under
+       the 4.5:1 WCAG AA floor for normal text — so every booster description on
+       this screen was failing the contrast minimum it is measured against. Repointed
+       to the same value as --lo-label (≈5.9:1), which also keeps the loadout
+       palette from minting a colour the rest of the app already ships. */
+    --lo-muted: #7a6040;
+    --lo-good: #2d6a3a;
   --lo-warn: #a05a00;
   --lo-paper: linear-gradient(125deg, #fff6e0, #ffe3ae);
   --lo-edge: #e8ca84;
@@ -5906,9 +5911,25 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   border: 1px solid var(--lo-edge);
   border-radius: 16px;
 }
-.pf-summary .ls-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.pf-summary .ls-row b { font: 700 20px/1.2 var(--display); color: var(--lo-figure); }
-.pf-summary .ls-row span { font-size: 13px; color: var(--lo-label); }
+/* The summary answers "what am I about to fly with", and it used to answer it
+   with a 20px name beside a 13px name and nothing to say which was which. Each
+   half now carries its own label, so the bird and the trail are named rather
+   than inferred from their relative type sizes. */
+.pf-summary .ls-row { display: flex; align-items: stretch; justify-content: space-between; gap: 10px; }
+.pf-summary .ls-item { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-summary .ls-item > em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lo-label);
+}
+.pf-summary .ls-item b { font: 700 20px/1.2 var(--display); color: var(--lo-figure); overflow-wrap: anywhere; }
+/* The trail is secondary to the bird, but it is not an aside — it gets its own
+   labelled cell rather than being tucked after the bird name. */
+.pf-summary .ls-trail { flex: 0 1 auto; text-align: right; align-items: flex-end; }
+.pf-summary .ls-trail span { font-size: 15px; font-weight: 600; color: var(--lo-label); overflow-wrap: anywhere; }
 
 .pf-meter { display: flex; gap: 5px; margin: 9px 0 5px; }
 .pf-meter i {
@@ -5973,21 +5994,29 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 
-/* The stock line is the whole point of the screen, so it gets its own
-   weight — "Owned 3 / Staged 1" is the sentence the player is here for. */
-/* The stock line is the sentence the player is here for, so it must not break
-   across two lines at 390px — "Owned: 0" over "Staged: 0" reads as a layout
-   accident rather than as two numbers. The row gives up width first (see the
-   tighter `.pf-actions` below) before this line is allowed to wrap. */
-.pf-stock { display: flex; flex-wrap: nowrap; gap: 4px 8px; margin-top: 3px; min-width: 0; }
-.pf-stock .pf-stock-count { font-size: 11px; color: var(--lo-muted); }
-.pf-stock .pf-stock-count b { color: var(--ink); font-size: 12px; }
+/* The stock line is the sentence the player came for — "Owned 3, Staged 1" —
+   so it gets its own weight rather than inheriting the description's. It was
+   `flex-wrap: nowrap` to keep "Owned: 0 / Staged: 0" on one line, which held at
+   390px and then pushed the third chip ("+2 in store") past the card edge at
+   360px. Each label-value pair is nowrap so the pair itself never splits; the
+   ROW wraps between pairs, which is the only place it can wrap without a number
+   being stranded from its own label. */
+.pf-stock { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; min-width: 0; align-items: center; }
+.pf-stock .pf-stock-count { font-size: 11px; color: var(--lo-muted); white-space: nowrap; }
+.pf-stock .pf-stock-count b { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* STAGED is the number the steppers change and the one the slot cap applies to;
+   OWNED is inventory the player cannot act on from this screen. They used to
+   render in the same muted weight, so the actionable number had no more
+   prominence than the fact. */
+.pf-stock .pf-stock-live { color: var(--ink); font-weight: 700; }
+.pf-stock .pf-stock-live b { font-size: 15px; font-weight: 800; color: var(--lo-figure); }
 .pf-stock .pf-stock-spare {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(127, 232, 200, 0.24);
   color: var(--lo-good);
+  white-space: nowrap;
 }
 
 .pf-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
@@ -5995,15 +6024,35 @@ h1, h2, h3, h4, h5, h6, .heading-art {
    player scanning the column cannot tell which button belongs to which
    booster. */
 .pf-actions .step {
-  width: 28px;
-  min-width: 28px;
+  /* 28px, which is what this shipped. Every other control in the app is
+     floored at 44px (`@supports (hover: none) { .mini-btn { min-height: 44px } }`
+     and `.overlay :is(.mini-btn, …) { min-height: 44px }`), so a two-button
+     stepper was the one place a thumb had to hit a target half the size — and
+     the two buttons sit 5px apart, so a near-miss lands on the opposite action.
+     The box is now 44×44 and the pair wraps with the rest of `.pf-actions`
+     rather than being squeezed back down at narrow widths. */
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
   justify-content: center;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
-  padding: 6px 0;
+  padding: 0;
 }
 .pf-actions .buy { min-width: 52px; }
-.pf-actions .mini-btn[disabled] { opacity: 0.4; }
+.pf-actions .mini-btn[disabled] { opacity: 0.45; }
+/* A disabled stepper still needs to read as disabled rather than as broken —
+   dimming alone left it looking like a live button that had stopped working,
+   which is the exact misreading the always-present-but-disabled pair was meant
+   to avoid. */
+.pf-actions .step:disabled {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--lo-muted);
+  border: 1px dashed var(--lo-dashed);
+  box-shadow: none;
+}
+.pf-actions .step:focus-visible { outline: 3px solid var(--lo-figure); outline-offset: 2px; }
 
 .pf-more { margin: 0 0 12px; }
 .pf-more > summary {
@@ -6027,8 +6076,15 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .pf-empty { background: rgba(127, 232, 200, 0.16); color: var(--lo-good); }
 .pf-warn { background: rgba(255, 168, 92, 0.2); color: var(--lo-warn); }
 
-@media (max-width: 359px) {
+/* The stepper pair grew from 28px to 44px, so the action cluster is ~150px
+   wide. Below this the description column cannot hold a legible line beside it,
+   so the controls take their own full-width row instead of the text wrapping to
+   four lines to make room. */
+@media (max-width: 420px) {
   .pf-row { flex-wrap: wrap; }
+  /* Only the controls move. The icon and its description stay together on the
+     first line — forcing the description to 100% would wrap it below the icon
+     and leave the icon stranded on a row of its own. */
   .pf-actions { width: 100%; justify-content: flex-end; }
 }
 

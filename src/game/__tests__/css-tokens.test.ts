@@ -209,10 +209,33 @@ describe("colour sprawl is ratcheted, not just measured", () => {
   // Raised to 1510 on 2026-10-04: D-18 quip-pill styles in design-polish.css
   // added ~8 hex declarations mirroring the existing toast palette (same values,
   // different sheet). The offenders test confirmed none are new unique colours.
-  // Raised 1510 → 1514 on 2026-10-04 (portal merge): the concurrent Poki-portal
-  // session's styles add ~18 declarations reusing existing palette values — then
-  // its stale D-18 .quip duplicate (superseded by index.css) was removed again in
-  // the merge resolution, leaving the net count comfortably under the cap.
+  //
+  // Raised to 1514 on 2026-10-04 (arena merge): +4, all in `menu-polish.css`,
+  // all four the new sticky `.home-status-bar` wallet row. The four budgeted
+  // declarations, and what each one is for:
+  //
+  //   #fffaf1  paper wash behind the sticky bar, so content scrolling under a
+  //            transparent bar doesn't turn the wallet into noise
+  //   #dfd0bd  the hairline that separates that bar from the sheet
+  //   #976425  the wallet coin figure
+  //   #3e5642  the personal-best figure
+  //
+  // These are NOT a new biome palette — the eleventh world (Gilded Grove) paints
+  // from `src/game/Biomes.ts` and adds no CSS at all; the sticky status bar just
+  // rode in on the same commit. So the correct reading of this bump is "a new
+  // surface", not "a new palette".
+  //
+  // It is blessed, and not tightened, because all four are verbatim copies of the
+  // `.home-record` palette a few lines below them (`menu-polish.css:688-689`
+  // already declares #3e5642 and #976425; `.home-record` already borders in
+  // #dfd0bd): zero new unique colours, which is why BASELINE_UNIQUE went DOWN,
+  // 915 → 912. That is the distinction the ratchet exists to police — a rise
+  // from copying an existing value is not sprawl. Tokenising them instead would
+  // be the better end state, but defining a token for #fffaf1 immediately fails
+  // the "paints with the token" test above, because three other rules in this
+  // same sheet still carry the raw hex (lines 248, 1483 and this block). That is
+  // a 4-site migration in `menu-polish.css`, deliberately not smuggled into a
+  // ratchet bump.
   const BASELINE_TOTAL = 1514;
   const BASELINE_UNIQUE = 915;
 

@@ -19,7 +19,7 @@ import { escapeHtml, sectionTitle } from "./kit";
 import { type HudSnapshot } from "./types";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderScoreTable } from "./parts";
 
-export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
+export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "runOutcome" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
   const deltaTxt =
@@ -101,9 +101,10 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
 
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
-    <h2>${escapeHtml(END_REASON_TITLE[s.endReason] ?? "Flight completed")}</h2>
-    <p class="end-reason">${escapeHtml(END_REASON_LINE[s.endReason] ?? "")}</p>
+    <h2>${escapeHtml(recapTitle(s))}</h2>
+    <p class="end-reason">${escapeHtml(recapLine(s))}</p>
     <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
+    ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
     ${s.newBest ? `<div class="new-best">${menuIconSm("crown")} ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
@@ -123,6 +124,9 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
     </div>
 
+    ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
+    ${renderNextFlight(s)}
+
     <div class="btn-row result-links">
       <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
       <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
@@ -130,9 +134,6 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     </div>
     ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
 
-    ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
-
-    ${renderNextFlight(s)}
     <details class="result-details"><summary>${t("hud.renderGameOver.FDetails", undefined, "Flight details ")}<span>Landmarks &amp; skill</span></summary><div class="over-stats">
       <div><span>Perfects</span><b>${s.perfects}</b></div>
       <div><span>${t("hud.renderGameOver.SMoments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
@@ -145,7 +146,6 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! ${menuIconSm("ghost")}` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
     ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}
     ${s.newlyCompleted.length ? `<div class="reward-strip nest">Nest upgraded → Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score</div>` : ""}
-    ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
     ${s.challengeOutcome ? `<div class="reward-strip ${s.challengeOutcome.includes("missed") ? "nest" : ""}">${escapeHtml(s.challengeOutcome)}</div>` : ""}
     ${duelStrip}
     ${raceStrip}
@@ -439,12 +439,29 @@ export function resultsPrimaryAction(
 }
 
 /**
- * How each ending is named on the results card.
- *
- * Three deaths used to produce one card reading "Flight completed" — including
- * a settle-death that fires with most of the daylight still on the meter, which
- * cannot be read as "the sun won" by any player.
+ * The recap headline is outcome-aware (playbook §3). The old maps framed
+ * every end reason as a defeat — "The sun beat you" greeted a player who
+ * flew the whole day trip to sundown, which is the mode *completing*, not
+ * losing. `runOutcome` (same contract the Poki funnel reports) now decides
+ * the frame: completed runs get earned-pride copy so the retry reads as
+ * "go further" instead of "erase a failure"; only genuine fails coach.
  */
+const recapTitle = (s: { endReason: HudSnapshot["endReason"]; runOutcome: HudSnapshot["runOutcome"] }): string => {
+  if (s.runOutcome === "complete") {
+    if (s.endReason === "settled") return "Flight complete — landed clean";
+    return "You flew to sundown";
+  }
+  return END_REASON_TITLE[s.endReason] ?? "Flight completed";
+};
+
+const recapLine = (s: { endReason: HudSnapshot["endReason"]; runOutcome: HudSnapshot["runOutcome"] }): string => {
+  if (s.runOutcome === "complete") {
+    if (s.endReason === "settled") return "You brought the glide home yourself. Full card, full flight.";
+    return "The day ran its course and you flew all of it — that's a complete flight.";
+  }
+  return END_REASON_LINE[s.endReason] ?? "";
+};
+
 const END_REASON_TITLE: Record<string, string> = {
   daylight: "The sun beat you",
   water: "You washed out",

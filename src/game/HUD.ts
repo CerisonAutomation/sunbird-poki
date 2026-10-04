@@ -3018,6 +3018,7 @@ function renderMain(s: HudSnapshot): string {
         <span class="hero-kicker">chase the daylight</span>
         <h1>SUNBIRD</h1>
         <p class="hero-sub">${t("hud.heroSub", undefined, "Hold to dive. Release to soar.")}<br>${t("hud.heroSub2", undefined, "Master the glide across endless islands.")}</p>
+        ${s.streakDays >= 2 ? `<div class="hero-meta"><span class="pill streak-pill">${menuIconSm("sun")} ${s.streakDays}-day streak — one flight keeps it alive</span></div>` : ""}
       </div>
     </header>
 

@@ -636,6 +636,8 @@ export class Game {
   private weeklyMods = { coinMult: 1, gravityMult: 1, windMult: 1, daylightMult: 1 };
   /** Golden Hour: the last stretch of daylight — 2× coins, amber world. */
   private goldenHour = false;
+  /** One-shot pre-cue for golden hour (see the daylight block in the run loop). */
+  private goldenCued = false;
   private nextMilestone = 500;
   private rivalBeatenToast = false;
 
@@ -2613,6 +2615,19 @@ export class Game {
       // GOLDEN HOUR — the last 22% of the day. The world turns amber, the
       // music opens, and every coin is worth double. Deep runs get a reason.
       const goldenNow = this.daylight > 0 && this.daylight < this.daylightMax() * 0.22;
+      // ANTICIPATION CUE — a soft heads-up while there is still daylight to
+      // spend: "golden hour soon" tells the player the run has a late-game
+      // payoff worth flying to, which is exactly the stretch where new
+      // players quit (the 2026-10-04 fit test lost most runs mid-flight).
+      // Once per run, one line, no siren: the payoff itself still lands as
+      // the surprise when the hour arrives.
+      if (
+        !this.goldenCued && !this.goldenHour && this.daylight > 0 &&
+        this.daylight < this.daylightMax() * 0.35 && this.daylight >= this.daylightMax() * 0.22
+      ) {
+        this.goldenCued = true;
+        this.hud.toast("Golden hour soon — coins ×2 while the sun sets", "info", "half_day");
+      }
       if (goldenNow && !this.goldenHour) {
         this.goldenHour = true;
         this.audio.goldenHour();
@@ -3678,6 +3693,7 @@ export class Game {
     if (this.eventRun) this.weeklyMods = weeklyEvent().mods;
     this.serverPlaceApplied = false;
     this.goldenHour = false;
+    this.goldenCued = false;
     this.nextMilestone = 500;
     this.rivalBeatenToast = false;
     this.stormPhase = 1;
@@ -4055,7 +4071,11 @@ export class Game {
       this.hud.toast("Flight logged Your first coins are in — 40 buys your first boost", "quest", "crystal");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
     } else if (this.sessionRuns === 2) {
-      this.hud.toast("Ready for the social sky? Challenge a rival or try today's course", "quest");
+      // A concrete, time-limited next goal beats a vague social nudge for a
+      // player two runs in: the daily course is live content with a payout,
+      // and naming it is the CTA (playbook lever 9). The social sky keeps its
+      // own surfaces — the lobby, the recap's challenge buttons.
+      this.hud.toast("Today's Daily Challenge is live — bonus coins on the daily course", "gold", "sun");
     }
 
     // A duel abandoned short of the line is a loss — no free retries on rating.
@@ -8343,6 +8363,7 @@ export class Game {
     atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
     farthestIsland: Math.max(st.farthestIsland, this.island),
     endReason: this.endReason,
+    runOutcome: this.runOutcome,
     launchBanner: this.launchBannerText,
     launchBannerT: this.launchBannerT,
     launchRating: this.lastLaunch?.rating ?? "none",

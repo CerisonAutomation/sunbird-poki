@@ -294,6 +294,11 @@ export type HudSnapshot = {
   /* --- momentum / flight readouts --- */
   /** How the run ended, so the card can say so. */
   endReason: "daylight" | "water" | "settled";
+  /** Whether the run actually ended in failure. A run that simply ran its
+   *  course (daylight out, or a settled landing after a full card) is a
+   *  complete run, and the recap headline must celebrate it, not mourn it —
+   *  shaming successful players is how a recap loses the retry. */
+  runOutcome: "complete" | "fail";
   launchBanner: string;
   launchBannerT: number;
   launchRating: string;

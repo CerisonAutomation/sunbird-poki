@@ -89,6 +89,46 @@ the evidence bar. Work top-down; each is small.
 | 9 | **Session cadence after run 2** — the "Ready for the social sky?" toast fires after run 2; consider a daily-challenge CTA instead | A concrete, time-limited next goal beats a vague social nudge for new players | `sessionRuns === 2` toast in `finishRun()` |
 | 10 | **Portrait-first polish** — portrait averages +6 % engagement and unlocks Gamebar ads (`EA-10`) | Platform-measured, not theory | Verify the default preview orientation is portrait |
 
+### 3.4 The recap psychology pass — levers shipped (same day)
+
+The ranked levers below were implemented the same day the playbook was
+written; nothing here is aspirational.
+
+* **Outcome-aware recap headline** — the headline used to shame every run
+  ("The sun beat you") including completed day trips. `runOutcome` (the same
+  contract the Poki funnel reports, §3.1) now flows into `HudSnapshot` and the
+  headline celebrates a completed run ("You flew to sundown" / "Flight
+  complete — landed clean"); only genuine fails get coaching copy.
+* **Near-miss promoted to the emotional peak** (lever 1) — the `nearMiss`
+  strip moved from below eight folds to directly after the tagline, before
+  the Fly Again button, where the retry decision actually forms.
+* **Armed bonus + next flight above the fold** (levers 5 + 8) — the 3× coin
+  card and the "take this into your next flight" lesson moved up to directly
+  after the Distance/Score/Coins summary; shop/pass/atlas links and the
+  details fold stay below.
+* **Golden-hour pre-cue** (lever 6) — one soft toast at 35 % daylight
+  ("Golden hour soon — coins ×2 while the sun sets"), once per run; the
+  payoff toast at 22 % is unchanged.
+* **Streak chip on the home hero** (lever 4) — a `streakDays ≥ 2` pill on the
+  title screen ("3-day streak — one flight keeps it alive"): endowed progress
+  exactly where the return decision happens.
+* **Run-2 CTA made concrete** (lever 9) — "Ready for the social sky?" became
+  "Today's Daily Challenge is live — bonus coins on the daily course".
+
+Locked by `src/game/__tests__/recap-engagement.test.ts` (9 tests: headline
+framing, fold order, no duplicate cards, streak chip presence/absence) and
+proven on the running artifact by `scripts/first-session-audit.mjs`, which
+now asserts the headline and samples for the golden-hour cues mid-run
+(headline PASS, pre-cue PASS on the 2026-10-04 run).
+
+**Lever status:** 1, 4, 5, 6, 8, 9 **shipped** (above) · 2 **already existed**
+(starter session-goals with a 40-coin reward floor — verified) · 3 **verified,
+no change needed** (Fly Again is the first control in the card; Space is the
+EN-02 two-step primary; the button already carries full gold-CTA styling) ·
+7 **deferred with reason** (a first-run ghost needs real cohort seed data —
+`benchmarkRows()` is empty until the game has live runs; revisit after the
+next fit test) · 10 **verified** (phone-shaped preview is the default).
+
 ## 5. What NOT to do (the guide is explicit)
 
 - **Never gate the first flight** — no name entry, no menu between boot and

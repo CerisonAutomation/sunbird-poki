@@ -23,7 +23,7 @@ import { RivalNameTag } from "./MassRace";
 import { formatNumberLocalized, SUPPORTED_LOCALES, getLocale, t } from "../i18n";
 import * as THREE from "three";
 
-import { skinPalette, skinShape, sunSVG, sunbirdSVG } from "./Sunbird";
+import { sunSVG, sunbirdSVG } from "./Sunbird";
 
 import { MissionRow } from "./Missions";
 

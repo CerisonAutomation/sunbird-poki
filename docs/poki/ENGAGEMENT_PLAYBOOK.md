@@ -129,6 +129,41 @@ EN-02 two-step primary; the button already carries full gold-CTA styling) ·
 `benchmarkRows()` is empty until the game has live runs; revisit after the
 next fit test) · 10 **verified** (phone-shaped preview is the default).
 
+### 3.5 The polish pass — readability, quick shop, worlds, perf (2026-10-04, second directive)
+
+Player-named fixes, each locked by `src/game/__tests__/polish-2026-10-04.test.ts`
+and the artifact audit:
+
+* **The jokes are readable now.** The quip lane ("the black text with the
+  jokes") had NO CSS rule for `.quip` anywhere — 211 flavour lines rendered as
+  raw dark ink directly on the sky. `.quip` is now a dark-glass pill with
+  light text, per-kind tints that swap to dark ink on light pills, and the
+  toast lane's in/out motion. Proven on the running build by the audit's
+  computed-style probe (35 samples, light text on a real background).
+* **More time to read.** Read-time model raised for a global second-language
+  audience: 415 → 470 ms/word, floor 1100 → 1400 ms, ceiling 6000 → 7500 ms;
+  quip hold 3400 → 4800 ms. The pins in `message-timing.test.ts` moved with
+  the shipped numbers, as that file's contract requires.
+* **Quick shop before playing.** The home hero is now a launch cluster:
+  "Fly now" plus a loadout chip showing the equipped bird, trail and staged
+  boosters — one tap into the Loadout (bird, trail, boosters, buy), zero new
+  raw colours (it borrows `.destination`'s palette; the colour ratchet stayed
+  flat).
+* **Worlds pay.** First arrival in each of the nine biomes now pays a
+  charting bonus that scales with depth (25 → 145 ●, `Biomes.chartingBonus`),
+  on the same run-tally path as every other coin so the recap and wallet
+  cannot disagree. Localised into the barrel's 36 locales.
+* **Max FPS.** The resolution ladder now steps down inside the perceptible
+  sub-50 fps band (was 1/40 — a device could sit at 45 fps forever), and a
+  Settings → "Show FPS counter" toggle paints the live rate in the flight HUD
+  so perf is visible, not promised.
+* **Mid ads: present and unskippable.** The dev preview now runs with
+  `VITE_SIM_BREAKS=true`, so the placeholder break (every 3rd run from run 2,
+  4/day cap) is playable in dev exactly as it ships. Every skip path is
+  pinned by `ad-unskippable.test.ts`: `ad-skip` is a no-op, the escape hatch
+  is disarmed until the break demonstrably fails, the upsell waits out the
+  timer, portal breaks refuse every game action.
+
 ## 5. What NOT to do (the guide is explicit)
 
 - **Never gate the first flight** — no name entry, no menu between boot and

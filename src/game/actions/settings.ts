@@ -38,6 +38,11 @@ export interface SettingsActionContext {
 export function settingsAction(ctx: SettingsActionContext, action: string, id: string): boolean {
 
     switch (action) {
+      case "set-show-fps":
+        ctx.save.state.settings.showFps = !ctx.save.state.settings.showFps;
+        ctx.save.persist();
+        ctx.bump();
+        return true;
       case "set-mute":
         ctx.save.state.settings.mute = !ctx.save.state.settings.mute;
         ctx.save.persist();

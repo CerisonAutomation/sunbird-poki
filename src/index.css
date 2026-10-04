@@ -593,6 +593,27 @@ textarea {
   z-index: 2;
 }
 
+/* Optional FPS chip (Settings → Show FPS counter). Perf transparency: the
+   player can watch the adaptive ladder work — resolution steps, shadows shed
+   — instead of trusting that "Auto" means something. Sits in the button row,
+   left of mute, styled quiet so it reads as an instrument, not an alert. */
+.fps-chip {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 124px;
+  z-index: 2;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(24, 20, 46, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text-on-sky);
+  font: 700 11px/1.2 var(--body, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 /* The play HUD's mute button only exists mid-flight; the shell needs a toggle
    the player can always reach. Sits over the menu sheet, thumb-reachable, and
    keeps the 44px portal-QA touch target. */
@@ -3182,6 +3203,50 @@ label { font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; }
   gap: 4px;
   pointer-events: none;
 }
+/* The quip pill itself. For a long time `.quip` had NO rule anywhere: the
+   element was created with class `quip ${kind}` and styled by nothing, so
+   every joke in the game rendered as raw unstyled text — dark ink floating
+   directly on the sky, unreadable against dusk and night biomes and invisible
+   over dark terrain. This is the toast pill's geometry with a darker glass
+   body so a quip reads on ANY sky, plus the same in/out motion the toast
+   lane uses (HUD toggles the `in`/`out` classes). */
+.quip {
+  max-width: min(86vw, 480px);
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(24, 20, 46, 0.88);
+  color: var(--text-on-sky);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 0 rgba(12, 8, 28, 0.35), 0 8px 22px rgba(8, 4, 24, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  transition: 0.22s cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+.quip.in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.quip.out {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+}
+/* Kind tints, aligned with the toast lane's vocabulary. Only the border and a
+   faint inner glow change — the text stays white on dark glass on every kind,
+   because a joke you cannot read is a joke that was never told. */
+.quip.cloud  { border-color: rgba(255, 255, 255, 0.22); }
+.quip.gold   { background: linear-gradient(135deg, rgba(255, 224, 138, 0.96), rgba(255, 193, 77, 0.96)); color: var(--ink); text-shadow: none; border-color: rgba(120, 80, 10, 0.4); }
+.quip.fever  { background: rgba(255, 107, 61, 0.94); }
+.quip.apex   { background: linear-gradient(135deg, rgba(138, 92, 255, 0.94), rgba(106, 61, 240, 0.94)); }
+.quip.info   { background: rgba(52, 58, 84, 0.92); }
+.quip.warn   { background: rgba(255, 107, 61, 0.94); }
+.quip.island { background: rgba(122, 208, 255, 0.94); color: var(--ink); text-shadow: none; }
+.quip.perfect{ background: rgba(255, 224, 138, 0.94); color: var(--ink); text-shadow: none; }
 .slope-chain-icon { font-size: 13px; line-height: 1; }
 .slope-chain i {
   display: block;

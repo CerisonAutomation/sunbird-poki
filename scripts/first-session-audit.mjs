@@ -26,7 +26,7 @@ const t0 = Date.now();
 const mark = (name) => ({ name, at: ((Date.now() - t0) / 1000).toFixed(1) + "s" });
 const marks = [];
 const consoleErrors = [];
-const leverHits = { goldenCue: 0, goldenHour: 0 };
+const leverHits = { goldenCue: 0, goldenHour: 0, quips: 0, quipStyled: false };
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 140)); });
 
 const shot = async (name) => {
@@ -35,9 +35,28 @@ const shot = async (name) => {
 };
 
 /** Sample the live HUD text so late-run toasts (golden hour cues) are caught
- *  even though they disappear before the next screenshot. */
+ *  even though they disappear before the next screenshot. Also verifies, once,
+ *  that a quip on screen is actually STYLED — the 2026-10-04 black-text bug
+ *  was a `.quip` element with no CSS rule anywhere, rendering dark ink
+ *  directly on the sky. Computed style, not source shape. */
+let quipChecked = false;
 const sampleHud = async () => {
   try {
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector(".quip");
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return { color: cs.color, bg: cs.backgroundColor, text: (el.textContent ?? "").slice(0, 40) };
+    });
+    if (probe) {
+      leverHits.quips++;
+      if (!quipChecked) {
+        quipChecked = true;
+        // "rgb(r, g, b)" — light text means every channel is comfortably > 150.
+        const m = /rgb\((\d+),\s*(\d+),\s*(\d+)/.exec(probe.color);
+        leverHits.quipStyled = Boolean(m && +m[1] > 150 && +m[2] > 150 && +m[3] > 150 && probe.bg !== "rgba(0, 0, 0, 0)");
+      }
+    }
     const text = await page.evaluate(() => document.body.innerText);
     if (text.includes("Golden hour soon")) leverHits.goldenCue++;
     if (text.includes("coins worth double")) leverHits.goldenHour++;
@@ -124,6 +143,7 @@ if (await retry.isVisible().catch(() => false)) {
 console.log("=== ENGAGEMENT LEVERS ===");
 console.log(`golden-hour pre-cue ("Golden hour soon") observed: ${leverHits.goldenCue > 0 ? `PASS (${leverHits.goldenCue} samples)` : "FAIL — never seen while the day drained"}`);
 console.log(`golden-hour payoff ("coins worth double") observed: ${leverHits.goldenHour > 0 ? "PASS" : "not seen (run may have ended early)"}`);
+console.log(`quip pill readable (light text on a real background): ${leverHits.quips === 0 ? "no quip fired during the run (not checkable)" : leverHits.quipStyled ? `PASS (${leverHits.quips} samples)` : "FAIL — dark/unstyled text on the sky"}`);
 
 console.log("=== TIMELINE ===");
 for (const m of marks) console.log(`${m.at.padStart(7)}  ${m.name}`);

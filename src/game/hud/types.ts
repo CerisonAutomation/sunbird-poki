@@ -292,6 +292,9 @@ export type HudSnapshot = {
   farthestIsland: number;
   showTutorialHand: boolean;
   /* --- momentum / flight readouts --- */
+  /** Live frame rate (from the adaptive-quality EMA), 0 before the first
+   *  measured frame. Rendered by the optional FPS chip (settings.showFps). */
+  fps: number;
   /** How the run ended, so the card can say so. */
   endReason: "daylight" | "water" | "settled";
   /** Whether the run actually ended in failure. A run that simply ran its

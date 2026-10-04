@@ -48,7 +48,7 @@ describe("message timing model", () => {
     // replacing the whole formula with the old 1.2s + 28ms/char one. The point
     // of this file is to pin the shipped numbers, so the numbers live here.
     const ACQUIRE_MS = 450;   // peripheral novel target on a moving background
-    const PER_WORD_MS = 415;  // 238 wpm, derated for peripheral + divided attention
+    const PER_WORD_MS = 470;  // 238 wpm, further derated for second-language readers (2026-10-04 raise)
     const long = quips.filter((q) => wordCount(q) > 4);
     for (const q of long) {
       expect(need(q), `"${q}"`).toBeGreaterThanOrEqual(ACQUIRE_MS + wordCount(q) * PER_WORD_MS);
@@ -57,7 +57,7 @@ describe("message timing model", () => {
 
   it("never gives a message LESS than it needs", () => {
     const ACQUIRE_MS = 450;
-    const PER_WORD_MS = 415;
+    const PER_WORD_MS = 470;
     for (const s of ["THUD!", "Great landing", "The fish gave that landing a standing ovation", "New skill unlocked: damp"]) {
       expect(need(s), s).toBeGreaterThanOrEqual(ACQUIRE_MS + wordCount(s) * PER_WORD_MS);
     }
@@ -74,12 +74,12 @@ describe("message timing model", () => {
   it("keeps a one-word message above the see-it floor", () => {
     // Literal 1100, not TOAST_FLOOR_MS: asserting a function returns the
     // constant it reads is true for every value of that constant.
-    expect(need("THUD!")).toBe(1100);
+    expect(need("THUD!")).toBe(1400);
   });
 
   it("caps so an occupied layer cannot deadlock", () => {
     const absurd = new Array(40).fill("word").join(" ");
-    expect(need(absurd)).toBe(6000);
+    expect(need(absurd)).toBe(7500);
   });
 
   it("the old model was the bug — it under-read the median quip", () => {

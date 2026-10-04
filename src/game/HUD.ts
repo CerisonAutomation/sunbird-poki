@@ -25,7 +25,7 @@ import { RivalNameTag } from "./MassRace";
 import { formatNumberLocalized, SUPPORTED_LOCALES, getLocale, t } from "../i18n";
 import * as THREE from "three";
 
-import { sunSVG, sunbirdSVG } from "./Sunbird";
+import { skinPalette, skinShape, sunSVG, sunbirdSVG } from "./Sunbird";
 
 import { MissionRow } from "./Missions";
 
@@ -123,10 +123,10 @@ const IMPACT_POPUP_CAP = 3;
  *  6 s for very long toasts) applied to the median quip, and it deliberately
  *  exceeds the moment-to-moment churn of the flight so a joke is not competing
  *  with the next coin. */
-const QUIP_HOLD_MS = 3400;
+const QUIP_HOLD_MS = 4800;
 /** Bounded extra wait so a quip raised while its lane is hidden is released
  *  rather than leaked — the same ceiling the toast lane uses. */
-const QUIP_OBSCURE_WAIT_MS = 2400;
+const QUIP_OBSCURE_WAIT_MS = 3000;
 
 /** One live quip. `timer` is the armed hold poll (re-armed every tick),
  *  `removal` the pending 260 ms fade-out removal. */
@@ -219,6 +219,9 @@ export class HUD {
   private pauseEl!: HTMLElement;
   private pauseBtnEl!: HTMLElement;
   private muteBtnEl!: HTMLButtonElement;
+  private fpsChipEl!: HTMLElement;
+  /** Last painted FPS, so the chip's text node is only touched when it moves. */
+  private fpsShown = -1;
   /** Live run-stats shown on the pause card (updated every frame while paused). */
   private pauseDistanceEl!: HTMLElement;
   private pauseAltitudeEl!: HTMLElement;
@@ -486,6 +489,7 @@ export class HUD {
           <div class="fever-label">FEVER</div>
           <div class="fever-bar"><div class="fever-fill" data-ref="feverFill"></div></div>
         </div>
+        <div class="fps-chip hidden" data-ref="fpsChip" role="status" aria-label="${t("hud.aria.fps", undefined, "Frames per second")}"></div>
         <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
         <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">${pauseSvg()}</button>
         <div class="combo" data-ref="combo"></div>
@@ -1170,6 +1174,14 @@ export class HUD {
     // crash "second wind" card is up so it can't read as a dead button.
     this.pauseBtnEl.classList.toggle("hidden", s.state !== "playing");
     this.muteBtnEl.classList.toggle("hidden", !inPlay);
+    // Optional FPS counter (settings > display). Painted only when the value
+    // moves: a textContent write per frame is a layout trigger per frame.
+    const showFps = inPlay && s.settings.showFps && s.fps > 0;
+    this.fpsChipEl.classList.toggle("hidden", !showFps);
+    if (showFps && s.fps !== this.fpsShown) {
+      this.fpsShown = s.fps;
+      this.fpsChipEl.textContent = `${s.fps} fps`;
+    }
     const muted = s.settings.mute;
     if (this.playMuteShown !== muted) {
       this.playMuteShown = muted;
@@ -2053,9 +2065,9 @@ export class HUD {
    * ACQUIRE_MS is the cost of a PERIPHERAL novel target on a moving
    * background — a one-button game pins gaze to the bird, and the fovea is
    * only 1.5-2 degrees, so anything off the bird is read at a discount.
-   * MS_PER_WORD is 415 ms: 238 wpm (Brysbaert 2019, meta-analysis of 190
-   * studies) reduced for peripheral placement, for divided attention, and for
-   * reading an isolated phrase rather than connected prose.
+   * MS_PER_WORD is 470 ms: 238 wpm (Brysbaert 2019, meta-analysis of 190
+   * studies) raised for a global second-language audience, then reduced for
+   * peripheral placement and divided attention (see MessageTiming.ts).
    *
    * Words, not characters, because a character is the wrong unit: a two-letter
    * word costs more per character than a seven-letter one, so a char model
@@ -2300,6 +2312,7 @@ export class HUD {
     this.pauseEl = grab("pause");
     this.pauseBtnEl = grab("pauseBtn");
     this.muteBtnEl = grab("muteBtn") as HTMLButtonElement;
+    this.fpsChipEl = grab("fpsChip");
     this.pauseDistanceEl = grab("pauseDistance");
     this.pauseAltitudeEl = grab("pauseAltitude");
     this.pauseComboEl = grab("pauseCombo");
@@ -2996,6 +3009,10 @@ function renderMain(s: HudSnapshot): string {
   // renderer declarative: filtering destinations here used to leave stale PvP
   // entries in the catalog and made other screens drift from the home menu.
   const playDestinations = PLAY_DESTINATIONS;
+  // The equipped bird for the loadout chip beside "Fly now". Falls back to the
+  // first skin so a snapshot with no equipped flag (tests, migration edge)
+  // still renders art rather than an empty box.
+  const equippedSkin = s.skins.find((v) => v.equipped)?.def ?? s.skins[0]?.def;
   const progressDestinations = PROGRESS_DESTINATIONS;
   return `
     <button
@@ -3022,7 +3039,14 @@ function renderMain(s: HudSnapshot): string {
       </div>
     </header>
 
-    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="${t("onboarding.flyNow", undefined, "Fly now")}"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
+    <div class="home-launch-row">
+      <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="${t("onboarding.flyNow", undefined, "Fly now")}"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
+      <button class="destination loadout-quick" data-ui data-action="open-loadout" aria-label="${t("hud.loadoutQuick.aria", undefined, "Loadout — change your bird, trail and boosters before you fly")}">
+        <span class="lq-art" aria-hidden="true">${equippedSkin ? sunbirdSVG({ palette: skinPalette(equippedSkin), shape: skinShape(equippedSkin), width: 44, title: "" }) : menuIcon("bird")}</span>
+        <span class="lq-copy"><small>${t("hud.loadoutQuick.title", undefined, "LOADOUT")}</small><b>${escapeHtml(s.loadout.bird)}</b><span>${escapeHtml(s.loadout.trail)}${s.loadout.boosts > 0 ? ` · ${s.loadout.boosts} ⚡` : ""}</span></span>
+        <span class="lq-go" aria-hidden="true">${menuIconSm("wind")}</span>
+      </button>
+    </div>
     ${renderQuickRail()}
     ${renderDailyRitualBanner(s)}
     ${renderTournamentCountdown(s)}
@@ -3081,6 +3105,7 @@ function renderSettings(s: HudSnapshot): string {
     ${toggle(t("hud.settings.largeText", undefined, "Large text"), "bigtext", s.settings.bigText)}
     ${toggle(t("hud.settings.tapToggleDive", undefined, "Tap to dive (no holding)"), "tap-toggle-dive", s.settings.tapToggleDive)}
     <p class="fineprint">${t("hud.settings.tapToggleDiveHint", undefined, "One tap starts the dive, the next tap ends it — nothing to hold down.")}</p>
+    ${toggle(t("hud.settings.showFps", undefined, "Show FPS counter"), "show-fps", s.settings.showFps)}
     <div class="setting-row setting-select"><label for="render-quality">${t("hud.settings.renderQuality", undefined, "Render quality")}</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? t("hud.settings.quality.auto", undefined, "Auto · recommended") : q === "high" ? t("hud.settings.quality.high", undefined, "High · more detail") : t("hud.settings.quality.low", undefined, "Low · less GPU work")}</option>`).join("")}</select></div>
     <div class="setting-row"><span>${t("hud.settings.flightsFlown", undefined, "Flights flown")}</span><b>${s.runsPlayed}</b></div>
     <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">${iconGlyph("fullscreen")} ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>

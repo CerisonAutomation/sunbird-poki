@@ -316,8 +316,34 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 
 /* Visible home navigation replaces the catch-all Explore dropdown. */
 .menu-hero { container-type: inline-size; }
-.home-launch { width:100%; margin:8px 0 16px; min-height:64px; }
+.home-launch-row { display:flex; gap:8px; align-items:stretch; margin:8px 0 16px; }
+.home-launch { flex:1 1 auto; min-width:0; margin:0; min-height:64px; }
 .home-launch span { display:block; font-size:12px; font-weight:500; letter-spacing:0; text-transform:none; margin-top:4px; }
+/* ── Quick loadout: the pre-flight shop chip beside "Fly now" ──────────────
+   The player's ask: a way to change bird, trail and boosters at the exact
+   moment of launching, not three screens deep. One compact card next to the
+   big button — the equipped bird IS the art, the trail and staged boosts are
+   the state, and the whole thing is one tap into the Loadout screen. */
+/* The chip carries `destination` in its class list, so the paper palette
+   (border, background, ink, hover) comes from `.destination` — zero new raw
+   colours; this block is layout only, which keeps the colour ratchet flat. */
+.loadout-quick {
+  flex:0 0 auto; display:flex; align-items:center; gap:8px;
+  min-width:118px; max-width:170px; padding:8px 12px; min-height:64px;
+}
+.loadout-quick .lq-art { display:flex; align-items:center; }
+.loadout-quick .lq-art svg { display:block; }
+.loadout-quick .lq-copy { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.loadout-quick .lq-copy small { display:block; font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
+.loadout-quick .lq-copy b { display:block; font-size:13px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loadout-quick .lq-copy > span { display:block; font-size:11px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:0; }
+.loadout-quick .lq-go { margin-left:auto; display:flex; align-items:center; }
+.loadout-quick .lq-go { margin-left:auto; color:#b68a63; display:flex; align-items:center; }
+/* Short screens: keep the pair but let the chip shrink to icon + name. */
+@media (max-height:520px), (max-width:360px) {
+  .loadout-quick { max-width:120px; padding:6px 10px; }
+  .loadout-quick .lq-copy > span { display:none; }
+}
 /* Full-width rows. The 2-up grid left a dead cell next to every odd tile and
    made half-width tiles on a phone, which read as gaps rather than a menu;
    one column means every destination spans the card edge to edge. */

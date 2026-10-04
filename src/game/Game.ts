@@ -1,7 +1,7 @@
 import { buildStamp } from "./version";
 import { skinShape } from "./Sunbird";
 import { biomeClimb } from "./FlightProgression";
-import { islandTemplate } from "./Biomes";
+import { chartingBonus, islandTemplate } from "./Biomes";
 import { FRENZY_AT, chainBonus, chainLabel, chainPulse, chainScale, chainTier, isFrenzyMoment } from "./ChainFlair";
 import { splitLayout, splitViews } from "./Viewport";
 import { iconGlyph } from "./MenuIcons";
@@ -2104,7 +2104,16 @@ export class Game {
     if (biomeNow.id !== this.lastBiomeId) {
       this.lastBiomeId = biomeNow.id;
       const isNew = this.save.markBiomeSeen(biomeNow.id);
-      if (isNew) this.hud.toast(`New shores charted: ${biomeNow.name}`, "island");
+      if (isNew) {
+        // Charting bonus: the first arrival in a world pays coins that scale
+        // with depth (see Biomes.chartingBonus). runCoins is the run tally
+        // paid once by recordRun() — same path as surprise coins, so the
+        // recap total and the wallet can never disagree with the toast.
+        const bonus = chartingBonus(biomeNow.id);
+        this.runCoins += bonus;
+        this.hud.toast(t("hud.toast.biomeCharted", { name: biomeNow.name, bonus: String(bonus) }, `New shores charted: ${biomeNow.name} · +${bonus}\u25cf`), "gold");
+        this.telemetry.track("biome_charted", { biome: biomeNow.id, bonus });
+      }
       // Set a short gameplay hint so the player knows what's different here.
       this.biomeHint = BIOME_INTRO_HINTS[biomeNow.id] ?? "";
       this.biomeHintTimer = this.biomeHint ? 9 : 0;
@@ -8362,6 +8371,7 @@ export class Game {
     biomeEmoji: this.terrain.biomeAt(this.bird.x).emoji,
     atlas: this.screen === "atlas" ? atlas(this.save, this.island) : [],
     farthestIsland: Math.max(st.farthestIsland, this.island),
+    fps: this.frameEma > 0 ? Math.round(1 / this.frameEma) : 0,
     endReason: this.endReason,
     runOutcome: this.runOutcome,
     launchBanner: this.launchBannerText,

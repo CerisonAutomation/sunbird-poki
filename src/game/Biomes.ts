@@ -143,6 +143,23 @@ export type BiomeDef = {
  * Nine hand-tuned worlds — each one changes HOW the hills PLAY, not just look.
  * V2 anti-bore: tighter rhythm, distinct thermals, unique hazards, no long flat.
  */
+/**
+ * First-visit coin reward for charting a world (2026-10-04 "worlds & rewards"
+ * directive). Exploration is the whole point of the endless chain, but the
+ * only thing a new biome ever paid was a toast. Now the first arrival in each
+ * of the nine worlds pays a charting bonus that scales with depth, so the
+ * pull toward "one more island" is economic as well as scenic.
+ *
+ * Pure so the scale is pinned by a unit test next to the grammar tests.
+ */
+export function chartingBonus(biomeId: string): number {
+  const idx = BIOMES.findIndex((b) => b.id === biomeId);
+  // Unknown ids (a future biome, a remixed lap variant) still pay a fair
+  // minimum — a new world that pays nothing is a regression nobody notices
+  // until a player asks why the chart stopped mattering.
+  return idx < 0 ? 25 : 25 + 15 * idx;
+}
+
 export const BIOMES: BiomeDef[] = [
   {
     id: "green",

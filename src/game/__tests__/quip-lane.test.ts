@@ -32,9 +32,9 @@ const QUIP_EXIT_MS = 260;
 /** Toast exit animation, mirrored from the `out` transition in index.css. */
 const TOAST_EXIT_MS = 420;
 /** The quip hold, as a literal. See the note above on why not the export. */
-const HOLD_MS = 3400;
+const HOLD_MS = 4800;
 /** Extra wait a hidden-lane quip is granted before it is released anyway:
- *  3400 + 2400. A test that waits longer than this is waiting past the
+ *  4800 + 3000. A test that waits longer than this is waiting past the
  *  release, not measuring whether read time was banked. */
 const BUDGET_MS = 5800;
 /** Hold for a two-word toast, as a literal: 450 acquire + 2 words × 415. The

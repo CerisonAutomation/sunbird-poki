@@ -140,7 +140,7 @@ function boostRow(v: BoostView, room: number, coins: number): string {
       <span>${desc}</span>
       <span class="pf-stock" data-ref="pf-stock-${d.id}">
         <span class="pf-stock-count">${t("hud.loadout.Owned", undefined, "Owned")}: <b>${v.stocked}</b></span>
-        <span class="pf-stock-count">${t("hud.loadout.Staged", undefined, "Staged")}: <b>${v.armedCount}</b></span>
+                <span class="pf-stock-count pf-stock-live">${t("hud.loadout.Staged", undefined, "Staged")}: <b>${v.armedCount}</b></span>
         ${v.spare > 0 ? `<span class="pf-stock-spare">+${v.spare} ${t("hud.loadout.Spare", undefined, "in store")}</span>` : ""}
       </span>
     </div>
@@ -177,7 +177,16 @@ export function renderLoadout(
     ${head(SCREEN.loadout, "back", `<span class="pill coin">● ${s.wallet}</span>`)}
 
     <section class="pf-summary" role="status">
-      <div class="ls-row"><b>${escapeHtml(loadout.bird)}</b><span>${escapeHtml(loadout.trail)}</span></div>
+      <div class="ls-row">
+        <div class="ls-item">
+          <em>${t("hud.loadout.Birds", undefined, "Your bird")}</em>
+          <b>${escapeHtml(loadout.bird)}</b>
+        </div>
+        <div class="ls-item ls-trail">
+          <em>${t("hud.loadout.Trails", undefined, "Trail")}</em>
+          <span>${escapeHtml(loadout.trail)}</span>
+        </div>
+      </div>
       <div class="pf-meter" role="img" aria-label="${t("hud.loadout.MeterLabel", undefined, "Boost slots used")} ${staged} / ${LOADOUT_MAX_BOOSTS}">
         ${Array.from({ length: LOADOUT_MAX_BOOSTS }, (_, i) => `<i class="${i < staged ? "pf-on" : ""}"></i>`).join("")}
       </div>
@@ -185,7 +194,7 @@ export function renderLoadout(
       <p class="fineprint">${t("hud.loadout.Note", undefined, "Boosters you own sit in the store until you stage them. Staged boosters are spent when you fly.")}</p>
     </section>
 
-    ${sectionTitle("bird", t("hud.loadout.Birds", undefined, "Your bird"), `${ownedBirds.length} owned`)}
+    ${sectionTitle("bird", t("hud.loadout.Birds", undefined, "Your bird"), String(ownedBirds.length))}
     <div class="pf-list">${ownedBirds.map(birdRow).join("")}</div>
     ${unownedBirds.length
       ? `<details class="pf-more">

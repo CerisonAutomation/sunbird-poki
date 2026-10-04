@@ -214,6 +214,135 @@ describe("a promo-card row cannot crush its own text column", () => {
   });
 });
 
+describe("the screen header stays one row", () => {
+  /**
+   * The whole defect in one assertion.
+   *
+   * `.screen-head` is a GRID: `40px minmax(0,1fr) auto` in ui.css, restated as
+   * `44px minmax(0,1fr) auto` by the overlay rule in menu-polish.css. `head()`
+   * emits back-btn, then `<h2>`, then `<span>${right}</span>` — so the h2
+   * occupies row 1 column 2 and the trailing slot (the wallet pill, the board
+   * badge) is the next free cell, column 3 of row 1.
+   *
+   * The narrow-screen rule then pinned that slot to `grid-column: 2 / -1` and
+   * left its ROW on auto. A definite column with an auto row does not get the
+   * next free cell: grid auto-placement skips forward until the whole span
+   * fits, and columns 2–3 of row 1 are taken by the h2 — so the pill was pushed
+   * to ROW 2. The header silently grew a second line, and because
+   * `.screen-head` is `position: sticky` inside the scrolling card, that second
+   * line is what the screen body slid underneath.
+   *
+   * The fix names the row. These assertions exist because the failure is
+   * invisible in a desktop screenshot: at ≥400px the rule does not apply at all,
+   * so a regression here would only ever show on a phone.
+   */
+  it("names row 1 on the trailing slot instead of letting auto-placement choose", () => {
+    // Within the ≤400px block the value must be the explicit one. Reading the
+    // whole cascade would find the same selector declared elsewhere, so this
+    // reads the media block itself.
+    const narrow = /@media \(max-width: 400px\) \{([\s\S]*?)\n\}/.exec(code("game/menu-polish.css"))?.[1] ?? "";
+    expect(narrow, "the ≤400px header block must still exist").not.toBe("");
+    const slot = /\.overlay \.screen-head > span \{([^}]*)\}/.exec(narrow)?.[1] ?? "";
+    expect(slot, "the trailing slot must be styled in the narrow block").not.toBe("");
+    expect(slot).toMatch(/grid-row:\s*1/);
+    // The span has to START at column 3. A `2 / -1` start is the bug itself.
+    expect(slot).toMatch(/grid-column:\s*3/);
+    expect(slot).not.toMatch(/grid-column:\s*2\s*\//);
+  });
+
+  it("pins the title to its own cell so the pair cannot be pushed apart", () => {
+    const narrow = /@media \(max-width: 400px\) \{([\s\S]*?)\n\}/.exec(code("game/menu-polish.css"))?.[1] ?? "";
+    const title = /\.overlay \.screen-head h2 \{([^}]*)\}/.exec(narrow)?.[1] ?? "";
+    expect(title).toMatch(/grid-row:\s*1/);
+    expect(title).toMatch(/grid-column:\s*2/);
+  });
+
+  it("does not size a grid item with flex properties", () => {
+      // `flex` is inert outside a flex container. This rule carried
+      // `flex: 1 1 0 !important` for as long as it existed, which contributed
+      // nothing while implying a box model the element does not have — and the
+      // one property that would have shrunk the title before the badge is the one
+      // it needed. `min-width: 0` is the grid equivalent and is asserted here
+      // alongside, so deleting the grid cell leaves this rule still shrinking.
+      const decls = declarationsFor(".overlay .screen-head h2");
+          expect(decls["flex"] ?? [], "a grid item must not be sized with flex properties").toEqual([]);
+          // Matched, not compared: the declaration is `min-width: 0 !important`, and
+          // the helper keeps the whole value, so `toBe("0")` would fail on a fix that
+          // is correct. The `!important` has to survive — it is what stops a
+          // lower-specificity `.screen-head h2` from re-imposing `min-width: auto`.
+          expect(final(".overlay .screen-head h2", "min-width")).toMatch(/^0\b/);
+          expect(final(".overlay .screen-head h2", "grid-column")).toBe("2");
+          expect(final(".overlay .screen-head h2", "grid-row")).toBe("1");
+        });
+});
+
+describe("the loadout steppers meet the same 44px floor as every other control", () => {
+  /**
+   * `.pf-actions .step` shipped at `width: 28px; min-width: 28px`. Every other
+   * control in this app is floored at 44px — `@supports (hover: none) { .mini-btn
+   * { min-height: 44px } }` and `.overlay :is(.mini-btn, …) { min-height: 44px }`
+   * in menu-polish.css — so a two-button stepper was the one place a thumb had to
+   * hit half the target. Worse: the `+` and `−` sit 5px apart, so a near-miss
+   * lands on the OPPOSITE action. Staging something you meant to unstage (or
+   * the reverse) is a destructive near-miss, not a cosmetic one.
+   *
+   * Widening the box to 44px is what fixed it, and that is easy to "tidy" back
+   * to 28px for visual density — which is exactly what happened before.
+   */
+  it("gives each stepper a 44×44 target", () => {
+    expect(final(".pf-actions .step", "width")).toBe("44px");
+    expect(final(".pf-actions .step", "min-width")).toBe("44px");
+    // Height is its own declaration because nothing else pins it; without this
+    // the button could be 44 wide and 28 tall, which is still a thumb miss.
+    expect(final(".pf-actions .step", "min-height")).toBe("44px");
+  });
+
+  it("cannot be squeezed back down by a later rule", () => {
+    const widths = declarationsFor(".pf-actions .step").width ?? [];
+    expect(widths.length, "exactly one width declaration").toBe(1);
+    expect(Number.parseFloat(widths[0]!)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("gives a disabled stepper a real disabled look, not just a dimmer one", () => {
+    // Opacity alone left the button reading as live-but-broken, which is the
+    // exact misreading the always-present-but-disabled pair was designed to
+    // avoid — see loadout-screen.test.ts, "keeps both steppers in the DOM".
+    expect(final(".pf-actions .step:disabled", "border")).toContain("dashed");
+    expect(final(".pf-actions .step:disabled", "box-shadow")).toBe("none");
+    expect(final(".pf-actions .step:disabled", "cursor")).toBe("default");
+  });
+});
+
+describe("the loadout body copy clears WCAG AA", () => {
+  /**
+   * `--lo-muted` was `#8a7a6a` at 12px on `.pf-row`'s `rgba(255,255,255,0.66)`
+   * over the paper card — ≈4.26:1, under the 4.5:1 AA floor for normal text. So
+   * every booster description on the pre-flight screen, the one screen where a
+   * player reads what an item DOES before committing a slot to it, was failing
+   * the minimum it is measured against.
+   *
+   * The token is asserted rather than the rendered colour because jsdom resolves
+   * no cascade against a background; the arithmetic is done on the token's value,
+   * which is where the ratio is decided.
+   */
+  it("no longer paints body text with a sub-AA grey", () => {
+    const palette = /--lo-muted:\s*(#[0-9a-fA-F]{3,6})/.exec(code("game/ui.css"))?.[1] ?? "";
+    expect(palette, "--lo-muted must still be a hex the tests can measure").not.toBe("");
+    const lum = (hex: string): number => {
+      const v = hex.length === 4
+        ? [1, 3].map((i) => parseInt(hex[i]! + hex[i]!, 16) / 255)
+        : [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const lin = v.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+    };
+    const ratio = 1.05 / (lum(palette) + 0.05);
+    // 4.5:1 against the lightest surface the text can land on (the card's own
+    // near-white, which is the floor — the actual row tint is slightly darker,
+    // so this is the conservative side of the measurement).
+    expect(ratio, `--lo-muted ${palette} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe("the rules another agent owns are left alone", () => {
   /**
    * Guards the boundary, not the appearance. `.boost-row`, `.loadout-row` and

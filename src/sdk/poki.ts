@@ -39,8 +39,10 @@ import {
   type PlatformEvents,
   type PlatformIdentity,
   type PlatformSystemInfo,
-} from "./platform";
-import { localCloudFallback } from "./local";
+} from "./platform-contract";
+// The localStorage cloud-save backend, from the neutral module that owns it —
+// NOT from `./local`, which is a sibling ADAPTER. See `./cloud-local.ts`.
+import { localCloudFallback } from "./cloud-local";
 import { setLoadingNet } from "./net";
 import { POKI_DISPLAY_AD_SIZE } from "./banner";
 

@@ -5,6 +5,13 @@
  *
  * Serves: local dev and the direct/web build ("none"), and a portal
  * builds that boot outside their portal (CrazyGames environment "disabled").
+ *
+ * Both imports below are leaves. `./platform-contract` holds the interface
+ * this class implements, and `./cloud-local` holds the storage backend — this
+ * adapter used to export the backend itself and make the Poki adapter import a
+ * sibling adapter's module to reach it, which is what closed
+ * `poki.ts → local.ts → platform.ts → poki.ts`. Importing the contract
+ * directly is also what keeps this file a leaf of the composition root.
  */
 import {
   EMPTY_INFO,
@@ -12,70 +19,8 @@ import {
   type PlatformAdapter,
   type PlatformIdentity,
   type PlatformSystemInfo,
-} from "./platform";
-import { storage, type StorageLike } from "../game/Storage";
-
-const PREFIX = "sunbird.cloud.";
-
-/**
- * Cross-safe storage backend: localStorage → sessionStorage → memory, in
- * that order (see Storage.ts). In a sandboxed portal iframe the raw
- * localStorage accessor throws, so the cloud-save fallback must survive
- * that — previously it silently no-opped there.
- */
-function ls(): StorageLike {
-  return storage;
-}
-
-/** Shared localStorage-backed cloud save (also used by the Poki adapter). */
-export const localCloudFallback = {
-  save(key: string, value: unknown): Promise<void> {
-    try {
-      ls()?.setItem(`${PREFIX}${key}`, JSON.stringify(value));
-    } catch {
-      /* quota/privacy mode — degrade silently */
-    }
-    return Promise.resolve();
-  },
-  load<T>(key: string): Promise<T | null> {
-    try {
-      const raw = ls()?.getItem(`${PREFIX}${key}`);
-      if (raw === null || raw === undefined) return Promise.resolve(null);
-      return Promise.resolve(JSON.parse(raw) as T);
-    } catch {
-      return Promise.resolve(null);
-    }
-  },
-  remove(key: string): Promise<void> {
-    try {
-      ls()?.removeItem(`${PREFIX}${key}`);
-    } catch {
-      /* ignore */
-    }
-    return Promise.resolve();
-  },
-  clear(): Promise<void> {
-    try {
-      const doomed: string[] = [];
-      const store = ls();
-      for (let i = 0; i < store.length; i++) {
-        const k = store.key(i);
-        if (k && k.startsWith(PREFIX)) doomed.push(k);
-      }
-      for (const k of doomed) store.removeItem(k);
-    } catch {
-      /* ignore */
-    }
-    return Promise.resolve();
-  },
-  has(key: string): Promise<boolean> {
-    try {
-      return Promise.resolve(ls()?.getItem(`${PREFIX}${key}`) !== null);
-    } catch {
-      return Promise.resolve(false);
-    }
-  },
-};
+} from "./platform-contract";
+import { localCloudFallback } from "./cloud-local";
 
 export class LocalAdapter implements PlatformAdapter {
   readonly name: "none";

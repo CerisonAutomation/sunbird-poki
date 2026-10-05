@@ -67,13 +67,12 @@ import { SunbirdPage } from "./SunbirdPage";
  * WHAT A CYCLE DOES, AND WHY IT IS NOT A DAYLIGHT DAY
  * ---------------------------------------------------
  * Each cycle is menu → flight (diving, so terrain streams and FX spawn) →
- * pause → teardown → menu, and every OTHER cycle takes an extra
- * pause → "Restart flight" first. Both teardown buttons run the game's own full
- * rebuild — `Game.goToMenu` and `Game.replayRun` both land in `startRun()`,
- * which calls `rebuildWorld()`, which disposes `terrain`, `collect` and
- * `weather` and constructs three fresh systems. That is the dominant
- * construct/destroy cycle in the product, and it is the one a GPU-resource leak
- * would show up in.
+ * pause → "Restart flight" → sample → exit to menu. Both teardown buttons run
+ * the game's own full rebuild — `Game.goToMenu` and `Game.replayRun` both land
+ * in `startRun()`, which calls `rebuildWorld()`, which disposes `terrain`,
+ * `collect` and `weather` and constructs three fresh systems. That is the
+ * dominant construct/destroy cycle in the product, and it is the one a
+ * GPU-resource leak would show up in.
  *
  * What this deliberately does NOT do is wait out a 120-second daylight day to
  * reach the results card. That wait buys no extra WebGL work — the same world
@@ -94,6 +93,30 @@ import { SunbirdPage } from "./SunbirdPage";
  * `flyUntilDead()` helper is the hook to reuse if that path ever needs GPU
  * coverage.
  *
+ * WHAT WAS MEASURED, ON THE PRODUCTION BUNDLE
+ * -------------------------------------------
+ * Four cycles, headless SwiftShader, every sample after a forced
+ * `HeapProfiler.collectGarbage`:
+ *
+ *   sample    buffer texture program shader framebuffer vertexArray   heap    dom
+ *   boot          286      9      17      0        4           203    8.83MB  777
+ *   restart 2     234      9      40     26        4           133   10.54MB  796
+ *   restart 4     230      9      40     28        4           129   10.80MB  797
+ *
+ * Textures are flat at 9 for the whole session, framebuffers flat at 4,
+ * renderbuffers flat at 0, programs flat at 38-40 once warm, and the forced-GC
+ * heap is flat from the second cycle (10.54 → 10.80 → 10.79 MB). That heap
+ * series is the real change from the previous audit: the same run sampled
+ * without a forced collection read 8.6 → 19.9 → 20.5 → 28.3 → 20.5 MB, a 3x
+ * swing that was the collector's schedule, not the program's retention.
+ *
+ * A second, independent run that attributed every LIVE buffer and vertex array
+ * to its creation stack settled the buffers-and-VAOs question. Live totals
+ * across four menu samples were 522 → 509 → 535 → 475 — the last sample LOWER
+ * than the second — and NO creation-stack site grew between the second and the
+ * fourth sample. Bounded oscillation, not a leak: streaming moves the count in
+ * both directions and nothing accumulates.
+ *
  * CLASSIFYING THE RESULT
  * ----------------------
  *   • FLAT live counts across cycles → no GPU-resource leak. Disposal is
@@ -101,6 +124,30 @@ import { SunbirdPage } from "./SunbirdPage";
  *   • LINEAR growth in live counts → a real leak, and the create/delete ledger
  *     says whether the game is failing to dispose at all (deleted stalls while
  *     created climbs) or disposing something else.
+ *
+ * WHY THE REFERENCE IS THE RESTART SAMPLE, NOT THE MENU
+ * ----------------------------------------------------
+ * This is the change that made the difference between a gate that means
+ * something and a gate that fails on where a sample happened to land.
+ *
+ * The live count depends on how much terrain has streamed at the instant of the
+ * sample, and that is not the same moment in two different states. Measured on
+ * the run above, the SAME cycle sampled in the menu and sampled just after the
+ * pause card's "Restart flight" rebuild differ by 86 buffers and 56 vertex
+ * arrays (316/190 against 230/129) — that is one chunk window's worth of
+ * geometry, and it has nothing to do with leaking.
+ *
+ * Read as a time series, the menu samples walk (253 → 282 → 314 → 316 buffers)
+ * and look like a leak; the restart samples over the same cycles do not
+ * (234 → 230, 133 → 129 vertex arrays). The menu camera drifts for as long as
+ * the menu is up, so "the same point in the same state" is not a thing a menu
+ * sample can promise. "Restart flight" IS deterministic: it rebuilds the world
+ * onto the same seed and puts the bird back at the start of a fresh run, so
+ * every restart sample is taken at the same camera position in the same state.
+ *
+ * That is why the growth budget below is measured restart-to-restart. It is the
+ * only comparison in this file where the two samples describe the same scene,
+ * which is the only kind of comparison a leak budget can rest on.
  *
  * Every assertion below is shaped so it cannot pass vacuously. In particular
  * the suite FAILS if the probe never observed a single `delete*` call during
@@ -273,9 +320,16 @@ function mb(bytes: number): string {
  * `VISIBLE_CHUNKS_BACK + VISIBLE_CHUNKS_FWD` = 18 chunks — a terrain mesh plus
  * its instanced prop groups, which is roughly a hundred buffers. These budgets
  * sit an order of magnitude below that: they fire on a leak far smaller than
- * "a chunk window is never released", and they cannot fire on the streaming
- * jitter they exist to absorb. Measured jitter on this build, across six cycles,
- * was under 20 buffers and under 10 vertex arrays.
+ * "a chunk window is never released".
+ *
+ * The budgets are sized against the restart-to-restart scatter of THIS build,
+ * which is 4 buffers and 4 vertex arrays between the two restart samples in the
+ * run above — an order of magnitude of headroom over the measured noise, and
+ * still an order of magnitude below a chunk-window leak. Sizing them against
+ * the menu-to-menu scatter instead (which reaches 63 buffers) is what made the
+ * earlier version of this file red on a healthy build: the budget had to be
+ * widened past the noise it was supposed to absorb, and a threshold that wide
+ * cannot fail.
  */
 const LIVE_GROWTH_BUDGET: Record<GlKind, number> = {
   buffer: 24,
@@ -339,14 +393,19 @@ const DISPOSAL_LIVENESS_FLOOR = 0.5;
 const WARMUP_CYCLES = 2;
 
 /**
- * Cycles driven. Four, which leaves three steady samples after the two-cycle
+ * Cycles driven. Five, which leaves three steady samples after the two-cycle
  * warm-up — enough to see a floor rise, which is the shape a leak takes. Each
- * cycle costs one launch, one dive, one pause, one rebuild and one exit, and
- * every other cycle takes a second rebuild on the way through. Measured at 58 s
- * end to end for four cycles on a software rasteriser; the waits below are sized
- * for a machine several times busier than that, not for that number.
+ * cycle costs one launch, one dive, one pause, one rebuild and one exit. The
+ * measured cost of four cycles on this build was 58 s end to end, so five is
+ * about 75 s; the waits below are sized for a machine several times busier
+ * than that, not for that number.
+ *
+ * Five rather than eight on purpose: eight cycles was tried and is not
+ * affordable here. Under load this box took over seven minutes for eight and
+ * ran out of budget mid-run. A lifetime gate that needs nine minutes to say
+ * "no leak" is a gate that gets skipped, and a skipped gate catches nothing.
  */
-const CYCLES = 4;
+const CYCLES = 5;
 /* ------------------------------------------------------------------ driver */
 
 /**
@@ -474,9 +533,14 @@ async function launchFlight(page: Page, label: string): Promise<void> {
     // procedurally meshes a window of terrain chunks and rebuilds the collectible
     // and weather systems, synchronously, before the HUD switches to flight. On
     // a quiet box that is well under a second; on a loaded CPU rasteriser it is
-    // the dominant cost in this file, and a 30 s budget here reported "the
-    // flight never started" for a launch that was still building its world.
-    timeout: 120_000,
+    // dominant cost in this file. The budget here was 30 s, then 120 s, and
+    // both reported "the flight never started" for a launch that was still
+    // building its world. The assertion is about whether the run EVER starts,
+    // not about how long a machine with other suites on it takes to build a
+    // world, so it now carries the same 240 s the boot budget does — the same
+    // call `playwright.config.ts` makes about its own budget: generous,
+    // because a gate that fails on ambient load is one people learn to re-run.
+    timeout: 240_000,
   });
 }
 
@@ -494,7 +558,7 @@ async function awaitRunAtRest(page: Page, label: string): Promise<void> {
   try {
     await page.locator('[data-ref="pause"]:not(.hidden), [data-ref="over"]:not(.hidden), [data-ref="continue"]:not(.hidden)')
       .first()
-      .waitFor({ state: "visible", timeout: 120_000 });
+      .waitFor({ state: "visible", timeout: 240_000 });
   } catch {
     throw new Error(`${label}: the run reached no end-of-run surface — ${await screens(page)}`);
   }
@@ -525,7 +589,7 @@ async function returnToMenu(page: Page, app: SunbirdPage, label: string): Promis
   if (where.paused) await clickIn(page, '[data-ref="pause"] [data-action="menu"]');
   else if (where.cont) {
     await clickIn(page, '[data-ref="continue"] [data-action="continue-sleep"]');
-    await page.locator('[data-ref="over"]:not(.hidden)').waitFor({ state: "visible", timeout: 30_000 });
+    await page.locator('[data-ref="over"]:not(.hidden)').waitFor({ state: "visible", timeout: 60_000 });
     await clickIn(page, '[data-ref="over"] [data-action="menu"]');
   } else if (where.over) await clickIn(page, '[data-ref="over"] [data-action="menu"]');
   else throw new Error(`${label}: the run left no exit surface — ${await screens(page)}`);
@@ -566,26 +630,27 @@ test("GPU objects are released across repeated menu ↔ flight cycles", async ({
     await launchFlight(page, `cycle ${cycle}`);
     await dive(page, 3_000);
 
-    if (cycle % 2 === 0) {
-      // The rebuild the results card's "Fly Again" performs, taken mid-session
-      // so it costs a pause rather than a 120-second daylight day.
-      await clickIn(page, '[data-action="pause"][data-ref="pauseBtn"]');
-      await expect(
-        page.locator('[data-ref="pause"]:not(.hidden)'),
-        `cycle ${cycle}: the pause card never opened — ${await screens(page)}`,
-      ).toBeVisible({ timeout: 120_000 });
-      await clickIn(page, '[data-ref="pause"] [data-action="restart-flight"]');
-      await expect(
-        inFlight(page),
-        `cycle ${cycle}: "Restart flight" did not put the bird back in the air — ${await screens(page)}`,
-      ).toBeVisible({ timeout: 120_000 });
-      await dive(page, 2_000);
-      samples.push(await sample(page, cdp, `restart ${cycle}`));
-    }
+    // Every cycle takes the pause -> "Restart flight" rebuild, and samples
+    // immediately afterwards. This is the game's own full `rebuildWorld()` —
+    // the same one the results card's "Fly Again" performs — taken mid-session
+    // so it costs a pause rather than a 120-second daylight day, and it is the
+    // one sample per cycle taken at a deterministic camera position. See WHY
+    // THE REFERENCE IS THE RESTART SAMPLE, NOT THE MENU.
+    await clickIn(page, '[data-action="pause"][data-ref="pauseBtn"]');
+    await expect(
+      page.locator('[data-ref="pause"]:not(.hidden)'),
+      `cycle ${cycle}: the pause card never opened — ${await screens(page)}`,
+    ).toBeVisible({ timeout: 240_000 });
+    await clickIn(page, '[data-ref="pause"] [data-action="restart-flight"]');
+    await expect(
+      inFlight(page),
+      `cycle ${cycle}: "Restart flight" did not put the bird back in the air — ${await screens(page)}`,
+    ).toBeVisible({ timeout: 240_000 });
+    await dive(page, 2_000);
+    samples.push(await sample(page, cdp, `restart ${cycle}`));
 
     exits.push(`cycle ${cycle}: ${await returnToMenu(page, app, `cycle ${cycle}`)}`);
     await page.waitForTimeout(2_000);
-    samples.push(await sample(page, cdp, `menu ${cycle}`));
   }
 
   console.log(`\n[gpu-resources] cycle exits: ${exits.join(", ")}\n`);
@@ -614,8 +679,8 @@ test("GPU objects are released across repeated menu ↔ flight cycles", async ({
   // the file mean something: a probe that cannot observe a dispose cannot detect
   // a missing one.
   for (let cycle = 2; cycle <= CYCLES; cycle += 1) {
-    const from = samples.find(s => s.label === `menu ${cycle - 1}`)!;
-    const to = samples.find(s => s.label === `menu ${cycle}`)!;
+    const from = samples.find(s => s.label === `restart ${cycle - 1}`)!;
+    const to = samples.find(s => s.label === `restart ${cycle}`)!;
     const built = sumOf(to.created) - sumOf(from.created);
     const released = sumOf(to.deleted) - sumOf(from.deleted);
     expect(
@@ -629,15 +694,16 @@ test("GPU objects are released across repeated menu ↔ flight cycles", async ({
 
   /* ---------------------------------------------------- GPU object growth */
 
-  // Menu samples only. A `flight` reading is a streaming peak and a `restart`
-  // reading is deliberately mid-teardown; neither is a steady state, and mixing
-  // them into the reference is how a correctly-behaving game gets reported as
-  // growing. `boot` is excluded for a stated reason (WARMUP_CYCLES): before the
-  // first flight it is a different scene entirely — no flight-only material has
-  // been compiled and no flight-shaped world has been streamed.
-  const menuSamples = samples.filter(s => s.label.startsWith("menu "));
-  const steady = menuSamples.slice(WARMUP_CYCLES - 1);
-  expect(steady.length, `only ${steady.length} steady menu samples were collected`).toBeGreaterThanOrEqual(3);
+  // Restart samples only. `boot` is excluded for a stated reason
+  // (WARMUP_CYCLES): before the first flight it is a different scene entirely —
+  // no flight-only material has been compiled and no flight-shaped world has
+  // been streamed. The menu is not sampled at all any more: its camera drifts
+  // for as long as the menu is up, so two menu samples are not the same scene
+  // and a growth budget on them measures where the sample landed. See WHY THE
+  // REFERENCE IS THE RESTART SAMPLE, NOT THE MENU.
+  const restartSamples = samples.filter(s => s.label.startsWith("restart "));
+  const steady = restartSamples.slice(WARMUP_CYCLES - 1);
+  expect(steady.length, `only ${steady.length} steady restart samples were collected`).toBeGreaterThanOrEqual(3);
 
   const floorOf = (kind: GlKind): number => Math.min(...steady.map(s => s.live[kind]));
 
@@ -648,7 +714,7 @@ test("GPU objects are released across repeated menu ↔ flight cycles", async ({
     expect(
       last.live[kind] - floor,
       `${kind} objects ended at ${last.live[kind]}, ${last.live[kind] - floor} above the low-water mark of the ` +
-        `steady menu series (${series}), against a budget of ${budget}. A rising floor is a leak: streaming ` +
+        `steady restart series (${series}), against a budget of ${budget}. A rising floor is a leak: streaming ` +
         `moves the live count in both directions and leaves the floor alone. Ledger: built ` +
         `${sumOf(last.created)}, released ${sumOf(last.deleted)}.`,
     ).toBeLessThanOrEqual(budget);
@@ -656,7 +722,7 @@ test("GPU objects are released across repeated menu ↔ flight cycles", async ({
     // leak smaller than the jitter the low-water mark already absorbs.
     expect(
       last.live[kind] - steady[0]!.live[kind],
-      `${kind} objects drifted ${last.live[kind] - steady[0]!.live[kind]} from the first steady menu sample to ` +
+      `${kind} objects drifted ${last.live[kind] - steady[0]!.live[kind]} from the first steady restart sample to ` +
         `the last (${series}), against a budget of ${budget}. A steady climb of that shape is linear growth — a ` +
         `leak — even when it stays inside the jitter band.`,
     ).toBeLessThanOrEqual(budget);

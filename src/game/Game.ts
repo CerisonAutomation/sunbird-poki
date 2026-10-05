@@ -28,7 +28,7 @@ import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
-import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
+import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed, goldContinueAllowed } from "./adGate";
 import { liveFieldSize, MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, type AnyRealtimeClient } from "./Realtime";
@@ -628,11 +628,11 @@ export class Game {
   /** Deferred launch options for when the search resolves. */
   private mmOpts: { ranked: boolean; storm: boolean } | null = null;
   /** Search phase. "searching" counts the window down. "waiting" means the
-     *  window closed with pilots in the room — hold it open for ready-up.
-     *  "expired" means it closed with nobody here: the search stays open and the
-     *  pilot decides. In both post-window phases the pilot chooses what happens
-     *  next; a search never falls into a race on its own. */
-    private mmPhase: "searching" | "waiting" | "expired" = "searching";
+   *  window closed with pilots in the room — hold it open for ready-up.
+   *  "expired" means it closed with nobody here: the search stays open and the
+   *  pilot decides. In both post-window phases the pilot chooses what happens
+   *  next; a search never falls into a race on its own. */
+  private mmPhase: "searching" | "waiting" | "expired" = "searching";
   /** Summary of public rooms seen during the search (real players, no fakes). */
   private mmRooms = "";
   private roomWatcher: RoomWatcher | null = null;
@@ -3999,7 +3999,7 @@ export class Game {
       : SIMULATED_BREAKS && !gold && this.ads.isAvailable() && this.save.adsLeftToday() > 0;
     // Honest tiering: free players get 1 second wind, VIP gets 2, and Gold
     // gets what its feature list promises — the sun never wins on a technicality.
-    const maxContinues = gold ? 99 : this.save.isVipActive() ? 2 : 1;
+    const maxContinues = this.maxContinues();
     if (this.continuesUsed < maxContinues && (gold || canCoins || canAd)) {
       this.continueTimer = CONTINUE_TIMEOUT;
       // MON-19: the offer is context-driven, not a static button — the framing
@@ -4032,6 +4032,19 @@ export class Game {
     } else {
       this.finishRun();
     }
+  }
+
+  /**
+   * Second winds available in a single flight: Gold never loses on a
+   * technicality, VIP gets two, everyone else one.
+   *
+   * One definition on purpose. This number decides BOTH whether the offer is
+   * built and whether a grant is allowed, and it used to be written out twice
+   * as `gold ? 99 : isVipActive ? 2 : 1` — two copies of a cap is how a cap
+   * stops meaning anything.
+   */
+  private maxContinues(): number {
+    return this.save.state.gold ? 99 : this.save.isVipActive() ? 2 : 1;
   }
 
   private doContinue(source: string): void {
@@ -6074,7 +6087,12 @@ export class Game {
         }
         return true;
       case "continue-gold":
-        if (this.state === "continue" && this.save.state.gold) this.doContinue("gold");
+        // The card already declines to draw this button on a portal
+        // (`!portal && s.gold` in hud/run.ts); the handler has to agree, or
+        // `save.state.gold` — restored straight out of the saved payload — is
+        // all a portal player needs to collect unlimited continues that play
+        // no ad. See `goldContinueAllowed` for the full account.
+        if (this.state === "continue" && goldContinueAllowed(this.portalEnabled(), this.save.state.gold)) this.doContinue("gold");
         return true;
       case "continue-sleep":
         if (this.state === "continue") this.finishRun();
@@ -7148,20 +7166,20 @@ export class Game {
   /* ------------------------------------------------------- matchmaking */
 
   /** Opt into a public room, ready when connected, and launch only on the
-     * server's shared start. A search that finds nobody stays open: the pilot
-     * keeps waiting or asks for the AI flock by hand. Browsing or cancelling
-     * cannot block a room. */
-    // The PvP matchmaking search window. 15 s of waiting on a spinner reads as
-    // the game being stuck; 10 s still gives a real lobby time to fill while
-    // keeping the wait shorter than the player's patience for it.
-    private static readonly MM_WINDOW = 10;
-  
-    /** Ends the search and hands back what it was searching for. Every exit out
-     *  of matchmaking tears the search down through here — "the run already
-     *  started", "the pilot cancelled", "the pilot asked for the AI flock" —
-     *  and they have to stay in step: leave the watcher running and the overlay
-     *  comes back on its own. */
-    private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
+   * server's shared start. A search that finds nobody stays open: the pilot
+   * keeps waiting or asks for the AI flock by hand. Browsing or cancelling
+   * cannot block a room. */
+  // The PvP matchmaking search window. 15 s of waiting on a spinner reads as
+  // the game being stuck; 10 s still gives a real lobby time to fill while
+  // keeping the wait shorter than the player's patience for it.
+  private static readonly MM_WINDOW = 10;
+
+  /** Ends the search and hands back what it was searching for. Every exit out
+   *  of matchmaking tears the search down through here — "the run already
+   *  started", "the pilot cancelled", "the pilot asked for the AI flock" —
+   *  and they have to stay in step: leave the watcher running and the overlay
+   *  comes back on its own. */
+  private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
     const opts = this.mmOpts;
     this.mmOpts = null;
     this.mmDeadline = 0;
@@ -7181,26 +7199,26 @@ export class Game {
     this.modeId = this.selectedPvpMode;
     this.mode = modeById(this.selectedPvpMode);
     if (!isMultiplayerConfigured()) {
-          // No transport in this runtime (e.g. a Poki iframe without WebRTC, or a
-          // direct build without VITE_MULTIPLAYER_URL). Say so and go back to the
-          // lobby. This used to launch an AI flock race from here, so "Search
-          // Online Pilots" silently became a bot race on every device that could
-          // not open a socket — and this branch is also the fallback for the
-          // ranked paths. The AI flock has its own button on the very same screen,
-          // so starting one here took a choice away without adding one.
-          //
-          // Nothing is armed below this point on the success path either (mmOpts /
-          // mmDeadline / the room watcher are all set further down), so clear them
-          // explicitly: a stale search would keep the overlay alive with no way to
-          // resolve it.
-          this.mmOpts = null;
-          this.mmPhase = "searching";
-          this.roomWatcher?.stop();
-          this.hud.setMatchmaking(false, 0, this.roomSize, 0);
-          this.hud.toast("Online racing is unavailable here", "info");
-          this.bump();
-          return;
-        }
+      // No transport in this runtime (e.g. a Poki iframe without WebRTC, or a
+      // direct build without VITE_MULTIPLAYER_URL). Say so and go back to the
+      // lobby. This used to launch an AI flock race from here, so "Search
+      // Online Pilots" silently became a bot race on every device that could
+      // not open a socket — and this branch is also the fallback for the
+      // ranked paths. The AI flock has its own button on the very same screen,
+      // so starting one here took a choice away without adding one.
+      //
+      // Nothing is armed below this point on the success path either (mmOpts /
+      // mmDeadline / the room watcher are all set further down), so clear them
+      // explicitly: a stale search would keep the overlay alive with no way to
+      // resolve it.
+      this.mmOpts = null;
+      this.mmPhase = "searching";
+      this.roomWatcher?.stop();
+      this.hud.setMatchmaking(false, 0, this.roomSize, 0);
+      this.hud.toast("Online racing is unavailable here", "info");
+      this.bump();
+      return;
+    }
     this.mmOpts = opts;
     this.mmPhase = "searching";
     this.mmRooms = "";
@@ -7283,12 +7301,12 @@ export class Game {
    * with AI flock" label) is that the game never claims bots are people; the
    * one counter that feeds the search overlay was the exception.
    */
-     private liveCount(): number {
-       const info = this.net?.info();
-       if (!info || !this.net?.connected) return 0;
-       if (info.aiFallback) return 0;
-       return Math.max(0, info.count - 1);
-     }
+  private liveCount(): number {
+    const info = this.net?.info();
+    if (!info || !this.net?.connected) return 0;
+    if (info.aiFallback) return 0;
+    return Math.max(0, info.count - 1);
+  }
 
   /**
    * Called every frame while a search is active.
@@ -7907,9 +7925,7 @@ export class Game {
       if (this.state !== "ad") return;
       this.endPortalAd();
       if (earned) {
-        const gold = this.save.state.gold;
-        const max = gold ? 99 : this.save.isVipActive() ? 2 : 1;
-        if (this.continuesUsed < max) this.doContinue("portal_rewarded");
+        if (this.continuesUsed < this.maxContinues()) this.doContinue("portal_rewarded");
         else this.setState("continue");
       } else {
         // The break did not pay: the player closed the portal's ad early (the

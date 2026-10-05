@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { MASS_RACE_FIELD, MODES, PVP_MODES, isRaceMode, type ModeId } from "../Modes";
-import { MassRace, MAX_RIVALS } from "../MassRace";
+import { MassRace, liveFieldSize, MAX_RIVALS } from "../MassRace";
 import { TerrainSystem } from "../TerrainSystem";
 import { Bird } from "../Bird";
 
@@ -78,9 +78,22 @@ describe("the AI rival field is a full field", () => {
     // Each one is a real Bird with its own state, not a shared puppet.
     const births = new Set(race.rivals.map((r) => r.bird));
     expect(births.size).toBe(MAX_RIVALS);
-    race.clear();
-    terrain.dispose();
-  });
+        race.clear();
+        terrain.dispose();
+      });
+    
+      it("keeps a LIVE room inside the 2-40 real-user band", () => {
+        // A live grid is made of PEOPLE and `roster()` never includes us, so the
+        // clamp has to stop one short of MAX_RIVALS: you plus 39 remotes is a
+        // 40-pilot room. A 41st seated human would be a 41st bird on the grid.
+        expect(liveFieldSize(39) + 1).toBe(40);
+        expect(liveFieldSize(40) + 1).toBe(40);
+        expect(liveFieldSize(1000) + 1).toBe(40);
+        // Two is the floor that makes a live room a race rather than a time trial:
+        // one remote plus you.
+        expect(liveFieldSize(1)).toBe(1);
+        expect(liveFieldSize(0)).toBe(1);
+      });
 
   it("rivals are still drawn — not casting shadows is not the same as not existing", () => {
     // `setShadowCasting(false)` keeps them out of the depth pass only. Their

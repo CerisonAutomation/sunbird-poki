@@ -4,6 +4,7 @@ import {
   adBreakCanEnd,
   adEscapeArmed,
   adEscapeCountdown,
+  goldContinueAllowed,
 } from "../adGate";
 import { AD_SAFETY_SECONDS } from "../constants";
 
@@ -172,6 +173,39 @@ describe("the guard lives in the action handler, not only in the view", () => {
     // hud/run.ts and Game.handleAction now call adEscapeArmed.
     expect(typeof adEscapeArmed).toBe("function");
     expect(adEscapeArmed.length).toBe(2);
+  });
+});
+
+
+describe("the ad-free Gold continue is not a portal skip", () => {
+  // Vector 5, and the only one that needs no ad on screen at all: Gold is sold
+  // as "Unlimited free second winds", so `continue-gold` grants a continue
+  // that costs nothing and plays no break. The card already declines to DRAW it
+  // on a portal; the handler was the part that was missing.
+  it("refuses it outright on a portal, whatever the save says", () => {
+    for (const gold of [true, false]) {
+      expect(goldContinueAllowed(PORTAL, gold), "portal gold=" + gold).toBe(false);
+    }
+  });
+
+  it("still grants it on a direct build, which is where Gold is sold", () => {
+    expect(goldContinueAllowed(PLACEHOLDER, true)).toBe(true);
+    expect(goldContinueAllowed(PLACEHOLDER, false)).toBe(false);
+  });
+
+  it("fails closed on a save that claims Gold on the Poki build", () => {
+    // The exact bypass: `gold` is restored verbatim from the saved payload
+    // (SaveData: `gold: Boolean(p.gold)`) and SELL_AD_REMOVAL is false here, so
+    // no Gold surface is ever drawn for such a player - but the flag still
+    // reached the case. A portal build must treat it as absent.
+    expect(goldContinueAllowed(PORTAL, true)).toBe(false);
+  });
+
+  it("is not re-opened by a truthy non-boolean", () => {
+    // Anything that reads as true must still lose to the portal check.
+    expect(goldContinueAllowed(PORTAL, 1 as unknown as boolean)).toBe(false);
+    expect(goldContinueAllowed(PORTAL, "yes" as unknown as boolean)).toBe(false);
+    expect(goldContinueAllowed(PORTAL, {} as unknown as boolean)).toBe(false);
   });
 });
 

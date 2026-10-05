@@ -387,6 +387,8 @@ export class HUD {
   /** Live nametag elements, reused per frame (see updateNameTags). */
   private readonly nameTagEls = new Map<string, HTMLDivElement>();
   private readonly nameTagKeys = new Map<string, string>();
+  /** Last measured box per tag, so declutter never has to force a reflow. */
+  private readonly nameTagSizes = new Map<string, { w: number; h: number }>();
 
   constructor(parent: HTMLElement) {
     this.menuSky = new MenuSky();
@@ -1088,6 +1090,7 @@ export class HUD {
     if (!container.childElementCount && this.nameTagEls.size > 0) {
       this.nameTagEls.clear();
       this.nameTagKeys.clear();
+      this.nameTagSizes.clear();
     }
     // DOM reuse: positions are cheap style writes (composited), while the
     // tag CONTENT is only re-parsed when rank/name/emote/draft actually
@@ -1095,6 +1098,10 @@ export class HUD {
     // packed field — a full HTML parse + node churn on every frame, which is
     // where mobile PVP frame times went to die.
     const seen = new Set<string>();
+    // Boxes already placed this frame. Tags arrive in relevance order (the
+    // ones you are drafting, then the nearest), so whoever claims a spot keeps
+    // it and anyone landing on top of it is dropped.
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
     for (const tag of tags ?? []) {
       this.tmpNameTagVec.set(tag.worldX, tag.worldY, -3.5);
       this.tmpNameTagVec.project(camera);
@@ -1112,6 +1119,7 @@ export class HUD {
         this.nameTagEls.set(tag.id, el);
         this.nameTagKeys.set(tag.id, "");
       }
+      el.style.display = "";
       el.style.left = `${px.toFixed(1)}px`;
       el.style.top = `${py.toFixed(1)}px`;
 
@@ -1122,13 +1130,43 @@ export class HUD {
         el.innerHTML =
           `${tag.emote ? `<b class="rt-emote" aria-hidden="true">${escapeHtml(tag.emote)}</b>` : ""}` +
           `<span class="rank-badge">#${tag.place}</span><span>${escapeHtml(tag.name)}</span>`;
+        // Measured here, while the tag is displayed, and only when its CONTENT
+        // changed — offsetWidth forces layout, and reading it per frame is the
+        // thing this loop already avoids. A zero means the play HUD was still
+        // hidden, which reads as a zero-size box and would silently disable
+        // declutter for the rest of the race; keep the nominal size instead and
+        // let the next content change measure it for real.
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        if (w > 0 && h > 0) this.nameTagSizes.set(tag.id, { w, h });
       }
+      // `translate(-50%, -100%)`: centred on px, sitting on py. Nominal size
+      // until one has been measured — a real 10px pill with a rank badge runs
+      // ~105x19, and under-estimating it lets the first frames of a race stack
+      // before the first real measurement lands.
+      const size = this.nameTagSizes.get(tag.id) ?? { w: 105, h: 19 };
+      const half = size.w / 2;
+      let clash = false;
+      for (const p of placed) {
+        if (px + half > p.x0 && px - half < p.x1 && py > p.y0 && py - size.h < p.y1) {
+          clash = true;
+          break;
+        }
+      }
+      if (clash) {
+        // Hidden rather than removed: the cache stays warm, so a tag that
+        // reappears next frame is a style write, not a rebuild.
+        el.style.display = "none";
+        continue;
+      }
+      placed.push({ x0: px - half, x1: px + half, y0: py - size.h, y1: py });
     }
     for (const [id, el] of this.nameTagEls) {
       if (!seen.has(id)) {
         el.remove();
         this.nameTagEls.delete(id);
         this.nameTagKeys.delete(id);
+        this.nameTagSizes.delete(id);
       }
     }
   }

@@ -429,4 +429,56 @@ export class SunbirdPage {
     }
   }
 
+  /**
+   * Every control the player can see has to be the thing that answers a tap.
+   *
+   * `expectNoOverlaps` compares boxes, which cannot see paint order. Two
+   * elements can overlap and the report still says nothing about which one the
+   * finger reaches — the mute toggle sat under the sticky status bar's opaque
+   * background at every viewport, boxes overlapped, and nothing in the suite
+   * said the lower 60% of a 44px touch target was dead to input.
+   *
+   * This asks the browser instead of inferring it from geometry: hit-test the
+   * centre of each visible control and name whatever is painted on top.
+   *
+   * Three ways to answer without lying, all of which were needed to get a
+   * usable reading:
+   *
+   *  • `content-visibility: hidden` on a closed `<details>` still reports a box
+   *    with a real height. Counting those put all 70 shop bird cards on every
+   *    closed collection and reported 6802 overlaps no player could ever see.
+   *    `checkVisibility()` asks "painted", not "laid out".
+   *  • The sheet scrolls, so most of its controls are below the fold at any
+   *    instant and their centres are outside the viewport.
+   *  • Decorative layers are `pointer-events: none` and the browser already
+   *    skips them when hit-testing — correctly, since a button behind one is
+   *    still fully clickable.
+   */
+  async expectControlsHitTestable(scope = ".hud-root"): Promise<void> {
+    const blocked = await this.page.locator(scope).evaluate(root => {
+      const painted = (el: Element): boolean => el.checkVisibility
+        ? el.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true })
+        : getComputedStyle(el).display !== "none" && getComputedStyle(el).visibility !== "hidden";
+      const name = (el: Element): string => el.tagName.toLowerCase() +
+        (el.className ? "." + String(el.className).trim().split(/\s+/).slice(0, 2).join(".") : "");
+      const out: string[] = [];
+      for (const el of root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [role="button"], [data-action]')) {
+        if (!painted(el)) continue;
+        if (getComputedStyle(el).pointerEvents === "none") continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+        if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) continue;
+        const hit = document.elementFromPoint(cx, cy);
+        if (!hit) { out.push(`${name(el)} — nothing answers at its centre`); continue; }
+        // A control painted over by its own child, or sitting inside its own
+        // wrapper, is not occluded.
+        if (hit === el || el.contains(hit) || hit.contains(el)) continue;
+        out.push(`${name(el)} — painted over by ${name(hit)}`);
+      }
+      return out;
+    });
+    expect(blocked, `controls hidden behind other paint:\n${blocked.join("\n")}`).toEqual([]);
+  }
+
 }

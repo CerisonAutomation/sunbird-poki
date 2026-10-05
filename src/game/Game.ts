@@ -29,7 +29,7 @@ import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALI
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
 import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed } from "./adGate";
-import { MassRace } from "./MassRace";
+import { liveFieldSize, MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, type AnyRealtimeClient } from "./Realtime";
 import { createNetTransport, prewarmNetTransport } from "./net-transport";
@@ -627,10 +627,12 @@ export class Game {
   private networkStartAt = 0;
   /** Deferred launch options for when the search resolves. */
   private mmOpts: { ranked: boolean; storm: boolean } | null = null;
-  /** Search phase: a live countdown while "searching", then "waiting" — the
-   *  search stays open and the pilot decides, instead of being dropped into an
-   *  AI race they never asked for. */
-  private mmPhase: "searching" | "waiting" = "searching";
+  /** Search phase. "searching" counts the window down. "waiting" means the
+     *  window closed with pilots in the room — hold it open for ready-up.
+     *  "expired" means it closed with nobody here: the search stays open and the
+     *  pilot decides. In both post-window phases the pilot chooses what happens
+     *  next; a search never falls into a race on its own. */
+    private mmPhase: "searching" | "waiting" | "expired" = "searching";
   /** Summary of public rooms seen during the search (real players, no fakes). */
   private mmRooms = "";
   private roomWatcher: RoomWatcher | null = null;
@@ -3755,7 +3757,7 @@ export class Game {
     if (isRaceMode(this.modeId)) {
       this.massRace.configureMode(this.modeId);
       const livePeers = !this.duelActive && !this.localRace && this.net?.connected ? this.net.roster() : null;
-      const fieldSize = this.duelActive ? 1 : livePeers ? Math.max(1, livePeers.length) : this.roomSize;
+      const fieldSize = this.duelActive ? 1 : livePeers ? liveFieldSize(livePeers.length) : this.roomSize;
       this.massRace.spawn(fieldSize, `${this.seed}:${this.modeId}:${fieldSize}`, this.terrain, this.startX);
       // Reserve actual human seats immediately; do not simulate 40 phantom
       // opponents in a two-person room while waiting for the first packet.
@@ -7146,19 +7148,20 @@ export class Game {
   /* ------------------------------------------------------- matchmaking */
 
   /** Opt into a public room, ready when connected, and launch only on the
-   * server's shared start. A timed-out search explicitly disconnects before
-   * starting local AI practice. Browsing or cancelling cannot block a room. */
-  // The PvP matchmaking search window. 15 s of waiting on a spinner reads as
-  // the game being stuck; 10 s still gives a real lobby time to fill while
-  // keeping the wait shorter than the player's patience for it.
-  private static readonly MM_WINDOW = 10;
-
-  /** Ends the search and hands back what it was searching for. Both exits out
-   *  of matchmaking -- "the run already started" and "the lobby came back
-   *  empty" -- tore the search down by hand, and the two five-line blocks had
-   *  to stay in step: leave the watcher running and the overlay comes back on
-   *  its own. */
-  private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
+     * server's shared start. A search that finds nobody stays open: the pilot
+     * keeps waiting or asks for the AI flock by hand. Browsing or cancelling
+     * cannot block a room. */
+    // The PvP matchmaking search window. 15 s of waiting on a spinner reads as
+    // the game being stuck; 10 s still gives a real lobby time to fill while
+    // keeping the wait shorter than the player's patience for it.
+    private static readonly MM_WINDOW = 10;
+  
+    /** Ends the search and hands back what it was searching for. Every exit out
+     *  of matchmaking tears the search down through here — "the run already
+     *  started", "the pilot cancelled", "the pilot asked for the AI flock" —
+     *  and they have to stay in step: leave the watcher running and the overlay
+     *  comes back on its own. */
+    private takeMatchOpts(): { ranked: boolean; storm: boolean } | null {
     const opts = this.mmOpts;
     this.mmOpts = null;
     this.mmDeadline = 0;
@@ -7178,13 +7181,26 @@ export class Game {
     this.modeId = this.selectedPvpMode;
     this.mode = modeById(this.selectedPvpMode);
     if (!isMultiplayerConfigured()) {
-      // No transport in this runtime (e.g. a Poki iframe without WebRTC, or a
-      // direct build without VITE_MULTIPLAYER_URL). Say so instead of silently
-      // starting an offline race the player believes is online.
-      this.hud.toast("Online racing is unavailable here — starting an AI flock race", "info");
-      this.launchMatch(opts, true);
-      return;
-    }
+          // No transport in this runtime (e.g. a Poki iframe without WebRTC, or a
+          // direct build without VITE_MULTIPLAYER_URL). Say so and go back to the
+          // lobby. This used to launch an AI flock race from here, so "Search
+          // Online Pilots" silently became a bot race on every device that could
+          // not open a socket — and this branch is also the fallback for the
+          // ranked paths. The AI flock has its own button on the very same screen,
+          // so starting one here took a choice away without adding one.
+          //
+          // Nothing is armed below this point on the success path either (mmOpts /
+          // mmDeadline / the room watcher are all set further down), so clear them
+          // explicitly: a stale search would keep the overlay alive with no way to
+          // resolve it.
+          this.mmOpts = null;
+          this.mmPhase = "searching";
+          this.roomWatcher?.stop();
+          this.hud.setMatchmaking(false, 0, this.roomSize, 0);
+          this.hud.toast("Online racing is unavailable here", "info");
+          this.bump();
+          return;
+        }
     this.mmOpts = opts;
     this.mmPhase = "searching";
     this.mmRooms = "";
@@ -7267,23 +7283,36 @@ export class Game {
    * with AI flock" label) is that the game never claims bots are people; the
    * one counter that feeds the search overlay was the exception.
    */
-private liveCount(): number {
-    const info = this.net?.info();
-    if (!info || !this.net?.connected) return 0;
-    if (info.aiFallback) return 0;
-    return Math.max(0, info.count - 1);
-  }
+     private liveCount(): number {
+       const info = this.net?.info();
+       if (!info || !this.net?.connected) return 0;
+       if (info.aiFallback) return 0;
+       return Math.max(0, info.count - 1);
+     }
 
-  /** Called every frame while a search is active. */
+  /**
+   * Called every frame while a search is active.
+   *
+   * `mmDeadline` is a wall-clock STAMP, not a countdown, so it stays positive
+   * for the whole life of the search — including the phases that run past it.
+   * That is what the opening guard tests ("is a search armed"), and zeroing it
+   * is how `takeMatchOpts` takes the overlay down. Reading it as an elapsed
+   * flag instead would hide the overlay on the frame after the window closed.
+   */
   private pumpMatchmaking(_raw: number): void {
     if (this.mmDeadline <= 0 || !this.mmOpts) return;
     // If the run already started (a real start frame, or a local launch), the
-    // search is over — the overlay must never sit on top of gameplay.
+    // search is over — the overlay must never sit on top of gameplay. The run
+    // is already the player's, so there is nothing left to find: tear the
+    // search down and say so. This used to launch an AI race from here, which
+    // is the one case where "the player asked for live pilots" was already
+    // decided by something else.
     if (this.state !== "menu") {
-      const opts = this.takeMatchOpts();
+      this.takeMatchOpts();
+      this.mmPhase = "searching";
       this.hud.setMatchmaking(false, 0, this.roomSize, 0);
-      this.hud.toast("No players found — starting AI race", "info");
-      if (opts) this.launchMatch(opts, true);
+      this.hud.toast("No live match found", "info");
+      this.bump();
       return;
     }
     const live = this.liveCount();
@@ -7292,18 +7321,34 @@ private liveCount(): number {
     // room starts (with a shared 6s countdown) only once every seated pilot
     // has readied up.
     const ready = this.net?.state === "lobby" ? (this.net.info().ready ? "ready" : "unready") : "none";
-    // "Waiting" phase: the search window elapsed with real pilots in the room.
-    // Keep the lobby alive for ready-up rather than abandoning them to AI; if
-    // they all leave, reopen the search window.
+    // A pilot turned up after the window closed, in either post-window phase:
+    // stop parking and hold the lobby for ready-up instead. The room still
+    // starts only on all-ready, so arriving cannot start anything.
+    if (this.mmPhase !== "searching" && live > 0) {
+      this.mmPhase = "waiting";
+      this.hud.setMatchmaking(true, live, this.roomSize, 0, "waiting", this.mmRooms, ready);
+      return;
+    }
+    // "waiting": the window closed with pilots here and they have all left.
+    // Reopen a fresh window rather than stranding the overlay on an empty
+    // room.
     if (this.mmPhase === "waiting") {
-      if (live > 0) {
-        this.hud.setMatchmaking(true, live, this.roomSize, 0, "waiting", this.mmRooms, ready);
-        return;
-      }
       this.mmPhase = "searching";
       this.mmDeadline = performance.now() + Game.MM_WINDOW * 1000;
       this.startRoomWatch();
       this.hud.toast("Pilot left — searching again", "info");
+    }
+    // "expired": the window closed on an empty lobby. This is the branch that
+    // started a 41-bird AI race one frame after the overlay had offered the
+    // player a choice — it called takeMatchOpts() (hiding the overlay) and
+    // then launchMatch(opts, true). The search now simply stays open: mmOpts
+    // and the room watcher stay armed, so "Keep searching" can reopen the
+    // window, Cancel (or ESC) can still leave, a joining pilot is noticed on
+    // the next frame (above), and the AI flock is reachable only from the
+    // explicit button.
+    if (this.mmPhase === "expired") {
+      this.hud.setMatchmaking(true, 0, this.roomSize, 0, "waiting", this.mmRooms, ready);
+      return;
     }
 
     const secsLeft = (this.mmDeadline - performance.now()) / 1000;
@@ -7312,22 +7357,19 @@ private liveCount(): number {
       if (live > 0) {
         // Real pilots found before the window closed — hold the lobby open.
         // The "start" net event fires once everyone readies (allReady in
-        // PokiNetlib). Only an empty room may launch on its own.
+        // PokiNetlib).
         this.mmPhase = "waiting";
         this.hud.setMatchmaking(true, live, this.roomSize, 0, "waiting", this.mmRooms, ready);
         this.hud.toast(`${live} pilot${live === 1 ? "" : "s"} found — hit Ready to race`, "gold");
         this.telemetry.track("matchmaking_live_waiting", { count: live });
         return;
       }
-      // Empty lobby — fall back to a clearly labeled AI flock so the pilot is
-      // never left staring at a dead search.
-      this.mmPhase = "waiting";
-      const opts = this.takeMatchOpts();
-      this.hud.setMatchmaking(false, live, this.roomSize, 0);
-      this.hud.toast("No live pilots found — racing the AI flock (practice)", "info");
-      this.telemetry.track("matchmaking_ai_fallback", { window: Game.MM_WINDOW });
+      // Window closed on an empty lobby: park and let the pilot decide. Nothing
+      // is launched from here.
+      this.mmPhase = "expired";
+      this.hud.setMatchmaking(true, 0, this.roomSize, 0, "waiting", this.mmRooms, ready);
+      this.telemetry.track("matchmaking_search_expired", { window: Game.MM_WINDOW });
       this.bump();
-      if (opts) this.launchMatch(opts, true);
     }
   }
 

@@ -8,6 +8,21 @@ import { generatePilotName } from "./pilotNameGenerator";
 
 export const MAX_RIVALS = 40;
 
+/**
+ * Rivals a LIVE room may put on the grid, given how many remote peers it holds.
+ *
+ * The AI flock sizes itself from `roomSize` (the 5/10/20/40 selector) and is
+ * allowed the full 40 rivals — those are simulated, so nobody is seated. A
+ * live grid is made of PEOPLE, and `roster()` never includes us, so it has to
+ * stop one short: you plus 39 remotes is a 40-pilot room. Both transports
+ * declare a 40-seat room (`MAX_CAPACITY`, or the `capacity` on `welcome`), so a
+ * well-behaved room lands on 39 and this clamp is the belt-and-braces that
+ * keeps the grid inside the 2-40 real-user band whatever a server reports.
+ */
+export function liveFieldSize(remotePeers: number): number {
+  return Math.min(MAX_RIVALS - 1, Math.max(1, remotePeers));
+}
+
 /** Metres behind the player before catch-up starts. Casual only. */
 export const PACK_CATCHUP_START = 350;
 export const PACK_CATCHUP_END = 800;

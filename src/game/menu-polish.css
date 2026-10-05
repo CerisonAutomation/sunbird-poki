@@ -588,7 +588,20 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .paper-card.menu-hero h1 { color:#ff7a45; font-size:46px; font-weight:500; letter-spacing:.035em; margin:7px 0 8px; text-shadow:0 2px 1px #a65e1220; background:none; -webkit-text-fill-color:#ff7a45; }
 .menu-hero .hero-sub { display:block; text-align:left; color:#795329; font-size:12px; line-height:1.5; margin:0; }
 .overlay .icon-btn.menu-mute {
-  z-index: 4;
+  /* Above the sticky bars, not below them. This sat at 4 while both
+     `.home-status-bar` and `.screen-head` are `position: sticky; z-index: 6`,
+     so the mute — absolutely positioned in the hero, the same top row — was
+     painted over by the sticky status bar's opaque parchment and its lower
+     ~60% was dead to hit-testing. index.css already asks for 6; the menu
+     sheet's higher-specificity `.overlay` rule quietly demoted it below the
+     thing it shares a row with. 7 beats both sticky bars at every viewport
+     measured (1280x800, 360x740, 320x568).
+
+     The `padding-right: 62px` on `.home-status-bar` is the OTHER half of the
+     same collision and does not cover it: padding keeps the bar's *text* clear
+     of the button horizontally, and nothing stops the bar's own background
+     from covering the button. */
+  z-index: 7;
   /* Safe-area aware. These overrode the inset-aware values in index.css with
      flat 12px, which on a notched iPhone in landscape (~44px inset) put half
      the target under the sensor housing. */

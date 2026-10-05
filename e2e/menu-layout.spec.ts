@@ -20,12 +20,19 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     expect(brand.weight).toBe("500");
     expect(brand.color).toBe("rgb(255, 122, 69)"); // Current coral brand in menu-polish.css.
     await app.expectNoOverlaps([".hero-sun-wrap", ".menu-mute"], '[data-ref="menuCard"]');
+    // Overlap alone does not say which element the finger reaches. The mute
+    // toggle shared its top row with a sticky, opaque status bar and was
+    // painted over by it — the boxes overlapped, which the assertion above is
+    // happy with, while the lower 60% of the button took no input at any of
+    // these viewports. Hit-testing is the only check that can see that.
+    await app.expectControlsHitTestable();
     await expect(page.getByRole("button", { name: "Fly now", exact: true })).toBeInViewport({ ratio: 1 });
     await expect(page.locator('details[data-ref="homeMore"]')).toHaveCount(0);
     await expect(app.menuAction("versus")).toBeVisible();
     await page.screenshot({ path: info.outputPath(`home-${viewport.width}.png`) });
     await app.openMenu("open-settings", "Settings");
     await app.expectMenuFits();
+    await app.expectControlsHitTestable();
     const card = page.locator('[data-ref="menuCard"]');
     const sizes = await card.locator(".toggle").evaluateAll(buttons => buttons.map(el => {
       const r = el.getBoundingClientRect(); return { width: r.width, height: r.height };

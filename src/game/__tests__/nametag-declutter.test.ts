@@ -84,24 +84,26 @@ describe("rival name tags: the cap", () => {
     terrain.dispose();
   });
 
-  it("ranks a kept tag by counting birds ahead", () => {
-    const { terrain, mr } = field(3);
-    // Player at 100. One rival at 200 (ahead of the player), two at 50.
-    const [a, b, c] = mr.rivals;
-    a!.bird.x = 200;
-    b!.bird.x = 50;
-    c!.bird.x = 50;
-
-    const tags = mr.getVisibleNameTags(100, 100, 0, 0);
-    const placeOf = (id: string): number | undefined => tags.find((t) => t.id === id)?.place;
-    // 1 (the player) + 1 (rival `a` is ahead of them).
-    expect(placeOf(a!.id)).toBe(2);
-    // Ahead: rival `a` and the player.
-    expect(placeOf(b!.id)).toBe(3);
-    expect(placeOf(c!.id)).toBe(3);
-
-    terrain.dispose();
-  });
+  it("ranks kept tags by counting birds ahead", () => {
+      const { terrain, mr } = field(3);
+      // Player at 100. One rival at 200 (ahead of the player), two at 50.
+      const [a, b, c] = mr.rivals;
+      a!.bird.x = 200;
+      b!.bird.x = 50;
+      c!.bird.x = 50;
+  
+      const tags = mr.getVisibleNameTags(100, 100, 0, 0);
+      const placeOf = (id: string): number | undefined => tags.find((t) => t.id === id)?.place;
+      // Rival `a` (200) is ahead of the player (100) and ahead of b and c (50):
+      // nobody beats it, so it leads.
+      expect(placeOf(a!.id)).toBe(1);
+      // b and c tie at 50, both behind the player and behind `a`: the player is
+      // one bird ahead of them and `a` is the other, so they are joint third.
+      expect(placeOf(b!.id)).toBe(3);
+      expect(placeOf(c!.id)).toBe(3);
+  
+      terrain.dispose();
+    });
 });
 
 function tag(id: string, worldX: number, worldY: number): RivalNameTag {
@@ -131,6 +133,12 @@ function camera(): THREE.PerspectiveCamera {
  * case here runs the nominal-size fallback — the same path a real browser takes
  * while the play HUD is hidden and the tags measure zero. That is deliberate:
  * the fallback is exactly where a silent regression would hide.
+ *
+ * The 105px nominal is sized to the worst case, not the average: measured in a
+ * browser, the pill is 46px wide at 3 characters and 103px at 14, and 14 is
+ * NAME_MAX — the protocol's hard cap on a pilot name. So the fallback can
+ * over-hide before the first real measurement, never under-hide. Under-sizing
+ * it is the failure mode that reintroduces the stack.
  */
 type LooseSnapshot = Record<string, unknown>;
 

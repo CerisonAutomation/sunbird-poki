@@ -1141,10 +1141,13 @@ export class HUD {
         if (w > 0 && h > 0) this.nameTagSizes.set(tag.id, { w, h });
       }
       // `translate(-50%, -100%)`: centred on px, sitting on py. Nominal size
-      // until one has been measured — a real 10px pill with a rank badge runs
-      // ~105x19, and under-estimating it lets the first frames of a race stack
-      // before the first real measurement lands.
-      const size = this.nameTagSizes.get(tag.id) ?? { w: 105, h: 19 };
+            // until one has been measured. Measured in-browser, a pill with a rank
+            // badge is 46px wide at 3 characters and 103px at 14 — and 14 is
+            // NAME_MAX, the protocol's hard cap, so this nominal is sized to the
+            // worst case a tag can ever be. It can therefore over-hide a tag in the
+            // frame before its first measurement (invisible) but never let two stack
+            // (the bug being fixed).
+            const size = this.nameTagSizes.get(tag.id) ?? { w: 105, h: 19 };
       const half = size.w / 2;
       let clash = false;
       for (const p of placed) {

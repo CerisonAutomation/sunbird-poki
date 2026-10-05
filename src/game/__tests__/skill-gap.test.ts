@@ -60,9 +60,23 @@ import { PHYS_DT } from "../constants";
  * spacing is exactly the fragility that broke this file; the replacement is
  * dimensionless on purpose.
  *
- * What the repaired instrument says about the GAME: the skill gap is real and
- * it is ~1.30x, not the 1.8x the header once hoped for. `tutorial` (the rule
- * the game actually teaches) is already the best readable policy there is.
+ * What the repaired instrument says about the GAME, after the release was made
+ * to pay forward as well as up (`RELEASE_SURGE` — the gap was a SPEED gap, and
+ * a release that only ever bought climb could not close it):
+ *
+ *                            headline(3)   45 held-out    45 second set
+ *   before the surge              1.287      1.350          1.357
+ *   after                         1.569      1.581          1.611
+ *
+ * and the worst seed of each 45-seed set rose with the mean, 1.260 -> 1.320 and
+ * 1.239 -> 1.303, so this is not the mean bought with the tail. The three
+ * policies that never release are bit-for-bit unchanged — masher 1728 m, coast
+ * 1194 m, random 1392 m — because every gate on the surge is on the release
+ * EVENT or on speed, and none of those policies produces one.
+ *
+ * `tutorial` (the rule the game actually teaches) is still the best readable
+ * policy there is, and the gap is still not the 1.8x this header once hoped
+ * for. See "is 1.8 reachable" below.
  *
  * ── determinism ─────────────────────────────────────────────────────────────
  * `random` uses a seeded LCG, never `Math.random()`: this file is a measurement
@@ -226,16 +240,35 @@ describe("skill gap: the measurement", () => {
      * The taught rule must beat the masher outright, and the size of the margin
      * is the finding — so read the number rather than the green.
      *
-     * TARGET, once balance work lands: `tutorial / masher >= 1.8`. Until then this
-     * assertion is deliberately the *floor* it is today, not the target, so the
-     * suite stays green while the number is carried upward. Flip the constant
+     * TARGET: `tutorial / masher >= 1.8`. The measured headline is 1.569, so
+     * this floor is set well under it — a real ratchet on the 1.05 it replaced,
+     * and still low enough that ordinary tuning has room. Flip the constant
      * below as the ratio improves; do not weaken it.
+     *
+     * IS 1.8 REACHABLE? Measured: not with the levers this game has, and the
+     * reason is arithmetic rather than tuning. `tutorial` and `masher` already
+     * carve the ground at the SAME speed — 27.6 against 28.7 m/s over 60 s —
+     * so the whole gap is `airborne fraction x airborne speed`, and reaching
+     * 1.8x from today's 1.35x at an unchanged 47% airborne fraction needs about
+     * 72 m/s of cruise, which is two thirds of `MAX_SPEED` for a glider that
+     * cannot climb. Getting there by airborne FRACTION instead means a bird
+     * that almost never touches the ground, which is a different game.
+     *
+     * Every lever that pushes harder was measured and rejected, with its
+     * number, in the `RELEASE_SURGE` header: a bigger crest pop (44 takes
+     * skill-ceiling's worst seed from 1.360 to 1.146), a more forward pop share
+     * (already capped at 0.6, and 0.65+ trades the mean for that same seed), and
+     * a surge without the commit gate (1.544 mean, worst seed 1.140). So the
+     * honest statement is that 1.8x is not reachable by tuning this one-button
+     * model, and the target should be revised to what the instrument can
+     * actually show — somewhere near 1.6x — rather than left at a number no
+     * reachable build has ever produced.
      *
      * This is the only skill row the suite has, so it measures the rule the
      * tutorial teaches rather than a stronger one — see "why these policies" in
      * the header for why the search for a stronger policy came back empty.
      */
-    const MIN_RATIO = 1.05;
+    const MIN_RATIO = 1.3;
   
     it("the taught rule beats holding forever", () => {
       const ratio = means.tutorial / means.masher;

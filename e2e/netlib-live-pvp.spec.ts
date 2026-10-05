@@ -11,7 +11,7 @@ import { SunbirdPage } from "./SunbirdPage";
  * nothing imported it — `vite.config.ts` had no `./net-transport` alias, so the
  * shipped Poki zip resolved `import … from "./net-transport"` to the NEUTRAL
  * WebSocket module and raced local AI pilots while the menu advertised live
- * rooms. No amount of reading that file can catch that class of bug; only two
+ * rooms. No amount of reading that file catches that class of bug; only two
  * browsers actually talking can.
  *
  * So this spec runs the game for real, in two `browser.newContext()`s — two
@@ -32,7 +32,7 @@ import { SunbirdPage } from "./SunbirdPage";
  * rendered here. An earlier probe regex-matched `document.body.textContent` for
  * a 5-letter token and matched "FEVER" out of the event deck. This spec reads
  * the one element whose entire job is to report it, and cross-checks it
- * against the shape Netlib guarantees (`codeLength: 5`, uppercase).
+ * against the shape Netlib guarantees (uppercase, service-assigned length).
  *
  * ## What counts as "they saw each other"
  *
@@ -40,8 +40,8 @@ import { SunbirdPage } from "./SunbirdPage";
  *
  *   1. `.room-flock` lists a REMOTE pilot on BOTH clients, and the two clients
  *      read each other's pilot name — which can only travel over a working
- *      datachannel, because `lobbyRivals()` renders exactly the peers the
- *      transport reports and nothing is ever padded into that list.
+ *      datachannel, because `lobbyRivals()` maps exactly the peers the
+ *      transport reports and pads the list with nothing.
  *   2. `room-presence` reports "2 connected" on both — `liveCount()` refuses to
  *      count the AI fallback, so this number is real humans or nothing.
  *   3. The unreliable channel carried `state` frames in BOTH directions once
@@ -59,9 +59,9 @@ const SIGNALING_HOST = "netlib.poki.io";
  *
  * NOT `[A-Z2-9]{5}`: the transport asks for `codeFormat: "short",
  * codeLength: 5`, and the signalling service ignores `codeLength` and returns
- * a FOUR-character code — verified directly against
- * `wss://netlib.poki.io/v0/signaling` (`{"type":"joined","lobbyInfo":{"code":
- * "C7JH",…}}`) and again through the running game. Known service bug, not a
+ * a FOUR-character code — verified live against
+ * `wss://netlib.poki.io/v0/signaling` (a real `create()` answered `4FN7`) and
+ * again through two real `PokiNetlibClient`s. Known service behaviour, not a
  * client contract: `createRoom` still asks for 5 because that is what we WANT,
  * and the service overriding it is not something the client should paper over
  * by asking for less.
@@ -76,21 +76,31 @@ const SIGNALING_HOST = "netlib.poki.io";
 const ROOM_CODE = /^[A-Z2-9]{4}$/;
 
 /**
+ * Boot budget for ONE client.
+ *
+ * Deliberately its own constant, and deliberately much larger than
+ * `SunbirdPage`'s shared 45 s. That 45 s is sized for a single-page spec on a
+ * quiet box; this one puts TWO full game boots in flight, and on a machine
+ * already running the rest of the gate the measured boot is 53–85 s (profiled:
+ * three long tasks, one ~49 s block, and zero network stalls — it is CPU-bound
+ * scene construction under SwiftShader, not something waiting on a socket).
+ * A budget that cannot be met produces a failure that reads like a broken
+ * lobby, which is exactly the misdiagnosis this spec exists to prevent.
+ */
+const BOOT_TIMEOUT = 240_000;
+
+/**
  * Room-lobby budget. Generous because the chain is genuinely long and every
  * link in it is a network round trip the test does not control: signalling
  * socket open → `create()` → ICE gather/stun → peer offer/answer → data
- * channels open → directed hellos → both tracks populated.
- *
- * This also covers the boot of the second client: `SunbirdPage.ready()` has
- * its own 45 s, and it runs inside this window, so the outer ceiling stays
- * here rather than being duplicated as a second constant.
+ * channels open → directed hellos → both rosters populated.
  */
 const ROOM_TIMEOUT = 90_000;
 
 /**
- * Countdown budget. `maybeStartRace()` / `startNow()` broadcast a start six
- * seconds out, so the race cannot begin sooner than this by construction. 30 s
- * leaves room for a busy CPU-rasterised box to render the countdown.
+ * Countdown budget. `maybeStartRace()` broadcasts a start six seconds out, so
+ * the race cannot begin sooner than this by construction. 30 s leaves room for
+ * a busy CPU-rasterised box to render the countdown.
  */
 const START_TIMEOUT = 45_000;
 
@@ -148,6 +158,27 @@ class Pilot {
   }
 
   /**
+   * Boot this client with this spec's own (larger) budget.
+   *
+   * Deliberately NOT `SunbirdPage.ready()`: that shares the suite-wide 45 s,
+   * which two concurrent boots on a loaded box cannot meet. The steps are
+   * identical — wait out `#boot-shell`, clear the pilot-name card if it is
+   * showing, land on "Fly now".
+   */
+  async boot(): Promise<void> {
+    await this.app.open();
+    await expect(this.lobby.locator("#boot-shell")).toHaveCount(0, { timeout: BOOT_TIMEOUT });
+    const play = this.lobby.getByRole("button", { name: "Fly now", exact: true });
+    const confirmName = this.lobby.locator('[data-action="confirm-pilot-name"]');
+    await expect(play.or(confirmName)).toBeVisible({ timeout: BOOT_TIMEOUT });
+    if (await confirmName.isVisible()) {
+      await this.lobby.getByRole("button", { name: "Random name", exact: true }).click();
+      await confirmName.click();
+    }
+    await expect(play).toBeVisible({ timeout: BOOT_TIMEOUT });
+  }
+
+  /**
    * Count of datachannel `state` frames this client RECEIVED.
    *
    * Read straight off the `RTCDataChannel`s netlib opened, rather than off the
@@ -158,7 +189,7 @@ class Pilot {
    */
   async inboundStateFrames(): Promise<number> {
     return this.lobby.evaluate(() => {
-      const seen = (window as unknown as { __nb?: { states: number; peers: Set<string> } }).__nb;
+      const seen = (window as unknown as { __nb?: { states: number } }).__nb;
       return seen?.states ?? 0;
     });
   }
@@ -178,16 +209,6 @@ class Pilot {
       if (type && !types.includes(type)) types.push(type);
     }
     return types;
-  }
-
-  async open(): Promise<void> {
-    await this.app.open();
-    await this.app.ready();
-  }
-
-  /** Console errors with the rig's own noise removed. */
-  realErrors(): string[] {
-    return this.errors.filter(text => !RIG_NOISE.some(re => re.test(text)));
   }
 
   /**
@@ -232,8 +253,8 @@ class Pilot {
    * "You" tile.
    *
    * `.room-flock` renders one `.room-bird` per rival `lobbyRivals()` reports
-   * plus one for the player. The first child is always the player ("You"), so
-   * the rest is exactly what arrived over the wire.
+   * plus one for the player, whose `<b>` is the literal "You". So everything
+   * after that tile is exactly what arrived over the wire.
    */
   async remotePilotNames(): Promise<string[]> {
     return this.lobby.locator(".room-flock .room-bird").evaluateAll(nodes =>
@@ -255,29 +276,27 @@ class Pilot {
     await expect(button).toHaveAttribute("aria-pressed", "true", { timeout: ROOM_TIMEOUT });
   }
 
-  /** True once the HUD has swapped the menu out for the flight view. */
-  async isRacing(): Promise<boolean> {
-    return this.lobby.locator('[data-action="pause"]').isVisible().catch(() => false);
+  /** Snapshot fields the report reads after an assertion fails. */
+  statesSync = 0;
+  iceStatesSync: string[] = [];
+
+  /** Console errors with the rig's own noise removed. */
+  realErrors(): string[] {
+    return this.errors.filter(text => !RIG_NOISE.some(re => re.test(text)));
   }
 
   /** Everything needed to diagnose a failure, as one block of text. */
   report(label: string): string {
-    const lines = [
+    return [
       `--- ${label} ---`,
-      `deviceId differs: (asserted separately)`,
       `signalling sockets: ${this.signallingUrls.length ? this.signallingUrls.join(", ") : "NONE — netlib never dialled"}`,
       `signalling frames sent: ${this.sent.length} (${this.sent.map(safePacketType).filter(Boolean).join(", ") || "none"})`,
       `signalling frames received: ${this.received.length} (${this.received.map(safePacketType).filter(Boolean).join(", ") || "none"})`,
       `RTCPeerConnection ice states: ${JSON.stringify(this.iceStatesSync)}`,
       `inbound datachannel state frames: ${this.statesSync}`,
       `console/page errors: ${this.realErrors().length ? "\n  " + this.realErrors().join("\n  ") : "none"}`,
-    ];
-    return lines.join("\n");
+    ].join("\n");
   }
-
-  /** Snapshot fields the report reads synchronously after an assertion fails. */
-  statesSync = 0;
-  iceStatesSync: string[] = [];
 }
 
 /**
@@ -292,7 +311,7 @@ class Pilot {
  */
 function observeRtc(page: Page): void {
   void page.addInitScript(() => {
-    const seen = { states: 0, hellos: 0, ice: [] as string[], peers: new Set<string>() };
+    const seen = { states: 0, hellos: 0, ice: [] as string[] };
     (window as unknown as { __nb: typeof seen }).__nb = seen;
 
     const NativeChannel = (globalThis as unknown as { RTCDataChannel: typeof RTCDataChannel }).RTCDataChannel;
@@ -304,7 +323,6 @@ function observeRtc(page: Page): void {
       ...rest: unknown[]
     ): RTCDataChannel {
       const channel = nativeCreate.call(this, label, ...(rest as []));
-      seen.peers.add(label);
       channel.addEventListener("message", event => {
         const raw = typeof event.data === "string" ? event.data : "";
         if (raw.includes('"type":"state"')) seen.states += 1;
@@ -343,7 +361,7 @@ function safePacketType(payload: string): string {
  * Is Netlib's signalling service reachable from here?
  *
  * Deliberately a PREFLIGHT, not part of the assertion. A sandbox with no
- * egress, a locked-down runner or an outage must not produce a 300-second
+ * egress, a locked-down runner or an outage must not produce a multi-minute
  * timeout that reads like a product defect — the honest outcome there is "this
  * environment cannot run the live-PvP proof", stated before the browsers even
  * boot. When it IS reachable (the normal case, CI included) the check costs one
@@ -374,11 +392,11 @@ async function signallingReachable(timeoutMs = 8_000): Promise<boolean> {
 }
 
 test.describe("live PvP over Poki Netlib", () => {
-  // One WebRTC session for two pages plus a 2 MB bundle parsed twice under
-  // CPU rasterisation is minutes of work, not seconds. The shared budget in
-  // playwright.config.ts (300 s) is sized for a single-page spec, and a run
-  // that trips it is indistinguishable from a hang in CI logs.
-  test.setTimeout(300_000);
+  // Two WebRTC sessions plus two full game boots under CPU rasterisation are
+  // minutes of work, not seconds, and on a shared machine boot alone can reach
+  // 85 s per client. Sized for the slow path so a genuine regression is what
+  // turns this red, not the ambient load.
+  test.setTimeout(900_000);
 
   test("two independent users join one room, see each other, and race together", async ({ browser }) => {
     test.skip(
@@ -400,13 +418,12 @@ test.describe("live PvP over Poki Netlib", () => {
 
     try {
       // ---------------------------------------------------------------- boot
-      // Both clients load and land in the Race Lobby. Sequential rather than
-      // parallel: the box is CPU-bound on SwiftShader and two concurrent 2 MB
-      // parses just trade one wall-clock cost for another.
-      await pilotA.open();
-      await pilotA.toRaceLobby();
-      await pilotB.open();
-      await pilotB.toRaceLobby();
+      // Both clients load in PARALLEL. Sequential was tried first and cost
+      // ~85 s + ~85 s of serialised boot on a loaded box, which does not fit
+      // any sane budget; the two boots are independent and the machine has
+      // cores to spare.
+      await Promise.all([pilotA.boot(), pilotB.boot()]);
+      await Promise.all([pilotA.toRaceLobby(), pilotB.toRaceLobby()]);
 
       // ------------------------------------------------- A hosts, reads code
       const code = await pilotA.hostPrivateRoom();
@@ -424,9 +441,9 @@ test.describe("live PvP over Poki Netlib", () => {
       ).toHaveText(code, { timeout: ROOM_TIMEOUT });
 
       // ------------------------------------------------- they see each other
-      // The load-bearing assertion. `lobbyRivals()` renders exactly the peers
-      // the transport reports and pads the list with nothing, so a non-empty
-      // roster is a peer that arrived over a data channel.
+      // The load-bearing assertion. `lobbyRivals()` maps exactly the peers the
+      // transport reports and pads with nothing, so a non-empty roster is a peer
+      // that arrived over a data channel.
       const [aSees, bSees] = await waitForBothRosters(pilotA, pilotB);
       expect(aSees, `${pilotA.report("roster")}\n${pilotB.report("roster")}`).toHaveLength(1);
       expect(bSees, `${pilotB.report("roster")}\n${pilotA.report("roster")}`).toHaveLength(1);
@@ -462,8 +479,8 @@ test.describe("live PvP over Poki Netlib", () => {
 
       // Flight state crosses in BOTH directions over the unreliable channel.
       // One direction would pass a half-connected pair.
-      await pollUntil(async () => (await pilotA.inboundStateFrames()) > 0, 20_000, "A never received flight state from B");
-      await pollUntil(async () => (await pilotB.inboundStateFrames()) > 0, 20_000, "B never received flight state from A");
+      await pollUntil(async () => (await pilotA.inboundStateFrames()) > 0, 30_000, "A never received flight state from B");
+      await pollUntil(async () => (await pilotB.inboundStateFrames()) > 0, 30_000, "B never received flight state from A");
 
       // ------------------------------------------------------------- evidence
       // Everything the run observed, printed once. This is what makes a future

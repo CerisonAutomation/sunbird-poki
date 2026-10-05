@@ -120,8 +120,29 @@ export function unpackChallengeToken(raw: string): RivalChallenge | null {
 
 const ROOM_KEY = "room";
 
-/** 5 chars from the room-code alphabet (no 0/O or 1/I). Lenient on input. */
-const CODE_RE = /^[A-Z0-9]{5}$/;
+/**
+ * Room codes are 4 OR 5 chars from the room-code alphabet (no 0/O or 1/I).
+ * Lenient on input, strict on length.
+ *
+ * This was `^[A-Z0-9]{5}$` — exactly five — and that pinned live PvP shut.
+ * The two code sources disagree about length, and only one of them was
+ * consulted here:
+ *
+ *   • `createRoom` asks the signalling service for `codeLength: 5`, and the
+ *     service IGNORES that and mints FOUR (`netlib.poki.io` returned "4FN7",
+ *     "TWD6" and "C7JH" across real runs).
+ *   • `makePokiRoomCode()` — the locally generated code used by every
+ *     non-Poki edition — really is five.
+ *
+ * The host path never runs a code through this function: `createRoom` adopts
+ * whatever the service returned, so "Create Private Room" produced a working
+ * `TWD6` card. The JOIN path does run it, in `Game`'s `join-room` handler, and
+ * rejected that same `TWD6` with "Enter a 5-letter room code". So the host
+ * always got a room and the guest could never enter it — the whole join leg of
+ * live PvP was dead while every one of the tests that hosted a room stayed
+ * green. Accepting both lengths is what makes the two paths agree.
+ */
+const CODE_RE = /^[A-Z0-9]{4,5}$/;
 
 /** Consumed once for the session — React StrictMode double-mounts the Game and
  * the first throwaway instance must not swallow the link for the real one. */

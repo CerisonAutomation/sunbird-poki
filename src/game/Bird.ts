@@ -1,4 +1,4 @@
-import { applyReleaseKick, dampClimbAtCeiling, glideLiftScale, launchPopSplit, releaseKick, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
+import { applyReleaseKick, dampClimbAtCeiling, glideLiftScale, launchPopSplit, releaseKick, releaseSurge, RELEASE_KICK_COOLDOWN } from "./FlightPhysics";
 import { type BirdShape } from "./Sunbird";
 import * as THREE from "three";
 import {
@@ -263,6 +263,11 @@ export class Bird {
   /** Seconds left before another release can buy a kick. See
    *  `RELEASE_KICK_COOLDOWN` — without it the kick is farmable. */
   private kickCooldown = 0;
+  /** Seconds the stick has been held on the dive currently in progress. */
+  private diveAge = 0;
+  /** Seconds the stick had been held when the last release edge fired. Read by
+   *  `releaseSurge` — see RELEASE_SURGE_COMMIT. */
+  private lastDiveLength = 0;
   /** Whether the previous physics step was a dive. The flare fires on the
    *  falling edge, so a held dive does not re-apply it every step. */
   private wasDiving = false;
@@ -507,6 +512,8 @@ export class Bird {
     this.drawnVx = this.vx;
     this.drawnVy = this.vy;
     this.kickCooldown = 0;
+    this.diveAge = 0;
+    this.lastDiveLength = 0;
     this.flareAmount = 0;
     this.releaseKickAmount = 0;
     this.squashAmt = 1;
@@ -713,7 +720,9 @@ export class Bird {
     if (this.wasDiving && !diving) {
       this.releaseBuffer = FLARE_BUFFER;
       this.releaseAge = 0;
+      this.lastDiveLength = this.diveAge;
     }
+    this.diveAge = diving ? this.diveAge + dt : 0;
     this.wasDiving = diving;
     this.releaseBuffer = Math.max(0, this.releaseBuffer - dt);
     this.releaseAge = diving ? Number.POSITIVE_INFINITY : this.releaseAge + dt;
@@ -953,6 +962,10 @@ export class Bird {
         // and sit upstream of this branch.
         this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown, this.speed());
         this.vy = applyReleaseKick(this.vy, this.kickCooldown, this.speed());
+        // THE SURGE. The same release, paid forward as well as up. See
+        // `RELEASE_SURGE` for why the skill gap was a SPEED gap and why this is
+        // gated on the dive having been committed rather than on "not diving".
+        this.vx += releaseSurge(this.vy, this.kickCooldown, this.speed(), this.lastDiveLength);
         this.kickCooldown = RELEASE_KICK_COOLDOWN;
       }
 

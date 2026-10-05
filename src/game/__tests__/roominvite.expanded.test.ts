@@ -28,7 +28,7 @@ describe("room invite: normalizeRoomCode", () => {
     expect(normalizeRoomCode("abc123456")).toBe("ABC12");
   });
 
-  it("returns empty string for < 5 usable chars", async () => {
+  it("returns empty string for < 4 usable chars", async () => {
     const { normalizeRoomCode } = await loadModule();
     expect(normalizeRoomCode("ab")).toBe("");
   });
@@ -50,9 +50,17 @@ describe("room invite: normalizeRoomCode", () => {
     expect(normalizeRoomCode("a1b2c")).toBe("A1B2C");
   });
 
-  it("rejects codes with underscores", async () => {
+  it("strips underscores like any other non-alphanumeric", async () => {
     const { normalizeRoomCode } = await loadModule();
-    expect(normalizeRoomCode("AB_C1")).toBe("");
+    // Underscores were never "rejected" — they are stripped, exactly like the
+    // `!@#$` in "strips non-alphanumeric chars" above. This case read
+    // `AB_C1` → "" and passed only by accident: stripping leaves "ABC1", which
+    // is 4 characters, and the old exactly-5 regex rejected that on LENGTH,
+    // not because of the underscore. Now that 4-char codes are valid (the
+    // signalling service mints them), the assertion shows what the function
+    // has always done. Rejection is still by length, checked just below.
+    expect(normalizeRoomCode("AB_C1")).toBe("ABC1");
+    expect(normalizeRoomCode("AB_C")).toBe("");
   });
 
   it("preserves digits in valid position", async () => {

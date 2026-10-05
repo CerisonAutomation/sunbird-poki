@@ -6,7 +6,6 @@
  * is the widest reader in the HUD (60 of the snapshot's 227 fields), the one
  * screen that legitimately needs most of the state.
  */
-import { adEscapeArmed, adEscapeCountdown } from "../adGate";
 import { formatNumberLocalized, t } from "../../i18n";
 import { flightTakeaway } from "../FlightGuidance";
 import { growthLedger } from "../GrowthLedger";
@@ -401,23 +400,18 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
           // The copy states the unskippable contract ("plays in full") while
           // keeping the number: it is the only thing that says when a
           // self-timed break ends. The portal path never reaches this branch;
-          // it takes the escape hatch below, which has no number to show.
+          // it renders no chip, because it has no number of its own to count.
           ? `<div class="ad-countdown" role="status" data-live="adSkip">${clockSvg()}<span>${t("hud.renderAd.PlaysInFull", undefined, "Ad plays in full · continues in")} <b>${Math.ceil(Math.max(0, s.adTimer))}</b>s</span></div>`
-          // Escape hatch, NOT a skip. On a portal build `adTimer` is left at 0,
-          // so this used to render enabled with a flat "Return to flight" from
-          // the first frame of every break — one click skipped a real ad. It is
-          // now inert until the break has demonstrably failed, with an honest
-          // countdown so the control is never dead without saying why.
-          // `Game.handleAction` enforces the same window independently.
-          : (() => {
-              const armed = adEscapeArmed(s.adElapsed, s.adSafetySeconds);
-              const left = adEscapeCountdown(s.adElapsed, s.adSafetySeconds);
-              return `<button class="mini-btn" data-ui data-action="ad-stuck"${armed ? "" : " disabled"}>${
-                armed
-                  ? "Return to flight"
-                  : `${clockSvg()}<span>Break in progress — return in <b>${left}</b>s</span>`
-              }</button>`;
-            })()
+          // A portal break has NO player-initiated exit, and no status chip of
+          // its own: the `.portal-ad-wait` block above already says "Your run
+          // is paused while the portal serves this break." The SDK's completion
+          // callback ends the break and the fixedUpdate safety valve recovers a
+          // break whose SDK promise never settles — neither path needs a button.
+          // The only control this branch ever drew was `ad-stuck`: an "escape
+          // hatch" that, once armed, let a single tap end a live portal ad. That
+          // is a click-through skip, so it is gone. What remains is nothing the
+          // player can press.
+          : ""
       }
       ${
         // The upsell must not read as a skip either. It renders disabled with

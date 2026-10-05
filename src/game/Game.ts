@@ -28,7 +28,7 @@ import type { Fx } from "./Fx";
 import { DPR_COOLDOWN_SECONDS, nextBloomBudget, nextDpr, nextEffectBudget, QUALITY_WINDOW_SECONDS, type EffectBudget } from "./quality";
 import { LaunchSystem, ratingLabel, type LaunchResult } from "./LaunchSystem";
 import { isRaceMode, MASS_RACE_FIELD, MODES, modeById, PVP_MODES, PVP_WORLDS, RACE_FINISH, type ModeDef, type ModeId, type PvpWorldCourse } from "./Modes";
-import { adBreakAllowsAction, adBreakCanEnd, adEscapeArmed, goldContinueAllowed } from "./adGate";
+import { adBreakAllowsAction, adBreakCanEnd, goldContinueAllowed } from "./adGate";
 import { liveFieldSize, MassRace } from "./MassRace";
 import { FinishGate } from "./FinishGate";
 import { fetchPublicRooms, isMultiplayerConfigured, type AnyRealtimeClient } from "./Realtime";
@@ -5236,8 +5236,13 @@ export class Game {
         if (this.state !== "gameover") break;
         const opts = this.lastMatchOpts ?? { ranked: false, storm: false };
         if (this.duelActive || this.versus) this.replayRun();
-        else if (this.localRace || !isMultiplayerConfigured()) this.launchMatch(opts, true);
-        else this.beginMatchmaking(opts);
+        else if (this.localRace) this.launchMatch(opts, true);
+        else if (!isMultiplayerConfigured()) {
+          // No transport in this runtime: an online rematch cannot be delivered.
+          // This used to quietly replay a bot race — a live rematch silently
+          // became PvAI. Say so instead; the AI flock has its own button.
+          this.hud.toast("Online racing isn't available here — rematch needs a live match", "info");
+        } else this.beginMatchmaking(opts);
         break;
       }
       case "share":
@@ -6098,21 +6103,15 @@ export class Game {
         if (this.state === "continue") this.finishRun();
         return true;
       case "ad-stuck":
-        // The ad screen would otherwise render with ZERO buttons on a portal
-        // build (both ad-skip and ad-gold are false there) and a frozen bar for
-        // the whole safety window. This returns the run — but ONLY once the
-        // break has demonstrably failed.
-        //
-        // It used to fire on the first frame of every break, which made it a
-        // one-click skip of a real portal ad: the game tore down its own ad
-        // state while the portal's ad was still on screen. The guard is
-        // duplicated here rather than trusted to the disabled attribute in the
-        // view, because a disabled button is a rendering detail and an action
-        // handler is the contract. Nothing is granted on this path either way.
-        if (!adEscapeArmed(this.adWallClock, AD_SAFETY_SECONDS)) return true;
-        this.telemetry.track("ad_escape_hatch", { reason: this.adReason, portal: this.platform?.name ?? "none" });
-        this.endPortalAd();
-        this.hud.toast("Returned to your flight", "info");
+        // Retained as an explicit no-op, not deleted — the same pattern as
+        // `ad-skip`. A portal break now has NO player-initiated exit: the SDK
+        // completion callback ends it, and the fixedUpdate safety valve (see
+        // `adWallClock` / `AD_SAFETY_SECONDS`) recovers a break whose SDK
+        // promise never settles. Neither path is a button, so a single tap can
+        // never end a live ad early. The button this used to drive was a
+        // click-through skip; it is gone from the view. Swallowing the action
+        // here means a stray dispatch — a cached view, a deep link, a console
+        // call — cannot tear down the break.
         return true;
       case "ad-skip":
         // Retained as an explicit no-op, not deleted.

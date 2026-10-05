@@ -914,6 +914,14 @@ export class HUD {
         // an explicit choice on the card's own buttons.
         return;
       }
+      if (e.target === this.adEl) {
+        // While a break is live the ad owns the whole screen, and a tap on its
+        // bare backdrop must stay inert: the break is ended by the SDK promise
+        // (or the automatic safety valve) and by nothing the player presses.
+        // `hidden` already makes every other screen un-hittable, but this is
+        // the ad's own guard against a stray tap ever reaching a `data-action`.
+        return;
+      }
       if (e.target === this.menuEl && this.currentSnapshot && this.currentSnapshot.screen !== "main") {
         handler("back", "");
         return;

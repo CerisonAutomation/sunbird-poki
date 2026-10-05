@@ -110,13 +110,22 @@ export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
       ${s.season.tiers
         .map((t) => {
           const canFree = t.unlocked && !t.freeClaimed;
-          const canPremium = t.unlocked && !t.premiumLocked && !t.premiumClaimed;
-          const premiumTitle = t.premiumLocked && !SELL_AD_REMOVAL ? "Portal edition — premium rewards shown for reference" : undefined;
-          return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
-            <div class="tier-num">Lv.${t.tier}</div>
-            <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui data-action="${canFree ? "claim-pass-free" : ""}" data-id="${t.tier}" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
-            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui data-action="${canPremium ? "claim-pass-premium" : ""}" data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : ""} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
-          </div>`;
+                    const canPremium = t.unlocked && !t.premiumLocked && !t.premiumClaimed;
+                    const premiumTitle = t.premiumLocked && !SELL_AD_REMOVAL ? "Portal edition — premium rewards shown for reference" : undefined;
+                    // A locked tier emits NO verb at all, rather than `data-action=""`.
+                    // Two reasons, both about the detectors rather than the player: an
+                    // empty verb is not something any handler owns, and writing the verb
+                    // as a literal (below) instead of interpolating it into the quotes is
+                    // what lets `hudSource.ts` parse this action out of the source. With
+                    // `data-action="${canFree ? ... : ""}"` its `([^"]+)` pattern stops at
+                    // the first inner quote and captures the fragment `${canFree ? ` as
+                    // an action name — the pass was feeding the wiring audit nonsense.
+                    // The button keeps `disabled` either way; it is never clickable.
+                    return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
+                      <div class="tier-num">Lv.${t.tier}</div>
+                      <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui ${canFree ? 'data-action="claim-pass-free"' : ""} data-id="${t.tier}" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
+                      <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui ${canPremium ? 'data-action="claim-pass-premium"' : ""} data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : ""} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
+                    </div>`;
         })
         .join("")}
     </div>

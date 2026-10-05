@@ -23,6 +23,19 @@ export function liveFieldSize(remotePeers: number): number {
   return Math.min(MAX_RIVALS - 1, Math.max(1, remotePeers));
 }
 
+/**
+ * How many rivals get a FLOATING nametag at once.
+ *
+ * Floating tags are screen furniture and the flight lane belongs to the bird.
+ * `getVisibleNameTags` culls on a 120 m camera window, but on a 40-pilot grid
+ * every rival is inside that window at the start line — so the uncapped pass
+ * stacked 40 pills onto one spot. Measured in the browser at 1200x762: 40 tags,
+ * all 40 inside the centre 50%x50% lane, 780 overlapping pairs (every pair of
+ * 40) painting 18x their own area over the bird. Six is enough to read the
+ * race; the standings ticker already carries the full order.
+ */
+export const MAX_VISIBLE_NAME_TAGS = 6;
+
 /** Metres behind the player before catch-up starts. Casual only. */
 export const PACK_CATCHUP_START = 350;
 export const PACK_CATCHUP_END = 800;
@@ -844,44 +857,59 @@ export class MassRace {
   }
 
   /** Visible rival name tag positions near the player for floating HUD badges */
-  getVisibleNameTags(cameraX: number, playerX: number, playerY: number, startX: number): RivalNameTag[] {
-    if (!this.group.visible) return [];
-    const tags: RivalNameTag[] = [];
-    const rivals = this.rivals;
-
-    for (const r of rivals) {
-      if (Math.abs(r.bird.x - cameraX) > 120) continue;
-      const dx = r.bird.x - playerX;
-      const dy = Math.abs(r.bird.y - playerY);
-      // Per-mode zone (Tempest Draft widens it to 38m) — the tag must match
-      // the physics zone, not the mode-default constant.
-      const isDrafting = dx > 0 && dx <= this.draftBehind && dy <= DRAFT_LATERAL;
-
-      // Place by counting birds ahead (rivals + player). Same answer as the
-      // 41-row standings sort this used to run EVERY frame, without the sort
-      // or the allocation — on the per-frame hot path.
-      let place = 0;
-      if (!r.eliminated) {
-        place = 1 + (playerX > r.bird.x ? 1 : 0);
-        for (const o of rivals) {
-          if (!o.eliminated && o.bird.x > r.bird.x) place++;
-        }
+    getVisibleNameTags(cameraX: number, playerX: number, playerY: number, startX: number): RivalNameTag[] {
+      if (!this.group.visible) return [];
+      const rivals = this.rivals;
+  
+      // Choose WHO gets tagged before building any of them. A place is an
+      // O(rivals) count of who is ahead, so ranking the whole camera window up
+      // front is what stops a packed grid paying 40 x 40 every frame — and it is
+      // also what keeps the lane legible (see MAX_VISIBLE_NAME_TAGS).
+      const pick: { r: Rival; drafting: boolean; score: number }[] = [];
+      for (const r of rivals) {
+        if (Math.abs(r.bird.x - cameraX) > 120) continue;
+        const dx = r.bird.x - playerX;
+        const dy = Math.abs(r.bird.y - playerY);
+        // Per-mode zone (Tempest Draft widens it to 38m) — the tag must match
+        // the physics zone, not the mode-default constant.
+        const isDrafting = dx > 0 && dx <= this.draftBehind && dy <= DRAFT_LATERAL;
+        // Rivals you are actually drafting win the slots outright: their tag is
+        // the actionable one (it lights up). Otherwise take whoever is nearest
+        // along the glide axis, i.e. the ones you are actually racing.
+        pick.push({ r, drafting: isDrafting, score: isDrafting ? -1e6 : Math.abs(dx) });
       }
-
-      tags.push({
-        id: r.id,
-        name: r.name,
-        worldX: r.bird.x,
-        worldY: r.bird.y + 1.6,
-        distance: Math.round(Math.max(0, r.bird.x - startX)),
-        place,
-        remote: r.kind === "remote",
-        drafting: isDrafting,
-        emote: this.emoteFor(r.id),
-      });
+      if (pick.length > MAX_VISIBLE_NAME_TAGS) {
+        pick.sort((a, b) => a.score - b.score);
+        pick.length = MAX_VISIBLE_NAME_TAGS;
+      }
+  
+      const tags: RivalNameTag[] = [];
+      for (const { r, drafting: isDrafting } of pick) {
+        // Place by counting birds ahead (rivals + player). Same answer as the
+        // 41-row standings sort this used to run EVERY frame, without the sort
+        // or the allocation — on the per-frame hot path.
+        let place = 0;
+        if (!r.eliminated) {
+          place = 1 + (playerX > r.bird.x ? 1 : 0);
+          for (const o of rivals) {
+            if (!o.eliminated && o.bird.x > r.bird.x) place++;
+          }
+        }
+  
+        tags.push({
+          id: r.id,
+          name: r.name,
+          worldX: r.bird.x,
+          worldY: r.bird.y + 1.6,
+          distance: Math.round(Math.max(0, r.bird.x - startX)),
+          place,
+          remote: r.kind === "remote",
+          drafting: isDrafting,
+          emote: this.emoteFor(r.id),
+        });
+      }
+      return tags;
     }
-    return tags;
-  }
 
   /** Show an emote over a bird ("you" for the player). Visible immediately —
    *  the stamp uses the current clock, and `emoteFor` expires it 2.5 s later,

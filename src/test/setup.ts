@@ -54,3 +54,21 @@ function install(name: "localStorage" | "sessionStorage"): void {
 
 if (!usable(g.localStorage)) install("localStorage");
 if (!usable(g.sessionStorage)) install("sessionStorage");
+
+// ResizeObserver polyfill for JSDOM test environment
+if (typeof g.ResizeObserver === "undefined") {
+  g.ResizeObserver = class ResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {
+      // JSDOM polyfill: no-op in test environment
+    }
+    observe(_target: Element): void {
+      // JSDOM polyfill: no-op in test environment
+    }
+    unobserve(_target: Element): void {
+      // JSDOM polyfill: no-op in test environment
+    }
+    disconnect(): void {
+      // JSDOM polyfill: no-op in test environment
+    }
+  } as any;
+}

@@ -1912,7 +1912,7 @@ export class Game {
           this.ghostPassed = true;
           this.save.addGhostBeat();
           const newTrophies = this.achievements.checkNew();
-          for (const t of newTrophies) this.hud.toast(t("hud.toast.trophy", { title: t.title }, `Trophy: ${t.title}`), "gold");
+          for (const trophy of newTrophies) this.hud.toast(t("hud.toast.trophy", { title: trophy.title }, `Trophy: ${trophy.title}`), "gold");
           if (newTrophies.length > 0) this.audio.trophy();
           this.hud.toast(t("toast.ghost.recorded", undefined, "Passed your ghost!"), "quest", "ghost");
           this.audio.ding();

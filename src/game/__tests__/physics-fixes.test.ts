@@ -35,7 +35,7 @@ describe("Fix #1: Float32 floating-origin recentering", () => {
     bird.reset(64, terrain.heightAt(64) + 0.9);
 
     for (let i = 0; i < Math.round(60 / PHYS_DT); i++) {
-      bird.step(PHYS_DT, { diving: policy(bird, terrain, i * PHYS_DT), fever: false, speedMult: 1, boost: false }, terrain);
+      bird.step(PHYS_DT, { diving: policy(bird, terrain), fever: false, speedMult: 1, boost: false }, terrain);
       // Verify all state remains finite (precision hasn't degraded to NaN/Infinity)
       expect(Number.isFinite(bird.x)).toBe(true);
       expect(Number.isFinite(bird.y)).toBe(true);

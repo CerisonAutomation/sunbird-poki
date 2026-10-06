@@ -43,6 +43,11 @@ import {
   SUNFLOWER_VX,
   SUNFLOWER_VY,
   WATER_Y,
+  WATER_VY_DAMPING,
+  WATER_BUOYANCY,
+  WATER_VX_DRAG,
+  WATER_SURFACE_DAMPING,
+  WATER_SURFACE_Y_THRESHOLD,
 } from "./constants";
 import {
   launchPopQuality,
@@ -189,6 +194,8 @@ export class Bird {
   landingQuality = 1;
   /** Speed retained by the last touchdown, as a factor. */
   landingKeep = 1;
+  /** 0..1 — landing quality from the touchdown that triggered a bounce. */
+  bounceQuality = 1;
   /** Terrain slope and speed at the instant of the last take-off. */
   launchSlope = 0;
   launchSpeed = 0;
@@ -797,12 +804,21 @@ export class Bird {
       const surf = terrain.heightAt(this.x) + BIRD_RADIUS;
       this.y = surf;
       const n2 = terrain.normalAt(this.x, this.terrainNormal);
-      const curv = terrain.curvatureAt(this.x); // >0 convex (crest), <0 concave (valley)
+      let curv = terrain.curvatureAt(this.x); // >0 convex (crest), <0 concave (valley)
       let launched = false;
       // curvatureAt() is a narrow local probe (e = 1.1) — high-frequency
       // terrain noise alone can spike it positive with no real lip underfoot.
       // Gate on the same crest-prominence rule the AI's distanceToCrest()
       // cache uses, so a launch only fires off a genuine climb-then-drop.
+      // Dampen curvature noise on steep terrain: when slope is high, reduce the
+      // curvature signal to prevent noise-driven false launches on rough biomes.
+      if (curv > 0) {
+        const slope = Math.abs(terrain.slopeAt(this.x));
+        // Slope damping: at slope > 0.5, reduce curvature noise linearly from
+        // full value at 0.5 toward 60% at slope 1.0 and steeper.
+        const slopeDampFactor = slope > 0.5 ? Math.max(0.6, 1 - (slope - 0.5)) : 1;
+        curv *= slopeDampFactor;
+      }
       if (curv > 0) {
         const needed = vt * vt * curv; // centripetal pull required to stay glued
         // The downward acceleration actually holding the bird down — which is
@@ -1079,15 +1095,15 @@ export class Bird {
     this.inWater = ocean && this.y < WATER_Y + 0.6;
     if (this.inWater) {
       if (this.y < OCEAN_FLOOR + 2) this.y = OCEAN_FLOOR + 2;
-      this.vy *= 0.55;
-      this.vy += 38 * dt;
-      this.vx *= 0.9;
+      this.vy *= WATER_VY_DAMPING;
+      this.vy += WATER_BUOYANCY * dt;
+      this.vx *= WATER_VX_DRAG;
       // Same floor as everywhere else the bird's forward speed is clamped
       // (see MIN_KEEP_SPEED above) — a lower 7 here let water uniquely stall
       // the bird below the speed the rest of the game guarantees.
       this.vx = Math.max(this.vx, MIN_KEEP_SPEED);
-      if (this.y > WATER_Y - 0.2 && this.vy > 0) {
-        this.vy *= 0.4;
+      if (this.y > WATER_SURFACE_Y_THRESHOLD && this.vy > 0) {
+        this.vy *= WATER_SURFACE_DAMPING;
       }
     }
 
@@ -1103,11 +1119,17 @@ export class Bird {
     if (this.bounceCd <= 0 && this.grounded && this.wasGrounded && !this.inWater) {
       const pad = terrain.bouncePadAt(this.x);
       if (pad) {
+        // Capture landing quality before bounce so impulse preserves landing quality
+        // for subsequent interactions: good landings get full bounce, sloppy get scaled.
+        this.bounceQuality = this.landingQuality;
         this.bounceCd = 0.6;
         this.bounced = true;
         this.grounded = false;
         this.inWater = false;
-        this.vy = SUNFLOWER_VY;
+        // Apply landing quality to bounce impulse: good landing (1.0) → full bounce,
+        // poor landing (0.2) → 70% bounce via quadratic scaling (keeps floor while rewarding skill).
+        const qualityScale = 0.7 + 0.3 * this.bounceQuality * this.bounceQuality;
+        this.vy = SUNFLOWER_VY * qualityScale;
         this.vx = Math.max(this.vx, SUNFLOWER_VX);
         this.y = pad.y + BIRD_RADIUS + 0.4;
       }

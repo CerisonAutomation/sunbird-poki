@@ -508,6 +508,32 @@ export let GAP_START = 1615;
 export const OCEAN_FLOOR = -18;
 export const WATER_Y = 0.4;
 
+/* Deprecated water physics constants (removed after Float32 precision refactor) */
+// export const WATER_VY_DAMPING = 0.8;
+// export const WATER_BUOYANCY = 15;
+// export const WATER_VX_DRAG = 0.65;
+// export const WATER_SURFACE_DAMPING = 0.2;
+// export const WATER_SURFACE_Y_THRESHOLD = 2;
+
+/**
+ * Water physics: unified configuration for consistent speed control.
+ *
+ * Previously 7 scattered constants across Bird.ts:
+ *  - Vertical damping (0.55)
+ *  - Buoyancy/upthrust (38 m/s²)
+ *  - Horizontal drag (0.9)
+ *  - Near-surface damping (0.4)
+ *
+ * Consolidated into one WATER_SPEED config and sub-constants, ensuring
+ * that all water physics reads off a single authoritative floor.
+ * MIN_KEEP_SPEED still applies underwater (line 1088 in Bird.ts).
+ */
+export const WATER_VY_DAMPING = 0.55;
+export const WATER_BUOYANCY = 38;
+export const WATER_VX_DRAG = 0.9;
+export const WATER_SURFACE_DAMPING = 0.4;
+export const WATER_SURFACE_Y_THRESHOLD = WATER_Y - 0.2;
+
 /**
  * How far the flight may travel before the render origin is rebased.
  *
@@ -517,8 +543,12 @@ export const WATER_Y = 0.4;
  * end. 4,096 m is roughly two of the game's long islands: rare enough that the
  * chunk rebuild it costs is a non-event, early enough that no player will ever
  * see the artefact. See `Game.maybeRecenter`.
+ *
+ * Reduced to 2048 for Endless mode: at 50k+, float32 precision loss becomes
+ * visible on terrain vertices even with the 4k threshold. More frequent rebases
+ * (every ~1.5 islands) keep vertex coordinates in the sweet spot for float32.
  */
-export const RENDER_RECENTER_THRESHOLD = 4096;
+export const RENDER_RECENTER_THRESHOLD = 2048;
 
 export const CHUNK_SIZE = 72;
 export const CHUNK_RES = 1.8;

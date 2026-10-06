@@ -168,6 +168,8 @@ function snapshotStub(): LooseSnapshot {
 }
 
 function mount(): { hud: HUD; container: HTMLElement } {
+  // Clear previous HUD instances so document.querySelector finds the current one.
+  document.body.innerHTML = "";
   const hud = new HUD(document.body);
   const snap = snapshotStub();
   Object.assign(snap, {

@@ -1030,7 +1030,7 @@ export class Game {
         this.modeId = rival.mode as ModeId;
         this.mode = modeById(this.modeId);
       }
-      this.hud.toast(`${rival.name} challenged you: beat ${rival.distance} m on their hills`, "quest", "swords");
+      this.hud.toast(t("toast.rival.challenge", { name: rival.name, distance: String(rival.distance) }, `${rival.name} challenged you: beat ${rival.distance} m on their hills`), "quest", "swords");
       this.telemetry.track("rival_received", { distance: rival.distance, mode: this.modeId });
     }
 
@@ -1060,7 +1060,7 @@ export class Game {
       }
       if (this.checkoutWaiting && this.screen === "checkout") {
         this.telemetry.track("checkout_return_focus", { sku: this.checkoutSku });
-        this.hud.toast("Welcome back — confirm below if you finished paying", "info");
+        this.hud.toast(t("hud.toast.checkoutReturn", undefined, "Welcome back — confirm below if you finished paying"), "info");
       }
     };
     this.onBlur = () => {
@@ -1101,7 +1101,7 @@ export class Game {
       if (this.konamiBuffer.length > KONAMI.length) this.konamiBuffer.shift();
       if (this.konamiBuffer.join(",") === KONAMI.join(",")) {
         this.konamiBuffer = [];
-        this.hud.toast(`Cheat mode activated — you found the secret!`, "gold", "star");
+        this.hud.toast(t("hud.toast.cheatMode", undefined, "Cheat mode activated — you found the secret!"), "gold", "star");
         this.save.addCoins(500);
         if (this.state === "playing") this.particles.emitConfetti(0, 0);
       }
@@ -1176,10 +1176,10 @@ export class Game {
     const vipGift = this.save.claimVipDaily(this.today);
     window.setTimeout(() => {
       if (this.disposed) return;
-      if (this.save.recoveredFromCorruption) this.hud.toast("Save couldn't be read — kept a backup, starting fresh", "warn");
-      if (streakReward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${streakReward} coins`, "gold");
-      if (streakMilestone) this.hud.toast(`${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold", "fire");
-      if (vipGift > 0) this.hud.toast(`VIP daily gift · +${vipGift} coins`, "vip");
+      if (this.save.recoveredFromCorruption) this.hud.toast(t("hud.toast.saveRecovered", undefined, "Save couldn't be read — kept a backup, starting fresh"), "warn");
+      if (streakReward > 0) this.hud.toast(t("hud.toast.streakDay", { n: this.save.state.streak.days, reward: streakReward }, `Day ${this.save.state.streak.days} streak · +${streakReward} coins`), "gold");
+      if (streakMilestone) this.hud.toast(t("hud.toast.streakMilestone", { days: streakMilestone.days, coins: streakMilestone.coins, trail: streakMilestone.trail ? " + a new trail" : "" }, `${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`), "gold", "fire");
+      if (vipGift > 0) this.hud.toast(t("hud.toast.vipGift", { coins: vipGift }, `VIP daily gift · +${vipGift} coins`), "vip");
     }, 700);
     this.telemetry.track("session_start", {
       gold: this.save.state.gold,
@@ -1262,7 +1262,7 @@ export class Game {
         this.joiningRemoteRoom = true;
         this.pendingRoomInvite = portalInvite;
         this.telemetry.track("portal_invite", { code: portalInvite });
-        this.hud.toast(`Invited to room ${portalInvite}`, "quest", "bird");
+        this.hud.toast(t("hud.toast.roomInvited", { code: portalInvite }, `Invited to room ${portalInvite}`), "quest", "bird");
       }
 
       // Portal identity → pilot name. The portal user's handle is their
@@ -1286,7 +1286,7 @@ export class Game {
       }
       this.bump();
     });
-    if (seasonEnd) this.hud.toast(`Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold", "swords");
+    if (seasonEnd) this.hud.toast(t("hud.toast.seasonEnd", { division: seasonEnd.division, coins: seasonEnd.coins }, `Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`), "gold", "swords");
     // Warm the embedded main-menu leaderboard on boot so it isn't empty on
     // the first frame. EA-05: this is background work — it is queued as idle
     // work so the first interactive frame (and the boot bar's last stage) does
@@ -1467,7 +1467,7 @@ export class Game {
       this.roomCode = code;
       this.setScreen("live");
       this.preseatLobby();
-      this.hud.toast(`Invited to room ${code} — ready up together to race`, "gold", "badge");
+      this.hud.toast(t("hud.toast.roomInvitedReady", { code }, `Invited to room ${code} — ready up together to race`), "gold", "badge");
       this.telemetry.track("room_invite_opened", { room: code });
     }
     // Club chat: light polling only while the Squad screen is on screen, and
@@ -1887,7 +1887,7 @@ export class Game {
         this.save.state.firstFlightDone = true;
         this.save.addCoins(50);
         this.save.persist();
-        this.hud.toast(`First flight complete · +50 coins — the sky is yours`, "gold", "bird");
+        this.hud.toast(t("hud.toast.firstFlight", undefined, "First flight complete · +50 coins — the sky is yours"), "gold", "bird");
         this.particles.emitConfetti(this.bird.x, this.bird.y + 3);
       }
     }
@@ -1898,7 +1898,7 @@ export class Game {
       const rx = this.rivalGhostPlayer.update(this.runTime, dt);
       if (rx !== null && !this.rivalGhostPassed && this.bird.x > rx + 0.5 && this.runTime > 4) {
         this.rivalGhostPassed = true;
-        this.hud.toast(`Passed ${this.rivalGhostName}'s flight!`, "gold", "ghost");
+        this.hud.toast(t("toast.ghost.passed", { name: this.rivalGhostName }, `Passed ${this.rivalGhostName}'s flight!`), "gold", "ghost");
         this.audio.ding();
         this.bonus += 60;
       }
@@ -1912,9 +1912,9 @@ export class Game {
           this.ghostPassed = true;
           this.save.addGhostBeat();
           const newTrophies = this.achievements.checkNew();
-          for (const t of newTrophies) this.hud.toast(`Trophy: ${t.title}`, "gold");
+          for (const t of newTrophies) this.hud.toast(t("hud.toast.trophy", { title: t.title }, `Trophy: ${t.title}`), "gold");
           if (newTrophies.length > 0) this.audio.trophy();
-          this.hud.toast(`Passed your ghost!`, "quest", "ghost");
+          this.hud.toast(t("toast.ghost.recorded", undefined, "Passed your ghost!"), "quest", "ghost");
           this.audio.ding();
           this.bonus += 30;
           this.awardXp(XP_RULES.ghostBeat);
@@ -1934,7 +1934,7 @@ export class Game {
         // message — toasting every thermal doubled the same text on screen.
         if (!this.thermalToasted && this.hintTimer < 40) {
           this.thermalToasted = true;
-          this.hud.toast("Thermal — release to ride it", "power");
+          this.hud.toast(t("hud.toast.thermal", undefined, "Thermal — release to ride it"), "power");
         }
       },
       onGustStart: () => {
@@ -1946,7 +1946,7 @@ export class Game {
         this.particles.emitAsh(x, y);
         this.shake(0.6);
         this.haptic([15, 10, 15, 10, 30]);
-        this.hud.toast("Ash cloud!", "warn");
+        this.hud.toast(t("hud.toast.ashCloud", undefined, "Ash cloud!"), "warn");
         this.perfectChain = 0;
       },
     });

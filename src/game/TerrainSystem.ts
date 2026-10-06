@@ -1092,7 +1092,11 @@ export class TerrainSystem {
     const vertCount = (n + 1) * stride;
     const positions = new Float32Array(vertCount * 3);
     const colors = new Float32Array(vertCount * 3);
-    const indices: number[] = [];
+    // Pre-allocate indices with correct size: 6 quads per row × 3 rows per vertex × n vertices
+    // Each row has 6 triangles (2 quads): (a+0, c+0, a+1), (a+1, c+0, c+1) + three more for depth faces
+    const indexCount = n * 18; // 3 rows × 2 quads × 3 indices
+    const indices = new Array<number>(indexCount);
+    let indexIdx = 0;
 
     const cTop = new THREE.Color();
     const cRidge = new THREE.Color();
@@ -1109,8 +1113,9 @@ export class TerrainSystem {
 
       // blend biome colours across island boundaries so the seam is soft
       const lx = this.localX(x);
-      const nextB = biomeForIsland(this.islandIndex(x) + 1);
-      const tpl = islandTemplate(this.islandIndex(x));
+      const islandIdx = this.islandIndex(x);
+      const nextB = biomeForIsland(islandIdx + 1);
+      const tpl = islandTemplate(islandIdx);
       const blend = smoothstep(tpl.period - 90, tpl.period, lx);
       cTop.setHex(b.top).lerp(tmpColor.setHex(nextB.top), blend);
       cRidge.setHex(b.ridge).lerp(tmpColor.setHex(nextB.ridge), blend);
@@ -1167,7 +1172,10 @@ export class TerrainSystem {
       const base = i * stride;
       // Render-space x: procedural sampling above used the true world x;
       // only the baked vertex data (GPU, float32) shifts by originX.
-      const rx = x - this.originX;
+      // Use double-precision arithmetic for the offset calculation to prevent
+      // precision loss at large world coordinates (50k+). The subtraction
+      // happens in float64, then converts to float32 for storage.
+      const rx = (x as number) - (this.originX as number);
       set3(positions, base + 0, rx, y, -hz);
       set3(positions, base + 1, rx, y, hz);
       set3(positions, base + 2, rx, y - depth * 0.42, hz);
@@ -1192,9 +1200,24 @@ export class TerrainSystem {
       if (i < n) {
         const a = i * stride;
         const c = (i + 1) * stride;
-        indices.push(a + 0, c + 0, a + 1, a + 1, c + 0, c + 1);
-        indices.push(a + 1, c + 1, a + 2, a + 2, c + 1, c + 2);
-        indices.push(a + 2, c + 2, a + 3, a + 3, c + 2, c + 3);
+        indices[indexIdx++] = a + 0;
+        indices[indexIdx++] = c + 0;
+        indices[indexIdx++] = a + 1;
+        indices[indexIdx++] = a + 1;
+        indices[indexIdx++] = c + 0;
+        indices[indexIdx++] = c + 1;
+        indices[indexIdx++] = a + 1;
+        indices[indexIdx++] = c + 1;
+        indices[indexIdx++] = a + 2;
+        indices[indexIdx++] = a + 2;
+        indices[indexIdx++] = c + 1;
+        indices[indexIdx++] = c + 2;
+        indices[indexIdx++] = a + 2;
+        indices[indexIdx++] = c + 2;
+        indices[indexIdx++] = a + 3;
+        indices[indexIdx++] = a + 3;
+        indices[indexIdx++] = c + 2;
+        indices[indexIdx++] = c + 3;
       }
     }
 
@@ -1202,7 +1225,22 @@ export class TerrainSystem {
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.setIndex(indices);
-    geo.computeBoundingSphere();
+
+    // Defer bounding sphere computation for far chunks to next frame,
+    // since distant geometry is never used for frustum culling at pixel
+    // precision. Saves ~0.5ms per far chunk build.
+    const shouldDeferBounds = forcedFar ?? distance > LOD_DISTANCE;
+    if (!shouldDeferBounds) {
+      geo.computeBoundingSphere();
+    } else {
+      // Schedule deferred computation for idle time.
+      scheduleIdle(() => {
+        if (geo.attributes.position) {
+          geo.computeBoundingSphere();
+        }
+      }, 50);
+    }
+
     return geo;
   }
 

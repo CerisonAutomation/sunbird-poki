@@ -103,9 +103,9 @@ export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
   return `
     ${head(SCREEN.nestPass, "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
     <div class="pass-progress"><i style="width:${pct}%"></i></div>
-    <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks the premium track." : " Fly to unlock rewards."}</p>
-    ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>${t("hud.renderPass.DTierRewardsGold", undefined, "Double the tier rewards with Gold")}</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
-    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — the free Nest Pass track is fully earnable. Gold is a one-time purchase with flight coins.</p>` : ""}
+    <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks premium rewards." : " Fly to unlock rewards."}</p>
+    ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>${t("hud.renderPass.DTierRewardsGold", undefined, "Get exclusive skins: Owl (Lv.10), Ember (Lv.20), Raven (Lv.50) & Prism trail")}</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
+    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — the free Nest Pass track is fully earnable with coins. Premium track is optional (Gold owners see both rewards per tier).</p>` : ""}
     <div class="tier-track">
       ${s.season.tiers
         .map((t) => {
@@ -124,8 +124,8 @@ export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
           // so a comment containing it would re-inject the exact junk it documents.
           return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
             <div class="tier-num">Lv.${t.tier}</div>
-            <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui ${canFree ? 'data-action="claim-pass-free"' : ""} data-id="${t.tier}" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
-            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui ${canPremium ? 'data-action="claim-pass-premium"' : ""} data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : ""} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
+            <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui ${canFree ? 'data-action="claim-pass-free"' : ""} data-id="${t.tier}" title="Free tier — claim for everyone" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
+            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui ${canPremium ? 'data-action="claim-pass-premium"' : ""} data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : `title="Premium tier — Gold only"`} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
           </div>`;
         })
         .join("")}

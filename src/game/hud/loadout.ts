@@ -149,8 +149,8 @@ function boostRow(v: BoostView, room: number, coins: number): string {
         aria-label="${t("hud.loadout.AddOne", undefined, "Stage one more")} ${label}">+</button>
       <button class="mini-btn step" data-ui data-action="loadout-boost-drop" data-id="${d.id}" ${canDrop ? "" : "disabled"}
         aria-label="${t("hud.loadout.DropOne", undefined, "Unstage one")} ${label}">−</button>
-      <button class="mini-btn buy" data-ui data-action="buy-boost" data-id="${d.id}" ${v.affordable ? "" : "disabled"}
-        ${v.dealPrice !== undefined ? "" : ""}>● ${price}</button>
+      <button class="mini-btn buy${v.dealPrice !== undefined ? " pf-deal-btn" : ""}" data-ui data-action="buy-boost" data-id="${d.id}" ${v.affordable ? "" : "disabled"}>
+        ${v.dealPrice !== undefined ? `<s>●${d.price}</s> ` : ""}● ${price}</button>
     </span>
   </div>`;
 }
@@ -176,6 +176,11 @@ export function renderLoadout(
   return `
     ${head(SCREEN.loadout, "back", `<span class="pill coin">● ${s.wallet}</span>`)}
 
+    <button class="primary-btn pf-fly-cta" data-ui data-action="pvp-practice">
+      ${menuIcon("flight")} ${t("hud.loadout.FlyNow", undefined, "Fly now")}
+      ${staged > 0 ? `<span class="pf-fly-badge">${staged} ${t("hud.loadout.BoostersBadge", undefined, "boosters")}</span>` : ""}
+    </button>
+
     <section class="pf-summary" role="status">
       <div class="ls-row">
         <div class="ls-item">
@@ -187,10 +192,10 @@ export function renderLoadout(
           <span>${escapeHtml(loadout.trail)}</span>
         </div>
       </div>
-      <div class="pf-meter" role="img" aria-label="${t("hud.loadout.MeterLabel", undefined, "Boost slots used")} ${staged} / ${LOADOUT_MAX_BOOSTS}">
+      <div class="pf-meter${slotsFull ? " pf-meter--full" : ""}" role="img" aria-label="${t("hud.loadout.MeterLabel", undefined, "Boost slots used")} ${staged} / ${LOADOUT_MAX_BOOSTS}">
         ${Array.from({ length: LOADOUT_MAX_BOOSTS }, (_, i) => `<i class="${i < staged ? "pf-on" : ""}"></i>`).join("")}
       </div>
-      <p class="pf-meter-label">${staged} / ${LOADOUT_MAX_BOOSTS} ${t("hud.loadout.Slots", undefined, "boost slots used")}</p>
+      <p class="pf-meter-label${slotsFull ? " pf-meter-label--full" : ""}">${slotsFull ? `<b>${t("hud.loadout.SlotsFull", undefined, "Loadout full!")}</b>` : `${staged} / ${LOADOUT_MAX_BOOSTS} ${t("hud.loadout.Slots", undefined, "boost slots used")}`}</p>
       <p class="fineprint">${t("hud.loadout.Note", undefined, "Boosters you own sit in the store until you stage them. Staged boosters are spent when you fly.")}</p>
     </section>
 

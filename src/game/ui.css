@@ -5904,6 +5904,34 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   --lo-slot: rgba(176, 106, 16, 0.18);
 }
 
+/* Fly Now CTA at the top of the loadout — primary entry point so the player
+   can configure and immediately launch without going back to the main menu. */
+.pf-fly-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  position: relative;
+}
+.pf-fly-cta svg { width: 22px; height: 22px; flex-shrink: 0; }
+.pf-fly-badge {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.25);
+  border-radius: 99px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
 .pf-summary {
   padding: 12px 14px;
   margin-bottom: 12px;
@@ -5942,7 +5970,17 @@ h1, h2, h3, h4, h5, h6, .heading-art {
    reads as "already used" is how a loadout ends up looking full when it is
    not. */
 .pf-meter i.pf-on { background: linear-gradient(90deg, var(--coral), var(--gold)); }
+.pf-meter.pf-meter--full i.pf-on { background: var(--coral); }
 .pf-meter-label { margin: 0 0 4px; font-size: 12px; color: var(--lo-label); }
+.pf-meter-label--full { color: var(--coral); font-weight: 700; }
+
+/* Discounted booster buy button — strikethrough original price in muted text */
+.pf-actions .pf-deal-btn s {
+  font-size: 10px;
+  color: rgba(255,255,255,0.55);
+  text-decoration: line-through;
+  margin-right: 1px;
+}
 
 .pf-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .pf-row {

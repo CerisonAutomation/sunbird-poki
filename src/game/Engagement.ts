@@ -273,7 +273,7 @@ export function evaluateNearMiss(
 ): NearMiss {
   if (bestDistance > 100 && distance < bestDistance) {
     const gap = bestDistance - distance;
-    if (gap / bestDistance <= 0.12) return { kind: "distance", gap, text: `${Math.ceil(gap)} m short of your best!` };
+    if (gap / bestDistance <= 0.20) return { kind: "distance", gap, text: `${Math.ceil(gap)} m short of your best!` };
   }
   if (bestAltitude > 40 && altitude < bestAltitude) {
     const gap = bestAltitude - altitude;

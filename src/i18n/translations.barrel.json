@@ -28284,6 +28284,54 @@
         "uk": "Ash cloud!",
         "uz": "Ash cloud!"
       }
+    },
+    "hud.results.streakKeep": {
+      "sourceText": "{days}-day streak — fly again tomorrow to keep it!",
+      "meta": {
+        "file": "src/game/hud/run.ts",
+        "context": "Results card retention hook: encourages player to return next session to maintain their daily streak"
+      },
+      "placeholders": [
+        "days"
+      ],
+      "translations": {
+        "en": "{days}-day streak — fly again tomorrow to keep it!",
+        "es": "{days}-day streak — fly again tomorrow to keep it!",
+        "de": "{days}-day streak — fly again tomorrow to keep it!",
+        "fr": "{days}-day streak — fly again tomorrow to keep it!",
+        "it": "{days}-day streak — fly again tomorrow to keep it!",
+        "pt": "{days}-day streak — fly again tomorrow to keep it!",
+        "ar": "{days}-day streak — fly again tomorrow to keep it!",
+        "zh": "{days}-day streak — fly again tomorrow to keep it!",
+        "ja": "{days}-day streak — fly again tomorrow to keep it!",
+        "mt": "{days}-day streak — fly again tomorrow to keep it!",
+        "tr": "{days}-day streak — fly again tomorrow to keep it!",
+        "ru": "{days}-day streak — fly again tomorrow to keep it!",
+        "ko": "{days}-day streak — fly again tomorrow to keep it!",
+        "nl": "{days}-day streak — fly again tomorrow to keep it!",
+        "pl": "{days}-day streak — fly again tomorrow to keep it!",
+        "hi": "{days}-day streak — fly again tomorrow to keep it!",
+        "id": "{days}-day streak — fly again tomorrow to keep it!",
+        "vi": "{days}-day streak — fly again tomorrow to keep it!",
+        "th": "{days}-day streak — fly again tomorrow to keep it!",
+        "sv": "{days}-day streak — fly again tomorrow to keep it!",
+        "bg": "{days}-day streak — fly again tomorrow to keep it!",
+        "bn": "{days}-day streak — fly again tomorrow to keep it!",
+        "cs": "{days}-day streak — fly again tomorrow to keep it!",
+        "da": "{days}-day streak — fly again tomorrow to keep it!",
+        "el": "{days}-day streak — fly again tomorrow to keep it!",
+        "fi": "{days}-day streak — fly again tomorrow to keep it!",
+        "he": "{days}-day streak — fly again tomorrow to keep it!",
+        "hu": "{days}-day streak — fly again tomorrow to keep it!",
+        "ms": "{days}-day streak — fly again tomorrow to keep it!",
+        "no": "{days}-day streak — fly again tomorrow to keep it!",
+        "ro": "{days}-day streak — fly again tomorrow to keep it!",
+        "sk": "{days}-day streak — fly again tomorrow to keep it!",
+        "sr": "{days}-day streak — fly again tomorrow to keep it!",
+        "tl": "{days}-day streak — fly again tomorrow to keep it!",
+        "uk": "{days}-day streak — fly again tomorrow to keep it!",
+        "uz": "{days}-day streak — fly again tomorrow to keep it!"
+      }
     }
   }
 }

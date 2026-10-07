@@ -323,8 +323,7 @@
 .hud-root .back-btn .chrome-glyph {
   width: 22px;
   height: 22px;
-  /* A chevron's optical centre is right of its bounding box centre. */
-  margin-right: 0.12em;
+  margin: 0;
 }
 .hud-root .mini-btn.ghost .chrome-glyph {
   width: 15px;

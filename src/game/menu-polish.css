@@ -298,6 +298,24 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .quick-rail-art svg { width: 100%; height: 100%; display: block; }
 .quick-rail-copy { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Quick rail tiles — color-coded by action so the player can locate each at a glance */
+.home-quick-rail .quick-action[data-action="open-live"] {
+  background: linear-gradient(145deg, #e4eeff, #ccdcff);
+  border-color: #88b0e8; box-shadow: 0 3px 0 rgba(55,95,210,.13);
+}
+.home-quick-rail .quick-action[data-action="open-practice"] {
+  background: linear-gradient(145deg, #fff2e4, #ffe2c8);
+  border-color: #dfa070; box-shadow: 0 3px 0 rgba(190,110,25,.12);
+}
+.home-quick-rail .quick-action[data-action="open-shop"] {
+  background: linear-gradient(145deg, #fff3c0, #ffe898);
+  border-color: #d4a830; box-shadow: 0 3px 0 rgba(175,120,20,.14);
+}
+.home-quick-rail .quick-action[data-action="open-settings"] {
+  background: linear-gradient(145deg, #f4f0ec, #ede8e0);
+  border-color: #c8bfb0; box-shadow: 0 2px 0 rgba(42,28,40,.07);
+}
+
 /* Narrowest shipped phone: stack the icon over the label rather than
    truncating the only word the player reads. */
 @media (max-width: 359px) {
@@ -383,23 +401,53 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
    both figure inks are the four home-sheet tokens, not local copies — this
    rule used to paste all four in by hand, which is why they are tokens. */
 .home-status-bar {
-  position: sticky; top: 0; z-index: 6;
-  display: flex; align-items: center; gap: 10px;
-  flex-wrap: nowrap; justify-content: flex-start;
-  /* Right padding clears the absolutely-positioned mute button (44px) that
-     shares the top row, so the Pass chip can never slide under it. */
-  margin: 0 -18px 10px; padding: 10px 62px 9px 18px;
-  background: linear-gradient(180deg, var(--paper-wash) 78%, rgba(255, 250, 241, 0.9));
-  border-bottom: 1px solid var(--rule-warm);
-  font-size: 12px; color: var(--muted-rose); text-align: left;
+  position: sticky; bottom: 0; z-index: 6;
+  display: flex; align-items: stretch;
+  flex-wrap: nowrap; gap: 0;
+  margin: 0 -18px;
+  padding: 6px 8px max(12px, env(safe-area-inset-bottom, 12px));
+  background: rgba(255, 250, 241, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1.5px solid var(--rule-warm);
+  box-shadow: 0 -8px 24px rgba(42, 28, 40, 0.09);
 }
-.home-status-bar .record-wallet { margin-left: 0; font: 600 16px var(--display); color: var(--ink-coin); }
-.home-status-bar .record-wallet small { font: 500 10px var(--body); }
-.home-status-bar .record-pass { margin-left: auto; flex-shrink: 0; }
-.home-status-bar .record-best { display: flex; align-items: center; gap: 4px; }
-.home-status-bar .record-best b { font: 600 14px var(--display); color: var(--ink-best); }
-.home-status-bar .record-art { flex: 0 0 auto; width: 18px; height: 18px; }
-@media (max-width: 380px) { .home-status-bar .record-best small, .home-status-bar .record-best span:not(.record-art) { font-size: 11px; } .home-status-bar { gap: 7px; } }
+/* Stat button cells — vertical stack: icon → value → label */
+.sb-stat {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px; border-radius: 12px;
+  background: transparent; border: none; cursor: pointer;
+  font-family: inherit; position: relative; overflow: hidden;
+  text-align: center;
+  transition: background 0.12s;
+}
+.sb-stat:active, .sb-stat:focus-visible { background: rgba(42, 28, 40, 0.06); outline: none; }
+/* Icon wrapper */
+.sb-icon { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.sb-icon svg { width: 18px; height: 18px; }
+/* Value */
+.sb-stat b { font: 700 14px/1 var(--display); color: var(--ink); white-space: nowrap; }
+.sb-coins b { color: var(--ink-coin); }
+.sb-best b { color: var(--ink-best); }
+/* Label */
+.sb-stat small { font: 600 8px/1 var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-rose); opacity: .7; white-space: nowrap; }
+/* Nest Pass progress sliver along the bottom edge of its button */
+.sb-prog {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 2.5px;
+  background: linear-gradient(90deg, #9b6dc5 0%, #c07de0 var(--pct, 0%), rgba(155, 109, 197, .12) var(--pct, 0%));
+  border-radius: 0 0 12px 12px;
+}
+/* Coin — gold on cream: drop-shadow makes it read against the paper-wash background */
+.sb-coins .sb-icon .icon-sm { filter: drop-shadow(0 1px 2px rgba(160, 100, 0, 0.32)); }
+/* Vertical divider between stats */
+.sb-divider { width: 1px; margin: 8px 2px; background: var(--rule-warm); flex-shrink: 0; align-self: stretch; }
+@media (max-width: 380px) {
+  .sb-stat { gap: 6px; padding: 8px 6px; }
+  .sb-icon { width: 18px; height: 18px; }
+  .sb-icon svg { width: 18px; height: 18px; }
+  .sb-body b { font-size: 14px; }
+}
 .onboarding-route { margin: 0 0 14px; padding: 12px; border: 1px solid #e1bd67; border-radius: 16px; background: linear-gradient(145deg,#fff7d6,#fffdf4); text-align: left; box-shadow: 0 4px 0 rgba(180,130,30,.12); }
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
 .onboarding-route-head span { font:800 10px/1 var(--body); letter-spacing:.14em; }

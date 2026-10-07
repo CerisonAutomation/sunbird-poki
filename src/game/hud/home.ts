@@ -237,13 +237,6 @@ export function renderMain(s: HudSnapshot): string {
   const equippedSkin = s.skins.find((v) => v.equipped)?.def ?? s.skins[0]?.def;
   const progressDestinations = PROGRESS_DESTINATIONS;
   return `
-    ${/* The pilot's status line — wallet, best, pass — pinned to the TOP of
-         the sheet (2026-10-04 directive: "move text to top"). It used to be
-         the last row of a 2,600px page, 1,400px below the fold: the coin
-         balance, the number every shop decision needs, was the single least
-         visible element on the screen. Sticky, so it stays while the menu
-         scrolls. */ ""}
-    <div class="home-record home-status-bar" role="status"><span class="record-wallet">● ${formatNumberLocalized(s.wallet)} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span><button class="record-pass" data-ui data-action="open-pass">${t("hud.menu.nestPass", undefined, "Nest Pass")} Lv.${s.season.tier}/${s.season.maxTier}</button><span class="record-best"><span class="record-art">${menuIcon("medal")}</span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span></div>
     <button
       class="icon-btn menu-mute"
       data-ui
@@ -270,9 +263,9 @@ export function renderMain(s: HudSnapshot): string {
 
     <div class="home-launch-row">
       <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="${t("onboarding.flyNow", undefined, "Fly now")}"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>${t("onboarding.flyNow", undefined, "Fly now")}</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
-      <button class="destination loadout-quick" data-ui data-action="open-loadout" aria-label="${t("hud.loadoutQuick.aria", undefined, "Loadout — change your bird, trail and boosters before you fly")}">
+      <button class="destination loadout-quick" data-ui data-action="open-loadout" aria-label="${t("hud.loadoutQuick.aria", undefined, "Customise — change your bird, trail and boosters before you fly")}">
         <span class="lq-art" aria-hidden="true">${equippedSkin ? sunbirdSVG({ palette: skinPalette(equippedSkin), shape: skinShape(equippedSkin), width: 44, title: "" }) : menuIcon("bird")}</span>
-        <span class="lq-copy"><small>${t("hud.loadoutQuick.title", undefined, "LOADOUT")}</small><b>${escapeHtml(s.loadout.bird)}</b><span>${escapeHtml(s.loadout.trail)}${s.loadout.boosts > 0 ? ` · ${s.loadout.boosts} ⚡` : ""}</span></span>
+        <span class="lq-copy"><small>${t("hud.loadoutQuick.title", undefined, "CUSTOMISE")}</small><b>${escapeHtml(s.loadout.bird)}</b><span>${escapeHtml(s.loadout.trail)}${s.loadout.boosts > 0 ? ` · ${s.loadout.boosts} ⚡` : ""}</span></span>
         <span class="lq-go" aria-hidden="true">${menuIconSm("wind")}</span>
       </button>
     </div>
@@ -290,5 +283,25 @@ export function renderMain(s: HudSnapshot): string {
     ${homeBoardStrip(s)}
     <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="${t("hud.aria.progress", undefined, "Progress")}">${menuLinks(progressDestinations)}</nav>
+    <div class="home-record home-status-bar" role="status">
+      <button class="sb-stat sb-coins" data-ui data-action="open-paywall" aria-label="${t("hud.menu.coinBalance", undefined, "coins")}: ${formatNumberLocalized(s.wallet)}">
+        <span class="sb-icon" aria-hidden="true">${menuIconSm("coin")}</span>
+        <b>${formatNumberLocalized(s.wallet)}</b>
+        <small>coins</small>
+      </button>
+      <span class="sb-divider" aria-hidden="true"></span>
+      <button class="sb-stat sb-pass" data-ui data-action="open-pass" aria-label="${t("hud.menu.nestPass", undefined, "Nest Pass")} level ${s.season.tier}">
+        <span class="sb-icon" aria-hidden="true">${menuIcon("pass")}</span>
+        <b>Lv.${s.season.tier}</b>
+        <small>nest pass</small>
+        <span class="sb-prog" style="--pct:${Math.round(s.season.tier / Math.max(1, s.season.maxTier) * 100)}%" aria-hidden="true"></span>
+      </button>
+      <span class="sb-divider" aria-hidden="true"></span>
+      <button class="sb-stat sb-best" data-ui data-action="open-progress" aria-label="${t("hud.menu.personalBest", undefined, "Personal best")}: ${distanceText(s.bestDistance)}">
+        <span class="sb-icon" aria-hidden="true">${menuIconSm("medal")}</span>
+        <b>${distanceText(s.bestDistance)}</b>
+        <small>best flight</small>
+      </button>
+    </div>
   `;
 }

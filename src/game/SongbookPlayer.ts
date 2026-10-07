@@ -51,6 +51,7 @@ export class SongbookPlayer {
   private readonly bus: GainNode;
   private readonly filter: BiquadFilterNode;
   private readonly duck: GainNode;
+  private readonly comp: DynamicsCompressorNode;
   /** Shimmer send: the per-song delay throw, plus a little room. */
   private readonly fxSend: GainNode;
   private readonly delay: DelayNode;
@@ -104,13 +105,24 @@ export class SongbookPlayer {
     this.filter.frequency.value = 6000;
     this.filter.Q.value = 0.6;
 
+    // A gentle limiter on the music bus: multi-voice tutti passages (pad +
+    // rhodes + chip + voice + drums all at once) would sum loud enough to clip
+    // on the master. Threshold at -10 dBFS, ratio 3:1, 5ms attack/80ms release
+    // keeps the dynamics alive while shaving the harsh peaks.
+    this.comp = ctx.createDynamicsCompressor();
+    this.comp.threshold.value = -10;
+    this.comp.ratio.value = 3;
+    this.comp.attack.value = 0.005;
+    this.comp.release.value = 0.08;
+
     this.bus.connect(this.filter);
     this.filter.connect(this.duck);
+    this.duck.connect(this.comp);
     // Straight into the game's master, with no shared room: the songs carry
     // their own delay throw, and adding the hall on top was audible as a tail the
     // originals do not have.
     void reverbSend;
-    this.duck.connect(destination);
+    this.comp.connect(destination);
 
     this.fxSend = ctx.createGain();
     this.delay = ctx.createDelay(1.5);
@@ -535,6 +547,21 @@ export class SongbookPlayer {
     fl.connect(g);
     g.connect(this.bus);
     g.connect(this.fxSend);
+    // Vibrato: a 5.5 Hz LFO, depth ±0.45% of the base frequency, delayed by
+    // the note's attack+onset so it kicks in after the tone is established.
+    // Without this, sustained notes are perfectly static — a real whistle or
+    // voice always wavers slightly, and the LFO is what makes it feel sung.
+    const lfo = this.ctx.createOscillator();
+    const lfoG = this.ctx.createGain();
+    lfo.type = "sine";
+    lfo.frequency.value = 5.5;
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.linearRampToValueAtTime(f * 0.0045, t + 0.12);
+    lfo.connect(lfoG);
+    lfoG.connect(o.frequency);
+    lfoG.connect(o2.frequency);
+    lfo.start(t);
+    lfo.stop(t + dur + 0.08);
     this.env(g, t, 0.04, dur * 0.3, 0.5, dur * 0.7, peak);
     o.start(t);
     o2.start(t);
@@ -564,7 +591,11 @@ export class SongbookPlayer {
     const g = this.ctx.createGain();
     const fl = this.ctx.createBiquadFilter();
     o.type = "square";
-    o.frequency.setValueAtTime(f, t);
+    // Brief upward pitch sweep on attack: the note starts a minor third above its
+    // target and bends down in 18ms, giving a chiptune "spring" that distinguishes
+    // note starts from held tones at tempo. Without it, fast passages blur together.
+    o.frequency.setValueAtTime(f * 1.19, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.018);
     fl.type = "lowpass";
     fl.frequency.setValueAtTime(1400, t);
     o.connect(fl);
@@ -630,7 +661,11 @@ export class SongbookPlayer {
       const g = this.ctx.createGain();
       const fl = this.ctx.createBiquadFilter();
       o.type = i % 2 ? "triangle" : "sine";
-      o.frequency.setValueAtTime(f, t);
+      // Slight random detune per voice (±9 cents max): chord tones that are
+      // perfectly in tune sum as a single static tone. A few cents apart gives
+      // each voice its own beating rate so the chord blooms and breathes.
+      const detune = (Math.random() - 0.5) * 18;
+      o.frequency.setValueAtTime(f * Math.pow(2, detune / 1200), t);
       fl.type = "lowpass";
       fl.frequency.setValueAtTime(900, t);
       o.connect(fl);
@@ -732,6 +767,7 @@ export class SongbookPlayer {
       this.fxSend.disconnect();
       this.filter.disconnect();
       this.duck.disconnect();
+      this.comp.disconnect();
       this.bus.disconnect();
     } catch {
       /* already torn down */

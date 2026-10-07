@@ -54,7 +54,7 @@ export const SCREEN_HEADINGS: Readonly<Record<keyof typeof SCREEN, string>> = {
   nestPass: "Nest Pass",
   trophyCase: "Trophy Case",
   account: "Account",
-  loadout: "Loadout",
+  loadout: "Customise",
 };
 
 /**

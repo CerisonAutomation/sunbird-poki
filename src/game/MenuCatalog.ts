@@ -84,7 +84,7 @@ export const PLAY_DESTINATIONS: MenuDestination[] = [
   // boosters — all on one page. It lives here rather than in the four-tile
   // quick rail because that rail is a deliberate 2x2 block; a fifth tile
   // would strand an orphan in a third row.
-  dest("loadout", "open-loadout", "trail", "Loadout", "Bird, trail & boosters",),
+  dest("loadout", "open-loadout", "trail", "Customise", "Bird, trail & boosters",),
   dest("challenges", "open-challenges", "challenge", "Challenges", "Daily & weekly goals, auto-matched",),
   dest("gameModes", "mode-select", "compass", "Circuits & Daily", "Long Light · Time Trial · Skyline · Coin Rush",),
   dest("endless", "start-endless", "endless", "Endless", "No clock · growing challenge",),

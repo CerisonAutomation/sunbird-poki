@@ -296,7 +296,9 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
    taller than the "Fly now" CTA it is supposed to sit under. */
 .quick-rail-art { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; }
 .quick-rail-art svg { width: 100%; height: 100%; display: block; }
-.quick-rail-copy { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-rail-copy { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; }
+.quick-rail-copy b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-rail-copy small { display: block; font-size: 9px; font-weight: 500; letter-spacing: .04em; opacity: .72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 
 /* Quick rail tiles — color-coded by action so the player can locate each at a glance */
 .home-quick-rail .quick-action[data-action="open-live"] {
@@ -321,7 +323,7 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 @media (max-width: 359px) {
   .home-quick-rail { gap: 6px; }
   .quick-rail-btn { justify-items: center; text-align: center; }
-  .quick-rail-copy { white-space: normal; overflow: visible; }
+  .quick-rail-copy b, .quick-rail-copy small { white-space: normal; overflow: visible; text-overflow: clip; }
 }
 
 /* Landscape phones have almost no vertical room; the rail sits directly under

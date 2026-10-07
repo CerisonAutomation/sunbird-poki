@@ -15,7 +15,7 @@
  * `ShopTrailView` and emits `data-action`s; the handlers live in Game.ts.
  */
 
-import { t } from "../../i18n";
+import { formatNumberLocalized, t } from "../../i18n";
 import { menuIcon, menuIconSm } from "../MenuIcons";
 import { skinPalette, skinShape, sunbirdSVG } from "../Sunbird";
 import { SCREEN, escapeHtml, head, sectionTitle } from "./kit";
@@ -174,7 +174,7 @@ export function renderLoadout(
   const unownedTrails = s.shopTrails.filter((v) => !v.owned).slice(0, 4);
 
   return `
-    ${head(SCREEN.loadout, "back", `<span class="pill coin">● ${s.wallet}</span>`)}
+    ${head(SCREEN.loadout, "back", `<span class="pill coin">● ${formatNumberLocalized(s.wallet)}</span>`)}
 
     <button class="primary-btn pf-fly-cta" data-ui data-action="pvp-practice">
       ${menuIcon("flight")} ${t("hud.loadout.FlyNow", undefined, "Fly now")}

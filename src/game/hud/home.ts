@@ -154,7 +154,7 @@ function renderOnboardingRoute(s: HudSnapshot): string {
       done: s.runsPlayed >= 1,
     },
     {
-      n: "02", action: "open-loadout", go: t("onboarding.step2Action", undefined, "Loadout ›"),
+      n: "02", action: "open-loadout", go: t("onboarding.step2Action", undefined, "Customise ›"),
       title: t("onboarding.step2Title", undefined, "Choose your bird"),
       sub: t("onboarding.step2Sub", undefined, "Birds, trails and boosts for your next flight"),
       // `seenLoadout`, not `seenShop` and not `wallet > 0`. The wallet is a live
@@ -222,7 +222,7 @@ function renderOnboardingRoute(s: HudSnapshot): string {
 function renderQuickRail(): string {
   return `<nav class="home-quick-rail" aria-label="${escapeHtml(t("hud.quickRail.label", undefined, "Quick actions"))}">${QUICK_ACTIONS.map(
     (item) =>
-      `<button class="quick-action quick-rail-btn" data-ui data-action="${item.action}" data-icon="${item.icon}" aria-label="${escapeHtml(item.title)} — ${escapeHtml(item.detail)}"><span class="quick-rail-art" aria-hidden="true">${menuIcon(item.icon)}</span><span class="quick-rail-copy"><b>${escapeHtml(item.title)}</b></span></button>`,
+      `<button class="quick-action quick-rail-btn" data-ui data-action="${item.action}" data-icon="${item.icon}" aria-label="${escapeHtml(item.title)} — ${escapeHtml(item.detail)}"><span class="quick-rail-art" aria-hidden="true">${menuIcon(item.icon)}</span><span class="quick-rail-copy"><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.detail)}</small></span></button>`,
   ).join("")}</nav>`;
 }
 
@@ -257,7 +257,7 @@ export function renderMain(s: HudSnapshot): string {
         <span class="hero-kicker">chase the daylight</span>
         <h1>SUNBIRD</h1>
         <p class="hero-sub">${t("hud.heroSub", undefined, "Hold to dive. Release to soar.")}<br>${t("hud.heroSub2", undefined, "Master the glide across endless islands.")}</p>
-        ${s.streakDays >= 2 ? `<div class="hero-meta"><span class="pill streak-pill">${menuIconSm("sun")} ${s.streakDays}-day streak — one flight keeps it alive</span></div>` : ""}
+        ${s.streakDays >= 2 ? `<div class="hero-meta"><span class="pill streak-pill">${menuIconSm("sun")} ${s.streakDays}-day streak${s.streakDays >= 7 ? " · on fire!" : " · fly to extend"}</span></div>` : ""}
       </div>
     </header>
 
@@ -291,7 +291,7 @@ export function renderMain(s: HudSnapshot): string {
       </button>
       <span class="sb-divider" aria-hidden="true"></span>
       <button class="sb-stat sb-pass" data-ui data-action="open-pass" aria-label="${t("hud.menu.nestPass", undefined, "Nest Pass")} level ${s.season.tier}">
-        <span class="sb-icon" aria-hidden="true">${menuIcon("pass")}</span>
+        <span class="sb-icon" aria-hidden="true">${menuIconSm("crown")}</span>
         <b>Lv.${s.season.tier}</b>
         <small>nest pass</small>
         <span class="sb-prog" style="--pct:${Math.round(s.season.tier / Math.max(1, s.season.maxTier) * 100)}%" aria-hidden="true"></span>

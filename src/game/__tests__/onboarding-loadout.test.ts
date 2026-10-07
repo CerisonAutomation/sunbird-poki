@@ -59,13 +59,13 @@ describe("onboarding step 02 routes to the Loadout", () => {
     done.hud.dispose();
   });
 
-  it("its button label reads Loadout, not Shop", async () => {
+  it("its button label reads Customise, not Shop", async () => {
     const m = await mountHud({ state: "menu", settings: { reduceMotion: false, dismissedOnboarding: false }, firstSteps: firstSteps() });
     hud = m.hud as never;
     const label = stepTwo(m.root).querySelector("i")?.textContent ?? "";
     // The `go` affordance is the "where does this go" cue. If it still said
     // "Shop ›" the button and the target would disagree on screen.
-    expect(label).toMatch(/loadout/i);
+    expect(label).toMatch(/customis/i);
     expect(label).not.toMatch(/shop/i);
   });
 

@@ -26,9 +26,13 @@ export class FirstFlight {
   private step = 0;
   private diveHeld = 0;
   private airTime = 0;
+  private totalTime = 0;
   private celebration = 0;
   private completed = false;
   private active: boolean;
+  /** Ignore input for the first 0.1 s so the "Fly now" button-press cannot
+   *  carry through and fill diveHeld before the bird is in play. */
+  private startupDelay = 0.1;
   /** Island the player was on when the sun step began: the step completes on
    *  crossing to the NEXT island, which is real progression, not a timer. */
   private sunStepIsland: number | null = null;
@@ -43,21 +47,29 @@ export class FirstFlight {
 
   /** Feed play signals each frame while the run is live. */
   update(dt: number, sig: { diving: boolean; grounded: boolean; slope: number; justLaunched: boolean; airborne: boolean; islandIndex: number }): void {
+    this.totalTime += dt;
     if (!this.active) {
       if (this.celebration > 0) this.celebration -= dt;
+      return;
+    }
+    // Eat the startup grace period before accepting any input. This prevents
+    // the "Fly now" button-press from carrying through and filling diveHeld
+    // before the bird has had a chance to reach the first downslope.
+    if (this.startupDelay > 0) {
+      this.startupDelay -= dt;
       return;
     }
     switch (this.step) {
       case 0:
         // Teach the dive: hold on a meaningful downslope for a cumulative beat.
-        if (sig.diving && (sig.slope < -0.05 || !sig.grounded)) this.diveHeld += dt;
-        // `sig.grounded` is load-bearing. The player's thumb is already down
-        // when they tap "Fly now", and that press carries through the frozen
-        // countdown, so without this the step-0 bar began filling at menu
-        // time and the coach could announce "RELEASE at the top to launch"
-        // before the bird had ever left the ground — teaching a gesture for
-        // an event the player has not seen.
-        if (this.diveHeld >= 0.55 && sig.grounded) this.step = 1;
+        // Cap per-frame increment so a single slow frame (large dt) cannot
+        // complete the step in one tick on low-end devices.
+        if (sig.diving && (sig.slope < -0.05 || !sig.grounded)) {
+          this.diveHeld += Math.min(dt, 0.1);
+        }
+        // Advance once the player has held long enough — grounded OR airborne,
+        // since after the startup delay both require deliberate input.
+        if (this.diveHeld >= 0.55) this.step = 1;
         break;
       case 1:
         // Teach the launch: an actual ramp launch, not a timer.
@@ -72,12 +84,13 @@ export class FirstFlight {
       case 3:
         // Teach the CLOCK. Daytrip's run ends when daylight runs out, and the
         // 2026-10-04 fit test showed players losing the run at the sun without
-        // ever learning that islands refill it. The step completes only when
-        // the pilot crosses onto the NEXT island — the exact move the line
-        // teaches — so the last coach beat ends on forward motion, the same
-        // note the flight itself ends on.
+        // ever learning that islands refill it. The step completes when the
+        // pilot crosses onto the NEXT island — the exact move the line teaches.
+        // Time-based fallback: if the player has been airborne for 60+ seconds
+        // and still hasn't reached the next island, complete anyway so the
+        // tutorial doesn't loop indefinitely on subsequent runs.
         if (this.sunStepIsland === null) this.sunStepIsland = sig.islandIndex;
-        if (sig.islandIndex > this.sunStepIsland) {
+        if (sig.islandIndex > this.sunStepIsland || this.totalTime >= 60) {
           this.active = false;
           this.completed = true;
           this.celebration = 3;
@@ -94,7 +107,12 @@ export class FirstFlight {
    */
   view(tapMode = false): CoachState {
     if (this.completed && this.celebration > 0) {
-      return { text: "", step: STEPS, steps: STEPS, justCompleted: true };
+      return {
+        text: t("onboarding.complete", undefined, "First flight done — the sky is yours! ☀"),
+        step: STEPS,
+        steps: STEPS,
+        justCompleted: true,
+      };
     }
     if (!this.active) return { text: "", step: -1, steps: STEPS, justCompleted: false };
     const text = [

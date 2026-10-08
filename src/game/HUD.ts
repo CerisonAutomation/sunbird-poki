@@ -639,8 +639,17 @@ export class HUD {
     // Observe only these small flow containers, not the full scene or per-frame
     // positions. Header/footer wrapping automatically reserves feedback space.
     this.resizeObs = new ResizeObserver(() => {
+      // Defer to rAF to avoid "ResizeObserver loop completed with undelivered
+      // notifications" — the CSS variable writes in publishStack() can resize
+      // the observed elements, which would re-enter the observer synchronously.
       this.stackSignature = "";
-      this.publishStack();
+      if (!this.stackRafPending) {
+        this.stackRafPending = true;
+        requestAnimationFrame(() => {
+          this.stackRafPending = false;
+          this.publishStack();
+        });
+      }
     });
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
@@ -2227,6 +2236,7 @@ export class HUD {
   private stackFrame = 0;
   private stackSignature = "";
   private stackPasses = 0;
+  private stackRafPending = false;
   private readonly menuContinuity = new MenuContinuity();
   private readonly resultsContinuity = new MenuContinuity();
   private copyDialog: HTMLElement | null = null;

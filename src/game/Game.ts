@@ -1110,7 +1110,12 @@ export class Game {
 
     this.hud.onAction((action, id) => this.handleAction(action, id));
     this.onResize = () => this.resize();
-    this.resizeObs = new ResizeObserver(() => this.resize());
+    this.resizeObs = new ResizeObserver(() => {
+      // Defer to rAF — renderer.setSize() inside resize() can change the host's
+      // layout, which would re-fire the observer synchronously and produce the
+      // "ResizeObserver loop completed with undelivered notifications" warning.
+      requestAnimationFrame(() => this.resize());
+    });
     this.resizeObs.observe(host);
     window.addEventListener("resize", this.onResize);
     window.visualViewport?.addEventListener("resize", this.onResize);
@@ -3660,6 +3665,13 @@ export class Game {
     // `runOutcome.ts` for the full contract.
     this.runOutcome = "fail";
     this.platform?.measure("run", this.modeId, "start");
+    // Poki interaction pattern: visible fires at portal_break_request (Telemetry),
+    // interact fires when the player actually commits to the run.
+    this.platform?.measure("button", "run_start", "interact");
+    // Level funnel: run-1, run-2, run-3 let Poki show where players stop returning.
+    if (this.sessionRuns <= 5) {
+      this.platform?.measure("level", `run-${this.sessionRuns}`, "start");
+    }
     // Snapshot the record to beat BEFORE this run writes anything, so the
     // mid-run "new record" moment and the results "NEW BEST" banner compare
     // against the genuinely previous best.
@@ -3857,7 +3869,9 @@ export class Game {
     this.setState("playing");
     this.setScreen("main");
     this.camera.setIntro(0);
-    this.hint = "HOLD to dive";
+    // Show the hint only when the interactive coach isn't active — the coach's
+    // own on-screen text says the same thing and a static hint would duplicate it.
+    this.hint = this.coach ? "" : t("onboarding.holdToDive", undefined, "HOLD to dive");
     void this.audio.resume();
     this.audio.setMusicMode("play");
     this.telemetry.track("run_start", { mode: this.modeId, seed: this.seed, skin: this.skin.id, boosts: armed.join(",") || "none", gold: this.save.state.gold });
@@ -4088,6 +4102,13 @@ export class Game {
     // (Poki funnel contract: send complete OR fail, never both, and a start
     // without an outcome would break the drop-off funnel.)
     this.platform?.measure("run", this.modeId, this.runOutcome);
+    // Mirror the level funnel: complete or fail for each run number so Poki's
+    // progress-events tab shows the drop-off as a proper start/complete/fail funnel.
+    // Level funnel: run-1…run-5 let Poki show where players stop returning.
+    // runOutcome is already "complete" or "fail" at this point (set above).
+    if (this.sessionRuns <= 5) {
+      this.platform?.measure("level", `run-${this.sessionRuns}`, this.runOutcome);
+    }
     const stats = this.runStats();
     // Freeze the number the results card shows: `bird.asleep` only damps
     // velocity (see Bird.update), it doesn't zero it, so the bird keeps
@@ -4096,7 +4117,7 @@ export class Game {
     // the HUD must show that same frozen number on the results screen, not
     // keep re-reading a bird position that is still sliding underneath it.
     this.resultDistance = stats.distance;
-    this.newBest = this.bestAtStart > 0 && stats.distance > this.bestAtStart;
+    this.newBest = stats.distance > this.bestAtStart;
     // A personal best is the one moment CrazyGames wants celebrated site-wide.
     if (this.newBest) this.platform?.happyTime();
     this.telemetry.track("run_end", {
@@ -4110,6 +4131,8 @@ export class Game {
     if (this.sessionRuns === 1) {
       this.hud.toast("Flight logged! Scroll down to open the Shop and spend your coins", "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
+      // Track the new-player shop CTA card that shows on the results screen.
+      this.platform?.measure("button", "shop-cta-results", "visible");
     } else if (this.sessionRuns === 2) {
       // A concrete, time-limited next goal beats a vague social nudge for a
       // player two runs in: the daily course is live content with a payout,
@@ -8058,8 +8081,11 @@ export class Game {
     const platform = this.platform;
     if (!platform || platform.name === "none") return;
     if (s === "board") platform.measure("button", "portal-leaderboard", "visible");
-    // The wardrobe lives in the shop screen's skin grid.
-    if (s === "shop") platform.measure("cosmetic", "skin-grid", "visible");
+    // The shop button is shown throughout the game; arriving at the screen = engaged.
+    if (s === "shop") {
+      platform.measure("button", "shop", "visible");
+      platform.measure("cosmetic", "skin-grid", "visible");
+    }
     // The loadout's bird picker is measured on interaction only, so the screen
     // that shows it reports the exposure — otherwise the pre-flight picker is
     // the one cosmetic the portal sees engaged but never seen offered.

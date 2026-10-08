@@ -18,7 +18,7 @@ import { escapeHtml, sectionTitle } from "./kit";
 import { type HudSnapshot } from "./types";
 import { distanceText, renderGoalList, renderMissions, renderQuests, renderScoreTable } from "./parts";
 
-export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "firstSteps" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "runOutcome" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "streakDays" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
+export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" | "biomeEmoji" | "biomeName" | "board" | "boardMetric" | "boardScope" | "campaignDone" | "campaignTotal" | "celebration" | "challengeOutcome" | "claimedQuests" | "coins" | "distance" | "duel" | "duelDelta" | "duelWas" | "endReason" | "expShareFirst" | "firstSteps" | "flightPath" | "ghostDelta" | "highScores" | "island" | "massRace" | "mastery" | "missions" | "modeId" | "modeName" | "multiplierClaimed" | "nearMiss" | "nestLevel" | "nestMult" | "newBest" | "newlyCompleted" | "nextAction" | "p1Stats" | "p2Stats" | "perfects" | "photoFinish" | "portalName" | "quests" | "raceField" | "raceFinishM" | "raceFinishTime" | "racePlace" | "raceRated" | "raceVerified" | "ratingBonus" | "ratingDelta" | "rings" | "rival" | "roomCode" | "runOutcome" | "runsPlayed" | "score" | "season" | "sessionGoals" | "share" | "shareBusy" | "skins" | "slopeChain" | "slopeScore" | "streakDays" | "sunflowers" | "trophyCounts" | "versus" | "versusWinner" | "wallet" | "wings" | "zeniths">): string {
   if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
   const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
   const deltaTxt =
@@ -98,13 +98,18 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     </div>`
       : "";
 
+  const isFirstRun = !s.massRace && s.runsPlayed === 1;
+  const firstRunTitle = "Your first flight!";
+  const firstRunLine = s.endReason === "water"
+    ? "Hit the ramp before you run out of hill — islands refill your daylight."
+    : "Each island refills your daylight — keep moving forward and you'll fly further!";
   return `
     <div class="results-kicker">${escapeHtml(s.modeName)} · ${t("hud.gameover.flightRecap", undefined, "flight recap")}</div>
-    <h2>${escapeHtml(recapTitle(s))}</h2>
-    <p class="end-reason">${escapeHtml(recapLine(s))}</p>    <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
+    <h2>${escapeHtml(isFirstRun ? firstRunTitle : recapTitle(s))}</h2>
+    <p class="end-reason">${escapeHtml(isFirstRun ? firstRunLine : recapLine(s))}</p>    <p class="tagline">${s.massRace ? t("hud.gameover.massraceTagline", undefined, "Your place, your progress, your next race.") : isFirstRun ? t("hud.gameover.firstRunTagline", undefined, "The sun sets fast — but you get better faster. One more try?") : t("hud.gameover.soloTagline", undefined, "A little farther. A little smoother. One more flight?")}</p>
     ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
-    ${!s.massRace ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
+    ${!s.massRace && !isFirstRun ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
     ${s.newBest ? `<div class="new-best">${menuIconSm("crown")} ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
     ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">${t("hud.gameover.leaderboardRank", undefined, "Leaderboard rank")} · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
@@ -155,11 +160,13 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     <div class="reached-strip">Reached <b>${menuIconSm(s.biomeEmoji)} ${s.biomeName}</b> · Island ${s.island + 1}</div>
 
     ${clipboardShare}
-    ${s.expShareFirst
-      ? `<button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>
-         <button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>`
-      : `<button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>
-         <button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>`}
+    ${isFirstRun
+      ? `<p class="fineprint replay-note">Come back tomorrow for 250 free coins! ${menuIconSm("coin")}</p>`
+      : s.expShareFirst
+        ? `<button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>
+           <button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>`
+        : `<button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>
+           <button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>`}
     <details class="result-details"><summary>Progress &amp; rewards <span>Goals, quests &amp; records</span></summary>
     ${renderGoalList(s.sessionGoals)}
     ${renderQuests(s.quests)}

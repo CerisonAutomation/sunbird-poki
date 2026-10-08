@@ -74,7 +74,9 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
           ctx.save.persist();
           ctx.telemetry.track("onboarding_shop_opened", { runs: ctx.save.state.runsPlayed });
           ctx.hud.toast("Shop: birds change your stats, boosts give you powers, trails look great — boosts from 40 coins, birds from 150", "gold", "shop");
+          ctx.platform?.measure("milestone", "first-shop", "reached");
         }
+        ctx.platform?.measure("button", "shop", "interact");
         ctx.setScreen("shop");
         return true;
       case "shop-free-coins": {

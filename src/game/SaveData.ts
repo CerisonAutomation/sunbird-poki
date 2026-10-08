@@ -15,6 +15,7 @@ import { durableSetItem } from "./resilience/durableSet";
 import { openPayload, sealPayload } from "./resilience/crc";
 import { TRACK_NAMES } from "./Music";
 import { COIN_MULTIPLIER_UPGRADES } from "./Economy";
+import { SELL_AD_REMOVAL } from "./edition";
 import { defaultRival, rankSeasonId, ratingDelta, RIVAL_BASE_RATING, seasonReward, softResetRating, streakBonus, type RivalMatch, type RivalState } from "./pvp";
 import { seasonId } from "./season";
 import { emptyTournamentState, type TournamentState } from "./Tournaments";
@@ -610,7 +611,7 @@ export class SaveData {
               }))
               .slice(0, 8)
           : [],
-        gold: Boolean(p.gold),
+        gold: SELL_AD_REMOVAL ? Boolean(p.gold) : false,
         vip: Boolean(p.vip),
         vipUntil: num(p.vipUntil),
         vipLastClaim: typeof p.vipLastClaim === "string" ? p.vipLastClaim : "",

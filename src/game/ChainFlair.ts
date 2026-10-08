@@ -62,7 +62,7 @@ export function chainPulse(combo: number): number {
 
 /** The coin bonus a chain step is worth, on top of the flat perfect award. */
 export function chainBonus(combo: number): number {
-  return Math.min(40, Math.max(0, combo - 1) * 6);
+  return Math.min(80, Math.max(0, combo - 1) * (combo - 1) * 3);
 }
 
 /** True the first time a run reaches FRENZY, false on every visit after. */

@@ -179,7 +179,7 @@ export function paceName(distance: number): string {
  * that is the feeling that makes somebody tap Fly Again.
  */
 export function paceTargetDistance(personalBest: number, rng: () => number = Math.random): number {
-  if (personalBest <= 0) return 320 + Math.round(rng() * 120);
+  if (personalBest <= 0) return 180 + Math.round(rng() * 80);
   // 102%..112% of best: beatable with one clean run, never a walkover.
   const stretch = 1.02 + rng() * 0.1;
   return Math.round(personalBest * stretch);

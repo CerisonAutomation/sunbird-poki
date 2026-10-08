@@ -70,5 +70,5 @@ if (typeof g.ResizeObserver === "undefined") {
     disconnect(): void {
       // JSDOM polyfill: no-op in test environment
     }
-  } as any;
+  } as unknown as typeof ResizeObserver;
 }

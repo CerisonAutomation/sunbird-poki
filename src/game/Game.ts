@@ -3981,7 +3981,7 @@ export class Game {
     // First water landing: new players don't know water drains daylight. Show
     // the mechanic once so the next run is informed, not repeated confusion.
     if (reason === "water" && !this.save.state.firstFlightDone && this.sessionRuns <= 2) {
-      this.hud.toast("Water drains daylight — hit the ramp before the hill runs out!", "warn", "wave");
+      this.hud.toast(t("hud.toast.waterWarning", undefined, "Water drains daylight — hit the ramp before the hill runs out!"), "warn", "wave");
     }
     this.daylight = 0;
     // An honest outcome for a mode with no finish line: the flight IS the
@@ -4139,7 +4139,7 @@ export class Game {
       // Grant 25 bonus coins on first run so the player has a meaningful
       // wallet to spend in the shop and can see real choices on their first visit.
       this.save.addCoins(25);
-      this.hud.toast("Flight logged! +25 bonus coins — open the Shop to spend them", "gold", "shop");
+      this.hud.toast(t("hud.toast.firstRunBonus", undefined, "Flight logged! +25 bonus coins — open the Shop to spend them"), "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
       // Track the new-player shop CTA card that shows on the results screen.
       this.platform?.measure("button", "shop-cta-results", "visible");

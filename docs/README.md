@@ -78,6 +78,7 @@ markdown — so this stays true instead of being true once.
 
 * [`audits/`](./audits/) — 21 dated audits. Each carries a `Status:` line saying
   whether its findings were resolved, and what replaced it for live status.
+* [`POKI_COMPLIANCE_VERIFICATION_2026-10-06.md`](./POKI_COMPLIANCE_VERIFICATION_2026-10-06.md) — Poki compliance verification snapshot (2026-10-06).
 * [`archive/`](./archive/) — 11 superseded or parked documents (old extracts,
   one-shot agent prompts, a migration plan whose premise is now false, and the
   non-Poki backlog parked on 2026-09-23). Kept for provenance.
@@ -86,12 +87,12 @@ markdown — so this stays true instead of being true once.
 These numbers are measured from disk by `pnpm docs:audit` and must match it.
 Adding a test file, a translation key or an audit means updating this block —
 that is the point. Do not hand-edit the prose figures above without this.
-tests: 2908
-testFiles: 233
-barrelKeys: 604
+tests: 2914
+testFiles: 235
+barrelKeys: 619
 locales: 36
-nonEnglishCells: 21140
-englishCells: 635
+nonEnglishCells: 21665
+englishCells: 1105
 audits: 21
 archive: 11
 -->

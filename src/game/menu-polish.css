@@ -442,6 +442,7 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .sb-stat b { font: 700 14px/1 var(--display); color: var(--ink); white-space: nowrap; }
 .sb-coins b { color: var(--ink-coin); }
 .sb-best b { color: var(--ink-best); }
+.sb-pass b { color: var(--ink); }
 /* Label */
 .sb-stat small { font: 600 8px/1 var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-rose); opacity: .7; white-space: nowrap; }
 /* Nest Pass progress sliver along the bottom edge of its button */

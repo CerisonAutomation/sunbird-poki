@@ -273,6 +273,8 @@ export class Game {
   private readonly ads: AdProvider = new PlaceholderAdProvider();
   /** Runs started since load. */
   private sessionRuns = 0;
+  /** Shader warm-up only needs to happen once per session. */
+  private shadersWarmed = false;
   private platform: PlatformAdapter | null = null;
   /** Detaches the window error → `captureError` reporters (see platform boot). */
   private detachPortalErrorReporters: (() => void) | null = null;
@@ -3864,7 +3866,7 @@ export class Game {
     // seconds of play and into the load the player is already waiting through.
     // Wrapped because it touches WebGL and must never be the reason a run fails
     // to start.
-    this.warmShaders();
+    if (!this.shadersWarmed) { this.shadersWarmed = true; this.warmShaders(); }
 
     this.setState("playing");
     this.setScreen("main");
@@ -3976,6 +3978,11 @@ export class Game {
   private onDaylightOut(reason: RunEndReason = "daylight"): void {
     this.bird.asleep = true;
     this.endReason = reason;
+    // First water landing: new players don't know water drains daylight. Show
+    // the mechanic once so the next run is informed, not repeated confusion.
+    if (reason === "water" && !this.save.state.firstFlightDone && this.sessionRuns <= 2) {
+      this.hud.toast("Water drains daylight — hit the ramp before the hill runs out!", "warn", "wave");
+    }
     this.daylight = 0;
     // An honest outcome for a mode with no finish line: the flight IS the
     // goal, so sunset after a real flight or choosing to land and rest is the
@@ -4129,7 +4136,10 @@ export class Game {
       momentRecap: this.moments.recapLine(),
     });
     if (this.sessionRuns === 1) {
-      this.hud.toast("Flight logged! Scroll down to open the Shop and spend your coins", "gold", "shop");
+      // Grant 25 bonus coins on first run so the player has a meaningful
+      // wallet to spend in the shop and can see real choices on their first visit.
+      this.save.addCoins(25);
+      this.hud.toast("Flight logged! +25 bonus coins — open the Shop to spend them", "gold", "shop");
       this.telemetry.track("onboarding_first_flight_complete", { distance: Math.round(stats.distance) });
       // Track the new-player shop CTA card that shows on the results screen.
       this.platform?.measure("button", "shop-cta-results", "visible");
@@ -6091,9 +6101,13 @@ export class Game {
    */
   private handleContinueEvent(action: string, id: string): boolean {
     switch (action) {
-      case "continue-coins":
-        if (this.state === "continue" && this.save.spend(CONTINUE_COST)) this.doContinue("coins");
+      case "continue-coins": {
+        // First 3 lifetime runs: continue is free so new players aren't blocked
+        // by an empty wallet on the most important re-engagement moment.
+        const earlyFree = this.save.state.runsPlayed <= 3;
+        if (this.state === "continue" && (earlyFree || this.save.spend(CONTINUE_COST))) this.doContinue("coins");
         return true;
+      }
       case "continue-ad":
         if (this.state === "continue") {
           if (this.portalEnabled() && !this.adsLive()) {
@@ -8414,8 +8428,10 @@ export class Game {
     continueTimer: this.continueTimer,
     continueReason: this.continueOfferView?.reason ?? "",
     continueHighlight: this.continueOfferView?.highlight ?? false,
-    continueCost: CONTINUE_COST,
-    canAffordContinue: st.wallet >= CONTINUE_COST,
+    // Waive the continue cost for the first three lifetime runs so new players
+    // aren't blocked by an empty wallet on the one screen where they might try again.
+    continueCost: st.runsPlayed <= 3 ? 0 : CONTINUE_COST,
+    canAffordContinue: st.runsPlayed <= 3 || st.wallet >= CONTINUE_COST,
     // Portal: only advertise a rewarded option the SDK can actually pay out.
     adAvailable: this.portalEnabled() ? this.adsLive() : SIMULATED_BREAKS && this.ads.isAvailable(),
     adTimer: this.adTimer,

@@ -141,7 +141,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     </div>` : ""}
     ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
 
-    <details class="result-details"><summary>${t("hud.renderGameOver.FDetails", undefined, "Flight details ")}<span>Landmarks &amp; skill</span></summary><div class="over-stats">
+    <details class="result-details"${s.runsPlayed <= 3 ? " open" : ""}><summary>${t("hud.renderGameOver.FDetails", undefined, "Flight details ")}<span>Landmarks &amp; skill</span></summary><div class="over-stats">
       <div><span>Perfects</span><b>${s.perfects}</b></div>
       <div><span>${t("hud.renderGameOver.SMoments", undefined, "Skyline moments")}</span><b>${s.zeniths}</b></div>
       <div><span>Rings</span><b>${s.rings}</b></div>
@@ -173,7 +173,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${renderMissions(s.missions, s.newlyCompleted)}
     <h3 class="table-title">${t("hud.renderGameOver.HGlides", undefined, "High glides")}</h3>
     ${renderScoreTable(s.highScores.slice(0, 5))}</details>
-    <button class="soft-btn wide results-shop-cta" data-ui data-action="open-shop">${menuIcon("shop")} Shop — birds, boosts &amp; trails</button>
+    ${s.runsPlayed > 2 ? `<button class="soft-btn wide results-shop-cta" data-ui data-action="open-shop">${menuIcon("shop")} Shop — birds, boosts &amp; trails</button>` : ""}
   `;
 }
 

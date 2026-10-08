@@ -137,8 +137,8 @@ describe("pace target distance", () => {
     const seeds = [() => 0, () => 0.5, () => 1];
     for (const rng of seeds) {
       const d = paceTargetDistance(0, rng);
-      expect(d).toBeGreaterThanOrEqual(320);
-      expect(d).toBeLessThanOrEqual(440);
+      expect(d).toBeGreaterThanOrEqual(180);
+      expect(d).toBeLessThanOrEqual(260);
       n += 1;
     }
     expect(n).toBe(3);

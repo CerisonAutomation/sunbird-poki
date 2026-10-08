@@ -48,6 +48,7 @@ import {
   WATER_VX_DRAG,
   WATER_SURFACE_DAMPING,
   WATER_SURFACE_Y_THRESHOLD,
+  PHYS_DT,
 } from "./constants";
 import {
   launchPopQuality,
@@ -173,6 +174,12 @@ export function disposeSharedBirdGeometry(): void {
 }
 
 export class Bird {
+  // Precomputed constants for inner-loop rotation smoothing (dt = PHYS_DT always)
+  private static readonly K_DIVE_PITCH    = 1 - Math.exp(-PHYS_DT / 0.05);
+  private static readonly K_RELEASE_PITCH = 1 - Math.exp(-PHYS_DT / 0.02);
+  private static readonly ROT_K_AIR = 1 - Math.pow(0.003,   PHYS_DT);
+  private static readonly ROT_K_GND = 1 - Math.pow(0.00008, PHYS_DT);
+
   private readonly terrainNormal = { nx: 0, ny: 1, tx: 1, ty: 0 };
   x = 50;
   y = 30;
@@ -1036,8 +1043,9 @@ export class Bird {
       this.vx *= decay;
       this.vy *= decay;
 
-      const s2 = this.speed();
-      if (s2 > cap) {
+      const s2sq = this.vx * this.vx + this.vy * this.vy;
+      if (s2sq > cap * cap) {
+        const s2 = Math.sqrt(s2sq);
         this.vx *= cap / s2;
         this.vy *= cap / s2;
       }
@@ -1157,15 +1165,13 @@ export class Bird {
     // Ramp INTO the dive slowly (50 ms τ) so the nose leads the input rather
     // than lagging two ticks. Snap OUT fast (20 ms τ) so the release reads
     // immediately — the player should see the nose lift the frame they let go.
-    const kDive = diving
-      ? 1 - Math.exp(-dt / 0.05)
-      : 1 - Math.exp(-dt / 0.02);
+    const kDive = diving ? Bird.K_DIVE_PITCH : Bird.K_RELEASE_PITCH;
     this.divePitch += ((diving ? -0.12 : 0) - this.divePitch) * kDive;
     const targetAngle = this.grounded
       ? Math.atan(terrain.slopeAt(this.x))
       : clamp(Math.atan2(this.vy, Math.max(6, this.vx)), -1.15, 0.95) + this.divePitch;
     // ground: fast snap to slope; air: responsive to velocity direction
-    this.rotation = lerpAngle(this.rotation, targetAngle, 1 - Math.pow(this.grounded ? 0.00008 : 0.003, dt));
+    this.rotation = lerpAngle(this.rotation, targetAngle, this.grounded ? Bird.ROT_K_GND : Bird.ROT_K_AIR);
   }
 
   syncVisual(dt: number, diving: boolean, fever: boolean, time: number, terrain: TerrainSystem, ox?: number, oy?: number, interp = 1): void {

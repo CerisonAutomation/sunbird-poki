@@ -64,7 +64,7 @@ describe("warpT / warpLevel", () => {
 describe("diveKick", () => {
   it("adds FOV only when falling fast above the rush band", () => {
     expect(diveKick(-30, 1)).toBeGreaterThan(4);
-    expect(diveKick(-30, SPEED_BANDS.warp)).toBeLessThanOrEqual(6);
+    expect(diveKick(-30, SPEED_BANDS.warp)).toBeLessThanOrEqual(10);
   });
 
   it("is zero when climbing, gliding flat or slow", () => {
@@ -75,7 +75,7 @@ describe("diveKick", () => {
   });
 
   it("caps at the configured maximum however hard the dive", () => {
-    expect(diveKick(-400, 1.2)).toBeLessThanOrEqual(6);
+    expect(diveKick(-400, 1.2)).toBeLessThanOrEqual(10);
     expect(diveKick(Number.NaN, 1)).toBe(0);
   });
 

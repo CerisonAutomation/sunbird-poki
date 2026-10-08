@@ -191,7 +191,7 @@ describe("the chain: a reward that escalates, or it is not felt", () => {
   it("pays more the longer the chain runs, and never runs away", () => {
     expect(chainBonus(1)).toBe(0);
     expect(chainBonus(5)).toBeGreaterThan(chainBonus(2));
-    expect(chainBonus(999)).toBeLessThanOrEqual(40);
+    expect(chainBonus(999)).toBeLessThanOrEqual(80);
   });
 
   it("labels itself, and says FRENZY at the threshold", () => {

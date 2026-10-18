@@ -99,6 +99,7 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 | `npm run botsim` | Headless load test: N real WebSocket pilots on the wire protocol |
 | `npm run botsim:40` | 40-pilot load + anti-cheat + resume run (the CI gate) |
 | `npm run physcheck` | Physics determinism harness |
+| `npm run bench:physics` | Hot-path benchmark (`scripts/bench-physics.ts`): ns/step solo and 40-bird, height-cache hit/miss, terrain probes — the numbers behind the `physics-perf` gate |
 | `npm run gen-icons` | Regenerate PWA icons |
 
 ## Testing
@@ -147,7 +148,7 @@ rust/           Cargo workspace: sunbird-protocol + sunbird-server (Axum WS)
 api/            Vercel leaderboard functions (+ _lib)
 backend/        Optional Cloudflare Workers: ghosts, telemetry, Stripe webhook entitlements (server-side only)
 server/social/  Optional PGlite social layer (friends, squads, feed)
-scripts/        verify-prod, mp-smoke, physcheck, portal packaging, icon gen
+scripts/        verify-prod, mp-smoke, physcheck, bench-physics, portal packaging, icon gen
 public/         PWA manifest, service worker, icons, self-hosted fonts
 ```
 

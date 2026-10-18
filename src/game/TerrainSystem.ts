@@ -419,7 +419,12 @@ export class TerrainSystem {
 
   normalAt(x: number, out = { nx: 0, ny: 1, tx: 1, ty: 0 }): { nx: number; ny: number; tx: number; ty: number } {
     const slope = this.slopeAt(x);
-    const len = Math.hypot(1, slope);
+    // sqrt(1 + slope²) rather than hypot(1, slope): terrain slopes
+    // are bounded by the build-time slope ceiling (a single-digit
+    // gradient), where the hypotenuse cannot come anywhere near the
+    // magnitudes hypot's scaling exists for. Runs twice a grounded
+    // step, so the cheaper primitive is the honest pick.
+    const len = Math.sqrt(1 + slope * slope);
     out.tx = out.ny = 1 / len;
     out.ty = slope / len;
     out.nx = -out.ty;
@@ -438,7 +443,10 @@ export class TerrainSystem {
     const h2 = this.heightAt(x + e);
     const d2 = (h0 - 2 * h1 + h2) / (e * e);
     const slope = this.slopeAt(x);
-    return -d2 / Math.pow(1 + slope * slope, 1.5);
+    // (1 + slope²)^1.5 as q·√q: one sqrt instead of a general
+    // pow, on a value the launch gate reads every grounded step.
+    const q = 1 + slope * slope;
+    return -d2 / (q * Math.sqrt(q));
   }
 
   /**
@@ -457,7 +465,18 @@ export class TerrainSystem {
 
   isOcean(x: number): boolean {
     const tpl = islandTemplate(this.islandIndex(x));
-    return this.localX(x) >= tpl.gapStart && this.localX(x) < tpl.gapEnd;
+    // localX without localXFor's own islandTemplate lookup: the
+    // straight subtraction for x ≥ 0, the island-0 wrap for
+    // negative x (the menu's attract camera). One template per
+    // call instead of two — this runs every physics step.
+    let lx: number;
+    if (x < 0) {
+      const p = islandTemplate(0).period;
+      lx = ((x % p) + p) % p;
+    } else {
+      lx = x - tpl.start;
+    }
+    return lx >= tpl.gapStart && lx < tpl.gapEnd;
   }
 
   /**
@@ -651,21 +670,84 @@ export class TerrainSystem {
    * precision at these magnitudes to visibly jitter or crack between
    * chunks. Procedural generation keeps sampling true (float64) world x —
    * only the baked render-space coordinates shift, so terrain shape,
-   * physics and determinism are unaffected. Currently-loaded chunks are
-   * cheap to rebuild (a handful around the camera), via the same
-   * idle-scheduled path a fresh spawn uses.
+   * physics and determinism are unaffected.
+   *
+   * The re-bake is SWAP-IN-PLACE, never teardown-and-respawn. The old
+   * form disposed every loaded chunk and re-spawned it on the idle
+   * path, which left the world under the player EMPTY for up to the
+   * idle timeout — 200 ms, a dozen frames at 60 Hz, once per threshold:
+   * the ground simply vanished mid-flight and popped back. Every baked
+   * coordinate is render-space (`worldX - origin`), so translating a
+   * live group by the origin delta parks its OLD bake exactly where
+   * it was in world space; the re-bake then lands geometry built at
+   * the NEW origin and snaps the group back to zero, inside one
+   * synchronous idle callback. Same discipline `rebuildChunkGeo`
+   * already uses: old resources are disposed only after the new ones
+   * are in place, so no frame can observe a chunk without geometry.
+   *
+   * `camX` is deliberately NOT a parameter: the old form needed it to
+   * re-decide each re-spawned chunk's LOD side, and the swap-in-place
+   * form keeps the side the chunk already has — a rebase moves the
+   * origin, not the camera, so the distance that picked the side is
+   * unchanged.
    */
-  recenter(newOriginX: number, camX: number): void {
+  recenter(newOriginX: number): void {
     if (newOriginX === this.originX) return;
+    const delta = newOriginX - this.originX;
     this.originX = newOriginX;
-    for (const [id, chunk] of [...this.chunks]) {
-      chunk.cancelled = true; // a pending idle-callback build must not use the old origin
-      this.group.remove(chunk.group);
-      for (const d of chunk.disposables) d.dispose();
-      this.chunks.delete(id);
-      this.spawnChunk(id, camX);
+    for (const [, chunk] of this.chunks) {
+      if (chunk.pending || !chunk.mesh) {
+        // Its deferred spawn build has not run yet, so there is
+        // no old bake to park — it will bake at the new origin
+        // when its idle slot fires.
+        continue;
+      }
+      // `-=`, not `=`: two rebases can queue before the first
+      // re-bake lands, and the second shift must stack on the
+      // first, not replace it.
+      chunk.group.position.x -= delta;
+      // One re-bake per chunk, and `lodRebuilds` stays off it
+      // while the queue is deep.
+      chunk.rebuilding = true;
+      scheduleIdle(() => {
+        if (chunk.cancelled) {
+          chunk.rebuilding = false;
+          return;
+        }
+        this.rebakeChunkAtOrigin(chunk);
+      });
     }
     this.farCenter = -Infinity; // force rebuildFar() to rebake with the new origin on next update()
+  }
+
+  /**
+   * Re-bake a live chunk at the CURRENT origin and swap it in
+   * atomically: new geometry and decor are built and added first,
+   * the old children are removed and disposed only after, and the
+   * group's recenter shift is snapped back to zero — because the
+   * new bake is already in the new render space. A recenter
+   * therefore costs no visible frame, and a cancelled build still
+   * leaves the previous bake on screen.
+   */
+  private rebakeChunkAtOrigin(chunk: Chunk): void {
+    const oldChildren = chunk.group.children.slice();
+    const oldDisposables = chunk.disposables;
+    const disposables: { dispose(): void }[] = [];
+    const geo = this.buildChunkGeo(chunk.id, 0, chunk.builtFar ?? false);
+    const mesh = new THREE.Mesh(geo, this.mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    chunk.group.add(mesh);
+    disposables.push(geo);
+    const propGroups = this.placeDecor(chunk.id, chunk.group, disposables);
+    this.placeSunflowers(chunk.id, chunk.group, disposables);
+    for (const child of oldChildren) chunk.group.remove(child);
+    for (const d of oldDisposables) d.dispose();
+    chunk.group.position.x = 0;
+    chunk.mesh = mesh;
+    chunk.disposables = disposables;
+    chunk.propGroups = propGroups.length ? propGroups : undefined;
+    chunk.rebuilding = false;
   }
 
   dispose(): void {
@@ -998,6 +1080,16 @@ export class TerrainSystem {
     const mesh = chunk.mesh;
     if (!mesh) {
       chunk.rebuilding = false;
+      return;
+    }
+    // A parked recenter shift means this chunk's decor is still
+    // baked at the old origin. An LOD re-detail alone would swap
+    // the terrain out from under correctly-parked props — and
+    // snapping the group back here would then jump the decor by
+    // the origin delta. Take the full re-bake instead; it
+    // re-places the decor and snaps the group itself.
+    if (chunk.group.position.x !== 0) {
+      this.rebakeChunkAtOrigin(chunk);
       return;
     }
     const geo = this.buildChunkGeo(chunk.id, 0, far);

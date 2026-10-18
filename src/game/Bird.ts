@@ -552,8 +552,19 @@ export class Bird {
     this.shape = "songbird";
   }
 
+  /**
+   * Instantaneous speed, m/s.
+   *
+   * `Math.sqrt(vx² + vy²)` rather than `Math.hypot`: hypot's
+   * overflow/underflow-safe scaling is correct for unbounded
+   * inputs, but `vx`/`vy` are clamped to the speed cap (~234 m/s
+   * with every transient headroom mechanic), where the squaring
+   * cannot overflow a double by ten orders of magnitude. hypot
+   * measures 3–10× slower than sqrt in V8, and this runs up to
+   * five times a physics step — see the release block in step().
+   */
   speed(): number {
-    return Math.hypot(this.vx, this.vy);
+    return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
   }
 
   /**
@@ -983,8 +994,14 @@ export class Bird {
         // branch are untouched — they solve a different failure (the launch
         // not firing at all, and the GROUNDED pop scoring zero on a long ramp)
         // and sit upstream of this branch.
-        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown, this.speed());
-        this.vy = applyReleaseKick(this.vy, this.kickCooldown, this.speed());
+        // One speed reading for the whole release: `sp` (sampled at the
+        // top of this branch) is the speed the bird arrives with — `vy`
+        // is not mutated until the assignment on the next line, and its
+        // RHS is evaluated first — so the kick and its ceiling see the
+        // same value they always did. The surge is deliberately read
+        // AFTER the kick: it scales off the speed the release bought.
+        this.releaseKickAmount = releaseKick(this.vy, this.kickCooldown, sp);
+        this.vy = applyReleaseKick(this.vy, this.kickCooldown, sp);
         // THE SURGE. The same release, paid forward as well as up. See
         // `RELEASE_SURGE` for why the skill gap was a SPEED gap and why this is
         // gated on the dive having been committed rather than on "not diving".
@@ -1190,7 +1207,9 @@ export class Bird {
     this.drawnVx = rvx;
     this.drawnVy = rvy;
     this.drawRotation = rrot;
-    const sp = Math.hypot(rvx, rvy);
+    // Interpolated values are bounded by the physics speed cap, so the
+    // hypot-accurate form buys nothing here — see speed().
+    const sp = Math.sqrt(rvx * rvx + rvy * rvy);
     // Render interpolation: the mesh draws at a smoothed position between two
     // fixed physics steps (ox/oy), so a >60 Hz display never sees the bird
     // step. The sim state (this.x/y) stays untouched.

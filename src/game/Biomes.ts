@@ -773,7 +773,17 @@ export function islandIndexFor(x: number): number {
   return lo;
 }
 
-/** The full layout of an island. */
+/** The full layout of an island.
+ *
+ * Deliberately NOT memoised: `period`/`start` read `ISLAND_PERIOD`
+ * and the layout table, and the landmarks read `GAP_START` and
+ * `DROP_START`, all of which the dev panel re-tunes live
+ * (see the "re-read without a layout rebuild" cases in
+ * dev-panel.test.ts). A cached template would freeze a tuning
+ * session's world at its first-read shape. The expensive
+ * transcendental inside — `islandGap`'s exp — is memoised at
+ * its own site in worldProgression, where its inputs are all
+ * const, so this stays cheap without going stale. */
 export function islandTemplate(island: number): IslandTemplate {
   const index = Math.max(0, Math.floor(island));
   const starts = ensureLayout();

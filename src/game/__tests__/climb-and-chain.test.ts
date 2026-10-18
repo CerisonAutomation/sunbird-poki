@@ -325,7 +325,7 @@ describe("the render origin, which was never wired", () => {
     // rebase and every shared/race seed would stop being comparable.
     const a = new TerrainSystem("recenter-invariance");
     const b = new TerrainSystem("recenter-invariance");
-    b.recenter(8192, 8192);
+    b.recenter(8192);
     for (const x of [100, 1500, 4200, 9000, 13000]) {
       expect(b.heightAt(x), `heightAt(${x}) changed after a rebase`).toBeCloseTo(a.heightAt(x), 9);
       expect(b.islandIndex(x)).toBe(a.islandIndex(x));
@@ -339,8 +339,60 @@ describe("the render origin, which was never wired", () => {
     // has — which is what a per-frame call would do — it must do nothing.
     const t = new TerrainSystem("recenter-noop");
     const before = t.heightAt(3000);
-    t.recenter(0, 3000);
+    t.recenter(0);
     expect(t.heightAt(3000)).toBe(before);
+    t.dispose();
+  });
+
+  it("re-bakes in place: no chunk is ever left without geometry", async () => {
+    // The old form disposed every loaded chunk and re-spawned it on
+    // the idle path, so for up to the idle timeout (200 ms — a dozen
+    // frames) once per threshold the world under the player was
+    // EMPTY GROUPS: the ground vanished mid-flight and popped back.
+    // The swap-in-place form must keep every chunk's geometry through
+    // a rebase, park the group on the origin delta while the re-bake
+    // is queued, and snap back to zero once it lands.
+    // Structural view of the private chunk map, the same pattern
+    // this file uses for `localX`.
+    type ChunkView = {
+      id: number;
+      group: { position: { x: number } };
+      mesh?: unknown;
+      rebuilding?: boolean;
+    };
+    const chunksOf = (t: TerrainSystem): Map<number, ChunkView> =>
+      (t as unknown as { chunks: Map<number, ChunkView> }).chunks;
+
+    const t = new TerrainSystem("recenter-no-hole");
+    t.update(3000); // stream in the opening window
+    // Let the deferred spawn builds land (scheduleIdle falls back
+    // to setTimeout in this environment).
+    await new Promise((r) => setTimeout(r, 50));
+    t.update(3000);
+    const live = [...chunksOf(t).values()].filter((c) => c.mesh);
+    expect(live.length).toBeGreaterThan(0);
+
+    t.recenter(2048);
+
+    // Immediately: nothing was torn down, every chunk still has its
+    // mesh, parked on the origin delta.
+    for (const chunk of chunksOf(t).values()) {
+      expect(chunk.mesh, `chunk ${chunk.id} lost its mesh in the rebase`).toBeDefined();
+      expect(chunk.group.position.x).toBe(-2048);
+    }
+
+    // After the idle re-bakes drain: groups snapped back, re-bakes
+    // complete, geometry replaced rather than absent.
+    await new Promise((r) => setTimeout(r, 50));
+    for (const chunk of chunksOf(t).values()) {
+      expect(chunk.group.position.x).toBe(0);
+      expect(chunk.rebuilding).toBeFalsy();
+      expect(chunk.mesh, `chunk ${chunk.id} has no mesh after the re-bake`).toBeDefined();
+    }
+    // And the world itself is unchanged by the rebase.
+    const reference = new TerrainSystem("recenter-no-hole");
+    expect(t.heightAt(3000)).toBeCloseTo(reference.heightAt(3000), 9);
+    reference.dispose();
     t.dispose();
   });
 });

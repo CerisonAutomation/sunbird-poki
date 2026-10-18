@@ -2,13 +2,37 @@ import { biomeForIsland } from "./Biomes";
 import { flightProgressionAt } from "./worldProgression";
 import { clamp } from "./math";
 
+/**
+ * Memoised `flightProgressionAt`. The curve is a pure function of the
+ * island index, but `hills()` reads it on every `computeHeight` cache
+ * miss (~1-2 per physics step per bird) and it costs a `Math.exp` each
+ * time — the same transcendental class the physics inner loop was
+ * purged of. The island index is the key, normalised exactly as
+ * `flightProgressionAt` normalises it, so non-finite and negative
+ * inputs share the entry they collapse to.
+ *
+ * The map is capped and evicts first-to-insert, the same policy
+ * `biomeForIsland`'s wildcard cache uses: a run only ever sits in a
+ * handful of adjacent islands, so 64 entries is two orders of margin.
+ */
+const _progressionCache = new Map<number, { hillScale: number; rhythmScale: number }>();
+
 /** Monotonic, bounded challenge envelope. Biomes vary the feel inside it;
  * neither speed nor slope can grow without limit during a long flight. */
 export function flightProgression(island: number): { hillScale: number; rhythmScale: number } {
   // Delegated to worldProgression so the escalation curve lives next to the
   // gap curve it has to stay in proportion with. The ranges were 0.32/0.24 —
   // a third more arch height across an entire career, which is not a career.
-  return flightProgressionAt(island);
+  const key = Number.isFinite(island) ? Math.max(0, island) : 0;
+  const cached = _progressionCache.get(key);
+  if (cached) return cached;
+  const value = flightProgressionAt(key);
+  _progressionCache.set(key, value);
+  if (_progressionCache.size > 64) {
+    const first = _progressionCache.keys().next().value;
+    if (first !== undefined) _progressionCache.delete(first);
+  }
+  return value;
 }
 
 /**

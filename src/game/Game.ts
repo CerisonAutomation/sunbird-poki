@@ -3314,7 +3314,7 @@ export class Game {
     if (x < RENDER_RECENTER_THRESHOLD) return;
     if (x - this.renderOriginX < RENDER_RECENTER_THRESHOLD) return;
     this.renderOriginX = Math.floor(x / RENDER_RECENTER_THRESHOLD) * RENDER_RECENTER_THRESHOLD;
-    this.terrain.recenter(this.renderOriginX, x);
+    this.terrain.recenter(this.renderOriginX);
     this.camera.recenter(this.renderOriginX);
     this.bird.setRenderOrigin(this.renderOriginX);
     this.collect.setRenderOrigin(this.renderOriginX);

@@ -54,12 +54,32 @@ export const GAP_RAMP_ISLANDS = 9;
  * Width of the ocean before island `index`, in world units.
  *
  * Monotonic, bounded by GAP_MAX, and finite for every input including junk.
+ *
+ * Memoised on the integer index: the curve is a pure function of
+ * `index` over const inputs, but it is read on every
+ * `islandTemplate` construction — which happens on every
+ * height-cache miss, `isOcean` and `localXFor` probe down the
+ * physics hot path — and costs a `Math.exp` each time. The
+ * island index only ever walks forward a handful at a time, so
+ * the capped map below holds the whole working set with two
+ * orders of magnitude of headroom, same eviction policy as the
+ * wildcard-biome cache in Biomes.ts.
  */
+const _gapCache = new Map<number, number>();
+
 export function islandGap(index: number): number {
   if (!Number.isFinite(index)) return GAP_MIN;
   const i = Math.max(0, index);
+  const cached = _gapCache.get(i);
+  if (cached !== undefined) return cached;
   const t = 1 - Math.exp(-i / GAP_RAMP_ISLANDS);
-  return GAP_MIN + (GAP_MAX - GAP_MIN) * t;
+  const width = GAP_MIN + (GAP_MAX - GAP_MIN) * t;
+  _gapCache.set(i, width);
+  if (_gapCache.size > 64) {
+    const first = _gapCache.keys().next().value;
+    if (first !== undefined) _gapCache.delete(first);
+  }
+  return width;
 }
 
 /**

@@ -35,6 +35,7 @@
     "gen-icons": "node scripts/gen-icons.mjs",
     "gen-animated-icon": "node scripts/gen-animated-icon.mjs",
     "physcheck": "tsx scripts/physcheck.ts",
+    "bench:physics": "tsx scripts/bench-physics.ts",
     "lint": "eslint src scripts api --max-warnings 0",
     "circular:check": "madge --circular --extensions ts,tsx src",
     "audit:ui": "node scripts/audit-ui.mjs",

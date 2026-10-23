@@ -21,6 +21,7 @@ const CSS_FILES = [
   path.join(ROOT, "src/index.css"),
   path.join(GAME_DIR, "ui.css"),
   path.join(GAME_DIR, "menu-polish.css"),
+  path.join(GAME_DIR, "design-polish.css"),
 ].filter((f) => fs.existsSync(f));
 
 const errors = [];
@@ -110,8 +111,8 @@ const refsGrabbed = new Set();
 for (const m of markupSrc.matchAll(/grab\("([A-Za-z0-9_-]+)"\)/g)) refsGrabbed.add(m[1]);
 // Refs read through helpers (querySelector by data-ref) are not "grabbed".
 const refsQueried = new Set();
-for (const m of markupSrc.matchAll(/readValue<[^>]*>\("([A-Za-z0-9_-]+)"\)|readValue\("([A-Za-z0-9_-]+)"\)/g)) {
-  refsQueried.add(m[1] ?? m[2]);
+for (const m of markupSrc.matchAll(/readValue<[^>]*>\("([A-Za-z0-9_-]+)"\)|readValue\("([A-Za-z0-9_-]+)"\)|readChecked\("([A-Za-z0-9_-]+)"\)|clearValue\("([A-Za-z0-9_-]+)"\)/g)) {
+  refsQueried.add(m[1] ?? m[2] ?? m[3] ?? m[4]);
 }
 for (const m of markupSrc.matchAll(/\[data-ref=\\?"([A-Za-z0-9_-]+)\\?"\]/g)) refsQueried.add(m[1]);
 for (const m of markupSrc.matchAll(/data-ref="\$\{([^}]+)\}"/g)) notes.push(`dynamic ref: ${m[0]}`);
@@ -191,10 +192,10 @@ for (const m of markupStripped.matchAll(/class="([^"]*)"/g)) {
 }
 // Classes toggled from JS but not written in markup.
 for (const m of markupSrc.matchAll(/classList\.(?:toggle|add|remove)\("([a-z0-9_-]+)"/g)) usedClasses.add(m[1]);
-const dynamicClasses = new Set(["on", "off", "hidden", "empty", "done", "live", "win", "podium", "dim", "mine", "gold", "rematch", "storm", "is-ready", "is-waiting", "is-claimed"]);
+const dynamicClasses = new Set(["on", "off", "hidden", "empty", "done", "live", "win", "podium", "dim", "mine", "gold", "rematch", "storm", "is-ready", "is-waiting", "is-claimed", "is-determinate"]);
 // Classes styled through a parent rule (` .mm-actions button `) or as a
 // modifier of a styled base class — they are not unstyled, they are composed.
-const parentStyled = new Set(["mm-ai", "mm-keep", "pause-mute", "mm-cancel", "mm-instant", "shop-section-birds", "nest-row"]);
+const parentStyled = new Set(["mm-ai", "mm-keep", "pause-mute", "mm-cancel", "mm-instant", "shop-section-birds", "nest-row", "pf-trail-row", "pf-boost"]);
 const unstyled = [...usedClasses].filter((c) => !cssClasses.has(c) && !dynamicClasses.has(c) && !parentStyled.has(c));
 if (unstyled.length) warnings.push(`${unstyled.length} class(es) used without a rule in ui.css: ${unstyled.slice(0, 12).join(", ")}`);
 

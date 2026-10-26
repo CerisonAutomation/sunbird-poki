@@ -530,7 +530,7 @@ The instruction started as a phrase and is now four machine-checked statements:
 1. **Source level** — `pnpm isolation:check` (`scripts/verify-isolation.mjs`):
    the Rust workspace references no platform integration at all (0 hits across
    13 source files); `@poki/netlib` is imported by exactly one module
-   (`src/game/PokiNetlib.ts`) and that module reaches nothing self-hosted; the
+   (`src/sdk/PokiNetlib.ts`) and that module reaches nothing self-hosted; the
    self-hosted transport (`src/game/Realtime.ts`) touches the Poki transport
    only as a type; the Poki-only modules name no self-hosted endpoint. Sabotage
    checks: appending the word "netlib" to a Rust file, or constructing the Poki

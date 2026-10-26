@@ -2,15 +2,19 @@ import { GRAVITY_GLIDE } from "./constants";
 import { DROP_START, GAP_START, RAMP_START } from "./constants";
 import { t } from "../i18n";
 
-/** Read the same terrain boundaries as physics; no hard-coded second ramp. */
-export function terrainCue(s: { grounded: boolean; localX: number; altitude: number; vy: number; landingSlope: number }): string {
+/** Read the same terrain boundaries as physics; no hard-coded second ramp.
+ * `tapMode` mirrors the tap-to-toggle-dive setting (see FirstFlight.view):
+ * players who never hold anything must read TAP, not HOLD/RELEASE. */
+export function terrainCue(s: { grounded: boolean; localX: number; altitude: number; vy: number; landingSlope: number }, tapMode = false): string {
+  const hold = tapMode ? "TAP" : "HOLD";
+  const release = tapMode ? "TAP" : "RELEASE";
   if (s.grounded) {
-    if (s.localX >= RAMP_START && s.localX < GAP_START) return t("onboarding.rideRamp", undefined, "RELEASE · ride the ramp to launch");
-    if (s.localX >= DROP_START && s.localX < RAMP_START) return t("onboarding.buildSpeed", undefined, "HOLD · build speed down the big drop");
+    if (s.localX >= RAMP_START && s.localX < GAP_START) return t("onboarding.rideRamp", undefined, `${release} · ride the ramp to launch`);
+    if (s.localX >= DROP_START && s.localX < RAMP_START) return t("onboarding.buildSpeed", undefined, `${hold} · build speed down the big drop`);
   } else if (s.altitude > 4 && s.altitude < 55 && s.vy < -8) {
-    return s.landingSlope < -0.08 ? t("onboarding.catchDownslope", undefined, "HOLD · catch the downslope") : t("onboarding.softenLanding", undefined, "RELEASE · soften the landing");
+    return s.landingSlope < -0.08 ? t("onboarding.catchDownslope", undefined, `${hold} · catch the downslope`) : t("onboarding.softenLanding", undefined, `${release} · soften the landing`);
   } else if (s.altitude >= 55 && s.vy < -8) {
-    return t("onboarding.holdToDescend", undefined, "HOLD to descend · look for a downhill landing");
+    return t("onboarding.holdToDescend", undefined, `${hold} to descend · look for a downhill landing`);
   }
   return "";
 }

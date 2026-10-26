@@ -44,12 +44,16 @@ export const MOMENT_KINDS = [
   // order both follow this list, so inserting a kind would silently rewrite the
   // story of every run already recorded.
   "wee",
+  // Also appended, for the same reason: `frenzy` is the fourth clean take-off in
+  // a row (see ChainFlair) and has to land in the ledger AFTER every moment that
+  // can precede it, or a saved run's story would be renumbered.
+  "frenzy",
 ] as const;
 
 export type MomentKind = (typeof MOMENT_KINDS)[number];
 
 /** Popup visual styles the HUD already knows how to draw. */
-export type MomentPopup = "perfect" | "great" | "thud" | "bop" | "fever" | "zenith" | "splash" | "power";
+export type MomentPopup = "perfect" | "great" | "thud" | "bop" | "fever" | "apex" | "splash" | "power";
 
 export type MomentDef = {
   kind: MomentKind;
@@ -154,6 +158,27 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
       tip: "Flying low and fast over a ridge pays +15 each time. Danger is literally a scoring mechanic. And you eat danger for breakfast!",
     },
   },
+  // The one big celebration. Tiny Wings spent its entire flourish budget on this
+  // moment — four clean take-offs, announced once — and Sunbird had the chain and
+  // the Fever payout but no moment that said so. Appended beside `perfect` in the
+  // table; its KIND is last in MOMENT_KINDS so no saved run's story renumbers.
+  frenzy: {
+    kind: "frenzy",
+    icon: "\u{1F525}",
+    label: "FRENZY",
+    key: "moments.frenzy",
+    cardKey: "moments.frenzy.card",
+    popup: "apex",
+    tone: "apex",
+    haptic: [14, 10, 14, 10, 30],
+    shout: "FRENZY!",
+    cardLine: (n) => `${n} FRENZY \u{2014} four perfect launches, back to back, on pure nerve!`,
+    next: {
+      title: "Ride the chain while it's hot",
+      tip: "A clean take-off at the top of a ramp starts a chain. A sloppy landing ends it. Chain four for FRENZY, three for Fever — keep the streak alive.",
+      action: "open-shop",
+    },
+  },
   perfect: {
     kind: "perfect",
     icon: "\u2728",
@@ -161,7 +186,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     key: "moments.perfect",
     cardKey: "moments.perfect.card",
     popup: "perfect",
-    tone: "zenith",
+    tone: "apex",
     haptic: [8, 6, 8],
     shout: "PERFECT!",
     cardLine: (n) => `${n} PERFECT \u2014 pure butter, chef's kiss, 11/10, would fly again!`,
@@ -177,7 +202,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     label: "PANIC",
     key: "moments.panic",
     cardKey: "moments.panic.card",
-    popup: "zenith",
+    popup: "apex",
     tone: "warn",
     haptic: [6, 4, 6, 4, 20],
     shout: "PANIC!",
@@ -234,7 +259,7 @@ export const MOMENTS: Record<MomentKind, MomentDef> = {
     key: "moments.wee",
     cardKey: "moments.wee.card",
     popup: "fever",
-    tone: "zenith",
+    tone: "apex",
     haptic: [6, 4, 12],
     shout: "WEE!",
     cardLine: (n) => `${n} WEE \u2014 the sky was too slow`,
@@ -274,6 +299,7 @@ export class MomentLedger {
     sleep: 0,
     record: 0,
     wee: 0,
+    frenzy: 0,
   };
   /** Insertion order, so ties on the card read as "the run's story". */
   private order: MomentKind[] = [];
@@ -447,7 +473,15 @@ export function clipFromMoment(kind: MomentKind): ClipKind | null {
   }
 }
 
-/** HappyTime intensity — Poki asks we use this sparingly. Crashes stay silent. */
+/**
+ * HappyTime intensity for a clip, 0…1. Crashes stay silent.
+ *
+ * NOT YET WIRED. `PlatformAdapter.happyTime(intensity?)` now accepts the
+ * value (it used to declare `happyTime(): void`, which made every call site
+ * fire at the default 1.0), but no call site passes one yet — the celebration
+ * sites all call `happyTime()` bare. Wire this in when a celebration is
+ * refactored; it is the missing half of that change.
+ */
 export function clipHappyTime(kind: ClipKind): number {
   switch (kind) {
     case "last_second":

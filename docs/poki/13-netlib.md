@@ -30,7 +30,7 @@ and it is usable whether or not the game is hosted on Poki.
 
 | Rule | Implementation |
 |---|---|
-| `NL-01`, `NL-02` | `src/game/PokiNetlib.ts` wraps `Network` (`new Network(NETLIB_GAME_ID)`, host `create()` / guest `join(code)`), and exposes the game's own `NetTransport` interface so `MassRace` renders remote pilots without knowing the transport. |
+| `NL-01`, `NL-02` | `src/sdk/PokiNetlib.ts` wraps `Network` (`new Network(NETLIB_GAME_ID)`, host `create()` / guest `join(code)`), and exposes the game's own `NetTransport` interface so `MassRace` renders remote pilots without knowing the transport. |
 | `NL-03` | Outbound state rides the **unreliable** channel at a fixed 15 Hz (never per frame), remote birds are interpolated from a two-sample buffer, and reliable channels carry hello/start/place events where loss would corrupt the race. |
 | `NL-04` | The Poki-hosted signalling/TURN defaults are used as shipped; no custom endpoints are configured. |
 | `NL-05` | `isPokiMultiplayerAvailable()` feature-detects `RTCPeerConnection` + `crypto.getRandomValues` (and the configured game id); `src/game/net-transport.poki.ts` falls back to the WebSocket client when either is missing. |

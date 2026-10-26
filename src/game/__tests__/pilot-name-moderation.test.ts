@@ -170,3 +170,59 @@ describe("pilot-name moderation — generated call signs always pass", () => {
     }
   });
 });
+
+/**
+ * A blocklist that only speaks English is a filter against English speakers.
+ * Poki is a global portal and this build ships 12 locales; the name a player
+ * types lands on a public leaderboard and on in-world name tags for everyone
+ * else in the session, so it has to be filtered in the language it was typed
+ * in. These are the hard cases per language family, with the same evasion
+ * folding (separators, leetspeak, diacritics, homoglyphs) applied.
+ */
+describe("pilot-name moderation — non-English", () => {
+  const blocked: Array<[string, string]> = [
+    ["es", "Puta Madre"],
+    ["es", "P.e.n.d.e.j.o"],
+    ["pt", "Caralho77"],
+    ["pt", "Buceta"],
+    ["fr", "Putain"],
+    ["fr", "C0nnard"],
+    ["de", "Arschloch"],
+    ["de", "Hurensohn"],
+    ["nl", "Klootzak"],
+    ["it", "Vaffanculo"],
+    ["it", "Str0nzo"],
+    ["pl", "Kurwa"],
+    ["pl", "Skurwysyn"],
+    ["ru", "Blyat"],
+    ["ru", "Pizdec"],
+    ["tr", "Orospu"],
+    ["el", "Malakas"],
+    ["ar", "Sharmuta"],
+    ["id", "Kontol"],
+    ["tl", "Putangina"],
+    ["hi", "Madarchod"],
+    ["ko", "Shibal"],
+    ["zh", "Caonima"],
+  ];
+
+  for (const [lang, name] of blocked) {
+    it(`rejects ${lang}: ${name}`, () => {
+      expect(isPilotNameClean(name)).toBe(false);
+    });
+  }
+
+  it("still accepts ordinary non-English names", () => {
+    // The Scunthorpe test, internationalised: real names and real words from
+    // the same languages must survive. A filter that eats "Cornelia" or
+    // "Unique" has traded one failure for a worse one.
+    const safe = [
+      "Jose Ruiz", "Sofia", "Muller", "Nguyen", "Lukasz", "Bjorn",
+      "Cornelia", "Unique", "Apollo", "Brandi", "Principal", "Computer",
+      "Renata", "Yuki", "Mateo", "Fatima", "Dmitri", "Ingrid",
+    ];
+    for (const name of safe) {
+      expect(isPilotNameClean(name), `"${name}" was wrongly rejected`).toBe(true);
+    }
+  });
+});

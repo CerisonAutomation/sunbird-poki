@@ -10,7 +10,17 @@
  * Build targeting: `VITE_PORTAL_TARGET` = "poki" |
  * "none". The SDK script URLs ship as inert literals (verified by
  * scripts/verify-portal.mjs); only the build target's URL is ever injected.
+ *
+ * This module is the COMPOSITION ROOT, not the contract. It imports both
+ * adapters on purpose so Rollup can DCE the branch this build does not target —
+ * but an adapter that reached back here for `PlatformAdapter` or `EMPTY_INFO`
+ * would close the loop `poki.ts → local.ts → platform.ts → poki.ts`. So the
+ * contract lives in `./platform-contract`, a leaf that imports nothing from
+ * this directory, and it is re-exported below: `src/game/**` and the sdk tests
+ * still import `PlatformAdapter`/`EMPTY_INFO` from `sdk/platform` unchanged.
+ * Adapters import `./platform-contract` directly.
  */
+import type { PlatformAdapter, PlatformEvents, PlatformName } from "./platform-contract";
 import { LocalAdapter } from "./local";
 import { runLoadingNet } from "./net";
 // Portal adapters are statically imported below but routed through the
@@ -21,190 +31,32 @@ import { runLoadingNet } from "./net";
 // vice-versa for non-Crazy builds. The shim also means the dynamic import
 // is unnecessary; we can instantiate directly and let Rollup DCE the
 // unused branch completely.
-import { PokiAdapter, pokiInitOptions } from "./poki";
+import { PokiAdapter, markPokiBooted, pokiInitOptions } from "./poki";
+import { pokiSdk } from "./poki-canon";
 import { BANNER_HOST_ID, hasDisplayAd } from "./banner";
 
-export type PlatformName = "poki" | "none";
+/* ------------------------------------------------------------- contract */
 
 /**
- * Portal events the game subscribes to at adapter init. `onPause`/`onResume`
- * fire on portal-side pause/resume (in addition to visibilitychange);
- * `onPortalMute` is the portal audio preference and must beat the in-game
- * toggle.
- */
-export type PlatformEvents = {
-  onAdOpened?: () => void;
-  onAdClosed?: () => void;
-  onPortalMute?: (muted: boolean) => void;
-  onPause?: () => void;
-  onResume?: () => void;
-};
-
-/** Portal identity. */
-export type PlatformIdentity = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  countryCode: string | null;
-  platform: PlatformName;
-};
-
-/** Canonical `user.systemInfo` shape, normalized to nullable fields. */
-export type PlatformSystemInfo = {
-  countryCode: string | null;
-  locale: string | null;
-  deviceType: "desktop" | "tablet" | "mobile" | null;
-  osName: string | null;
-  osVersion: string | null;
-  browserName: string | null;
-  browserVersion: string | null;
-  applicationType: string | null;
-};
-
-/** Invite params passed via portal invite links (roomName, region, …). */
-export type InviteParams = Record<string, string>;
-
-/**
- * The STRICT platform surface. Every member is required — adapters that
- * don't support a capability implement an honest no-op (or a local
- * fallback, for the local adapter) and report it via `capabilities()`.
- */
-export interface PlatformAdapter {
-  readonly name: PlatformName;
-  /**
-   * Whether the player's browser is blocking ads, as reported by the portal.
-   * Optional: only a portal that can detect it implements it. MON-12 makes this
-   * load-bearing rather than cosmetic — a break that cannot serve must not be
-   * requested at all, because "never loop the request" is the requirement.
-   */
-  hasAdBlock?(): boolean;
-  /** True once the SDK finished init (local adapter: immediately). */
-  readonly ready: boolean;
-  /** Which capabilities this adapter actually provides (telemetry/UI gating). */
-  capabilities(): string[];
-
-  /** Portal environment as reported by the SDK ("local" | "disabled" | null). */
-  environment(): string | null;
-
-  /* ------------------------------------------------------- lifecycle */
-  loadingStart(): void;
-  loadingFinished(): void;
-  /**
-   * Tell the portal the game is playable. On Poki this is `gameLoadingFinished`
-   * (one-shot, and the game's own release marker); the adapter owns the mapping.
-   */
-  signalGameReady(): void;
-  gameplayStart(): void;
-  gameplayStop(): void;
-  /** Ask the portal to treat the game as paused (best-effort). */
-  pause(): void;
-  /** Portal celebration for a special moment (personal best). Never throws. */
-  /** Poki's milestone celebration (`PokiSDK.happyTime`, capital T). */
-  happyTime(): void;
-
-  /* -------------------------------------------------------------- ads */
-  /** Midgame/commercial break. Resolves when the break is over or unavailable. */
-  commercialBreak(): Promise<void>;
-  /** Rewarded break. Resolves true only when the portal explicitly granted the reward. */
-  rewardedBreak(): Promise<boolean>;
-  showMidgameAd(): Promise<void>;
-  showRewardedAd(): Promise<boolean>;
-  mountBanner(container: HTMLElement): void;
-
-  /* -------------------------------------------------------- cloud save */
-  saveCloud<T>(key: string, value: T): Promise<void>;
-  loadCloud<T>(key: string): Promise<T | null>;
-  removeCloud(key: string): Promise<void>;
-  clearCloud(): Promise<void>;
-  hasCloud(key: string): Promise<boolean>;
-
-  /* ---------------------------------------------------------- identity */
-  /** Portal user, or null when signed out / unavailable. */
-  getIdentity(): Promise<PlatformIdentity | null>;
-  /** `user.systemInfo` (synchronous on the SDK; null fields when absent). */
-  getSystemInfo(): PlatformSystemInfo;
-  /** Portal leaderboard submission (`user.addScore`) — best-effort, never throws. */
-  submitPlatformScore(score: number): Promise<void>;
-  /**
-   * Open the portal's own leaderboard overlay (Poki `showLeaderboard`).
-   * No-op on platforms without one — gated in the UI by `capabilities()`.
-   */
-  showLeaderboard(id?: number | null): void;
-  /**
-   * Register the gameplay canvas with the portal's playtest recorder
-   * (Poki `playtestSetCanvas`): Level-2 playtest recordings need it.
-   */
-  playtestSetCanvas(canvas: HTMLCanvasElement | HTMLCanvasElement[] | null): void;
-  /** Report a runtime error to the portal's dashboard. Never throws. */
-  captureError(err: string | Error): void;
-  /** Device class as the portal reports it; null when unavailable. */
-  deviceCategory(): "mobile" | "tablet" | "desktop" | null;
-  /**
-   * The language the portal says this player uses (Poki `getLanguage()`), or
-   * null to fall back to browser detection. The guide recommends serving the
-   * player's own language automatically rather than making them find a
-   * setting, and the portal knows it more reliably than `navigator.language`.
-   */
-  getLanguage(): string | null;
-  /**
-   * Reposition the portal's own overlay (the mobile Poki pill) so it does not
-   * cover game UI. No-op where the portal has no such element.
-   */
-  movePill(topPercent: number, topPx: number): void;
-  /**
-   * Level-2 Playtest recording hooks (Poki game-dev-tools). Turning capture on
-   * records the HTML around the canvas so the recording shows what the player
-   * saw; a no-op everywhere else.
-   */
-  playtestCapture(on: boolean): void;
-  /** Open an external URL through the portal (required instead of navigating). */
-  openExternalLink(url: string): void;
-  /** Account linking prompt (identity upgrade flow). True when completed. */
-  requestAccountLink(): Promise<boolean>;
-  /**
-   * Portal user token for backend verification: the Xsolla/IAP user token on
-   * CrazyGames, the short-lived (1-minute) JWT on Poki. Never store it —
-   * verify it server-side immediately.
-   */
-  getIapToken(): Promise<string | null>;
-
-  /* ------------------------------------------------- invites / rooms */
-  isInstantMultiplayer(): boolean;
-  /** A specific invite-link parameter, or null. */
-  getInviteParam(name: string): string | null;
-  /** All invite params, or null when not launched from an invite. */
-  getInviteParams(): InviteParams | null;
-  /** Portal-initiated join (invite click while the game is open). Returns unregister. */
-  onJoinRoom(listener: (params: InviteParams) => void): () => void;
-  /**
-   * Show the portal invite button/link for the current room.
-   * Resolves with the shareable link, or null when unavailable.
-   */
-  inviteFriends(params: InviteParams): Promise<string | null>;
-  /** Push room state to the portal (joinable flag, room id, invite params). */
-  updateRoom(opts: { roomId?: string; isJoinable?: boolean; inviteParams?: InviteParams }): void;
-  leftRoom(): void;
-  /**
-   * Gameplay event measurement. `action` is a stable string: `start`/
-   * `complete`/`fail` form progress funnels (one outcome per attempt);
-   * `visible`/`interact` measure placement exposure vs. engagement; any
-   * other value is a custom event (Poki reserves `/` and `^` — never use them).
-   */
-  measure(category: string, label: string, action: string): void;
-/** Share via the portal (best-effort). True on success.
+ * The platform contract lives in `./platform-contract` — see this file's
+ * header for why it cannot live here. Re-exported (not re-declared) so every
+ * existing importer keeps its import path: `src/game/Game.ts` and
+ * `src/game/actions/shop.ts` take `PlatformAdapter` from `sdk/platform`, and
+ * the sdk tests take `PlatformEvents` from there too. Only the two adapters and
+ * the build-target shim import the contract directly.
  *
- * `params` is portal share data (Poki appends it to a signed shareable URL,
- * readable again with `getInviteParam`; CrazyGames injects its own
- * multiplayer params and ignores extras).
+ * `export type` for the types and a plain `export` for `EMPTY_INFO`: it is a
+ * value, and an `export type` of it would erase it from the emitted module.
  */
-  share(message: string, params?: InviteParams): Promise<boolean>;
-
-  /* --------------------------------------------------------- settings */
-  /** Push the portal's current mute state into `PlatformEvents.onPortalMute`. */
-  syncSettings(): void;
-  /** Settings as exposed by the portal (disableChat etc.). */
-  getSettings(): { muteAudio: boolean; disableChat: boolean };
-}
+export type {
+  InviteParams,
+  PlatformAdapter,
+  PlatformEvents,
+  PlatformIdentity,
+  PlatformName,
+  PlatformSystemInfo,
+} from "./platform-contract";
+export { EMPTY_INFO } from "./platform-contract";
 
 /* ------------------------------------------------------------------ boot */
 
@@ -417,22 +269,33 @@ function ensureSdk(): Promise<PlatformName> {
   if (loadPromise) return loadPromise;
 
   if (TARGET === "poki") {
-    // Poki global
-    type PokiGlobal = {
-      init?: () => Promise<void>;
-      setDebug?: (v: boolean) => void;
-      gameLoadingStart?: () => void;
-      movePill?: (x: number, y: number) => void;
-    };
-    const getPoki = (): PokiGlobal | undefined => (window as unknown as { PokiSDK?: PokiGlobal }).PokiSDK;
+    // The canonical surface, from `poki-canon`: the published `@poki/sdk`
+    // typings plus the CDN members those typings predate. This block used to
+    // declare its own `PokiGlobal` by hand, and a second copy lived further
+    // down the same function — two hand-written surfaces that could drift from
+    // the SDK they describe, which is exactly how `gameLoadingStart` (never in
+    // the published typings) ended up typed twice by hand.
+    const getPoki = pokiSdk;
     loadPromise = new Promise((resolve) => {
-      // Poki Inspector injects the SDK before the bundle loads; wait up to
-      // 2 s, then fall back to loading from the Poki CDN.
+      // The packaged portal build carries the SDK tag in its own <head>
+      // (Poki's HTML5 guide step 1 — `scripts/package-portal.mjs` injects it,
+      // and only for the Poki target, because no other edition may load it).
+      // So the usual path is: the tag is already in flight, this poll sees
+      // `window.PokiSDK` the moment it lands, and `loadCdn()` never runs.
+      //
+      // The poll still exists because a host (the Inspector, an embedder) may
+      // install its own SDK before the bundle evaluates — but the window is
+      // now 800 ms, not 2 s. The old 2 s was the delay before the download
+      // even STARTED, which on a cold mobile load was two seconds of nothing
+      // happening, spent waiting for a script nobody had asked for yet.
+      // `loadCdn()` is now the recovery path for a tag that failed, not the
+      // normal path, and it attaches to the static tag rather than duplicating
+      // it (`data-sunbird-sdk="poki"`).
       let waited = 0;
       const check = window.setInterval(() => {
         if (getPoki()) { window.clearInterval(check); resolve("poki"); return; }
         waited += 100;
-        if (waited >= 2000) { window.clearInterval(check); loadCdn(); }
+        if (waited >= 800) { window.clearInterval(check); loadCdn(); }
       }, 100);
 
       function loadCdn() {
@@ -482,15 +345,8 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
 
   let boot: Promise<{ name: PlatformName; platformEnvironment: string | null }>;
   if (TARGET === "poki") {
-    type PokiGlobal = {
-      init?: (options?: { submitScore?: (submit: (leaderboard: string, score: number) => void) => void }) => Promise<void>;
-      setDebug?: (v: boolean) => void;
-      gameLoadingStart?: () => void;
-      movePill?: (x: number, y: number) => void;
-      /** Game Events (`measure()`) reporting — see developers.poki.com/guide/game-events. */
-      enableEventTracking?: () => void;
-    };
-    const getPoki = (): PokiGlobal | undefined => (window as unknown as { PokiSDK?: PokiGlobal }).PokiSDK;
+    // Same canonical accessor as the loader above — one surface, one source.
+    const getPoki = pokiSdk;
     boot = ensureSdk().then(async (loaded) => {
       if (loaded !== "poki") return { name: "none", platformEnvironment: null };
       try {
@@ -500,14 +356,36 @@ function bootstrapSdk(): Promise<{ name: PlatformName; platformEnvironment: stri
         // submitPlatformScore(). Passing no options would silently leave the
         // portal leaderboards unwired.
         await getPoki()?.init?.(pokiInitOptions());
-        // Game Events: the SDK only reports measure() checkpoints once event
-        // tracking is switched on, and the dashboard's drop-off funnel / C2P
-        // read-outs are built from exactly those events. Same handshake shape
-        // as init — optional, so an older CDN build degrades to plain events.
+        // The one place the SDK counts as booted. The HTML5 doc requires init to
+        // finish before anything else is called, and the ad surface is what
+        // breaks loudly when it is not ("The Poki SDK was not yet booted"): the
+        // global exists from the first line of the CDN script, so the adapter
+        // has no way to tell an unfinished boot from a ready one on its own.
+        // Inside the try on purpose — a rejected init leaves the flag false,
+        // because an SDK that never booted cannot serve a break, and every
+        // earlier line of this function has the same fate.
+        markPokiBooted();
+        // NOT a measure() gate. The CDN loader's `measure` forwards
+        // unconditionally; this member does not enable or gate it. In the
+        // shipped core it is a GDPR/CMP consent hook — it installs a
+        // `window.__tcfapi` Google Consent Mode listener — and it is a
+        // complete no-op inside the portal, because the core short-circuits
+        // the whole call when already running in the Poki iframe. Called
+        // anyway: it is the right place to register consent plumbing, and the
+        // same handshake shape as init degrades cleanly on older builds.
         try { getPoki()?.enableEventTracking?.(); } catch { /* events optional */ }
         // gameLoadingStart() fires exactly once, right after init, before
         // any asset/3D scene work begins. Game.loadingFinished() is called
         // by the Game constructor once the renderer/HUD/terrain are ready.
+        //
+        // It is NOT a documented Poki signal and it is not in the SDK's public
+        // typings; `poki-canon.ts` records the shipped core as defining it as
+        // an empty function, so it never opens a loading phase. It is kept
+        // here because it is harmless and costs one call. It was briefly moved
+        // into the adapter's deferred queue to "fire as early as possible",
+        // which changed the observable boot order and required rewriting the
+        // boot-order expectations — all to reorder a documented no-op, and
+        // leaving the comment in `poki.ts` asserting something untrue.
         getPoki()?.gameLoadingStart?.();
       } catch { /* preserve playable build in sandbox */ }
       // Mobile: move the Poki pill out of the flight-HUD so it never covers

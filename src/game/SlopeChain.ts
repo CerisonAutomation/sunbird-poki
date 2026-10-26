@@ -13,7 +13,7 @@ export class SlopeChain {
   }
 
   land(quality: number, slope: number, impact: number): boolean {
-    this.armed = quality >= 0.8 && slope < -0.04 && impact < 6;
+    this.armed = quality >= 0.8 && slope < -0.02 && impact < 6;
     if (!this.armed) this.chain = 0;
     return this.armed;
   }
@@ -26,7 +26,7 @@ export class SlopeChain {
       return null;
     }
     this.chain += 1;
-    const points = 20 + Math.min(5, this.chain) * 10;
+    const points = 20 + Math.min(8, this.chain) * 12;
     this.score += points;
     return { chain: this.chain, points };
   }

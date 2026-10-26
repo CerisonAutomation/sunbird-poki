@@ -1,0 +1,199 @@
+/**
+ * Where the transient message lanes go, from measurements rather than guesses.
+ *
+ * The flight HUD stacks four things down the middle of the screen: the coaching
+ * band, the coach hand, the toast column and the impact-popup reservation. For a
+ * long time each one was anchored by its own hand-written `calc()` — each
+ * restating the header offset, each with its own per-breakpoint override. Four
+ * lanes, four independent guesses about the same band, and they drifted into each
+ * other: at 1200x762 the messages band and the popup reservation overlapped by
+ * 27,040px², and in portrait the band landed inside the goal strip by 10,012px².
+ *
+ * The fix is not a fifth better guess. It is one measurement, read three times.
+ *
+ * The arithmetic is separated from the DOM because the interesting part is the
+ * orientation problem, and that is testable without a browser: in portrait the
+ * footer is TOP-anchored (design-polish.css), so `--hud-footer-height` measures a
+ * band downward from the header rather than a reservation upward from the
+ * viewport bottom, and every expression that subtracts it from a `bottom` or a
+ * `100%` is subtracting the wrong number. Nothing in CSS can know which edge the
+ * footer actually sits against; this can, because it is handed the answer.
+ */
+
+export const LANE_GAP_PX = 10;
+
+/** Where the band would sit if it only had to clear the header. The chain pills
+ *  live in the header's 4px..66px band and the band cannot start among them. */
+export const MESSAGES_CHAIN_CLEAR_PX = 66;
+
+/** How much of the free band the floor term keeps in hand below the band, so the
+ *  last coaching line never lands on the quip lane. */
+export const MESSAGES_TAIL_PX = 60;
+
+export interface MessageBandInput {
+  /** Height of the play area, in px. */
+  hudPx: number;
+  /** Distance from the play area's top to the bottom of the header lane. */
+  headerPx: number;
+  /** Is the footer pinned to the TOP of the play area (the portrait override)? */
+  anchoredTop: boolean;
+  /** The footer's thickness measured from whichever edge it is anchored to. */
+  footerPx: number;
+  /** Top of the quip lane, in the same top-down coordinates. */
+  quipY: number;
+  /** Top of the slope-chain pill, the other bottom-anchored flight lane. */
+  slopeY: number;
+  /** Measured height of the coach hand; 0 while it is `display:none`. */
+  handPx: number;
+  /** The band's height with no ceiling applied, i.e. what its content needs. */
+  naturalBandPx: number;
+  /**
+   * Keep the band hung under the header even though the footer is bottom-anchored.
+   *
+   * The two flags used to be the same signal: a bottom-anchored footer implied
+   * the band descends to the corridor floor. They are separate now. In portrait
+   * the goal strip moved to the physical bottom (design-polish.css), so the
+   * footer is genuinely bottom-anchored and the *measurements* above are the
+   * portrait-from-the-top ones — but the band still belongs under the header
+   * there, because descending drags `--hud-stack-bottom` with it and pushes the
+   * toast lane off the bottom of a phone. Only the band's PLACEMENT is forced;
+   * every number above is still derived from the real layout.
+   */
+  forceTopLayout?: boolean;
+}
+
+export interface MessageBand {
+  /** `--hud-messages-top`: where the band starts. */
+  top: number;
+  /** `--hud-messages-max`: the ceiling on the band's height. */
+  maxPx: number;
+  /** `--hud-messages-bottom`: where the coach hand starts. */
+  bottom: number;
+  /** `--hud-stack-bottom`: where the toast and popup lanes start, i.e. the
+   *  bottom of the coach hand when it is showing. */
+  stackBottom: number;
+  /** `--hud-lane-floor`: the lowest edge the band may reach. */
+  laneFloor: number;
+  /** `--hud-chain-clear`: the top of the free band, i.e. the lowest edge the
+   *  ring-chain pill may not sit on. */
+  chainClear: number;
+  /** `--hud-footer-bottom`: the footer's reservation from the BOTTOM. */
+  footerBottom: number;
+}
+
+/**
+ * `--hud-footer-bottom`: the footer's reservation measured from the BOTTOM.
+ *
+ * Separate from `--hud-footer-height` because that one means different things
+ * by orientation. It is a function of its own, so it is named here rather than
+ * written at the call site: `messageBand` needs it, and so does anything that
+ * has to publish it BEFORE measuring the lanes that hang off it — `.quips` is
+ * `bottom: calc(var(--hud-footer-bottom) + 42px)`, so a caller that reads the
+ * quip lane's position and then publishes this has measured the previous pass's
+ * value. See `HUD.publishMessageBand`.
+ */
+export function footerBottomReservation({ anchoredTop, footerPx }: Pick<MessageBandInput, "anchoredTop" | "footerPx">): number {
+  return anchoredTop ? 0 : footerPx;
+}
+
+export function messageBand(input: MessageBandInput): MessageBand {
+  const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx, forceTopLayout } = input;
+  // Nothing may start above the header, and in portrait nothing may start above
+  // the TOP-anchored footer either — the same obstruction, stacked under the
+  // header instead of against the viewport bottom.
+  const ceiling = anchoredTop ? Math.max(headerPx + 4, footerPx + 8) : headerPx + 4;
+  const floorY = hudPx - (anchoredTop ? 0 : footerPx);
+  // Both bottom-anchored flight lanes are obstructions. The popup lane is a
+  // reservation that spans the whole corridor, so the lower of the two is what
+  // bounds it. `Math.max(top, …)` keeps a floor that has collapsed above the
+  // band from reporting a floor higher than the band, which is how the popup
+  // lane used to invert to zero height and silently stop rendering.
+  const obstruction = Math.min(quipY, slopeY);
+  // Prefer clearing the chain pills, but never past the room actually left.
+  // Anchoring on `obstruction - TAIL` rather than on the footer's edge is what
+  // keeps the band from being pushed past the lanes it has to stay above: with
+  // only 47px between the header and the quip lane, `floorY - 60` put the band
+  // 10px BELOW the quip lane, and the band measured zero height.
+  const room = Math.max(ceiling, obstruction - MESSAGES_TAIL_PX);
+  // BOTTOM-ANCHORED. `room` is the band's TOP edge — the highest it may sit —
+  // and treating it as the bottom is what broke the first attempt at this.
+  //
+  // The band used to hang just under the header (`headerPx + CHAIN_CLEAR`),
+  // which put the coach's sentence in the middle of the flight corridor, over
+  // the bird and over the line the player is about to take. In a one-button
+  // game the corridor is the game, so the text now sits on the FLOOR of that
+  // corridor: flush above `.quips` and `.slope-chain`, which are already
+  // bottom-anchored to the footer.
+  //
+  // Nothing below the band moved. `.quips` and `.slope-chain` are anchored to
+  // `--hud-footer-bottom` (not to the band), so the band simply descends to sit
+  // on top of them, and `--hud-stack-bottom` carries the coach hand down with it.
+  //
+  // `obstruction` is the top of the highest lane the band must clear, so the
+  // floor it lands on is the lower of that and the footer's own top edge.
+  // The floor the band lands on: the lower of the footer's top edge and the top
+  // of the highest lane it must clear (`.quips` / `.slope-chain`).
+  const laneFloor = Math.min(floorY, obstruction);
+  // LANDSCAPE ONLY, and that restriction is the point rather than a cop-out.
+  //
+  // In portrait the footer is TOP-anchored, so the persistent objective cards sit
+  // directly under the header and the band is already clear of the flight
+  // corridor up there. The bottom of a portrait screen is not free — it belongs
+  // to the toast lane and the quips — and descending into it does not move the
+  // coach's text off the bird; it drags `--hud-stack-bottom` down with it and
+  // pushes the toasts off the bottom of a 568px phone (measured 613.5 of 568).
+  //
+  // In landscape the footer is bottom-anchored, the goal cards live at the
+  // bottom, and the corridor between header and footer is nearly empty. That is
+  // where the sentence was blocking the view, and that is where it now sits —
+  // flush above `.quips` and `.slope-chain`, which hang off
+  // `--hud-footer-bottom` and did not move.
+  const bottomAnchored = !anchoredTop && !forceTopLayout;
+  const headroom = Math.max(0, laneFloor - ceiling - LANE_GAP_PX);
+  const bottomAnchoredMaxPx = Math.min(naturalBandPx, headroom);
+  const top = bottomAnchored
+    ? Math.max(ceiling, laneFloor - LANE_GAP_PX - bottomAnchoredMaxPx)
+    : Math.max(ceiling, Math.min(Math.max(ceiling, headerPx + MESSAGES_CHAIN_CLEAR_PX), room));
+  const maxPx = bottomAnchored
+    ? bottomAnchoredMaxPx
+    : Math.max(0, Math.min(naturalBandPx, Math.max(0, Math.min(laneFloor, Math.max(top, obstruction)) - top - LANE_GAP_PX)));
+  const bottom = top + maxPx;
+  const stackBottom = bottom + LANE_GAP_PX + (handPx > 0 ? handPx + LANE_GAP_PX : 0);
+  return { top, maxPx, bottom, stackBottom, laneFloor, chainClear: ceiling, footerBottom: footerBottomReservation(input) };
+}
+
+/** How far below the header the top-anchored footer is parked. `design-polish.css`
+ *  pins it at `calc(var(--hud-header-height) + 8px)`, so a few px of slack
+ *  separates "parked under the header" from "pinned to the bottom". */
+export const FOOTER_TOP_ANCHOR_SLACK_PX = 16;
+
+export interface FooterAnchorInput {
+  /** The footer's own top edge, in the same top-down coordinates as `hudTop`. */
+  footerTop: number;
+  /** The play area's top edge. */
+  hudTop: number;
+  /** The header's full offset from the play area's top. */
+  headerPx: number;
+}
+
+/**
+ * Is the footer pinned to the TOP of the play area (the portrait override)?
+ *
+ * The obvious test — "is the footer's top in the upper half of the screen?" —
+ * is wrong whenever the header is tall, and the header is tall exactly where
+ * this matters most. On a 320x568 phone the header runs 290px down a 568px
+ * screen, so the portrait footer parked under it at y 310 sits BELOW the
+ * midpoint at y 284. The test called it bottom-anchored, reserved 258px from
+ * the bottom instead of 427px from the top, and the message band was placed at
+ * 306 — inside the footer's own 310..427 box, overlapping it by 196x51px.
+ *
+ * What actually distinguishes the two is the footer's relationship to the
+ * HEADER, not to the viewport: the top-anchored footer is parked a few px below
+ * the header's bottom edge whatever the viewport is shaped like, while a
+ * bottom-anchored footer is pinned to the viewport's bottom edge and sits far
+ * below the header on any screen with room for both.
+ */
+export function footerAnchoredTop({ footerTop, hudTop, headerPx }: FooterAnchorInput): boolean {
+  return footerTop - hudTop <= headerPx + FOOTER_TOP_ANCHOR_SLACK_PX;
+}
+

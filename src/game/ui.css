@@ -64,7 +64,10 @@ button {
   cursor: pointer;
   color: var(--ink);
   font-family: inherit;
-  padding-bottom: 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all var(--transition-fast);
   box-shadow: var(--shadow-sm);
 }
@@ -84,6 +87,16 @@ button {
   outline-offset: 2px;
 }
 
+/* P0 touch-target fix: a little extra breathing room on phones/small
+   tablets — .paper-card's own `width: min(440px, 100%)` (index.css) already
+   keeps it inside the viewport, so 95vw only ever tightens that cap, never
+   loosens it. */
+@media (max-width: 768px) {
+  .back-btn { width: 48px; height: 48px; }
+  .paper-card { max-width: 95vw; }
+  .screen-head { gap: 12px; }
+}
+
 .section-title {
   text-align: left;
   font-size: 11px;
@@ -100,7 +113,7 @@ button {
   text-transform: none;
   letter-spacing: 0;
   font-size: 11px;
-  color: #a07860;
+  color: var(--warm-tan);
 }
 
 .pill {
@@ -117,13 +130,13 @@ button {
 }
 
 .pill.coin {
-  color: #8a5a12;
+  color: var(--amber-mid);
   background: #ffe6a8;
 }
 
 .pill.gold {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
 }
 
 .wallet-row {
@@ -156,8 +169,8 @@ button {
 }
 
 .soft-btn.gold {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
   box-shadow: 0 3px 0 #c98a10;
 }
 
@@ -179,15 +192,15 @@ button {
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
-  background: #ff6b4a;
-  color: #fff;
+  background: var(--coral);
+  color: var(--text-on-sky);
   box-shadow: 0 3px 0 #c8452a;
   white-space: nowrap;
 }
 
 .mini-btn.gold {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
   box-shadow: 0 3px 0 #c98a10;
 }
 
@@ -227,8 +240,8 @@ button {
 }
 
 .primary-btn.gold {
-  background: linear-gradient(180deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(180deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
   box-shadow: 0 6px 0 #c98a10;
 }
 
@@ -271,12 +284,12 @@ button {
   border-radius: 9px;
   font-size: 12px;
   font-weight: 700;
-  color: #8a6a62;
+  color: var(--muted-rose);
   cursor: pointer;
 }
 
 .seg button.on {
-  background: #fff;
+  background: var(--text-on-sky);
   color: var(--ink);
   box-shadow: 0 2px 0 rgba(42, 28, 40, 0.1);
 }
@@ -285,7 +298,7 @@ button {
   font-family: inherit;
   border: none;
   background: #fff1d6;
-  color: #8a5a12;
+  color: var(--amber-mid);
   padding: 6px 12px;
   border-radius: 999px;
   font-size: 12px;
@@ -347,7 +360,7 @@ button {
 .collection.complete .coll-count {
   color: #3a2410;
   font-weight: 800;
-  background: linear-gradient(120deg, #ffd76a, #ff9a4a);
+  background: linear-gradient(120deg, var(--coin-gold), #ff9a4a);
 }
 .skin-grid {
   display: grid;
@@ -372,7 +385,7 @@ button {
 
 
 .skin-card.equipped {
-  border-color: #ffb020;
+  border-color: var(--amber);
   background: #fff7e0;
 }
 
@@ -386,7 +399,7 @@ button {
 
 .sk-perk {
   font-size: 11px;
-  color: #8a6a62;
+  color: var(--muted-rose);
   text-align: center;
   min-height: 28px;
   line-height: 1.2;
@@ -403,7 +416,7 @@ button {
   border-radius: 20px;
   padding: 14px 16px;
   margin-bottom: 10px;
-  border: 2px solid #ffb020;
+  border: 2px solid var(--amber);
 }
 .shop-hero-bird {
   flex-shrink: 0;
@@ -411,7 +424,7 @@ button {
 }
 .shop-hero-info { flex: 1; min-width: 0; }
 .shop-hero-name { font-weight: 800; font-size: 16px; margin-bottom: 2px; }
-.shop-hero-perk { font-size: 12px; color: #8a6a62; line-height: 1.3; margin-bottom: 4px; }
+.shop-hero-perk { font-size: 12px; color: var(--muted-rose); line-height: 1.3; margin-bottom: 4px; }
 .shop-hero-boosts { font-size: 12px; font-weight: 600; color: #4a7a4a; }
 .shop-hero-boosts.muted { color: #b0a098; }
 .boost-pip { margin-right: 2px; font-size: 15px; }
@@ -470,14 +483,14 @@ button {
 
 .upsell span {
   font-size: 11px;
-  color: #8a5a12;
+  color: var(--amber-mid);
   display: block;
 }
 
 .upsell .mini-btn {
   display: inline-block;
   font-size: 12px;
-  color: #5a3a00;
+  color: var(--amber-dark);
 }
 
 /* ---------- paywall ---------- */
@@ -496,8 +509,8 @@ button {
   display: grid;
   place-items: center;
   font-size: 34px;
-  color: #5a3a00;
-  background: linear-gradient(145deg, #ffe38a, #ffb020);
+  color: var(--amber-dark);
+  background: linear-gradient(145deg, #ffe38a, var(--amber));
   box-shadow: 0 6px 0 #c98a10, 0 0 30px rgba(255, 190, 50, 0.5);
 }
 
@@ -517,7 +530,7 @@ button {
 .gold-price small {
   font-size: 12px;
   font-weight: 500;
-  color: #8a6a62;
+  color: var(--muted-rose);
 }
 
 .feature-list {
@@ -569,7 +582,7 @@ button {
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 14px;
-  background: #fff;
+  background: var(--text-on-sky);
   color: var(--ink);
   outline: none;
 }
@@ -581,7 +594,7 @@ button {
 
 .redeem input:focus,
 .sheet input:focus {
-  border-color: #ffb020;
+  border-color: var(--amber);
 }
 
 .sheet input {
@@ -645,7 +658,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #a07860;
+  color: var(--warm-tan);
 }
 
 .sheet .two {
@@ -690,7 +703,7 @@ button {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-on-sky);
   transition: left 0.15s;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
@@ -717,7 +730,7 @@ button.wake-strip.wake-ad-btn {
   display: block;
   width: 100%;
   cursor: pointer;
-  border: 1.5px solid #d4aa44;
+  border: 1.5px solid var(--gold-muted);
   border-top-color: #fffbcc;
   transition: filter 0.12s ease, transform 0.1s ease;
 }
@@ -732,8 +745,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   place-items: center;
   font-size: 30px;
   font-weight: 700;
-  color: #fff;
-  background: conic-gradient(#ff6b4a, #ffc14a);
+  color: var(--text-on-sky);
+  background: conic-gradient(var(--coral), var(--gold));
   box-shadow: 0 6px 0 rgba(42, 28, 40, 0.14);
   animation: pulse 1s ease-in-out infinite;
 }
@@ -746,7 +759,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .ad-card {
   width: min(420px, 100%);
   background: #141226;
-  color: #fff;
+  color: var(--text-on-sky);
   border-radius: 24px;
   padding: 18px;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
@@ -845,12 +858,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 12px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #fff;
+  color: var(--text-on-sky);
 }
 
 .ad-cta {
   display: inline-block;
-  background: #ffc14a;
+  background: var(--gold);
   color: #3a2a00;
   font-weight: 700;
   border-radius: 999px;
@@ -870,7 +883,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   display: block;
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, #ff6b4a, #ffc14a);
+  background: linear-gradient(90deg, var(--coral), var(--gold));
   transition: width 0.1s linear;
 }
 
@@ -912,13 +925,13 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .quest .qb i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #ff6b4a, #ffc14a);
+  background: linear-gradient(90deg, var(--coral), var(--gold));
 }
 
 .quest .qr {
   font-size: 12px;
   font-weight: 700;
-  color: #8a5a12;
+  color: var(--amber-mid);
   background: #ffe6a8;
   padding: 3px 8px;
   border-radius: 999px;
@@ -947,8 +960,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 /* ---------- play HUD additions ---------- */
 .gold-chip {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
@@ -965,7 +978,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .pchip {
   background: rgba(20, 16, 40, 0.55);
-  color: #fff;
+  color: var(--text-on-sky);
   border-radius: 999px;
   padding: 5px 12px;
   font-size: 13px;
@@ -992,41 +1005,44 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .pchip.shield {
   background: linear-gradient(135deg, rgba(74, 208, 255, 0.9), rgba(40,160,220,0.85));
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 2px 10px rgba(40,180,255,0.35);
 }
 
 .pchip.gust {
-  background: linear-gradient(135deg, rgba(100,180,255,0.85), rgba(60,130,220,0.8));
+  background: linear-gradient(135deg, rgba(90,160,220,0.85), rgba(60,130,220,0.8));
   box-shadow: 0 2px 8px rgba(60,130,255,0.3);
+  animation: pulse 0.6s ease-in-out infinite;
 }
 
 .pchip.thermal {
-  background: linear-gradient(135deg, rgba(255,180,40,0.9), rgba(220,120,20,0.85));
+  background: linear-gradient(135deg, rgba(255,190,80,0.9), rgba(220,120,20,0.85));
+  color: #4a2a00;
   box-shadow: 0 2px 10px rgba(255,160,30,0.35);
+  animation: pulse 0.6s ease-in-out infinite;
 }
 
-.toast.zenith {
-  background: #fff;
-  color: #2a1c28;
+.toast.apex {
+  background: var(--text-on-sky);
+  color: var(--ink);
   font-size: 18px;
   letter-spacing: 0.14em;
   box-shadow: 0 0 24px rgba(255, 255, 255, 0.7), 0 6px 0 rgba(42, 28, 40, 0.12);
 }
 
 .toast.gold {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
 }
 
 .toast.quest {
   background: #b6e0a8;
-  color: #1f4a2a;
+  color: var(--forest);
 }
 
 .toast.power {
   background: #7a5cff;
-  color: #fff;
+  color: var(--text-on-sky);
 }
 
 .toast.warn {
@@ -1042,7 +1058,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 /* ---------- vip ---------- */
 .vip-chip {
   background: linear-gradient(135deg, #b6a8ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
@@ -1052,18 +1068,18 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .pill.vip {
   background: linear-gradient(135deg, #b6a8ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
 }
 
 .mini-btn.vip {
   background: linear-gradient(135deg, #b6a8ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 3px 0 #4a3ecf;
 }
 
 .primary-btn.vip {
   background: linear-gradient(180deg, #b6a8ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 6px 0 #4a3ecf;
 }
 
@@ -1073,7 +1089,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .gold-badge.vip {
   background: linear-gradient(145deg, #cfc2ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 6px 0 #4a3ecf, 0 0 30px rgba(120, 100, 255, 0.5);
 }
 
@@ -1084,7 +1100,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .toast.vip {
   background: linear-gradient(135deg, #b6a8ff, #6a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
 }
 
 /* ---------- ghost chip ---------- */
@@ -1099,7 +1115,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .ghost-chip.ahead {
   background: #b6e0a8;
-  color: #1f4a2a;
+  color: var(--forest);
 }
 
 .ghost-chip.behind {
@@ -1126,7 +1142,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   height: 28px;
   border-radius: 50%;
   border: 3px solid rgba(90, 60, 0, 0.15);
-  border-top-color: #ffb020;
+  border-top-color: var(--amber);
   animation: spin 0.8s linear infinite;
 }
 
@@ -1148,17 +1164,17 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .pass-progress i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #ff6b4a, #ffc14a);
+  background: linear-gradient(90deg, var(--coral), var(--gold));
 }
 
 .tier-track {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 340px;
-  overflow-y: auto;
   padding-top: 8px;
   padding-right: 2px;
+  /* No inner scroll — parent .paper-card scrolls; overscroll-behavior:contain
+     on the card prevents the page from scrolling when the list end is reached. */
 }
 
 .tier-card {
@@ -1180,7 +1196,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .tier-num {
   font-size: 12px;
   font-weight: 700;
-  color: #8a6a62;
+  color: var(--muted-rose);
   text-align: center;
 }
 
@@ -1197,18 +1213,18 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .tier-reward.premium {
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
-  color: #5a3a00;
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
+  color: var(--amber-dark);
 }
 
 .tier-reward.locked {
   background: rgba(42, 28, 40, 0.1);
-  color: #8a6a62;
+  color: var(--muted-rose);
 }
 
 .tier-reward.claimed {
   background: #b6e0a8;
-  color: #1f4a2a;
+  color: var(--forest);
 }
 
 .tier-reward:disabled {
@@ -1246,12 +1262,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .trophy.unlocked.gold {
-  border-color: #ffc14a;
+  border-color: var(--gold);
 }
 
 .trophy.unlocked.platinum {
   border-color: #b6a8ff;
-  background: linear-gradient(160deg, #fff, #eee6ff);
+  background: linear-gradient(160deg, var(--text-on-sky), #eee6ff);
 }
 
 .trophy-icon {
@@ -1266,7 +1282,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .trophy-desc {
   font-size: 11px;
-  color: #8a6a62;
+  color: var(--muted-rose);
   margin-top: 2px;
   min-height: 28px;
 }
@@ -1305,6 +1321,9 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   transition: opacity 0.18s ease, transform 0.18s ease, color 0.25s, text-shadow 0.25s;
   pointer-events: none;
   letter-spacing: -0.01em;
+  /* The streak climbs continuously, so it has the same jitter problem the
+     distance and coin counters had. */
+  font-variant-numeric: tabular-nums;
 }
 
 .combo.show {
@@ -1319,7 +1338,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .combo.fire {
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 0 20px #ff6a20, 0 0 44px #ff3c00, 0 0 80px rgba(255,80,0,0.4), 0 3px 0 #7a1000;
   font-size: 42px;
   animation: firecombo 0.6s ease-in-out infinite alternate;
@@ -1348,15 +1367,57 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   }
 }
 
+/* The "push and hold" coach. A 20×20 inline SVG sits directly on top of its own
+   caption, and the two collided.
+
+   The mechanism, because it is not an obvious one: `.icon-sm` is
+   `inline-block` with `vertical-align: -0.15em`. An inline-block's baseline is
+   its BOTTOM margin edge, so that -0.15em lowers the whole icon 0.15em below
+   the line's baseline. A lowered inline box extends the line box UPWARD only —
+   the browser does not grow it downward — so the icon's bottom 0.15em plus its
+   descender overflows the line box and lands inside whatever comes next. Here
+   that was `.hand-hint`, which had 4px of `margin-top` and a `font-size` of
+   56px to descend into: 0.15em is 8.4px, so the glyph and the words it labels
+   physically overlapped. In the flight HUD the `font-size` drops to 38px, where
+   the same arithmetic still overflows the 4px gap.
+
+   It also read as misaligned, because the block is shrink-to-fit around the
+   caption while the icon is only 1.2em wide — `translate(-50%)` centred the
+   *pair* and left the glyph hanging off to the left of the words.
+
+   Both go away with a flex column, because a flex item is blockified: there is
+   no line box, no baseline, no strut and no descender for the icon to fall
+   into, and `align-items: center` puts the glyph on the caption's centre line.
+   The sizes are unchanged; only the box model they share is. */
 .hand {
   position: absolute;
   left: 50%;
   top: 52%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Owns the separation now that `gap` does. index.css gave the caption 4px of
+     `margin-top` for the block flow this rule no longer uses. */
+  gap: 7px;
   font-size: 56px;
   transform: translate(-50%, 0);
   opacity: 0;
   pointer-events: none;
   filter: drop-shadow(0 6px 10px rgba(20, 16, 40, 0.4));
+}
+
+.hand .hand-hint {
+  margin-top: 0;
+  text-align: center;
+}
+
+/* Flex items ignore `vertical-align`, but stating it keeps the icon's box
+   exactly 1.2em square with no baseline offset to inherit if this ever leaves
+   the flex context. */
+.hand .icon-sm {
+  display: block;
+  vertical-align: baseline;
+  flex: 0 0 auto;
 }
 
 .hand.show {
@@ -1379,7 +1440,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   align-items: center;
   gap: 5px;
   background: rgba(20, 16, 40, 0.4);
-  color: #fff;
+  color: var(--text-on-sky);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
@@ -1401,16 +1462,6 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   display: block;
 }
 
-.pchip.gust {
-  background: rgba(90, 160, 220, 0.85);
-  animation: pulse 0.6s ease-in-out infinite;
-}
-
-.pchip.thermal {
-  background: rgba(255, 190, 80, 0.9);
-  color: #4a2a00;
-  animation: pulse 0.6s ease-in-out infinite;
-}
 
 .reached-strip {
   background: rgba(255, 255, 255, 0.6);
@@ -1425,9 +1476,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
   padding-right: 2px;
+  /* No inner scroll — parent .paper-card scrolls. */
 }
 
 .atlas-card {
@@ -1442,20 +1492,21 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .atlas-card.reached {
   opacity: 1;
   border-color: var(--c);
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.85), color-mix(in srgb, var(--c) 30%, #fff));
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.85), color-mix(in srgb, var(--c) 30%, var(--text-on-sky)));
 }
 
 .atlas-num {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #a07860;
+  color: var(--warm-tan);
 }
 
 .atlas-emoji {
   font-size: 28px;
   margin: 2px 0;
 }
+.atlas-emoji .icon-sm { width: 28px; height: 28px; display: block; margin: 0 auto; }
 
 .atlas-name {
   font-weight: 700;
@@ -1464,7 +1515,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .atlas-tag {
   font-size: 11px;
-  color: #8a6a62;
+  color: var(--muted-rose);
   min-height: 28px;
 }
 
@@ -1519,9 +1570,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 /* ---------- account ---------- */
 .code-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
   margin: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .code {
@@ -1542,14 +1596,14 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   border-radius: 10px;
   padding: 8px;
   resize: vertical;
-  background: #fff;
+  background: var(--text-on-sky);
   color: var(--ink);
   margin-bottom: 6px;
 }
 
 .cloud-box:focus {
   outline: none;
-  border-color: #ffb020;
+  border-color: var(--amber);
 }
 
 @media (max-width: 480px) {
@@ -1587,7 +1641,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .mini-btn.vip,
 .soft-btn.vip {
   background: linear-gradient(135deg, #b9a4ff, #7a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 3px 0 #4a34b8;
 }
 
@@ -1605,12 +1659,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .pill.vip {
   background: linear-gradient(135deg, #c9b8ff, #9a7cff);
-  color: #fff;
+  color: var(--text-on-sky);
 }
 
 .gold-badge.vip {
   background: linear-gradient(145deg, #c9b8ff, #7a5cff);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 6px 0 #4a34b8, 0 0 30px rgba(140, 110, 255, 0.45);
 }
 
@@ -1621,7 +1675,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .primary-btn.vip {
   background: linear-gradient(180deg, #a98cff, #7050e8);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: 0 6px 0 #4a34b8;
 }
 
@@ -1629,16 +1683,6 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   box-shadow: 0 3px 0 #4a34b8;
 }
 
-
-.code-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
-  font-size: 13px;
-  font-weight: 600;
-}
 
 /* ---------------- altitude gauge ---------------- */
 .alt-gauge {
@@ -1671,9 +1715,18 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   opacity: 0.5;
 }
 .alt-zone.z1 { bottom: 0; height: 22%; background: linear-gradient(#8fd8ff, transparent); opacity: 0.65; }
-.alt-zone.z2 { bottom: 22%; height: 24%; background: linear-gradient(#ffffff, transparent); opacity: 0.6; }
-.alt-zone.z3 { bottom: 46%; height: 26%; background: linear-gradient(#7fa8ff, transparent); opacity: 0.6; }
-.alt-zone.z4 { bottom: 72%; height: 28%; background: linear-gradient(#2b2b6e, transparent); opacity: 0.7; }
+.alt-zone.z2 { bottom: 22%; height: 24%; background: linear-gradient(var(--pure-white), transparent); opacity: 0.6; }
+/* Colorblind-friendly: z3/z4 (the two zones a red/green mix-up would blur
+   together) also carry a diagonal stripe pattern layered over the color
+   falloff, so the zone reads by pattern even if the tint does not. */
+.alt-zone.z3 {
+  bottom: 46%; height: 26%; opacity: 0.6;
+  background: repeating-linear-gradient(45deg, rgba(255, 180, 0, 0.3) 0 2px, transparent 2px 6px), linear-gradient(#7fa8ff, transparent);
+}
+.alt-zone.z4 {
+  bottom: 72%; height: 28%; opacity: 0.7;
+  background: repeating-linear-gradient(45deg, rgba(255, 100, 100, 0.3) 0 2px, transparent 2px 6px), linear-gradient(#2b2b6e, transparent);
+}
 
 .alt-fill {
   position: absolute;
@@ -1698,7 +1751,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .alt-read {
   font-size: 11px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 1px 4px rgba(20, 20, 40, 0.6);
 }
 
@@ -1715,7 +1768,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 46px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #fff;
+  color: var(--text-on-sky);
   opacity: 0;
   pointer-events: none;
   white-space: nowrap;
@@ -1723,9 +1776,9 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .launch-banner.show { animation: launchpop 0.85s cubic-bezier(0.15, 1.5, 0.35, 1) forwards; }
-.launch-banner.perfect { color: #fff0a8; text-shadow: 0 0 26px #ffb020, 0 4px 0 #a64a12; }
+.launch-banner.perfect { color: #fff0a8; text-shadow: 0 0 26px var(--amber), 0 4px 0 #a64a12; }
 .launch-banner.great { color: #d8f4ff; text-shadow: 0 0 20px #4ab8ff, 0 4px 0 #1a5a8a; }
-.launch-banner.good { color: #fff; font-size: 34px; }
+.launch-banner.good { color: var(--text-on-sky); font-size: 34px; }
 
 /* Screen-space bloom pulse is deliberately subtle: impact hierarchy without
    obscuring the line the player needs to read. */
@@ -1777,14 +1830,30 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   animation: hintpop 0.25s ease;
 }
 
-.pu i { font-style: normal; font-size: 15px; }
-.pu u { text-decoration: none; font-size: 11px; font-weight: 700; color: #fff; }
+/* The countdown chip's icon slot. This held `escapeHtml(p.icon)` — the pickup's
+   icon NAME — so every timed power-up in the strip rendered as the literal word
+   "rocket", "magnet", "shield"… in a 15px italic-ish slot while the boost chips
+   beside it showed the same pickup as an actual drawing. It is an `.icon-sm`
+   SVG now, so the slot is sized in pixels like every other icon slot in this
+   sheet (`.pchip .icon-sm`, `.mode-icon .icon-sm`) rather than in `em` off a
+   `font-size` that only ever sized text. `display: block` blockifies it: as a
+   flex item it would otherwise keep its `vertical-align` baseline box and sit
+   a pixel or two off the countdown number's centre line. */
+.pu i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+}
+.pu i .icon-sm { display: block; width: 15px; height: 15px; vertical-align: baseline; }
+.pu u { text-decoration: none; font-size: 11px; font-weight: 700; color: var(--text-on-sky); }
 .pu b {
   position: absolute;
   left: 0;
   bottom: 0;
   height: 3px;
-  background: linear-gradient(90deg, #ffc14a, #fff1a0);
+  background: linear-gradient(90deg, var(--gold), #fff1a0);
   transition: width 0.2s linear;
 }
 
@@ -1807,6 +1876,21 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   }
 }
 
+/* P0 touch-target fix: `hover: none` targets a real touch-primary device
+   (unlike a max-width query, this also catches a touch-capable tablet or
+   laptop at a wide viewport). `.icon-btn` is deliberately left out here — it
+   is already floored at 44px (`.icon-btn.pause-btn`, `.icon-btn.menu-mute`,
+   `.hud-controls .icon-btn`, and the <=640px rule below all set it
+   explicitly), and `min-height`/`min-width` would win as a layout floor over
+   those fixed 44px values regardless of selector specificity, growing the
+   HUD's mute/pause row exactly where layout.spec.ts/orientation.spec.ts pin
+   its height. `.primary-btn`/`.mini-btn` carry no such pinned height
+   anywhere, so raising their floor here is safe. */
+@supports (hover: none) {
+  .primary-btn { min-height: 48px; padding: 12px 16px; }
+  .mini-btn { min-height: 44px; font-size: 13px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1826,7 +1910,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   transform: translate(-50%, -50%);
   font-size: 96px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-on-sky);
   opacity: 0;
   pointer-events: none;
   text-shadow: 0 6px 0 rgba(42, 28, 40, 0.3), 0 16px 40px rgba(20, 20, 40, 0.4);
@@ -1834,7 +1918,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .countdown.show { animation: cdpop 0.9s ease-out forwards; }
 .countdown.go {
   color: #fff0a8;
-  text-shadow: 0 0 40px #ffb020, 0 0 90px #ff8000, 0 6px 0 rgba(42,28,40,0.35);
+  text-shadow: 0 0 40px var(--amber), 0 0 90px #ff8000, 0 6px 0 rgba(42,28,40,0.35);
   animation: cdgo 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
@@ -1864,10 +1948,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   pointer-events: none;
 }
 
-.vs-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 48px; gap: 6px; align-items: center; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.vs-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 48px; gap: 6px; align-items: center; font-size: 11px; font-weight: 700; color: var(--text-on-sky); text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 .vs-row i { display: block; height: 7px; border-radius: 999px; background: rgba(20,16,40,0.42); overflow: hidden; }
 .vs-row b { display: block; height: 100%; border-radius: 999px; }
-.vs-row.p1 b { background: linear-gradient(90deg, #ff9a62, #ff5a3a); }
+.vs-row.p1 b { background: linear-gradient(90deg, var(--wing), #ff5a3a); }
 .vs-row.p2 b { background: linear-gradient(90deg, #7fc4ff, #3d8bf2); }
 .vs-row em { font-style: normal; text-align: right; }
 
@@ -1879,7 +1963,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .vs-stat { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; background: rgba(255,255,255,0.6); border-radius: 10px; padding: 6px 10px; font-size: 14px; font-weight: 700; }
 .vs-stat span:first-child { text-align: left; }
 .vs-stat span:last-child { text-align: right; }
-.vs-stat em { font-style: normal; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #a07860; font-weight: 600; }
+.vs-stat em { font-style: normal; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warm-tan); font-weight: 600; }
 .vs-stat .w { color: #2d8a4a; }
 
 /* ---------------- mode select ---------------- */
@@ -1915,9 +1999,9 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .mode-list .mode-icon .icon-sm { width: 32px; height: 32px; }
 .mode-body { flex: 1; min-width: 0; }
 .mode-body b { display: block; font-size: 15px; }
-.mode-body em { font-style: normal; font-size: 11px; color: #8a6a62; }
+.mode-body em { font-style: normal; font-size: 11px; color: var(--muted-rose); }
 .mode-grid .mode-body b { font-size: 14px; }
-.mode-meta { font-size: 11px; font-weight: 700; color: #a07860; align-self: flex-end; }
+.mode-meta { font-size: 11px; font-weight: 700; color: var(--warm-tan); align-self: flex-end; }
 .mode-grid .mode-meta { align-self: flex-start; }
 .soft-btn.wide2 { flex: 1; }
 
@@ -1958,14 +2042,14 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-style: normal;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   margin-bottom: 4px;
 }
 
 .gs i { display: block; height: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
 .gs b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); transition: width 0.2s ease; }
-.gs.close b { background: linear-gradient(90deg, #ffc14a, #fff1a0); box-shadow: 0 0 10px #ffb030; }
+.gs.close b { background: linear-gradient(90deg, var(--gold), #fff1a0); box-shadow: 0 0 10px #ffb030; }
 .gs.close em::after { content: " — almost!"; color: #ffe08a; }
 
 .gs u {
@@ -1974,7 +2058,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   text-decoration: none;
   font-size: 10px;
   font-weight: 500;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   margin-bottom: 3px;
   opacity: 0.82;
@@ -1985,6 +2069,9 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 .gs-career { opacity: 0.8; }
 .gs-career b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
+
+.gs-trophy { opacity: 0.85; }
+.gs-trophy b { background: linear-gradient(90deg, #e8c850, #fff4a0); }
 
 .next-action {
   font-size: 13px;
@@ -2001,7 +2088,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   bottom: 26%;
   transform: translate(-50%, 10px);
   background: linear-gradient(135deg, #b6e0a8, #7fd88a);
-  color: #1f4a2a;
+  color: var(--forest);
   font-weight: 700;
   font-size: 14px;
   padding: 8px 16px;
@@ -2012,7 +2099,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .goal-pop.show { animation: goalpop 2.6s ease forwards; }
 .goal-pop.kind-quest {
-  background: linear-gradient(135deg, #ffe08a, #ffc14a);
+  background: linear-gradient(135deg, #ffe08a, var(--gold));
   color: var(--text-on-sky);
   text-shadow: 0 1px 0 var(--halo-on-sky);
 }
@@ -2024,7 +2111,11 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
      the header. The header can grow with race/boost rows and the footer can
      grow with fever, goals and emotes; a fixed header offset therefore puts
      this announcement directly on top of active HUD content. */
-  top: calc(var(--hud-header-height, 110px) + (100vh - var(--hud-header-height, 110px) - var(--hud-footer-height, 65px)) / 2);
+  /* 100dvh, not 100vh: the containing block is the visual viewport, and 100vh
+     is the large one, so on any browser with a collapsing URL bar — the normal
+     way this ships, inside a portal iframe — the banner sat below the centre of
+     what the player can actually see. Every sibling already uses 100%. */
+  top: calc(var(--hud-header-height, 110px) + (100dvh - var(--hud-header-height, 110px) - var(--hud-footer-height, 90px)) / 2);
   transform: translateX(-50%) translateY(8px) scale(.94);
   z-index: 18;
   pointer-events: none;
@@ -2068,10 +2159,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-weight: 900;
   font-size: 19px;
   letter-spacing: 0.02em;
-  color: #5a3a00;
+  color: var(--amber-dark);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 55%),
-    linear-gradient(135deg, #fff3cf, #ffd76a);
+    linear-gradient(135deg, #fff3cf, var(--coin-gold));
   border: 2px solid #e8a83a;
   box-shadow: 0 4px 0 rgba(180, 120, 20, 0.35), 0 0 24px -4px rgba(255, 190, 60, 0.65);
   animation: newbestpop 0.5s cubic-bezier(0.2, 1.5, 0.3, 1);
@@ -2082,7 +2173,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a5a12;
+  color: var(--amber-mid);
   margin-top: 2px;
 }
 @keyframes newbestpop {
@@ -2115,7 +2206,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 /* ---------------- leaderboard ---------------- */
 .board-badge { font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
-.board-badge.live { background: #b6e0a8; color: #1f4a2a; }
+.board-badge.live { background: #b6e0a8; color: var(--forest); }
 .board-badge.local { background: #dfe6f2; color: #3c5470; }
 .board-badge.warn { background: #ffe0a8; color: #7a4a00; }
 
@@ -2140,10 +2231,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 13px;
 }
 .board-row.you { background: linear-gradient(90deg, #ffe6a8, rgba(255, 255, 255, 0.6)); font-weight: 700; }
-.board-row.empty { display: block; text-align: center; color: #a07860; }
-.board-row .bp { font-weight: 700; color: #a07860; }
+.board-row.empty { display: block; text-align: center; color: var(--warm-tan); }
+.board-row .bp { font-weight: 700; color: var(--warm-tan); }
 .board-row .bv { font-weight: 700; }
-.board-rank { text-align: center; font-size: 13px; margin-bottom: 8px; color: #6a5a62; }
+.board-rank { text-align: center; font-size: 13px; margin-bottom: 8px; color: var(--mauve); }
 
 /* Inline leaderboard on the main menu */
 .mini-board { margin: 12px 0 10px; text-align: left; }
@@ -2165,7 +2256,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   margin-top: 6px;
   font-size: 12.5px;
   font-weight: 600;
-  color: #6a5a62;
+  color: var(--mauve);
   text-align: center;
 }
 .mini-board-foot b { color: #b06a10; }
@@ -2181,20 +2272,21 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .cup-card.bronze { border-color: #d09a62; }
 .cup-card.silver { border-color: #b9c4d2; }
-.cup-card.gold { border-color: #ffc14a; }
+.cup-card.gold { border-color: var(--gold); }
 .cup-card.diamond { border-color: #8ad6ff; box-shadow: 0 0 18px rgba(120, 200, 255, 0.4); }
 .cup-head { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.cup-icon { font-size: 24px; }
+.cup-icon { font-size: 24px; width: 34px; display: flex; align-items: center; justify-content: center; }
+.cup-icon .icon-sm { width: 24px; height: 24px; }
 .cup-head b { display: block; font-size: 15px; }
-.cup-head em { font-style: normal; font-size: 11px; color: #8a6a62; }
-.cup-timer { font-size: 11px; font-weight: 700; color: #a07860; white-space: nowrap; }
+.cup-head em { font-style: normal; font-size: 11px; color: var(--muted-rose); }
+.cup-timer { font-size: 11px; font-weight: 700; color: var(--warm-tan); white-space: nowrap; }
 .cup-meta { display: flex; gap: 8px; font-size: 11px; color: #7a5a62; margin: 8px 0 6px; align-items: center; }
 .cup-tier { font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e8d2bc; color: #6a4a3a; }
 .cup-tier.bronze { background: #f0c9a0; color: #7a4415; }
 .cup-tier.silver { background: #e2e8f0; color: #445468; }
 .cup-tier.gold { background: #ffe6a8; color: #7a5200; }
 .cup-tier.diamond { background: #cdefff; color: #1d5a7a; }
-.cup-next { font-size: 11px; color: #8a6a62; margin: 6px 0 8px; }
+.cup-next { font-size: 11px; color: var(--muted-rose); margin: 6px 0 8px; }
 
 /* ---------------- live standings ---------------- */
 .standings {
@@ -2217,12 +2309,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   padding: 3px 7px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-on-sky);
   backdrop-filter: blur(3px);
 }
-.st-row.you { background: rgba(255, 170, 60, 0.85); color: #2a1c28; font-weight: 800; }
+.st-row.you { background: rgba(255, 170, 60, 0.85); color: var(--ink); font-weight: 800; }
 .st-row.remote { box-shadow: inset 0 0 0 1px rgba(140, 220, 255, 0.7); }
-.st-row .st-p { color: #ffd76a; font-weight: 800; }
+.st-row .st-p { color: var(--coin-gold); font-weight: 800; }
 .st-row.you .st-p { color: #5a3200; }
 .st-row .st-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-row .st-d { opacity: 0.85; }
@@ -2230,7 +2322,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .primary-btn.race40 {
   background: linear-gradient(180deg, #63c7ff, #2f7fe0);
   box-shadow: 0 6px 0 #1f5aa8;
-  color: #fff;
+  color: var(--text-on-sky);
 }
 .primary-btn.race40:active { box-shadow: 0 3px 0 #1f5aa8; }
 
@@ -2245,7 +2337,10 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .roster-bar {
   position: absolute;
   left: 50%;
-  top: 66px;
+  /* Same fix as `.finish-countdown`: this is a second element in the top zone
+     pinned to a magic pixel count with no safe-area term, so it collided on a
+     notched phone in landscape for the same reason. */
+  top: calc(56px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   width: min(620px, 94vw);
   pointer-events: none;
@@ -2285,7 +2380,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   height: 17px;
   margin-left: -8.5px;
   background: linear-gradient(180deg, #ffe08a, #ff9a3c);
-  box-shadow: 0 0 0 2px #fff, 0 0 12px rgba(255,190,80,0.95);
+  box-shadow: 0 0 0 2px var(--text-on-sky), 0 0 12px rgba(255,190,80,0.95);
   z-index: 3;
 }
 .rb-emote {
@@ -2306,13 +2401,13 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   margin-top: 3px;
   font-size: 10px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 .rm-room { background: rgba(255,255,255,0.22); border-radius: 999px; padding: 1px 7px; letter-spacing: 0.1em; }
 .rm-net { text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
 .rm-net.racing, .rm-net.lobby { color: #9dffb0; opacity: 1; }
-.rm-net.connecting { color: #ffd76a; }
+.rm-net.connecting { color: var(--coin-gold); }
 .rm-net.error { color: #ff9a8a; }
 
 /* ---------------- slipstream meter ---------------- */
@@ -2382,7 +2477,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .race-result.win { background: linear-gradient(135deg, #ffe6a8, #ffd06a); }
 .rr-place { font-size: 30px; font-weight: 800; color: #b06a10; }
-.rr-of { font-size: 12px; color: #8a6a62; }
+.rr-of { font-size: 12px; color: var(--muted-rose); }
 .rr-time { font-size: 15px; font-weight: 700; margin-left: auto; }
 
 @media (max-width: 640px) {
@@ -2400,12 +2495,20 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .finish-countdown {
   position: absolute;
   left: 50%;
-  top: 120px;
+  /* Was a hardcoded `top: 120px`, which collided with a landscape notch /
+     Dynamic Island because it carried no safe-area term at all. Bound to the
+     same two things the header it must clear is bound to — the shared
+     `--hud-header-height` token and `env(safe-area-inset-top)` — so the
+     countdown can never end up underneath the bar it is supposed to sit below,
+     whatever the device or the header does. The bare 120px also went stale
+     the moment the header height changed, which is exactly the class of bug
+     this removes. */
+  top: calc(var(--hud-header-height, 110px) + 10px + env(safe-area-inset-top, 0px));
   transform: translateX(-50%);
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 3px 0 rgba(42,28,40,0.3), 0 0 18px rgba(255,220,120,0.55);
   pointer-events: none;
 }
@@ -2428,7 +2531,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   margin-bottom: 3px;
   font-size: 10px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-on-sky);
   text-shadow: 0 1px 3px rgba(0,0,0,0.65);
   pointer-events: none;
 }
@@ -2444,7 +2547,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   box-shadow: 0 0 0 2px rgba(255,255,255,0.9), 0 2px 10px rgba(255,170,60,0.7);
 }
 .rp-place.podium { background: linear-gradient(180deg, #fff3c4, #ffce4a); }
-.rm-gap { color: #ffd76a; font-variant-numeric: tabular-nums; }
+.rm-gap { color: var(--coin-gold); font-variant-numeric: tabular-nums; }
 .rm-lead { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* bird pips: body + wings + beak, not plain dots */
@@ -2488,23 +2591,23 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   background:
     radial-gradient(120% 90% at 50% -20%, rgba(255,214,120,0.5), transparent 60%),
     linear-gradient(180deg, #2a3f66, #182642);
-  color: #fff;
+  color: var(--text-on-sky);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
 }
 .live-hero-top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; opacity: 0.92; margin-bottom: 4px; }
 .live-field { background: rgba(255,255,255,0.16); border-radius: 999px; padding: 2px 9px; }
 .live-seed { opacity: 0.8; font-weight: 600; }
-.live-title { margin: 2px 0 4px; font-size: 24px; letter-spacing: 0.01em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.25); }
+.live-title { margin: 2px 0 4px; font-size: 24px; letter-spacing: 0.01em; color: var(--text-on-sky); text-shadow: 0 2px 0 rgba(0,0,0,0.25); }
 .live-hero .tagline { margin: 0 0 8px; color: #d8e6f5; font-size: 12.5px; }
 .live-meter { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.18); overflow: hidden; }
-.live-meter i { display: block; height: 100%; background: linear-gradient(90deg, #7fe08a, #ffd76a); border-radius: 999px; transition: width 0.3s ease; }
+.live-meter i { display: block; height: 100%; background: linear-gradient(90deg, #7fe08a, var(--coin-gold)); border-radius: 999px; transition: width 0.3s ease; }
 .live-meter-cap { font-size: 11px; opacity: 0.85; margin-top: 4px; }
 .race-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
 .race-card { background: rgba(255,255,255,0.62); border: 1px solid var(--sb-line, rgba(36,26,36,0.12)); border-radius: 14px; padding: 10px; text-align: left; }
 .race-card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 6px; min-width: 0; flex-wrap: wrap; }
 .race-card-h b { font-size: 13px; flex-shrink: 0; }
-.race-card-h span { font-size: 10px; color: #8a6a62; min-width: 0; overflow-wrap: anywhere; }
-.race-tip { display: flex; gap: 6px; font-size: 11px; color: #6a5a62; margin-top: 6px; line-height: 1.35; min-width: 0; }
+.race-card-h span { font-size: 10px; color: var(--muted-rose); min-width: 0; overflow-wrap: anywhere; }
+.race-tip { display: flex; gap: 6px; font-size: 11px; color: var(--mauve); margin-top: 6px; line-height: 1.35; min-width: 0; }
 .race-tip span { min-width: 0; overflow-wrap: anywhere; }
 .race-tip b { white-space: nowrap; flex-shrink: 0; color: var(--sb-ink, #241a24); }
 .reward-strip.nest.nemesis, .reward-strip.nemesis { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
@@ -2522,12 +2625,12 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   border: 1px solid rgba(60,90,130,0.2);
 }
 .race-hero.podium { background: linear-gradient(135deg, #fff3cf, #ffe3a1); border-color: rgba(200,150,40,0.4); }
-.race-hero.win { background: linear-gradient(135deg, #ffe9a8, #ffc14a); border-color: #c98a10; box-shadow: 0 0 24px rgba(255,190,80,0.45); }
+.race-hero.win { background: linear-gradient(135deg, #ffe9a8, var(--gold)); border-color: #c98a10; box-shadow: 0 0 24px rgba(255,190,80,0.45); }
 .race-hero.dnf { background: linear-gradient(135deg, #fdf2f2, #fae0df); border-color: rgba(220,60,60,0.3); }
 .race-hero.dnf .race-place b { color: #b91c1c; }
 .race-medal { font-size: 40px; grid-row: span 2; text-align: center; }
 .race-place b { font-size: 26px; font-weight: 900; margin-right: 6px; }
-.race-place span { font-size: 12px; color: #6a5a62; font-weight: 600; }
+.race-place span { font-size: 12px; color: var(--mauve); font-weight: 600; }
 .race-bar { grid-column: 2; height: 7px; border-radius: 999px; background: rgba(36,26,36,0.12); overflow: hidden; }
 .race-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff9a3c, #ff5a3a); border-radius: 999px; }
 .nemesis-card {
@@ -2540,8 +2643,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .reward-strip.photo { background: linear-gradient(90deg, #dcefff, rgba(255,255,255,0.5)); }
 
 /* --- versus result podium --- */
-.vs-hero { text-align: center; border-radius: 16px; padding: 14px 10px 12px; margin-bottom: 10px; color: #fff; }
-.vs-hero.p1win { background: linear-gradient(135deg, #ff9a62, #e05a2a); }
+.vs-hero { text-align: center; border-radius: 16px; padding: 14px 10px 12px; margin-bottom: 10px; color: var(--text-on-sky); }
+.vs-hero.p1win { background: linear-gradient(135deg, var(--wing), #e05a2a); }
 .vs-hero.p2win { background: linear-gradient(135deg, #7fc4ff, #2f6fd0); }
 .vs-crown-big { font-size: 40px; display: block; }
 .vs-winner { font-size: 21px; font-weight: 900; letter-spacing: 0.06em; text-shadow: 0 2px 0 rgba(0,0,0,0.25); }
@@ -2549,11 +2652,11 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .vs-stat em { display: flex; flex-direction: column; gap: 3px; }
 .vs-bars { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
 .vs-bars b { display: block; height: 4px; border-radius: 999px; min-width: 3px; }
-.vs-bars .l { background: #ff9a62; }
+.vs-bars .l { background: var(--wing); }
 .vs-bars .r { background: #7fc4ff; }
 .vs-stat.time { background: rgba(42,28,40,0.08); }
 .vs-row.lead b { box-shadow: 0 0 8px rgba(255,200,80,0.9); }
-.vs-row.lead span:first-child { color: #ffd76a; }
+.vs-row.lead span:first-child { color: var(--coin-gold); }
 
 /* --- shop rarity + stats --- */
 .skin-card { position: relative; }
@@ -2565,18 +2668,18 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .skin-card.r-rare .rarity { background: #dcefff; color: #1d5a7a; }
 .skin-card.r-epic .rarity { background: #e6d4ff; color: #5a2d9e; }
-.skin-card.r-legendary { border-color: #ffc14a; background: #fff7e0; }
-.skin-card.r-legendary .rarity { background: linear-gradient(135deg,#ffd76a,#ffb020); color: #5a3a00; }
+.skin-card.r-legendary { border-color: var(--gold); background: #fff7e0; }
+.skin-card.r-legendary .rarity { background: linear-gradient(135deg,var(--coin-gold),var(--amber)); color: var(--amber-dark); }
 .skin-card.r-mythic { border-color: #9a7cff; background: #f2ecff; }
-.skin-card.r-mythic .rarity { background: linear-gradient(135deg,#b9a4ff,#7a5cff); color: #fff; }
+.skin-card.r-mythic .rarity { background: linear-gradient(135deg,#b9a4ff,#7a5cff); color: var(--text-on-sky); }
 .skin-card.owned:not(.equipped) { border-color: rgba(63,138,74,0.35); }
 .sk-stats { display: flex; flex-direction: column; gap: 2px; width: 100%; margin: 2px 0 4px; }
 .sk-stat { display: grid; grid-template-columns: 24px minmax(0, 1fr) 30px; gap: 4px; align-items: center; font-size: 9px; }
-.sk-stat em { font-style: normal; font-weight: 800; color: #a07860; letter-spacing: 0.06em; }
+.sk-stat em { font-style: normal; font-weight: 800; color: var(--warm-tan); letter-spacing: 0.06em; }
 .sk-stat i { display: block; height: 5px; border-radius: 999px; background: rgba(36,26,36,0.1); overflow: hidden; }
 .sk-stat i b { display: block; height: 100%; background: linear-gradient(90deg, #7fd88a, #3f9a4f); border-radius: 999px; }
 .sk-stat u { text-decoration: none; font-weight: 700; color: #3c5470; text-align: right; }
-.sk-stat.mag { display: block; text-align: center; color: #5a3a00; background: #ffe6a8; border-radius: 6px; padding: 1px 0; font-weight: 700; }
+.sk-stat.mag { display: block; text-align: center; color: var(--amber-dark); background: #ffe6a8; border-radius: 6px; padding: 1px 0; font-weight: 700; }
 .boost-once { font-size: 9px; font-weight: 700; color: #3f7d8a; background: #dcefff; border-radius: 6px; padding: 1px 6px; margin-left: 6px; white-space: nowrap; }
 .tag.need { background: rgba(36,26,36,0.08); color: #7a6259; }
 .boost-row.armed { border: 2px solid #8fd49a; }
@@ -2641,7 +2744,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .rank-div { grid-area: div; font-size: 15px; font-weight: 800; white-space: nowrap; }
 .rank-num { grid-area: num; font-size: 26px; font-weight: 900; text-align: right; font-variant-numeric: tabular-nums; }
 .rank-bar { grid-area: bar; height: 7px; border-radius: 999px; background: rgba(42, 28, 40, 0.12); overflow: hidden; }
-.rank-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb020, #ff7a3a); border-radius: 999px; }
+.rank-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), #ff7a3a); border-radius: 999px; }
 .rank-sub { grid-area: sub; font-size: 11.5px; color: #7a5a12; font-weight: 600; }
 
 /* --- mode row --- */
@@ -2657,7 +2760,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .pvp-mode i { font-style: normal; font-size: 22px; }
 .pvp-mode b { font-size: 12px; }
-.pvp-mode span { font-size: 10px; color: #8a6a62; font-weight: 600; }
+.pvp-mode span { font-size: 10px; color: var(--muted-rose); font-weight: 600; }
 .pvp-mode.rated { border-color: #e8a83a; background: #fff6e0; }
 .pvp-mode:active { transform: translateY(2px); box-shadow: none; transition: none; }
 
@@ -2678,20 +2781,20 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   background: rgba(255, 255, 255, 0.65); border-radius: 14px; padding: 10px 6px;
 }
-.vs-you { border: 2px solid #ffb020; background: #fff6e0; }
+.vs-you { border: 2px solid var(--amber); background: #fff6e0; }
 .vs-foes { display: flex; flex-direction: column; gap: 5px; }
 .vs-foe { padding: 8px 6px; }
 .vs-bird { font-size: 28px; }
 .vs-you b, .vs-foe b { font-size: 13px; }
-.vs-sub { font-size: 11px; color: #8a6a62; font-weight: 600; }
+.vs-sub { font-size: 11px; color: var(--muted-rose); font-weight: 600; }
 .vs-mark {
   align-self: center; font-size: 20px; font-weight: 900; font-style: italic;
-  color: #fff; background: linear-gradient(180deg, #ff6b4a, #d44528);
+  color: var(--text-on-sky); background: linear-gradient(180deg, var(--coral), #d44528);
   border-radius: 12px; padding: 6px 8px; box-shadow: 0 3px 0 #a03a20;
 }
 .lobby-rules {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  font-size: 12px; font-weight: 600; color: #6a5a62; margin-bottom: 8px; flex-wrap: wrap;
+  font-size: 12px; font-weight: 600; color: var(--mauve); margin-bottom: 8px; flex-wrap: wrap;
 }
 .lobby-rules .dot { width: 4px; height: 4px; border-radius: 50%; background: #c8a882; }
 .loadout-card {
@@ -2705,23 +2808,23 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .race-rating { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
 .rate-delta.up { color: #2d7a3a; }
 .rate-delta.down { color: #b03a2a; }
-.race-rated-tag { font-size: 10px; font-weight: 700; color: #8a6a62; background: rgba(42,28,40,0.07); border-radius: 999px; padding: 2px 8px; }
+.race-rated-tag { font-size: 10px; font-weight: 700; color: var(--muted-rose); background: rgba(42,28,40,0.07); border-radius: 999px; padding: 2px 8px; }
 .race-streak { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: #8a4a10; }
 
 /* --- rank screen --- */
 .rank-hero {
   text-align: center; border-radius: 18px; padding: 16px 12px 14px; margin-bottom: 10px;
-  background: linear-gradient(180deg, #2c3a5e, #1a2340); color: #fff;
+  background: linear-gradient(180deg, #2c3a5e, #1a2340); color: var(--text-on-sky);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 .rank-div-big { font-size: 44px; }
 .rank-hero-num { font-size: 44px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
-.rank-hero-div { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd76a; margin: 2px 0 8px; }
+.rank-hero-div { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--coin-gold); margin: 2px 0 8px; }
 .rank-bar.big { height: 9px; background: rgba(255, 255, 255, 0.16); margin: 0 8px; }
 .rank-hero-next { font-size: 12px; opacity: 0.85; margin-top: 6px; font-weight: 600; }
 .rank-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
 .rank-stats > div { background: rgba(255, 255, 255, 0.6); border-radius: 12px; padding: 7px 4px; text-align: center; }
-.rank-stats span { display: block; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #a07860; font-weight: 700; }
+.rank-stats span { display: block; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warm-tan); font-weight: 700; }
 .rank-stats b { font-size: 15px; }
 .match-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
 .match-row {
@@ -2789,7 +2892,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   align-items: center;
   gap: 4px;
 }
-.currency-item .coin-icon { color: #ffb020; }
+.currency-item .coin-icon { color: var(--amber); }
 
 /* ---------- 7. MATCHMAKING ANIMATION ---------- */
 .matchmaking {
@@ -2807,14 +2910,14 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   width: 48px;
   height: 48px;
   border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #ff6b4a;
+  border-top-color: var(--coral);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 .matchmaking-count {
   font-size: 24px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-on-sky);
   font-variant-numeric: tabular-nums;
 }
 .matchmaking-label {
@@ -2830,7 +2933,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 20px;
   font-weight: 800;
   background: linear-gradient(180deg, #ff8a4a, #ff5a3a);
-  color: #fff;
+  color: var(--text-on-sky);
   border: none;
   border-radius: 16px;
   cursor: pointer;
@@ -2855,7 +2958,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .reward-count {
   font-size: 28px;
   font-weight: 900;
-  color: #ffd76a;
+  color: var(--coin-gold);
   text-shadow: 0 2px 0 #a64a12;
   animation: countUp 0.5s ease-out;
   font-variant-numeric: tabular-nums;
@@ -2895,7 +2998,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font: inherit;
 }
 .daily-strip.done { background: linear-gradient(90deg, #e8f6e8, #d8efd8); border-color: rgba(70, 140, 70, 0.35); }
-.daily-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; }
+.daily-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.daily-strip .ds-icon .icon-sm { width: 22px; height: 22px; }
 .daily-strip .ds-body { flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .daily-strip .ds-body b { font-size: 13px; }
 .daily-strip .ds-body em { font-style: normal; font-size: 11px; color: #8a6a4a; }
@@ -2926,7 +3030,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .daily-card.done { background: linear-gradient(135deg, #eef8ee, #ddefdd); border-color: rgba(70, 140, 70, 0.3); }
 .daily-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.daily-head .daily-icon { font-size: 26px; }
+.daily-head .daily-icon { font-size: 26px; display: flex; align-items: center; }
+.daily-head .daily-icon .icon-sm { width: 26px; height: 26px; }
 .daily-head b { display: block; font-size: 14px; }
 .daily-head em { font-style: normal; font-size: 11px; color: #8a6a4a; }
 .daily-head > div { flex: 1; }
@@ -2958,7 +3063,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   width: 26px; height: 26px;
   display: grid; place-items: center;
   border-radius: 50%;
-  background: #6b46c1; color: #fff;
+  background: #6b46c1; color: var(--text-on-sky);
   font-weight: 900; font-size: 13px;
   flex: none;
 }
@@ -3008,7 +3113,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   margin-bottom: 6px;
   background: #fdfcf9;
 }
-.mastery-row .m-icon { font-size: 20px; width: 26px; text-align: center; }
+.mastery-row .m-icon { font-size: 20px; width: 26px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.mastery-row .m-icon .icon-sm { width: 20px; height: 20px; }
 .mastery-row .m-body { flex: 1; }
 .mastery-row .m-body b { display: block; font-size: 13px; }
 .mastery-row .m-body em { font-style: normal; font-size: 11px; color: #9a8a80; }
@@ -3029,7 +3135,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: #3a2410;
-  background: linear-gradient(120deg, #ffd76a, #ff9a4a);
+  background: linear-gradient(120deg, var(--coin-gold), #ff9a4a);
 }
 .mastery-row .qb { margin-top: 3px; }
 
@@ -3052,7 +3158,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 
 /* prize skins: earned, never bought */
 .skin-card.r-prize { border-color: #3aa2a0; background: #e8f8f6; }
-.skin-card.r-prize .rarity { background: linear-gradient(135deg, #6fd8c8, #2a9a90); color: #fff; }
+.skin-card.r-prize .rarity { background: linear-gradient(135deg, #6fd8c8, #2a9a90); color: var(--text-on-sky); }
 .tag.prize {
   display: inline-block;
   font-size: 10px;
@@ -3088,7 +3194,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .trail-card.equipped {
-  border-color: #ffb020;
+  border-color: var(--amber);
   background: #fff7e0;
 }
 
@@ -3116,7 +3222,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .trail-body em {
   font-style: normal;
   font-size: 11px;
-  color: #8a6a62;
+  color: var(--muted-rose);
   max-width: 100%;
   overflow-wrap: anywhere;
 }
@@ -3125,8 +3231,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.05em;
-  color: #5a3a00;
-  background: linear-gradient(135deg, #ffd76a, #ffb020);
+  color: var(--amber-dark);
+  background: linear-gradient(135deg, var(--coin-gold), var(--amber));
   border-radius: 6px;
   padding: 1px 6px;
   margin-left: 6px;
@@ -3134,7 +3240,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 
 .boost-row.deal {
-  border: 2px solid #ffc14a;
+  border: 2px solid var(--gold);
 }
 
 .boost-row .mini-btn s {
@@ -3253,7 +3359,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   gap: 6px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--pure-white);
   border: 1px solid rgba(180, 150, 120, 0.28);
   color: #3b2c24;
   font-size: 12px;
@@ -3273,7 +3379,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .pvp-pill.on, .world-pill.on {
   background: linear-gradient(135deg, #ff9431, #ff6b3d);
-  color: #ffffff;
+  color: var(--pure-white);
   border-color: #e85929;
   box-shadow: 0 2px 8px rgba(255, 107, 61, 0.35);
   transform: scale(1.03);
@@ -3346,6 +3452,16 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   row-gap: 2px;
   min-width: 0;
 }
+/* The boost's name, as an element rather than a bare text node. A text node
+   inherits the ROW's colour, so on a deal row — where the "TODAY −50%" tag
+   paints the line white — the name went white on cream and vanished. The
+   cheapest boost in the shop had no readable name. */
+.boost-row .boost-name {
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 13px;
+}
+.boost-row.armed .boost-name { color: var(--green, #1f5f34); }
 
 .boost-row > div {
   min-width: 0;
@@ -3432,7 +3548,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   text-align: left;
   font: inherit;
 }
-.event-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; }
+.event-strip .ds-icon { font-size: 22px; width: 30px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.event-strip .ds-icon .icon-sm { width: 22px; height: 22px; }
 .event-strip .ds-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .event-strip .ds-body b { font-size: 13px; }
 .event-strip .ds-body em { font-style: normal; font-size: 11px; color: #6a4a8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3464,7 +3581,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   border-top: 1px dashed rgba(120, 70, 190, 0.3);
   padding-top: 10px;
 }
-.theme-strip .theme-icon { font-size: 20px; }
+.theme-strip .theme-icon { font-size: 20px; display: flex; align-items: center; }
+.theme-strip .theme-icon .icon-sm { width: 20px; height: 20px; }
 .theme-strip .theme-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .theme-strip .theme-body b { font-size: 13px; }
 .theme-strip .theme-body em { font-style: normal; font-size: 11px; color: #6a4a8a; }
@@ -3486,7 +3604,8 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .camp-chapter.locked { opacity: 0.55; }
 .camp-chapter.claimed { border-color: rgba(70, 140, 70, 0.35); background: rgba(232, 246, 232, 0.6); }
 .camp-head { display: flex; gap: 10px; align-items: flex-start; }
-.camp-icon { font-size: 24px; width: 32px; text-align: center; }
+.camp-icon { font-size: 24px; width: 32px; text-align: center; display: flex; align-items: center; justify-content: center; }
+.camp-icon .icon-sm { width: 24px; height: 24px; }
 .camp-head b { display: block; font-size: 14px; }
 .camp-head em { display: block; font-style: italic; font-size: 12px; color: #7a6a5a; margin-top: 2px; }
 .camp-goal {
@@ -3507,7 +3626,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   font-size: 11px;
   flex: none;
 }
-.camp-goal.done .check { background: #58b368; border-color: #58b368; color: #fff; }
+.camp-goal.done .check { background: #58b368; border-color: #58b368; color: var(--text-on-sky); }
 .camp-goal.done .cg-label { color: #4a7a52; text-decoration: line-through; }
 .camp-goal .cg-label { flex: 1; min-width: 0; }
 .camp-goal .cg-prog { font-variant-numeric: tabular-nums; font-size: 11px; color: #8a7a6a; white-space: nowrap; }
@@ -3651,7 +3770,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .pause-run-stats .prs {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  font-size: 10px; color: #8a6a62; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 10px; color: var(--muted-rose); letter-spacing: 0.08em; text-transform: uppercase;
 }
 .pause-run-stats .prs b { font-size: 16px; color: var(--ink); letter-spacing: 0; }
 .pause-quick-grid {
@@ -3699,7 +3818,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .soft-btn:hover { background: rgba(255, 255, 255, 0.9); }
 .danger-btn { color: #7a3a36; border-color: rgba(160, 75, 65, 0.28); }
-.pause-exit-note { margin: 11px 4px 0; color: #8a6a62; font-size: 11px; line-height: 1.4; }
+.pause-exit-note { margin: 11px 4px 0; color: var(--muted-rose); font-size: 11px; line-height: 1.4; }
 /* When a pause sub-screen is open, tint the backdrop darker so the sub-card
    reads clearly over the frozen world, and lift the menu above any in-flight
    HUD chrome that might otherwise paint over it. */
@@ -3730,7 +3849,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .menu-section-label {
   margin: 16px 2px 7px;
-  color: #8a6a62;
+  color: var(--muted-rose);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.14em;
@@ -3738,7 +3857,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 }
 .hangar-nav { margin-top: 0; }
 .home-more-heading span {
-  color: #8a6a62;
+  color: var(--muted-rose);
   font-size: 11px;
   font-weight: 700;
 }
@@ -3757,7 +3876,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .home-more summary::-webkit-details-marker { display: none; }
 .home-more summary::before { content: "⌄"; color: #a05a00; font-size: 18px; line-height: 1; }
 .home-more[open] summary::before { transform: rotate(180deg); }
-.home-more summary span { margin-left: auto; color: #8a6a62; font-size: 11px; font-weight: 700; }
+.home-more summary span { margin-left: auto; color: var(--muted-rose); font-size: 11px; font-weight: 700; }
 .home-more[open] summary span { visibility: hidden; }
 .home-more-body { padding: 0 10px 12px; }
 .shop-direct { width: calc(100% - 20px); margin: 8px 10px 4px; display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -3818,7 +3937,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   height: 16px;
   line-height: 16px;
   border-radius: 50%;
-  background: linear-gradient(120deg, #ffd76a, #ff9a4a);
+  background: linear-gradient(120deg, var(--coin-gold), #ff9a4a);
   color: #3a2410;
   box-shadow: 0 1px 3px rgba(80, 40, 10, 0.35);
 }
@@ -3931,7 +4050,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .mini-btn.gold {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 50%),
-    linear-gradient(135deg, #ffd76a, #ffb020);
+    linear-gradient(135deg, var(--coin-gold), var(--amber));
   box-shadow: 0 3px 0 #c98a10, 0 5px 10px -4px rgba(210, 150, 30, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 .soft-btn, .ghost-btn {
@@ -3984,16 +4103,11 @@ button:focus-visible, .toggle:focus-visible {
   pointer-events: none;
 }
 .rank-hero-num {
-  background: linear-gradient(180deg, #fff, #ffd9a8);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* A crisp gold edge, not a bloom: the drop-shadow follows the glyph alpha, so
-     a wide soft one reads as a halo around the digits. */
+  color: #fff8e9;
   filter: drop-shadow(0 1px 2px rgba(24, 16, 40, 0.45));
 }
 .rank-bar.big i {
-  background: linear-gradient(90deg, #ffd76a, #ff8a3a);
+  background: linear-gradient(90deg, var(--coin-gold), #ff8a3a);
   box-shadow: 0 0 10px rgba(255, 180, 70, 0.75);
 }
 .rank-stats > div {
@@ -4083,8 +4197,8 @@ button:focus-visible, .toggle:focus-visible {
   transition: background 0.2s ease;
 }
 .toggle i {
-  background: linear-gradient(180deg, #ffffff, #f2e9de);
-  box-shadow: 0 2px 4px rgba(58, 34, 24, 0.3), inset 0 1px 0 #fff;
+  background: linear-gradient(180deg, var(--pure-white), #f2e9de);
+  box-shadow: 0 2px 4px rgba(58, 34, 24, 0.3), inset 0 1px 0 var(--text-on-sky);
   transition: left 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .toggle.on {
@@ -4188,7 +4302,7 @@ button:focus-visible, .toggle:focus-visible {
 .soft-btn.gold {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 50%),
-    linear-gradient(135deg, #ffd76a, #ffb020);
+    linear-gradient(135deg, var(--coin-gold), var(--amber));
   border: none;
   box-shadow: 0 3px 0 #c98a10, 0 6px 12px -5px rgba(210, 150, 30, 0.5);
 }
@@ -4209,7 +4323,7 @@ button:focus-visible, .toggle:focus-visible {
   transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 .seg button.on {
-  background: #fff;
+  background: var(--text-on-sky);
   box-shadow: 0 2px 6px rgba(58, 34, 24, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -4220,7 +4334,7 @@ button:focus-visible, .toggle:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 2px solid #ffb020;
+  border: 2px solid var(--amber);
   background:
     radial-gradient(120% 70% at 50% -10%, rgba(255, 220, 130, 0.5), rgba(255, 220, 130, 0) 60%),
     #fff6e0;
@@ -4240,7 +4354,7 @@ button:focus-visible, .toggle:focus-visible {
 .vs-mark {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 50%),
-    linear-gradient(180deg, #ff6b4a, #d44528);
+    linear-gradient(180deg, var(--coral), #d44528);
   box-shadow: 0 3px 0 #a03a20, 0 6px 14px -4px rgba(200, 70, 40, 0.5);
   transform: rotate(-4deg);
 }
@@ -4291,7 +4405,7 @@ button:focus-visible, .toggle:focus-visible {
 /* Rematch stands out from the soft buttons — it is the retention seam. */
 .soft-btn.rematch {
   background: linear-gradient(135deg, #3a7bd5, #5a9be8);
-  color: #fff;
+  color: var(--text-on-sky);
   border-color: transparent;
 }
 
@@ -4335,7 +4449,7 @@ button:focus-visible, .toggle:focus-visible {
   padding: 3px 12px;
   border-radius: 999px;
   background: #e8452a;
-  color: #fff;
+  color: var(--text-on-sky);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -4345,7 +4459,7 @@ button:focus-visible, .toggle:focus-visible {
 .feature-list.tight li { padding: 2px 0 2px 28px; font-size: 13px; }
 .primary-btn.starter {
   background: linear-gradient(135deg, #ff9a3a, #e8452a);
-  color: #fff;
+  color: var(--text-on-sky);
   width: 100%;
 }
 .vip-crown { color: #b06ae8; margin-right: 2px; }
@@ -4366,7 +4480,7 @@ button:focus-visible, .toggle:focus-visible {
 .a11y-color .toggle.on { background: #1668d8; }
 .a11y-color .verified-tag { color: #1668d8; }
 .a11y-color .ghost-btn.danger { color: #d87f16; border-color: #d87f16; }
-.a11y-color .toast.warn { border-left: 4px solid #d87f16; }
+.a11y-color .toast.warn { box-shadow: inset 4px 0 0 #d87f16; }
 
 /* Large text: one comfortable step up across the whole UI. */
 .a11y-bigtext .hud-root { font-size: 112%; }
@@ -4605,7 +4719,7 @@ button:focus-visible, .toggle:focus-visible {
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, #ffb020, #ff7a30);
+  background: linear-gradient(90deg, var(--amber), #ff7a30);
   transition: width 0.3s ease;
 }
 
@@ -4748,9 +4862,9 @@ button:focus-visible, .toggle:focus-visible {
   color: #ffd66b;
   text-shadow: 0 0 26px #ff8800, 0 0 50px #ff4400, 0 3px 8px rgba(0,0,0,0.5);
 }
-.impact-popup--zenith {
+.impact-popup--apex {
   font-size: 32px;
-  color: #ffffff;
+  color: var(--pure-white);
   text-shadow: 0 0 22px #6af, 0 2px 6px rgba(0,0,0,0.5);
 }
 .impact-popup--splash {
@@ -4799,7 +4913,7 @@ button:focus-visible, .toggle:focus-visible {
 
 .rival-nametag .rank-badge {
   background: rgba(255, 122, 42, 0.9);
-  color: #fff;
+  color: var(--text-on-sky);
   border-radius: 4px;
   padding: 0px 4px;
   font-size: 8px;
@@ -4842,7 +4956,7 @@ button:focus-visible, .toggle:focus-visible {
   padding: 8px 10px;
   font-size: 14px;
   font-weight: 700;
-  background: #fff;
+  background: var(--text-on-sky);
   color: var(--ink);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -4888,7 +5002,7 @@ button:focus-visible, .toggle:focus-visible {
   padding: 8px 6px;
   border-radius: 10px;
   border: 1px solid #e0d0b0;
-  background: #fff;
+  background: var(--text-on-sky);
   text-align: center;
   font-size: 11px;
 }
@@ -4994,7 +5108,7 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 }
 .matchmaking-title {
   font: 800 20px var(--display);
-  color: #fff;
+  color: var(--text-on-sky);
   letter-spacing: 0.02em;
   text-align: center;
   text-wrap: balance;
@@ -5109,7 +5223,7 @@ h1, h2, h3, h4, h5, h6, .heading-art {
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(20, 16, 40, 0.5);
-  color: #fff;
+  color: var(--text-on-sky);
   font-size: 13px;
   font-weight: 700;
   backdrop-filter: blur(6px);
@@ -5303,3 +5417,732 @@ h1, h2, h3, h4, h5, h6, .heading-art {
 .shop-onboard b { display: flex; align-items: center; gap: 6px; font: 700 12px var(--display); color: #5a3d10; margin-bottom: 7px; }
 .shop-onboard-steps { margin: 0; padding: 0 0 0 16px; display: flex; flex-direction: column; gap: 5px; }
 .shop-onboard-steps li { font: 400 11.5px/1.45 var(--body); color: #6a4a18; }
+
+/* ---------- Celebration strip & wings proximity bar ---------- */
+.celebration { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.celebration .beat { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.08); font: 600 13px/1.3 var(--display); }
+/* The row is a single-line flex box: the icon, then the sentence. A flex item
+   will not shrink below its min-content width unless it is told it may, so a
+   long beat line — and these are translated, so "German" is not "English" —
+   pushed straight out of the card instead of wrapping. `min-width: 0` on the
+   row plus `overflow-wrap` on the text is what lets a long line break. */
+.celebration .beat { min-width: 0; }
+.celebration .beat-text { min-width: 0; overflow-wrap: anywhere; }
+/* The icon is pinned to one size for BOTH surfaces. Left to itself it inherits
+   `.icon-sm`'s `1.2em`, and the staged rows are 13px while the ledger chips
+   under them are 11px — so the same trophy drew at 15.6px directly above the
+   same trophy at 13.2px, which is the "crowding" read. A fixed box also stops
+   the flex row from ever negotiating the glyph's width against the words. */
+.celebration .beat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.celebration .beat-icon .icon-sm { display: block; width: 100%; height: 100%; vertical-align: baseline; }
+.celebration .beat.silver { box-shadow: inset 3px 0 0 #a0b8d8; }
+.celebration .beat.gold { box-shadow: inset 3px 0 0 var(--gold-muted); }
+.celebration .beat.platinum { box-shadow: inset 3px 0 0 #e0d0f0; }
+.celebration .beat.bronze { box-shadow: inset 3px 0 0 #c09060; }
+.celebration .beat.banner { background: rgba(180,140,40,0.18); box-shadow: inset 3px 0 0 var(--gold-muted); }
+.celebration .beat.more { opacity: 0.7; font-style: italic; }
+.celebration .beat-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.celebration .beat-row .beat { font-size: 11px; padding: 5px 8px; }
+/* Growth ledger — the two ladders the results card names. Was
+   `min-height: 1px`, a placeholder collapsed to a sliver for a module that had
+   no importer at all; the lines are real content now, so they get real height. */
+.growth-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 9px 12px 10px;
+  border-radius: 12px;
+  background: rgba(20, 16, 40, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.growth-ledger:empty { display: none; }
+.growth-ledger .gl-title {
+  font: 700 10px/1 var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-on-sky);
+  opacity: 0.62;
+}
+.growth-ledger dl { margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.growth-ledger .gl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* Same failure as the beat rows, one screen down: `dt` is a flex item with no
+   `min-width: 0`, so it refuses to shrink and shoves `dd` — the "1,850 m to
+   Gale" figure and its progress bar — out past the card's right edge. Letting
+   the term take the slack and wrap is what keeps the number on screen. */
+.growth-ledger .gl-row dt { min-width: 0; flex: 1 1 auto; }
+.growth-ledger .gl-row .gl-label { min-width: 0; overflow-wrap: anywhere; }
+.growth-ledger .gl-row dd { flex: 0 0 auto; }
+.growth-ledger dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: 600 13px/1.2 var(--display);
+  color: var(--text-on-sky);
+}
+.growth-ledger dt i { font-style: normal; font-size: 14px; }
+.growth-ledger dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.growth-ledger dd span {
+  font: 500 11px/1.2 var(--display);
+  color: var(--text-on-sky);
+  opacity: 0.85;
+  text-align: right;
+}
+.growth-ledger .gl-bar {
+  display: block;
+  width: min(150px, 40vw);
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+.growth-ledger .gl-bar b { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
+.growth-ledger .gl-wings .gl-bar b { background: linear-gradient(90deg, #a0c8ff, #d8b4fe); }
+.growth-ledger .gl-mastery .gl-bar b { background: linear-gradient(90deg, #ffe08a, var(--coin-gold)); }
+
+/* Wings proximity bar */
+/* Absolutely positioned like every other flight element. It was the last
+   child never added to a `lane()`, which made it the first in-flow block of
+   `.play-hud` — so the "N m to <rank>" meter printed across the very top of
+   the screen, out of context, and pushed the header down 31px.
+
+   It was also the one persistent element painting a band across the middle of
+   the flight lane: `> i` is a block-level bar, so at min(340px, 74vw) the
+   meter drew a 340px rule straight through the screen at the height the bird
+   flies, which is the one region the interface must leave to the bird. A
+   measure across 390px is a HUD *band*, not a readout. Left-anchored and
+   narrowed it becomes a chip in the same left column as the altitude gauge —
+   both answer "how is this flight going" — and the centre stays clear. */
+.wings-near {
+  position: absolute;
+  left: 62px;
+  bottom: calc(var(--hud-footer-height, 90px) + 192px);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 10px;
+  width: max-content; max-width: min(178px, 46vw);
+  border-radius: 999px;
+  background: rgba(20, 16, 40, 0.42);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.wings-near.hidden { display: none; }
+.wings-near > i { display: block; height: 4px; border-radius: 2px; background: var(--gold-muted); transition: width 0.3s; max-width: 100%; }
+.wings-near > span { font: 600 11px/1 var(--display); color: rgba(255,255,255,0.8); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The Reduce Motion switch lives in Settings, and the game is spent flying — so
+   the flight HUD needs the same `animation: none` the overlay gets. That rule
+   now lives in menu-polish.css, with !important: a rule here without it was a
+   single three-class selector in the cascade-winning sheet away from silently
+   not applying. See the "Same promise for the flight HUD" note there. */
+
+/* Reduce motion overrides */
+.sb-reduce-motion .celebration .beat { animation: none; opacity: 1; }
+.sb-reduce-motion .gs-quest.just { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .celebration .beat { opacity: 1; }
+  .gs-quest.just { animation: none; }
+}
+
+@import "./menu-polish.css";
+
+/* ---------- the wingbeat ---------- */
+/* `sunbirdSVG({ animateWings: true })` has been emitting a wing class since the
+   bird was first drawn, and nothing ever defined it — so every "animated" bird
+   in the game (the title screen, the name entry, the boot loader) has been a
+   still image with a transform-origin and no motion. This is that animation. */
+/* Both wings swing in opposition about their own shoulder, which is what makes
+   a flap read as a flap rather than as the whole bird tilting. The two are
+   separate keyframes because the far wing has to lead the near one slightly. */
+.bird-wing { transform-box: view-box; }
+.bird-wing--songbird,
+.bird-wing--wader,
+.bird-wing--comet,
+.bird-wing--ember,
+.bird-wing--raptor,
+.bird-wing--owl { animation: birdFlapNear 1.15s ease-in-out infinite; }
+.bird-wing--songbird.wing-far,
+.bird-wing--wader.wing-far,
+.bird-wing--comet.wing-far,
+.bird-wing--ember.wing-far,
+.bird-wing--raptor.wing-far,
+.bird-wing--owl.wing-far { animation-name: birdFlapFar; }
+@keyframes birdFlapNear {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-17deg); }
+}
+@keyframes birdFlapFar {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-13deg); }
+}
+/* A raptor holds its wings out; a wader beats them slowly and shallowly. One
+   shared keyframe for six species is what made them all flap like the songbird
+   no matter what they were. */
+.bird-wing--raptor { animation-duration: 1.9s; }
+.bird-wing--owl { animation-duration: 1.45s; }
+.bird-wing--wader { animation-duration: 1.6s; }
+.bird-wing--ember, .bird-wing--comet { animation-duration: 0.85s; }
+/* The shop is where a player decides what to fly, so the bird on the card is
+   the product. Bigger, and lit off the tile so it reads as the thing being
+   offered rather than as a thumbnail in a list. */
+.skin-bird .bird-wing { transform-box: view-box; }
+.skin-card .skin-art svg { filter: drop-shadow(0 3px 5px rgba(58, 34, 24, 0.26)); }
+.shop-hero-bird { filter: drop-shadow(0 6px 12px rgba(58, 34, 24, 0.3)); }
+
+/* Respect the in-game Reduce Motion toggle and the OS setting alike — a
+   decorative flap is exactly the kind of motion that setting exists for.
+   These come LAST and without `!important`, so they win on source order
+   against the per-species durations above at equal specificity. The in-game
+   class wins on specificity against the media query below. */
+@media (prefers-reduced-motion: reduce) {
+  .bird-wing,
+  .bird-wing--songbird, .bird-wing--raptor, .bird-wing--owl,
+  .bird-wing--wader, .bird-wing--ember, .bird-wing--comet,
+  .bird-wing.wing-far { animation: none; }
+}
+.sb-reduce-motion .bird-wing,
+.sb-reduce-motion .bird-wing--songbird, .sb-reduce-motion .bird-wing--raptor,
+.sb-reduce-motion .bird-wing--owl, .sb-reduce-motion .bird-wing--wader,
+.sb-reduce-motion .bird-wing--ember, .sb-reduce-motion .bird-wing--comet,
+.sb-reduce-motion .bird-wing.wing-far { animation: none; }
+
+/* ---------- the combined PvP screen ---------- */
+/* The AI flock now lives on the race screen next to the lobby, so it needs its
+   own visual register: a recessed panel that reads as "the other half of this
+   page" rather than as a second screen that happened to get appended. */
+.race-rival-divider {
+  margin-top: 22px;
+  padding-top: 4px;
+}
+.race-section-ai {
+  border-style: dashed;
+  border-color: rgba(126, 168, 150, 0.5);
+  background: linear-gradient(180deg, rgba(30, 52, 46, 0.5), rgba(20, 38, 34, 0.4));
+}
+.race-section-ai .practice-formats summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 6px 0;
+  list-style: revert;
+}
+.race-section-ai .practice-formats summary h3 { display: inline; margin: 0; }
+
+/* The ranked note under a duel: a caveat the player must be able to read but
+   not one that should compete with the duel button above it. */
+.ranked-perk-note {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+
+/* The daily-ritual strip and its dismiss affordance. The ✕ is a real control
+   and needs a tap target, not a glyph floating in a corner. */
+.daily-ritual-banner { align-items: center; }
+.daily-ritual-close {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+/* ---------- the chain readout, and FRENZY ---------- */
+/* Tiny Wings had exactly one flourish in the whole game: four clean take-offs in
+   a row, announced. The chain that produces it is the game's core skill loop, so
+   it has to be readable mid-flight without looking away from the bird. The
+   readout sits in the same lane as the launch banner, scales with the chain, and
+   gains a tier of colour and pulse per step — a reward that looks the same at
+   ×1 and ×9 is a reward nobody feels. */
+.chain-readout {
+  --chain-scale: 0;
+  --chain-pulse: 1s;
+  /* In the flight-messages lane, not floating at 22% of the screen. At 568x320
+     that 22% is 70px — inside a ~90px header, so CHAIN x2 printed over the
+     distance/daylight/coins bar. Lane placement is what the sibling
+     announcements already do and is size-proof. */
+  position: static;
+  transform: scale(var(--chain-scale));
+  transform-origin: 50% 50%;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease-out, transform 0.14s cubic-bezier(0.2, 1.6, 0.4, 1);
+  text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 18px currentColor;
+  z-index: 4;
+}
+.chain-readout.tier-warm {
+  font-size: 22px;
+  color: #ffe08a;
+  opacity: 1;
+}
+.chain-readout.tier-hot {
+  font-size: 28px;
+  color: #ffb03a;
+  opacity: 1;
+}
+.chain-readout.tier-blazing {
+  font-size: 34px;
+  color: #ff7a3c;
+  opacity: 1;
+  animation: chainBeat var(--chain-pulse) ease-in-out infinite;
+}
+/* The one that matters. Full weight, its own colour, and a beat that a player
+   feels in the corner of their eye before they read the word. */
+.chain-readout.tier-frenzy {
+  font-size: 42px;
+  color: #ff4d6d;
+  opacity: 1;
+  animation: chainBeat var(--chain-pulse) ease-in-out infinite, frenzyGlow 1.1s ease-in-out infinite alternate;
+}
+@keyframes chainBeat {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.45); }
+}
+@keyframes frenzyGlow {
+  0% { text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 18px #ff4d6d; }
+  100% { text-shadow: 0 2px 0 rgba(40, 22, 10, 0.45), 0 0 34px #ffd166, 0 0 60px #ff4d6d; }
+}
+/* Reduced motion keeps the escalation — size and colour, which carry the
+   information — and drops only the pulsing, which is the decorative half. */
+@media (prefers-reduced-motion: reduce) {
+  .chain-readout.tier-blazing,
+  .chain-readout.tier-frenzy { animation: none; }
+}
+.sb-reduce-motion .chain-readout.tier-blazing,
+.sb-reduce-motion .chain-readout.tier-frenzy { animation: none; }
+
+/* The results card gained a chip, so it needs a place to be. */
+.moment-chip.frenzy {
+  border-color: #ff4d6d;
+  background: rgba(255, 77, 109, 0.18);
+  color: #ffd166;
+}
+
+/* A daily-reward card the player is told has coins waiting must be a door, not
+   a notice. It was a <div> whose only control was the dismiss — the one control
+   that made the problem go away. */
+.pc-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.pc-open .pc-body { text-align: left; }
+.daily-ritual-close { flex: 0 0 auto; }
+
+/* A cup title prize, finally rendered. */
+.prize-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  background: rgba(176, 106, 232, 0.14);
+  border-color: rgba(176, 106, 232, 0.5);
+  color: #7a3fb0;
+  font-weight: 800;
+  cursor: default;
+}
+
+/* Why the run ended, above "Flight completed". */
+.end-reason {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted-rose);
+}
+
+/* ---------------- run medal ladder ----------------
+   Sits under the distance block, which is where the player's eye already is for
+   the number it qualifies. Deliberately small and quiet: it answers "what is
+   next", not "how am I doing", and it must never compete with the terrain.
+
+   `data-medal` carries the earned rung so the colour follows the ladder
+   instead of being a second hardcoded mapping in the stylesheet. */
+.stat-medal {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-on-sky, rgba(255, 248, 235, 0.72));
+  text-shadow: 0 1px 2px rgba(42, 28, 40, 0.45);
+  font-variant-numeric: tabular-nums;
+  transition: color 160ms ease;
+}
+/* No `opacity: 0.7` here. This is the medal line for every player who has not
+ * earned a medal yet — i.e. the entire first run, which on a portal is most of
+ * the session — and it is drawn straight onto the sky with no scrim. Measured
+ * against the four sky presets that is 2.43:1 on day, 2.11:1 on shader and
+ * 1.76:1 on golden, at 11px. WCAG AA wants 4.5:1. The 0.7 was there to make the
+ * line recede, and it did: it made it unreadable instead. The colour already
+ * carries the 0.55 alpha, which is the whole of the intended subtlety. */
+.stat-medal[data-medal="none"] { color: var(--text-on-sky, rgba(255, 248, 235, 0.72)); }
+.stat-medal[data-medal="bronze"] { color: var(--coral, #e8853f); }
+.stat-medal[data-medal="silver"] { color: var(--text-on-sky, #f6efe2); }
+.stat-medal[data-medal="gold"] { color: var(--gold, #ffc14a); }
+.stat-medal[data-medal="platinum"] { color: var(--aqua, #7fe3d0); }
+
+/* Within a quarter of the next rung the goal is close enough to steer by, and
+   that is the one moment this line is allowed to be loud. */
+.stat-medal.close {
+  color: var(--gold, #ffc14a);
+  animation: medal-breathe 900ms ease-in-out infinite;
+}
+@keyframes medal-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat-medal.close { animation: none; }
+}
+
+/* Quest rows inside the one goal panel. They reuse the `.gs` widget — same
+   label / progress / bar row as the session goals — because the two used to be
+   two separate panels drawing the same thing, which read as a duplicate panel
+   to anyone playing (and was the "why are there two goal bars" report). Now
+   there is one panel and the rows are distinguished by a colour, not a box. */
+.gs-quest { border-color: rgba(127, 232, 200, 0.34); }
+.gs-quest > i > b { background: linear-gradient(90deg, #7fe8c8, #ffe08a); }
+.gs-quest.done { opacity: 0.86; border-color: var(--gold); }
+.gs-quest.done > i > b { background: var(--gold); }
+.gs-quest.just { animation: gs-bank 0.6s ease-out; }
+@keyframes gs-bank {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.55); }
+  40%  { transform: scale(1.03); box-shadow: 0 0 12px 2px rgba(255, 224, 138, 0.35); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(255, 224, 138, 0); }
+}
+
+/* ---------- stat glyphs ----------
+   The flight readouts were bare text: "DISTANCE", "best 0", "daylight",
+   "0 m". Coins had a glyph and daylight had a knob icon, so the top bar read
+   as one styled readout and three plain labels, and the eye had to read every
+   one of them to know what it was looking at. Each label now carries a small
+   SVG so the bar scans as a set of the same widget.
+
+   Deliberately absent from the COINS label: the coin glyph already sits in the
+   value below it, and a second coin in the same block is the two-circles
+   report again. */
+.stat-label,
+.stat-sub,
+.sun-caption,
+.alt-read {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stat-block.right .stat-label { justify-content: flex-end; }
+.stat-label .icon-sm,
+.stat-sub .icon-sm,
+.sun-caption .icon-sm,
+.alt-read .icon-sm {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  opacity: 0.9;
+  /* Nudged down a hair: the icons sit optically high against 10-11px caps. */
+  transform: translateY(0.5px);
+}
+.alt-read .icon-sm { width: 11px; height: 11px; }
+
+/* ---------------- pre-flight loadout ----------------
+   One screen owns three things the player used to have to reconcile across
+   two: which bird, which trail, and what is in the booster store. The rows
+   below are one shape (`.pf-row`) with per-kind parts, so a bird, a
+   trail and a booster can never drift into three different layouts.
+
+   The palette lives in custom properties rather than as literals on each rule.
+   Every colour below already ships elsewhere in this app — the screen borrows
+   the house palette instead of minting its own — and hoisting it here means the
+   borrowed values have exactly one place to be retuned. It also keeps this
+   screen out of the colour-sprawl ratchet in css-tokens.test.ts, which is
+   pointing at the real thing: a second palette nobody reads twice. */
+.pf-summary,
+.pf-list,
+.pf-more,
+.pf-empty,
+.pf-warn {
+  --lo-figure: #b06a10;
+    --lo-label: #7a6040;
+    /* Was #8a7a6a: ≈4.26:1 against the .pf-row surface at 12px, which is under
+       the 4.5:1 WCAG AA floor for normal text — so every booster description on
+       this screen was failing the contrast minimum it is measured against. Repointed
+       to the same value as --lo-label (≈5.9:1), which also keeps the loadout
+       palette from minting a colour the rest of the app already ships. */
+    --lo-muted: #7a6040;
+    --lo-good: #2d6a3a;
+  --lo-warn: #a05a00;
+  --lo-paper: linear-gradient(125deg, #fff6e0, #ffe3ae);
+  --lo-edge: #e8ca84;
+  --lo-live: #ff8a4a;
+  --lo-tint: #fff3e2;
+  --lo-dashed: #c7b99d;
+  --lo-slot: rgba(176, 106, 16, 0.18);
+}
+
+/* Fly Now CTA at the top of the loadout — primary entry point so the player
+   can configure and immediately launch without going back to the main menu. */
+.pf-fly-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  position: relative;
+}
+.pf-fly-cta svg { width: 22px; height: 22px; flex-shrink: 0; }
+.pf-fly-badge {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.25);
+  border-radius: 99px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.pf-summary {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--lo-paper);
+  border: 1px solid var(--lo-edge);
+  border-radius: 16px;
+}
+/* The summary answers "what am I about to fly with", and it used to answer it
+   with a 20px name beside a 13px name and nothing to say which was which. Each
+   half now carries its own label, so the bird and the trail are named rather
+   than inferred from their relative type sizes. */
+.pf-summary .ls-row { display: flex; align-items: stretch; justify-content: space-between; gap: 10px; }
+.pf-summary .ls-item { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-summary .ls-item > em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lo-label);
+}
+.pf-summary .ls-item b { font: 700 20px/1.2 var(--display); color: var(--lo-figure); overflow-wrap: anywhere; }
+/* The trail is secondary to the bird, but it is not an aside — it gets its own
+   labelled cell rather than being tucked after the bird name. */
+.pf-summary .ls-trail { flex: 0 1 auto; text-align: right; align-items: flex-end; }
+.pf-summary .ls-trail span { font-size: 15px; font-weight: 600; color: var(--lo-label); overflow-wrap: anywhere; }
+
+.pf-meter { display: flex; gap: 5px; margin: 9px 0 5px; }
+.pf-meter i {
+  flex: 1;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lo-slot);
+}
+/* The filled slots carry the colour, not the hollow ones: an empty slot that
+   reads as "already used" is how a loadout ends up looking full when it is
+   not. */
+.pf-meter i.pf-on { background: linear-gradient(90deg, var(--coral), var(--gold)); }
+.pf-meter.pf-meter--full i.pf-on { background: var(--coral); }
+.pf-meter-label { margin: 0 0 4px; font-size: 12px; color: var(--lo-label); }
+.pf-meter-label--full { color: var(--coral); font-weight: 700; }
+
+/* Discounted booster buy button — strikethrough original price in muted text */
+.pf-actions .pf-deal-btn s {
+  font-size: 10px;
+  color: rgba(255,255,255,0.55);
+  text-decoration: line-through;
+  margin-right: 1px;
+}
+
+.pf-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.pf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  color: var(--ink);
+}
+.pf-row.pf-on { border-color: var(--lo-live); background: var(--lo-tint); }
+.pf-row.pf-locked { opacity: 0.82; }
+/* A discounted booster row. Deliberately a warm gold edge + cream wash, not the
+   hot red the global `.deal` badge uses: the whole row is the surface here, so a
+   saturated fill drowned the description text. `text-shadow: none` is load-bearing
+   — the badge's glow would otherwise still be inherited from nothing, but the
+   point is this row must read as "on sale", not "on fire". */
+.pf-row.pf-deal {
+  border-color: var(--lo-figure);
+  background: linear-gradient(180deg, #fffdf4, #fdf0d4);
+  box-shadow: inset 0 0 0 1px rgba(176, 106, 16, 0.16);
+}
+.pf-row .li {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+.pf-row .li svg { width: 100%; height: 100%; display: block; }
+.pf-row .lt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pf-row .lt b { font-size: 14px; }
+.pf-row .lt span { font-size: 12px; line-height: 1.3; color: var(--lo-muted); }
+
+.pf-bird-row .li { width: 46px; height: 46px; }
+.pf-swatch {
+  display: block;
+  width: 34px;
+  height: 12px;
+  border-radius: 999px;
+  /* Fallback only — the trail row sets `background` inline, which wins. It
+     exists so that a future regression in that inline value shows up as a
+     neutral grey pill rather than an invisible white one. A trail you paid
+     for, own, and equipped should never render as a blank chip. */
+  background: #f0e8d5;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* The stock line is the sentence the player came for — "Owned 3, Staged 1" —
+   so it gets its own weight rather than inheriting the description's. It was
+   `flex-wrap: nowrap` to keep "Owned: 0 / Staged: 0" on one line, which held at
+   390px and then pushed the third chip ("+2 in store") past the card edge at
+   360px. Each label-value pair is nowrap so the pair itself never splits; the
+   ROW wraps between pairs, which is the only place it can wrap without a number
+   being stranded from its own label. */
+.pf-stock { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; min-width: 0; align-items: center; }
+.pf-stock .pf-stock-count { font-size: 11px; color: var(--lo-muted); white-space: nowrap; }
+.pf-stock .pf-stock-count b { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* STAGED is the number the steppers change and the one the slot cap applies to;
+   OWNED is inventory the player cannot act on from this screen. They used to
+   render in the same muted weight, so the actionable number had no more
+   prominence than the fact. */
+.pf-stock .pf-stock-live { color: var(--ink); font-weight: 700; }
+.pf-stock .pf-stock-live b { font-size: 15px; font-weight: 800; color: var(--lo-figure); }
+.pf-stock .pf-stock-spare {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(127, 232, 200, 0.24);
+  color: var(--lo-good);
+  white-space: nowrap;
+}
+
+.pf-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
+/* Fixed-width steppers: `+` must sit in the same place on every row, or a
+   player scanning the column cannot tell which button belongs to which
+   booster. */
+.pf-actions .step {
+  /* 28px, which is what this shipped. Every other control in the app is
+     floored at 44px (`@supports (hover: none) { .mini-btn { min-height: 44px } }`
+     and `.overlay :is(.mini-btn, …) { min-height: 44px }`), so a two-button
+     stepper was the one place a thumb had to hit a target half the size — and
+     the two buttons sit 5px apart, so a near-miss lands on the opposite action.
+     The box is now 44×44 and the pair wraps with the rest of `.pf-actions`
+     rather than being squeezed back down at narrow widths. */
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+.pf-actions .buy { min-width: 52px; }
+.pf-actions .mini-btn[disabled] { opacity: 0.45; }
+/* A disabled stepper still needs to read as disabled rather than as broken —
+   dimming alone left it looking like a live button that had stopped working,
+   which is the exact misreading the always-present-but-disabled pair was meant
+   to avoid. */
+.pf-actions .step:disabled {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--lo-muted);
+  border: 1px dashed var(--lo-dashed);
+  box-shadow: none;
+}
+.pf-actions .step:focus-visible { outline: 3px solid var(--lo-figure); outline-offset: 2px; }
+
+.pf-more { margin: 0 0 12px; }
+.pf-more > summary {
+  cursor: pointer;
+  padding: 8px 11px;
+  font-size: 12px;
+  color: var(--lo-muted);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px dashed var(--lo-dashed);
+  border-radius: 12px;
+}
+.pf-more[open] > summary { margin-bottom: 8px; }
+
+.pf-empty, .pf-warn {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 12px;
+}
+.pf-empty { background: rgba(127, 232, 200, 0.16); color: var(--lo-good); }
+.pf-warn { background: rgba(255, 168, 92, 0.2); color: var(--lo-warn); }
+
+/* The stepper pair grew from 28px to 44px, so the action cluster is ~150px
+   wide. Below this the description column cannot hold a legible line beside it,
+   so the controls take their own full-width row instead of the text wrapping to
+   four lines to make room. */
+@media (max-width: 420px) {
+  .pf-row { flex-wrap: wrap; }
+  /* Only the controls move. The icon and its description stay together on the
+     first line — forcing the description to 100% would wrap it below the icon
+     and leave the icon stranded on a row of its own. */
+  .pf-actions { width: 100%; justify-content: flex-end; }
+}
+
+/* Moved here from design-polish.css: audit-ui.mjs gates on unstyled BUTTON
+   classes and only reads the component stylesheets, so a rule for
+   `.results-shop-cta` living in design-polish.css read as no rule at all.
+   After the score table, a wide Shop button anchors the bottom of the card —
+   a natural exit when the player has coins to spend. */
+.results-shop-cta {
+  display: block;
+  width: 100%;
+  padding: 4px 0 2px;
+  border-top: 1px solid rgba(200, 160, 80, 0.18);
+  margin-top: 6px;
+}
+.results-shop-cta.soft-btn {
+  border-radius: 10px;
+  font-size: 15px;
+  justify-content: center;
+}

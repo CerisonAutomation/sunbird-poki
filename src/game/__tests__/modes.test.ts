@@ -6,7 +6,7 @@ describe("game modes", () => {
     const ids = MODES.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(MODES.map((m) => m.id).sort()).toEqual(
-      ["coinrush", "daytrip", "distance", "endless", "massrace", "perfect", "race", "zenith"].sort(),
+      ["coinrush", "daytrip", "distance", "endless", "massrace", "perfect", "race"].sort(),
     );
   });
 
@@ -32,7 +32,7 @@ describe("game modes", () => {
 
   it("modeById resolves known ids and falls back to daytrip", () => {
     expect(modeById("race").id).toBe("race");
-    expect(modeById("zenith").id).toBe("zenith");
+    expect(modeById("distance").id).toBe("distance");
     expect(modeById("daytrip").id).toBe("daytrip");
     // Unknown id falls back to the first (default) mode, never undefined.
     expect(modeById("nope" as never).id).toBe(MODES[0]!.id);

@@ -5,8 +5,8 @@ describe("slope chain", () => {
   it("links a clean downslope kiss into the next rated launch", () => {
     const flow = new SlopeChain();
     expect(flow.land(0.9, -0.1, 2)).toBe(true);
-    expect(flow.launch("great")).toEqual({ chain: 1, points: 30 });
-    expect(flow.score).toBe(30);
+    expect(flow.launch("great")).toEqual({ chain: 1, points: 32 });
+    expect(flow.score).toBe(32);
   });
   it("does not award an unrated lip and breaks on rough or sunflower paths", () => {
     const flow = new SlopeChain();

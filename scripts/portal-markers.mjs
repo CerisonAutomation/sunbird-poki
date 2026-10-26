@@ -102,6 +102,59 @@ export function missingMarkersIn(html, portal) {
   return missing;
 }
 
+/**
+ * Payment-processor markers — the machine-checked form of "portals are
+ * coin-only, no payment processor".
+ *
+ * These are checked against the **pre-scrub** bundle in `package-portal.mjs`,
+ * and that placement is the whole point. The packaging step rewrites
+ * `/stripe/gi` -> `"portal"` across the whole inlined bundle and *then*
+ * asserted that no `stripe` remained, which is a tautology: the string it
+ * searched for had just been removed from everywhere, so the assertion was false
+ * for every possible input. Worse, it made every downstream `/stripe/` test
+ * (`verify-portal.mjs`, `audit-zips.mjs`) incapable of firing, so the headline
+ * coin-only claim was true by inspection and not by gate.
+ *
+ * A scrub can only ever be a cosmetic last line of defence, because the thing
+ * it is defending against — a payment SDK — is present as *text* in the bundle
+ * before the scrub runs. That is the moment a check can actually see it, so
+ * that is where this list is enforced.
+ *
+ * Honest limit: this is a text scan, so it cannot see a processor whose
+ * identifier is assembled at runtime (`"str"+"ipe"`) or base64'd into the
+ * bundle. It is a real gate, not a proof — do not describe it as one.
+ *
+ * Patterns are deliberately specific. Bare /square/, /apple.?pay/ and /shopify/
+ * were tried and dropped: the bundle legitimately contains an `apple-pay` CSS
+ * utility class, and a marker list that cries wolf gets deleted.
+ */
+export const PAYMENT_PROVIDER_MARKERS = [
+  [/stripe/i, "Stripe"],
+  [/pk_(live|test)_/i, "Stripe publishable key"],
+  [/paypal/i, "PayPal"],
+  [/braintree/i, "Braintree"],
+  [/adyen/i, "Adyen"],
+  [/paddle/i, "Paddle"],
+  [/razorpay/i, "Razorpay"],
+  [/lemonsqueezy/i, "Lemon Squeezy"],
+  [/gocardless/i, "GoCardless"],
+  [/klarna/i, "Klarna"],
+  [/coinbase\s?\.?com/i, "Coinbase Commerce"],
+  [/checkout\.com/i, "Checkout.com"],
+  [/squareup\.com/i, "Square (squareup)"],
+  [/\b(xsplit|paysafecard|skrill|neteller)\b/i, "alternative payment provider"],
+];
+
+/** Every payment-processor marker that appears in `text`, as "name (matched)"."*/
+export function paymentMarkersIn(text) {
+  const hits = [];
+  for (const [re, why] of PAYMENT_PROVIDER_MARKERS) {
+    const m = re.exec(text);
+    if (m) hits.push(`${why} ("${m[0]}")`);
+  }
+  return hits;
+}
+
 /** Every forbidden marker that appears in `html`, as "reason (matched text)". */
 export function foreignMarkersIn(html, portal) {
   const table = FOREIGN_MARKERS[portal];

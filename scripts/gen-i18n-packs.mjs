@@ -8,7 +8,7 @@
  * statically importing it puts ALL locales into the boot bundle (~94 KB).
  *
  * This script projects the barrel into **positional** per-locale packs
- * (`src/i18n/packs/<locale>.json` — an array of texts in `pack-keys.json`
+ * (`public/i18n/<locale>.json` — an array of texts in `pack-keys.json`
  * order), which the runtime lazy-loads one locale at a time. English is
  * generated too: it is the eager fallback pack and the only one imported
  * statically.
@@ -38,7 +38,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const barrelPath = join(root, "src/i18n/translations.barrel.json");
-const outDir = join(root, "src/i18n/packs");
+const outDir = join(root, "public/i18n");
 
 const barrel = JSON.parse(readFileSync(barrelPath, "utf8"));
 // Locale codes come from the entries themselves (the union of every
@@ -55,21 +55,47 @@ const keys = Object.keys(barrel.barrel).sort();
 const keysPath = join(root, "src/i18n/pack-keys.json");
 writeFileSync(keysPath, JSON.stringify(keys) + "\n");
 
+// English is the fallback pack and is therefore never compacted — it must hold
+// every key, because a locale that nulls a cell is relying on this copy.
+const english = (key) => {
+  const entry = barrel.barrel[key];
+  const text = entry.translations.en ?? entry.sourceText;
+  return typeof text === "string" ? text : "";
+};
+
 let written = 0;
+let bytesBefore = 0;
+let bytesAfter = 0;
 for (const code of codes) {
-  const values = keys.map((key) => {
+  const full = keys.map((key) => {
     const entry = barrel.barrel[key];
     const text = entry.translations[code] ?? entry.translations.en ?? entry.sourceText;
-    // An empty slot means "no text for this locale": the runtime skips it and
-    // falls back to English for that key, exactly as an absent map entry did.
     return typeof text === "string" ? text : "";
   });
+  const values = full.map((value, i) => {
+    // A `null` slot means "no text for this locale": the runtime skips it and
+    // falls back to English for that key, exactly as an absent map entry did.
+    //
+    // A slot byte-identical to the English string is collapsed to `null` too.
+    // It would render the same characters, so storing it twice is pure weight —
+    // and at 55% of all cells that weight is what pushed the single-file
+    // payload over its budget. Brand names ("Sunbird"), numerals and tokens
+    // that legitimately match English fall out of every pack for free.
+    return code !== "en" && value !== "" && value === english(keys[i]) ? null : value;
+  });
   const file = join(outDir, `${code}.json`);
-  writeFileSync(file, JSON.stringify(values) + "\n");
+  const serialised = `${JSON.stringify(values)}\n`;
+  writeFileSync(file, serialised);
   written += 1;
-  const filled = values.filter((v) => v.length > 0).length;
-  console.log(`  packs/${code}.json — ${filled}/${keys.length} strings`);
+  bytesBefore += JSON.stringify(full).length;
+  bytesAfter += serialised.length;
+  const stored = values.filter((v) => v !== null && v.length > 0).length;
+  console.log(`  packs/${code}.json — ${stored}/${keys.length} stored (${keys.length - stored} inherit English)`);
 }
+console.log(
+  `  pack payload: ${(bytesBefore / 1024).toFixed(0)} KB -> ${(bytesAfter / 1024).toFixed(0)} KB ` +
+    `(-${(((bytesBefore - bytesAfter) / bytesBefore) * 100).toFixed(1)}%)`,
+);
 
 console.log(
   `i18n packs regenerated: ${written} locales × ${keys.length} barrel keys (positional, + pack-keys.json)`,

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HUD } from "../HUD";
+import { TOAST_MIN_VISIBLE_MS } from "../toastFloor";
+import { messageHoldMs } from "../MessageTiming";
 import { feedbackSlot } from "../HudFeedback";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = ""; });
@@ -45,7 +47,25 @@ describe("readable HUD feedback", () => {
     expect(root.querySelectorAll(".top-bar .hud-controls button")).toHaveLength(2);
     expect(root.querySelector(".hud-header .roster-bar")).not.toBeNull();
     expect(root.querySelector(".flight-footer .fever-wrap")).not.toBeNull();
-    expect(root.querySelectorAll(".flight-messages > *")).toHaveLength(5);
+    // Membership, not a count. `toHaveLength(5)` pinned the lane's exact
+    // child count, so adding `.chain-readout` to the flight-messages lane —
+    // which is where ui.css has always said it belongs — failed here instead of
+    // being accepted, and the only way to satisfy it was to leave the element
+    // outside the lane. A count assertion silently forbids the fix for the very
+    // bug it should have caught.
+    //
+    // What actually matters is that the lane's declared members ARE in the lane,
+    // and that nothing undeclared is. Asserting the names means a new lane
+    // member is a one-line change here and a wrong lane is a failure.
+    const msgs = root.querySelector(".flight-messages")!;
+    for (const sel of [".coach-steps", ".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]) {
+      expect(msgs.querySelector(sel), `${sel} must be in the flight-messages lane`).not.toBeNull();
+    }
+    // Everything in the lane is a declared member — no strays parked there.
+    const declared = [".coach-steps", ".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"];
+    for (const child of [...msgs.children]) {
+      expect(declared.some((d) => child.matches(d)), `undeclared ${child.className} in the lane`).toBe(true);
+    }
     hud.dispose();
     expect(disconnect).toHaveBeenCalledOnce();
   });
@@ -74,9 +94,36 @@ describe("readable HUD feedback", () => {
     hud.toast("Butter landing", "cloud");
     hud.toast("Butter landing", "cloud");
     expect(root.querySelector(".toast")?.textContent).toBe("Butter landing ×2");
+    // The in-flight cap is one pill, and it used to be enforced by evicting
+    // the incumbent instantly — so in a stream of system messages a toast
+    // could be born and destroyed inside the same 100 ms, which is why the
+    // flavour lines never appeared.
+    //
+    // The floor is now the incumbent's own READ time, not TOAST_MIN_VISIBLE_MS.
+    // The 520ms constant was the requirement the policy signature knew about, so
+    // `oldestToastAgeMs` returned a boolean dressed as an age (0 until the grace
+    // period ended, Infinity after) and the comparison could only ever answer on
+    // the requirement's sign, never its value: two words were evicted at 520ms
+    // exactly as a six-word message was. "Butter landing" needs 450 + 2x415 =
+    // 1280ms, so the assertion below is stated in those terms.
+    const butterReadMs = messageHoldMs("Butter landing");
+    expect(butterReadMs, "the read model must still price this at more than the old floor").toBeGreaterThan(TOAST_MIN_VISIBLE_MS);
     hud.toast("Through the ring", "gold");
     expect(root.querySelectorAll(".toast")).toHaveLength(1);
-    expect(root.querySelector(".toast")?.textContent).toBe("Through the ring");
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "the incumbent keeps the slot until it has actually been readable",
+    ).toBe("Butter landing ×2");
+    vi.advanceTimersByTime(butterReadMs - 1);
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "one millisecond short of readable is still not readable",
+    ).toBe("Butter landing ×2");
+    vi.advanceTimersByTime(40);
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "and the deferred message still arrives — it is delayed, not dropped",
+    ).toBe("Through the ring");
     root.dataset.flying = "false";
     hud.toast("Menu reward");
     expect(root.querySelectorAll(".toast")).toHaveLength(2);
@@ -85,5 +132,35 @@ describe("readable HUD feedback", () => {
     hud.dispose();
     expect(vi.getTimerCount()).toBe(0);
     expect(document.querySelector(".hud-root")).toBeNull();
+  });
+
+  it("a message that arrives after the 520ms grace period is not a readable one", () => {
+    // This is the assertion that separates a real age from a boolean. The old
+    // `oldestToastAgeMs` returned 0 before 520ms and `Infinity` after, so every
+    // test stated at t≈0 passes with either implementation — 0 and a 10ms age
+    // agree on the decision. At t=700ms they disagree, and the boolean answers
+    // "already done" for a message the read model prices at 1280ms. The bug
+    // lived in exactly that window, so the test lives in exactly that window.
+    vi.useFakeTimers();
+    const { hud, root } = fixture();
+    root.dataset.flying = "true";
+    const readMs = messageHoldMs("Butter landing");
+    expect(readMs, "this frame is only meaningful if the read time exceeds the grace period")
+      .toBeGreaterThan(TOAST_MIN_VISIBLE_MS + 180);
+    hud.toast("Butter landing", "cloud");
+    vi.advanceTimersByTime(TOAST_MIN_VISIBLE_MS + 180);
+    hud.toast("Nice air", "gold");
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "520ms past the grace period is not 1280ms past the message's birth",
+    ).toBe("Butter landing");
+    vi.advanceTimersByTime(readMs - TOAST_MIN_VISIBLE_MS - 180 - 1);
+    expect(
+      root.querySelector(".toast")?.textContent,
+      "and the late challenger is deferred to the end of the read time, not dropped",
+    ).toBe("Butter landing");
+    vi.advanceTimersByTime(20);
+    expect(root.querySelector(".toast")?.textContent, "it does arrive").toBe("Nice air");
+    hud.dispose();
   });
 });

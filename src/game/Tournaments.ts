@@ -74,7 +74,7 @@ const CATALOG: {
     name: "Skyline Trials",
     blurb: "Chain launches and touch the stratosphere.",
     icon: "rocket",
-    mode: "zenith",
+    mode: "distance",
     metric: "altitude",
     cuts: { bronze: 60, silver: 130, gold: 220, diamond: 330 },
   },
@@ -274,19 +274,34 @@ export class Tournaments {
     return improved;
   }
 
-  /** Claims the highest tier the player has actually reached but not banked. */
-  claim(cupId: string): PrizeGrant | null {
+  /**
+   * Claims every tier the player has reached but not banked. Reaching gold
+   * pays bronze with it: the old single-tier claim stamped `claimedTier` at
+   * the highest reached, so a player who jumped straight to diamond silently
+   * forfeited the three prizes below it — and `claimable` then read false
+   * forever, because it compares against the same highest tier.
+   *
+   * `claimedTier` stays the highest tier paid, so the unclaimed slice is
+   * everything strictly above it: exactly-once with no new save field.
+   */
+  claim(cupId: string): PrizeGrant[] | null {
     const def = this.defs.find((d) => d.id === cupId);
     if (!def) return null;
     const entry = this.state.entries[cupId];
     if (!entry) return null;
-    const tier = tierFor(def, entry.best);
-    if (!tier || entry.claimedTier === tier) return null;
-    entry.claimedTier = tier;
-    const prize = def.prizes[tier];
-    if (prize.kind === "trail" && !this.state.trails.includes(prize.id)) this.state.trails.push(prize.id);
-    if (prize.kind === "title" && !this.state.titles.includes(prize.id)) this.state.titles.push(prize.id);
-    return { prize, tier, cup: def.name };
+    const reached = tierFor(def, entry.best);
+    if (!reached || entry.claimedTier === reached) return null;
+    const from = entry.claimedTier ? TIER_ORDER.indexOf(entry.claimedTier) + 1 : 0;
+    const to = TIER_ORDER.indexOf(reached);
+    entry.claimedTier = reached;
+    const grants: PrizeGrant[] = [];
+    for (const tier of TIER_ORDER.slice(from, to + 1)) {
+      const prize = def.prizes[tier];
+      if (prize.kind === "trail" && !this.state.trails.includes(prize.id)) this.state.trails.push(prize.id);
+      if (prize.kind === "title" && !this.state.titles.includes(prize.id)) this.state.titles.push(prize.id);
+      grants.push({ prize, tier, cup: def.name });
+    }
+    return grants;
   }
 
   ownedTrails(): string[] {
@@ -345,6 +360,15 @@ export const TRAILS: Record<string, { label: string; colors: [number, number, nu
       [0.6, 0.5, 1],
       [0.35, 0.85, 1],
       [0.9, 0.95, 1],
+    ],
+  },
+  /* granted free at the 30-day login-streak milestone (SaveData.ts) */
+  trail_streak: {
+    label: "Streakfire",
+    colors: [
+      [1, 0.55, 0.1],
+      [1, 0.82, 0.2],
+      [1, 0.95, 0.7],
     ],
   },
   /* shop trails — bought with coins in the Shop (SHOP_TRAILS in Economy.ts) */
@@ -495,4 +519,24 @@ export const TRAILS: Record<string, { label: string; colors: [number, number, nu
       [0.3, 0.79, 0.94],
     ],
   },
+  trail_amethyst: {
+    label: "Amethystveil",
+    colors: [
+      [0.73, 0.54, 0.91],
+      [0.54, 0.36, 0.78],
+      [0.88, 0.82, 1],
+    ],
+  },
+};
+
+/**
+ * Cup title prizes, keyed by prize id.
+ *
+ * The diamond cup grants an "Ace" title into `state.titles`, and for the whole
+ * life of that feature nothing read the array — the hardest prize in the game
+ * was written to a field and dropped. The label lives here so the HUD can
+ * render what was won instead of the raw prize id.
+ */
+export const CUP_TITLES: Record<string, string> = {
+  title_ace: "Ace",
 };

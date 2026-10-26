@@ -39,9 +39,9 @@ export const SPEED_BANDS = {
 export type WarpLevel = 0 | 1 | 2 | 3;
 
 /** Extra FOV degrees at full dive power. */
-const DIVE_KICK_MAX = 6;
+const DIVE_KICK_MAX = 10;
 /** Vertical speed (units/s) that counts as a full-power dive. */
-const DIVE_KICK_REF = 26;
+const DIVE_KICK_REF = 20;
 /** Downward speed required before a WEE celebration is allowed. */
 export const WEE_MIN_DIVE = 10;
 /** Normalised speed that fires a WEE (above the warp band, so it is rare). */

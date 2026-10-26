@@ -26,7 +26,12 @@
  * structural copies of what a run end already knows, so this is unit-tested
  * directly and importable from anywhere without a cycle. The rule `Moments.ts`
  * set and `GrowthLedger.ts` follows.
+ *
+ * The one import is `MenuIcons`, which is itself a pure data + string-builder
+ * module with no imports of its own, so "dependency-free" still holds in the
+ * sense that matters here: no state, no cycles, nothing to construct.
  */
+import { smIconNameOr, type SmIconName } from "./MenuIcons";
 
 export type Rarity = "bronze" | "silver" | "gold" | "platinum";
 
@@ -295,19 +300,29 @@ export function beatCopy(beat: Beat): BeatCopy {
   }
 }
 
-/** The icon *name* for a beat (see MenuIcons). Rarity is carried by colour,
- *  never by the icon. Callers render it with menuIconSm (HTML) or iconGlyph. */
-export function beatIcon(beat: Beat): string {
+/**
+ * The icon *name* for a beat (see MenuIcons). Rarity is carried by colour,
+ * never by the icon. Callers render it with menuIconSm (HTML) or iconGlyph.
+ *
+ * The `|| "feather"` shape this used everywhere was doing the wrong job. The
+ * right-hand side only ever fires when the field is *absent*; an icon field that
+ * is present but misspelled, or one that has since been renamed in `smArtwork`,
+ * sails through untouched and reaches a renderer that cannot draw it. This
+ * normalises instead: whatever arrives, the return is a name the icon map
+ * actually has, so the renderer is total by construction and the coverage test
+ * has something real to assert on.
+ */
+export function beatIcon(beat: Beat): SmIconName {
   const e = beat.event;
   switch (e.kind) {
     case "wings":
-      return e.icon || "feather";
+      return smIconNameOr(e.icon, "feather");
     case "trophy":
       return "trophy";
     case "record":
       return "crown";
     case "mastery":
-      return e.icon || "badge";
+      return smIconNameOr(e.icon, "badge");
     case "pass":
       return "badge";
     case "nest":
@@ -315,9 +330,9 @@ export function beatIcon(beat: Beat): string {
     case "quest":
       return "star";
     case "cosmetic":
-      return e.icon || "star";
+      return smIconNameOr(e.icon, "star");
     case "challenge":
-      return e.icon || "flag";
+      return smIconNameOr(e.icon, "flag");
     default:
       return "star";
   }
@@ -335,7 +350,8 @@ export type BeatView = {
   key: string;
   params: Record<string, string | number> | undefined;
   fallback: string;
-  icon: string;
+  /** A name `menuIconSm` is guaranteed to be able to draw — see `beatIcon`. */
+  icon: SmIconName;
   rarity: Rarity;
   delayMs: number;
   /** True for a career rank-up, which earns a banner instead of a chip. */

@@ -352,13 +352,22 @@ describe("3× coin bonus card (one claim per run)", () => {
   it("portal (rewarded) variant states the reward and marks the ad before the tap", () => {
     const html = renderCoinMultiplierCard(250, false, true);
     expect(html).toContain("data-action=\"multiply-run-coins\"");
-    expect(html).toContain("🎬"); // the tap is visibly an ad placement
+    // The tap must be VISIBLY an ad placement. This used to assert a literal
+    // "🎬" emoji, which pinned the glyph rather than the meaning — so swapping
+    // the emoji for a proper inline SVG (no font dependency, scales, matches
+    // every other icon in the build) failed the test even though the card got
+    // better. Assert the meaning instead: an icon element, and the words.
+    expect(html).toMatch(/<svg class="icon-[^"]*"/); // the tap is visibly an ad placement
     expect(html).toContain("Watch a short ad"); // reward stated BEFORE the tap
     expect(html).toContain("+● 500");
-    // The free (non-portal) variant must stay ad-free.
+    // The free (non-portal) build offers the SAME bonus with no ad: no icon,
+    // and "Claim" rather than "Watch". It keeps the button — the offer is real
+    // in both editions; only the portal routes it through a rewarded ad.
     const free = renderCoinMultiplierCard(250, false);
-    expect(free).not.toContain("🎬");
-    expect(free).not.toContain("📺");
+    expect(free).toContain("data-action=\"multiply-run-coins\"");
+    expect(free).toContain("Claim 3×");
+    expect(free).not.toContain("Watch a short ad");
+    expect(free, "the ad-free variant must carry no ad icon").not.toMatch(/<svg class="icon-/);
   });
 
   it("is absent entirely when the run earned no coins", () => {

@@ -1,7 +1,6 @@
 export type ModeId =
   | "daytrip"
   | "race"
-  | "zenith"
   | "distance"
   | "coinrush"
   | "perfect"
@@ -123,6 +122,24 @@ export const PVP_WORLDS: PvpWorldCourse[] = [
     tagline: "Vast red canyon walls with extreme vertical descents",
     difficulty: "★★★★★",
   },
+  {
+    id: "hollow",
+    name: "Hollow Crown",
+    biomeId: "amethyst",
+    island: 9,
+    emoji: "gem",
+    tagline: "Violet glass spires hanging in slow, weightless air",
+    difficulty: "★★★★★",
+  },
+  {
+    id: "gilded",
+    name: "Gilded Mile",
+    biomeId: "grove",
+    island: 10,
+    emoji: "star",
+    tagline: "Endless golden glades — one glide can cross the whole grove",
+    difficulty: "★★★★☆",
+  },
 ];
 
 export const MODES: ModeDef[] = [
@@ -144,16 +161,6 @@ export const MODES: ModeDef[] = [
     clock: 0,
     finish: 4000,
     scoreBy: "time",
-    escalate: false,
-  },
-  {
-    id: "zenith",
-    name: "Skyline",
-    blurb: "Ninety seconds to climb above the clouds and bonk the skybox.",
-    icon: "rocket",
-    clock: 90,
-    finish: 0,
-    scoreBy: "altitude",
     escalate: false,
   },
   {

@@ -15,8 +15,10 @@ export class OverlayNavigation {
       return;
     }
     if (event.key !== "Tab" || !this.active) return;
+    // Same set as ACTIVATABLE above: a [role="button"] control is activatable
+    // via Space yet was Tab-skippable here, breaking the focus wrap.
     const controls = [...this.active.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
+      OverlayNavigation.ACTIVATABLE,
     )].filter(el => {
       return !hiddenByDisclosure(el)
         && el.getClientRects().length > 0 && !el.closest("[inert]");
@@ -83,7 +85,22 @@ export class OverlayNavigation {
       const heading = active.querySelector<HTMLElement>("h1, h2");
       const label = heading?.textContent || (active.classList.contains("matchmaking") ? "Finding a race" : "Sunbird");
       if (active.getAttribute("aria-label") !== label) active.setAttribute("aria-label", label);
-      if (active !== this.active) {
+      // Re-anchor focus whenever it is not already inside this overlay.
+      //
+      // The old guard was `active !== this.active`, which only covered the
+      // overlay changing identity. The menu is a single persistent
+      // `.overlay.menu` element whose card is re-rendered with fresh innerHTML
+      // per screen (HUD.ts:723), so on a screen-to-screen move the element was
+      // identical and nothing happened — while the heading we had focused was
+      // already destroyed, dropping focus to <body> and making the next Tab
+      // restart from the top of the document.
+      //
+      // "Not already inside" rather than "always" is load-bearing: sync() runs
+      // on every HUD update, and an unconditional focus here would re-announce
+      // the heading to assistive tech ~60 times a second.
+      const focused = document.activeElement;
+      const focusInside = focused instanceof HTMLElement && active.contains(focused);
+      if (!focusInside) {
         if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
         else active.querySelector<HTMLElement>("button:not(:disabled)")?.focus({ preventScroll: true });
       }

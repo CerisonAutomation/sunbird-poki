@@ -22,25 +22,36 @@
  *
  * Provenance for the canonical surface lives in `src/sdk/poki-canon.ts`.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { PokiAdapter } from "../poki";
+import { PokiAdapter, markPokiBooted } from "../poki";
 import {
   MEASURE_CATEGORIES,
   MEASURE_INTERACTION_ACTIONS,
   MEASURE_PROGRESS_ACTIONS,
+  POKI_SDK_ACCESS_CONFINE,
   POKI_SDK_NON_CANONICAL,
   POKI_SDK_RUNTIME_ONLY,
   clampHappyIntensity,
+  measureViaPoki,
   sanitizeMeasure,
+  pokiAuthToken,
+  clearPokiAuthToken,
 } from "../poki-canon";
 
 afterEach(() => {
   delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
 });
+
+// This file pins WHICH canonical member each adapter method reaches, not when
+// it is allowed to reach it — so it runs against a booted SDK, the same
+// convention `poki-breaks.test.ts` uses. The boot-order refusals are a
+// deliberately separate file (`poki-boot-order.test.ts`), because that flag
+// only ever moves one way and cannot be undone between cases here.
+markPokiBooted();
 
 const root = resolve(__dirname, "../../..");
 const read = (p: string): string => readFileSync(resolve(root, p), "utf8");
@@ -191,6 +202,54 @@ describe("Poki SDK canonical surface", () => {
     }
   });
 
+  it("records what each runtime-only member actually DOES in the shipped core", () => {
+    // The registry used to be filled from Poki's name lists, which made three
+    // members look wired when the shipped core defines them as `()=>{}` or
+    // `()=>!1`. Names being real says nothing about behaviour, so every entry
+    // now carries the body transcribed out of
+    // poki-sdk-core-0df3a52d1f37602f598b9432c7bae77681d8e3ea.js.
+    //
+    // This cannot re-fetch that file (it is a CDN artifact, not vendored), so
+    // the assertion is that every entry *carries a body* and that the stub
+    // classification agrees with that body. When the CDN build hash moves,
+    // re-download it and re-transcribe — a changed body is a real behaviour
+    // change, not a comment to refresh.
+    for (const entry of POKI_SDK_RUNTIME_ONLY) {
+      expect(entry.impl.length, `${entry.name}: record the shipped core's body`).toBeGreaterThan(4);
+      const claimsStub = /stub|hardcoded/.test(entry.impl);
+      const body = entry.impl.split(" — ")[0].trim();
+      // A stub must be one of the empty-arrow shapes the core actually uses.
+      if (claimsStub) {
+        expect(
+          /^\(\)=>(\{\}|!1)/.test(body),
+          `${entry.name}: impl says stub but body is ${body}`,
+        ).toBe(true);
+      } else {
+        expect(
+          !/^\(\)=>(\{\}|!1)$/.test(body),
+          `${entry.name}: body ${body} IS a stub — impl must say so`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("does not claim a stubbed member works", () => {
+    // The three members that are called AND are stubs in the shipped build.
+    const calledButStubbed = POKI_SDK_RUNTIME_ONLY.filter(
+      (e) => e.wired && /stub|hardcoded/.test(e.impl),
+    ).map((e) => e.name);
+    // `happyTime` and `isAdBlocked` are called and are stubs; their `why` must
+    // say so plainly rather than describing behaviour that never happens.
+    for (const name of calledButStubbed) {
+      const entry = POKI_SDK_RUNTIME_ONLY.find((e) => e.name === name)!;
+      expect(
+        /\bNEVER\b|\bnever\b|hardcoded|empty function/.test(entry.why),
+        `${name} is a stub in the shipped core but its "why" reads as if it works`,
+      ).toBe(true);
+    }
+    expect(calledButStubbed.sort()).toEqual(["gameLoadingStart", "happyTime", "isAdBlocked"]);
+  });
+
   it("declares the runtime-only members as members of the canonical type", () => {
     // Compile-time proof would be the mapped type alone; this asserts the
     // registry did not silently grow a name the type does not carry.
@@ -215,6 +274,97 @@ describe("Poki SDK canonical surface", () => {
   });
 });
 
+/**
+ * The canonical surface is only worth anything while `pokiSdk()` is the sole
+ * door to `window.PokiSDK`. The suite above checks WHICH members the adapter
+ * and the boot path call — and it could only ever check those two files,
+ * because those were the only two that had a regex for them.
+ *
+ * `src/game/Telemetry.ts` imported `pokiSdk` and called `sdk.measure(...)`
+ * itself, so it was a third route into the SDK in a file no regex here looked
+ * at. An invented member used there would have compiled clean and then no-opped
+ * in production: the exact failure `poki-canon.ts` was written to prevent, in
+ * the one place the guard could not see.
+ *
+ * So the guard is widened from "these two files are canonical" to "nothing
+ * outside `src/sdk/` may reach the global at all" — which is a property of the
+ * tree, not of a file list, and therefore cannot go stale when a file moves.
+ */
+describe("SDK access is confined to src/sdk/", () => {
+  function walk(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (entry === "node_modules") continue;
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (/\.tsx?$/.test(full)) out.push(full);
+    }
+    return out;
+  }
+
+  /** Every shipped source file outside the adapter directory. */
+  function filesOutsideSdk(): { path: string; code: string }[] {
+    return walk(resolve(root, "src"))
+      .filter((f) => !f.startsWith(resolve(root, "src/sdk")))
+      // A suite has to be able to stub the global to prove anything about it.
+      .filter((f) => !f.includes("__tests__"))
+      .map((f) => ({ path: relative(root, f), code: stripNonCode(readFileSync(f, "utf8")) }));
+  }
+
+  it("has files to check — the walk is not silently empty", () => {
+    // A guard that finds nothing to scan passes forever. The count is the
+    // floor the tree is expected to stay above.
+    expect(filesOutsideSdk().length).toBeGreaterThan(50);
+  });
+
+  it("is not imported from outside src/sdk/", () => {
+    const offenders: string[] = [];
+    for (const { path, code } of filesOutsideSdk()) {
+      for (const symbol of POKI_SDK_ACCESS_CONFINE) {
+        // An import clause, or any other reference to the symbol itself.
+        const used = new RegExp(`\\b${symbol}\\b`).test(code);
+        if (used) offenders.push(`${path} — imports/calls ${symbol}()`);
+      }
+    }
+    expect(
+      offenders,
+      `only src/sdk/ may reach the Poki SDK global. Offenders:\n  ${offenders.join("\n  ")}\n` +
+        "Call a function in src/sdk/ instead — see measureViaPoki().",
+    ).toEqual([]);
+  });
+
+  it("is not reached through a hand-rolled window cast", () => {
+    // The other half of the same escape: even without importing `pokiSdk`, a
+    // module can declare its own surface with
+    // `(window as unknown as { PokiSDK?: … })`. That is precisely the cast
+    // `poki-canon.ts` exists to make unnecessary — and it throws away the
+    // canonical type, which is the whole guarantee.
+    const offenders = filesOutsideSdk()
+      .filter(({ code }) => /PokiSDK\s*\??\s*:/.test(code))
+      .map(({ path }) => path);
+    expect(
+      offenders,
+      `these modules declare their own PokiSDK shape instead of using src/sdk/poki-canon: ${offenders.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("routes measurement through one shared function that reports delivery", () => {
+    // Both callers exist, and both must go through the same door.
+    expect(read("src/sdk/poki.ts")).toMatch(/measureViaPoki\(category, label, action\)/);
+    expect(read("src/game/Telemetry.ts")).toMatch(/measureViaPoki\(/);
+
+    // Delivery is a fact about the call, not about having called.
+    expect(measureViaPoki("round", "daytrip", "start")).toBe(false); // no SDK present
+    const calls: string[] = [];
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = {
+      measure: (c: string, w: string, a: string) => calls.push(`${c}|${w}|${a}`),
+    };
+    expect(measureViaPoki("round", "daytrip", "start")).toBe(true);
+    // Rejected by the loader's own rules → not delivered, and not called.
+    expect(measureViaPoki("quest", "2026-38", "clear-1")).toBe(false);
+    expect(calls).toEqual(["round|daytrip|start"]);
+  });
+});
+
 describe("measure() argument rules (the live SDK's own validation)", () => {
   it("requires category and what", () => {
     expect(sanitizeMeasure("", "daytrip", "start")).toBeNull();
@@ -224,10 +374,26 @@ describe("measure() argument rules (the live SDK's own validation)", () => {
     expect(sanitizeMeasure("round", "daytrip", "")).toEqual({ category: "round", what: "daytrip", action: "" });
   });
 
-  it("rejects the reserved `/` and `^` characters", () => {
+  it("enforces the loader's character allowlist, not just `/` and `^`", () => {
+    // The loader tests `/[^A-Za-z0-9_: .+|-]/` and rejects on a match. `/` and
+    // `^` are rejected only because they fall outside that set — there is no
+    // "reserved character" rule. Banning just those two let the rest through to
+    // events the SDK discards without logging anything we can see.
     expect(sanitizeMeasure("round", "day/trip", "start")).toBeNull();
     expect(sanitizeMeasure("round", "daytrip", "com^plete")).toBeNull();
     expect(sanitizeMeasure("ro/und", "daytrip", "start")).toBeNull();
+
+    // Every character the allowlist grants must survive.
+    for (const ch of "Az09_:.+|- ") {
+      expect(sanitizeMeasure("round", `day${ch}trip`, "start")).not.toBeNull();
+    }
+
+    // ...and every character outside it must be caught, so a future caller
+    // cannot quietly build an event the SDK will throw away. Space is absent
+    // here on purpose: the allowlist grants it.
+    for (const ch of [",", "!", "?", '"', "'", "(", ")", "[", "]", "#", "%", "&", "*", "<", ">", "=", "~", ";", "@", "$", "\\", "`", "é", "日", "\n", "\t"]) {
+      expect(sanitizeMeasure("round", `day${ch}trip`, "start")).toBeNull();
+    }
   });
 
   it("allows at most two numeric values across all three arguments", () => {
@@ -236,10 +402,13 @@ describe("measure() argument rules (the live SDK's own validation)", () => {
     expect(sanitizeMeasure("level", "1-2", "complete")).not.toBeNull();
     expect(sanitizeMeasure("level", "1-2", "complete-3")).toBeNull();
     expect(sanitizeMeasure("quest", "2026-38", "clear-1")).toBeNull();
-    // The loader also counts literal `{n}` placeholders as numeric values, so
-    // three of them is over the budget exactly like three digit runs are.
+    // The loader also counts a literal `{n}` placeholder as a numeric value —
+    // but that branch is unreachable, because `{` and `}` are outside the
+    // character allowlist, so any string containing one is rejected a rule
+    // earlier. Simulating the loader's own validator confirms both `{n}` cases
+    // below are REJECTED, not "one placeholder, under budget".
     expect(sanitizeMeasure("level", "{n}", "run-{n}-{n}")).toBeNull();
-    expect(sanitizeMeasure("level", "{n}", "run-{n}-x")).not.toBeNull();
+    expect(sanitizeMeasure("level", "{n}", "run-{n}-x")).toBeNull();
   });
 
   it("trims what it forwards", () => {
@@ -254,9 +423,44 @@ describe("measure() argument rules (the live SDK's own validation)", () => {
     const { calls, adapter } = recording();
     adapter.measure("round", "daytrip", "complete");
     adapter.measure("quest", "2026-38", "clear-1"); // three numerics → dropped
-    adapter.measure("round", "day/trip", "complete"); // reserved char → dropped
+    adapter.measure("round", "day/trip", "complete"); // outside the allowlist → dropped
     adapter.measure("", "daytrip", "start"); // no category → dropped
     expect(calls).toEqual(["measure:round|daytrip|complete"]);
+  });
+
+  it("agrees with the loader's own validator on every case we can construct", () => {
+    // A literal transcription of the minified validator inside the CDN
+    // loader's `measure`, kept independent of `sanitizeMeasure` on purpose:
+    // if the two ever disagree, one of them has drifted from Poki.
+    const loaderAccepts = (category: string, what: string, action: string) => {
+      const c = `${category ?? ""}`.trim();
+      const w = `${what ?? ""}`.trim();
+      const a = `${action ?? ""}`.trim();
+      if (c === "" || w === "") return false;
+      if ([c, w, a].some((x) => /[^A-Za-z0-9_: .+|-]/.test(x))) return false;
+      const numerics = [c, w, a].join(" ").split(/\d+|\{n\}/i).length - 1;
+      return !(numerics > 2);
+    };
+
+    const categories = ["round", "level", "pvp_sprint", "run", "skip-level", "", "  ", "a b", "x/y", "x^y", "1", "2026-38"];
+    const whats = ["daytrip", "coin multiplier", "run-{n}", "a.b", "a+b", "a|b", "a-b", "é", "", "1", "1-2-3", "day/trip"];
+    const actions = ["start", "complete", "fail", "visible", "interact", "reached", "granted", "", "x y", "x,y", "x;y", "1-2-3"];
+
+    let compared = 0;
+    for (const c of categories) {
+      for (const w of whats) {
+        for (const a of actions) {
+          const ours = sanitizeMeasure(c, w, a) !== null;
+          const theirs = loaderAccepts(c, w, a);
+          expect(
+            ours,
+            `disagreement on ${JSON.stringify([c, w, a])}: ours=${ours} loader=${theirs}`,
+          ).toBe(theirs);
+          compared++;
+        }
+      }
+    }
+    expect(compared).toBe(categories.length * whats.length * actions.length);
   });
 });
 
@@ -299,5 +503,79 @@ describe("canonical member behaviour", () => {
     adapter.signalGameReady();
     adapter.signalGameReady();
     expect(calls).toEqual(["gameLoadingFinished"]); // one-shot, canonical member
+  });
+});
+
+/**
+ * `getToken()` is a postMessage round trip to the parent frame with an
+ * 8-second timeout, and the token lives about a minute. AUDS and the adapter's
+ * `getIapToken()` share one cache so a burst of storage writes costs one
+ * round trip rather than one each.
+ */
+describe("the shared Poki account token", () => {
+  beforeEach(() => {
+    clearPokiAuthToken();
+    delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
+  });
+  afterEach(() => {
+    clearPokiAuthToken();
+    delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
+  });
+
+  const withGetToken = (getToken: () => Promise<string | null>) => {
+    (window as unknown as { PokiSDK?: unknown }).PokiSDK = { getToken };
+  };
+
+  it("calls the SDK as a member, not detached", async () => {
+    // Detaching `getToken` into a bare function loses `this`, and every Poki
+    // member reads it to reach the parent frame. The signature is written so
+    // this throws if a receiver is needed.
+    withGetToken(function (this: unknown) {
+      if (this === undefined || this === undefined) throw new TypeError("detached");
+      return Promise.resolve("jwt-1");
+    });
+    await expect(pokiAuthToken()).resolves.toBe("jwt-1");
+  });
+
+  it("serves a second caller from cache instead of re-fetching", async () => {
+    let calls = 0;
+    withGetToken(() => {
+      calls += 1;
+      return Promise.resolve("jwt-1");
+    });
+    await expect(pokiAuthToken()).resolves.toBe("jwt-1");
+    await expect(pokiAuthToken()).resolves.toBe("jwt-1");
+    expect(calls).toBe(1);
+  });
+
+  it("collapses concurrent callers onto one request", async () => {
+    let calls = 0;
+    withGetToken(() => {
+      calls += 1;
+      return new Promise<string>((r) => setTimeout(() => r("jwt-1"), 5));
+    });
+    const all = await Promise.all([pokiAuthToken(), pokiAuthToken(), pokiAuthToken()]);
+    expect(all).toEqual(["jwt-1", "jwt-1", "jwt-1"]);
+    expect(calls).toBe(1);
+  });
+
+  it("does not cache a failure, and recovers on the next call", async () => {
+    // The first call is what a synchronous throw used to break: the async body
+    // settles before the in-flight handle is assigned, so the flag was left
+    // pointing at a dead promise and EVERY later call returned null forever.
+    let attempt = 0;
+    withGetToken(() => {
+      attempt += 1;
+      if (attempt === 1) throw new TypeError("User accounts is not available");
+      return Promise.resolve("jwt-2");
+    });
+    await expect(pokiAuthToken()).resolves.toBeNull();
+    await expect(pokiAuthToken()).resolves.toBe("jwt-2");
+  });
+
+  it("returns null when the SDK is absent, without latching", async () => {
+    await expect(pokiAuthToken()).resolves.toBeNull();
+    withGetToken(() => Promise.resolve("jwt-3"));
+    await expect(pokiAuthToken()).resolves.toBe("jwt-3");
   });
 });

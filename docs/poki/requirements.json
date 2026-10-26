@@ -142,7 +142,7 @@
         "type": "test",
         "path": "src/game/__tests__/firstflight.test.ts"
       },
-      "evidence": "3-step play-signal onboarding, progression systems, and 12 locales."
+      "evidence": "3-step play-signal onboarding, progression systems, and 36 locales (src/i18n/locales.ts)."
     },
     {
       "id": "GK-03",
@@ -427,7 +427,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "new-best"
       },
       "evidence": "Confetti burst + jingle on personal bests, level-ups, chests and race wins; the results card carries a NEW BEST banner and the portal celebration hook fires when one exists."
@@ -477,10 +477,10 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
-        "pattern": "Let it sleep"
+        "path": "src/game/hud/run.ts",
+        "pattern": "data-action=\"continue-sleep\""
       },
-      "evidence": "Free restart and free 'let it sleep' paths always exist; no mode is ad-gated."
+      "evidence": "Free restart and free 'end the flight' paths always exist; no mode is ad-gated. The check pins the free, non-ad BUTTON (data-action=\"continue-sleep\"), which renders in the same pass as the rewarded CTA, not its label. The rule is Poki's and says nothing about wording — see docs/poki/04-monetization.md. It used to pin the literal 'Let it sleep'; that was a house proxy, retired 2026-10-04 because run.ts holds only the English FALLBACK while all 36 player-facing strings live in src/i18n/translations.barrel.json, so the pin could never see what a non-English player reads. It also broke on the plain-copy pass that renamed the label to 'End the flight', which forced the choice between this gate and good copy. Pinning the affordance is copy-independent and proves the same obligation."
     },
     {
       "id": "MON-04",
@@ -490,7 +490,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "Watch for Second Wind"
       },
       "evidence": "Labelled button, aria-labelled, explicit reward wording."
@@ -516,7 +516,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "renderContinue"
       },
       "evidence": "All three options render in one pass; nothing gates the ad behind a wizard step."
@@ -549,14 +549,14 @@
       "id": "MON-09",
       "group": "MON",
       "kind": "requirement",
-      "rule": "Reward buttons carry a prominent clapperboard icon.",
+      "rule": "Every control that triggers a rewarded break carries the clapperboard icon.",
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
-        "pattern": "🎬"
+        "path": "src/game/hud/run.ts",
+        "pattern": "data-action=\"continue-ad\">\\$\\{menuIconSm\\(\"clapper\"\\)\\}"
       },
-      "evidence": "🎬 present on the rewarded continue button and verified in the shipped bundle."
+      "evidence": "menuIconSm(\"clapper\") is a dedicated 20x20 inline SVG clapperboard in the game's own palette, added for this rule and distinct from the generic play glyph (a filled disc with a triangle). All three rewarded CTAs now use it: continue-ad (Second Wind) and multiply-run-coins (3x bonus) here, and shop-free-coins in hud/shop.ts. The check pins the ICON NAME in the button markup rather than any icon in the file, so an unrelated play icon elsewhere cannot satisfy it. Emoji were avoided deliberately: 🎬 is emoji-presentation and renders as tofu in toast textContent on some devices, which is the same defect that removed ⏳ from the timer glyph."
     },
     {
       "id": "MON-10",
@@ -642,7 +642,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/run.ts",
         "pattern": "Second Wind"
       },
       "evidence": "Rewarded revive."
@@ -655,7 +655,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/HUD.ts",
+        "path": "src/game/hud/meta.ts",
         "pattern": "Spend"
       },
       "evidence": "Coins-or-video choice on the continue screen, single currency."
@@ -1091,7 +1091,7 @@
       "status": "informational",
       "verify": {
         "type": "file",
-        "path": "src/game/PokiNetlib.ts"
+        "path": "src/sdk/PokiNetlib.ts"
       },
       "evidence": "Client implemented behind a code-split."
     },
@@ -1115,7 +1115,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "RTCPeerConnection"
       },
       "evidence": "P2P is selected only when the build targets Poki AND RTCPeerConnection/crypto are present (PokiMpUtils.isPokiMultiplayerAvailable); WebSocket and local paths remain for every other build."
@@ -2050,7 +2050,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "new Network\\(NETLIB_GAME_ID\\)"
       },
       "evidence": "Host creates, guest joins by code; both wrapped behind the game's NetTransport interface."
@@ -2063,7 +2063,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "unreliable"
       },
       "evidence": "15 Hz unreliable state + reliable hello/start/place events."
@@ -2076,7 +2076,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "RTCPeerConnection"
       },
       "evidence": "isPokiMultiplayerAvailable() gates the Netlib client; net-transport.poki.ts falls back to the WebSocket client."
@@ -2102,7 +2102,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiNetlib.ts",
+        "path": "src/sdk/PokiNetlib.ts",
         "pattern": "closedByUs"
       },
       "evidence": "Reconnect + seat preservation in PokiNetlibClient; MassRace keeps flying the local squadron otherwise."
@@ -2116,7 +2116,7 @@
       "verify": {
         "type": "grep",
         "path": "src/game/net-transport.poki.ts",
-        "pattern": "import\\(\"\\./PokiNetlib\"\\)"
+        "pattern": "import\\(\"\\.\\./sdk/PokiNetlib\"\\)"
       },
       "evidence": "One shared dynamic import (loadNetlib) is awaited by createNetTransport and warmed by prewarmNetTransport: the library is never in the boot path, and never in a non-Poki bundle."
     },
@@ -2140,7 +2140,7 @@
       "status": "satisfied",
       "verify": {
         "type": "grep",
-        "path": "src/game/PokiMpUtils.ts",
+        "path": "src/sdk/PokiMpUtils.ts",
         "pattern": "ABCDEFGHJKLMNPQRSTUVWXYZ"
       },
       "evidence": "No 0/O/1/I alphabet, five characters, shared with the WebSocket transport."

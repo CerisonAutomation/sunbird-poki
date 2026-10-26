@@ -30,6 +30,14 @@ const PORT = 4176;
 const ROOT = path.join(import.meta.dirname, "..", "poki-upload");
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const POKI_CDN = /game-cdn\.poki\.com/;
+/** Poki's own userdata API — the leaderboard's backing store. Not a shipped
+ *  asset: it is a runtime call to the platform, like the SDK itself, and the
+ *  "external resources" assertion is about asset hosts. Left unrouted it both
+ *  tripped that assertion and reached the real API, which answers 400 without
+ *  a live session and so failed the "nothing 4xx'd" claim for a reason that had
+ *  nothing to do with the build. */
+const POKI_API = /auds\.poki\.io/;
+const POKI_SERVED = /game-cdn\.poki\.com|auds\.poki\.io/;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -118,6 +126,39 @@ window.PokiSDK = (function () {
 const callsOf = (page: Page): Promise<Call[]> =>
   page.evaluate(() => (window as unknown as { __pokiCalls?: Call[] }).__pokiCalls ?? []);
 
+/**
+ * Boot the ARTIFACT, from the artifact's own server, and prove it.
+ *
+ * `SunbirdPage.open()` navigates to the relative URL `"/"`, which the browser
+ * resolves against `use.baseURL` — the baseURL of whatever config is running.
+ * That is the artifact origin (4176) under `playwright.artifact.config.ts` and
+ * nothing else anywhere: the per-group configs used to run these specs
+ * concurrently all point `baseURL` at their own `vite preview`, which serves
+ * `dist/`. So two of the three tests here were silently booting the DIRECT
+ * build off a preview server while asserting things about `poki-upload/` —
+ * which is the exact "stale bundle, every assertion describes code that isn't
+ * the code under test" failure the base config's `reuseExistingServer: false`
+ * comment exists to prevent. It did not look like a mistake; it looked like a
+ * red assertion (`expect(external).toEqual([])` listing
+ * `http://127.0.0.1:4313/` and `/i18n/en.json`, i.e. the preview server's own
+ * requests), which is worse.
+ *
+ * So the navigation is explicit and the origin is ASSERTED, not assumed: if a
+ * future refactor puts this spec back on a relative URL, this fails with one
+ * line naming the baseURL that hijacked it instead of with a mystery
+ * "external resources" diff.
+ *
+ * Order matters: the page object is built BEFORE the navigation, because it is
+ * what collects `pageerror`/console errors, and a boot exception thrown during
+ * the initial load is exactly the thing this spec exists to catch.
+ */
+async function openArtifact(page: Page): Promise<SunbirdPage> {
+  const app = new SunbirdPage(page);
+  await page.goto(`${ORIGIN}/`, { waitUntil: "commit" });
+  expect(new URL(page.url()).origin, "the artifact spec must boot poki-upload/, not a preview server").toBe(ORIGIN);
+  return app;
+}
+
 let server: Server;
 
 test.beforeAll(async () => {
@@ -135,6 +176,15 @@ test.beforeEach(async ({ page }) => {
   await page.route(POKI_CDN, (route) =>
     route.fulfill({ status: 200, contentType: "application/javascript", body: SDK_STUB }),
   );
+  // An empty board, which is what a first-time portal player is shown. Fulfilled
+  // locally so the suite makes no real network call, as the comment above claims.
+  await page.route(POKI_API, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 0, items: [] }),
+    }),
+  );
 });
 
 test("the shipping folder boots, plays, and emits the Poki event contract", async ({ page }) => {
@@ -145,14 +195,13 @@ test("the shipping folder boots, plays, and emits the Poki event contract", asyn
     const url = new URL(request.url());
     if (url.protocol === "data:") return;
     if (url.origin === ORIGIN) local.push(url.pathname);
-    else if (!POKI_CDN.test(request.url())) external.push(request.url());
+    else if (!POKI_SERVED.test(request.url())) external.push(request.url());
   });
   page.on("response", (response) => {
     if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`);
   });
 
-  const app = new SunbirdPage(page);
-  await app.open();
+  const app = await openArtifact(page);
   await app.ready();
 
   // Let the log settle past the loading-screen failsafe window (window load +
@@ -238,18 +287,24 @@ test("boots and plays inside the cross-origin iframe the Inspector uses", async 
 
   // The boot overlay removing itself is the app's own "first playable frame".
   await expect(game.locator("#boot-shell")).toHaveCount(0, { timeout: 60_000 });
-  // A fresh profile lands on the first-run welcome screen before the menu CTA,
-  // so dismiss it the way SunbirdPage.ready() does. This test used to pass only
-  // because it ran against a poki-upload/ snapshot that predated that screen;
-  // once the artifact is built from current source the CTA is not there yet.
-  const welcome = game.locator('[data-action="confirm-pilot-name"]');
-  if (await welcome.isVisible().catch(() => false)) {
-    await welcome.click();
-    await expect(welcome).toHaveCount(0, { timeout: 20_000 });
-  }
-  await expect(game.getByRole("button", { name: "Play free flight now", exact: true })).toBeVisible();
+  // No name gate. `Game`'s boot deliberately accepts the generated call sign
+  // instead of opening `nameEntry` first ("never put a screen between the
+  // visitor and the first gameplayStart()"), so the menu CTA is reachable from
+  // a cold frame with nothing dismissed.
+  //
+  // This used to be a conditional dismiss: `if (await welcome.isVisible())`.
+  // A conditional that has been false since the screen was removed is not a
+  // safety net, it is a branch that can never run — and it documented a boot
+  // flow the build does not have. It is now the assertion instead: if a name
+  // gate ever comes back, this fails here, in the frame the Inspector actually
+  // uses, rather than timing out 45s later at a "Fly now" that never arrives.
+  await expect(
+    game.locator('[data-action="confirm-pilot-name"]'),
+    "the artifact must reach the menu CTA with no first-run name gate in front of it",
+  ).toHaveCount(0);
+  await expect(game.getByRole("button", { name: "Fly now", exact: true })).toBeVisible();
 
-  await game.getByRole("button", { name: "Play free flight now", exact: true }).click();
+  await game.getByRole("button", { name: "Fly now", exact: true }).click();
   await expect(game.locator('[data-action="pause"]')).toBeVisible();
 
   // The stub is injected into the game frame too, and it saw the lifecycle.
@@ -263,8 +318,7 @@ test("boots and plays inside the cross-origin iframe the Inspector uses", async 
 });
 
 test("the Poki leaderboard overlay is offered once the SDK reports it", async ({ page }) => {
-  const app = new SunbirdPage(page);
-  await app.open();
+  const app = await openArtifact(page);
   await app.ready();
 
   await page.locator('[data-ref="menuCard"] [data-action="open-board"]').first().click();
@@ -279,3 +333,81 @@ test("the Poki leaderboard overlay is offered once the SDK reports it", async ({
     .toBe(true);
   expect(app.errors).toEqual([]);
 });
+
+/**
+ * The PvP wiring contract, proven on the SHIPPING BUILD.
+ *
+ * For the whole life of this fork `net-transport.poki.ts` existed and nothing
+ * imported it: the Poki zip resolved `./net-transport` to the neutral module
+ * and got the WebSocket relay client, which — with `VITE_MULTIPLAYER_URL`
+ * shipped empty — answered every race with "No multiplayer server configured"
+ * while the menu advertised live PvP. Every source-level audit passed, because
+ * each checked the transport file in isolation and none checked that anything
+ * resolves to it.
+ *
+ * The only witness that cannot lie is the bundle's own network behaviour:
+ * opening the Race Lobby must open a Netlib signalling socket
+ * (`wss://netlib.poki.io/v0/signaling`) — an attempt, whether or not the
+ * sandbox can reach it — and must never dial a self-hosted relay. A revert to
+ * the neutral transport fails here with zero sockets opened.
+ */
+test("opening the Race Lobby races over Poki Netlib, not a dead relay", async ({ page }) => {
+  // Count WebSocket CONSTRUCTIONS inside the page, not `page.on("websocket")`:
+  // in this headless build sockets that die during establishment (the harness
+  // has no egress to poki.io) never surface as Playwright websocket events,
+  // while the constructor call is an unconditional fact about the bundle.
+  await page.addInitScript(() => {
+    const Original = window.WebSocket;
+    const w = window as unknown as { __wsDials: string[] };
+    w.__wsDials = [];
+    const Wrapped = function (this: unknown, url: string | URL, protocols?: string | string[]) {
+      w.__wsDials.push(String(url));
+      return protocols === undefined ? new Original(url) : new Original(url, protocols);
+    } as unknown as typeof WebSocket;
+    Wrapped.prototype = Original.prototype;
+    Object.assign(Wrapped, Original);
+    window.WebSocket = Wrapped;
+  });
+
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.openMenu("open-live", "Race Lobby");
+
+  // The lobby screen itself does not connect — hosting a private room does
+  // (host-room → Game.preseatLobby → createNetTransport →
+  // PokiNetlibClient.connect → `new Network()` → signalling socket). The
+  // prewarm import may dial too; either way, a Netlib dial must happen.
+  await page.getByRole("button", { name: "Create Private Room", exact: true }).click();
+
+  const netlibDials = () =>
+    page.evaluate(() =>
+      ((window as unknown as { __wsDials?: string[] }).__wsDials ?? []).filter((u) =>
+        /wss?:\/\/netlib\.poki\.io/.test(u),
+      ).length,
+    );
+  await expect
+    .poll(netlibDials, {
+      timeout: 30_000,
+      message: "no Netlib signalling dial was ever made — the shipped bundle is not using the Poki transport",
+    })
+    .toBeGreaterThan(0);
+
+  // And the other direction: a Poki build has no relay to dial. The broken
+  // wiring dialled nothing at all, and a *mis*wired one would try ws(s)://…/mp
+  // — either way this assertion names the regression.
+  const relays = await page.evaluate(
+    () => ((window as unknown as { __wsDials?: string[] }).__wsDials ?? []).filter((u) => !/netlib\.poki\.io/.test(u)),
+  );
+  expect(relays, "the Poki build must not dial any non-Netlib WebSocket").toEqual([]);
+
+  // The signalling socket cannot connect in this harness (no egress to
+  // poki.io), so the client must degrade honestly — an AI-fallback room or an
+  // error state — without the GAME throwing. The browser's own "WebSocket
+  // connection failed" console line is the environment talking, not the game:
+  // on the real portal the socket connects. Filter it before judging.
+  const realErrors = app.errors.filter(
+    (e) => !/WebSocket connection to ['"]wss:\/\/(netlib\.poki\.io|auds\.poki\.io)/.test(e),
+  );
+  expect(realErrors, "the game itself must not throw while the transport degrades").toEqual([]);
+});
+

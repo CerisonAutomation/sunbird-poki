@@ -53,24 +53,43 @@ Wired = called by `src/sdk/poki.ts` or the boot path in `src/sdk/platform.ts`.
 `playtestCaptureHtml{Once,Force,On,Off}()` · `movePill(topPercent, topPx)` ·
 `measure(category, what, action)`
 
-Not wired, deliberately: `displayAd` / `destroyAd` — real members, but the HTML5
-guide documents only commercial and rewarded breaks and Poki decides ad
-placement, so opening a display slot is a policy risk with no upside. `mountBanner`
-stays an honest no-op.
+Not wired by default: `displayAd` / `destroyAd` — real members of both the
+typings and the shipped core, and `mountBanner` calls `displayAd` whenever
+`VITE_POKI_DISPLAY_AD_SIZE` is set. The slot stays empty in a default build
+because the format is chosen per game in the Poki dashboard and handed to the
+developer; the code cannot guess it, and guessing would request a slot the
+portal never configured. `destroyAd` IS wired — `Game.dispose()` calls
+`destroyBanner()` so the slot is released without a page reload.
 
 ### T2 — live CDN build only
 
-| Member | Wired | Why |
-|---|---|---|
-| `gameLoadingStart()` | yes | opens the loading phase; every engine wrapper calls it before asset work |
-| `happyTime(intensity)` | yes | documented in T3 as an intensity 0…1 |
-| `isAdBlocked()` | yes | the only ad-block probe Poki ships |
-| `gameLoadingProgress(v)` | no | fraction vs. percent is undocumented — guessing would misreport the bar |
-| `gameInteractive()` | no | legacy marker; `gameLoadingFinished()` is the documented conversion signal |
-| `sendHighscore(score)` | no | legacy; `init({ submitScore })` is the published handshake |
-| `getLeaderboard()` | no | our board is AUDS-backed; `showLeaderboard()` is the portal UI side |
-| `customEvent(...)`, `logError(...)` | no | `measure()` and `captureError()` are the documented channels |
-| `muteAd()`, `roundStart()`, `roundEnd()`, `setPlayerAge()`, `generateScreenshot()`, `initWithVideoHB()`, `setDebugTouchOverlayController()`, `setPlaytestCanvas()` | no | undocumented or portal-internal; recorded so nobody re-invents them |
+The `Wired` column below used to be filled from Poki's *name lists*. A name
+being real says nothing about whether it does anything, and that mistake marked
+three members as working when the shipped core defines them as empty functions.
+`In the core` is transcribed from the function bodies in
+`poki-sdk-core-0df3a52d1f37602f598b9432c7bae77681d8e3ea.js`; the same table lives
+in code as `POKI_SDK_RUNTIME_ONLY` (`src/sdk/poki-canon.ts`), pinned by
+`poki-canon.test.ts`, so a CDN bump that changes a body fails a test instead of
+quietly turning a feature into a no-op.
+
+| Member | Wired | In the core | Why |
+|---|---|---|---|
+| `gameLoadingStart()` | yes | `()=>{}` | called, but empty — it never opens a loading phase. Harmless: `gameLoadingFinished()` is the signal that works |
+| `happyTime(intensity)` | yes | `()=>{}` | called with a clamped intensity, but empty — the celebration overlay NEVER fires. The name is documented (T3); there is no HTML5 implementation |
+| `isAdBlocked()` | yes | `()=>!1` | hardcoded false, so the probe is permanently false. Real detection exists inside the core but is never exposed. MON-12 is upheld by the platform, not by this |
+| `gameLoadingProgress(v)` | no | `()=>{}` | empty, and fraction-vs-percent is undocumented anyway |
+| `gameInteractive()` | no | `()=>{}` | empty; `gameLoadingFinished()` is the documented conversion signal |
+| `sendHighscore(score)` | no | `()=>{}` | empty; `init({ submitScore })` is the published handshake |
+| `getLeaderboard()` | no | `()=>Promise.resolve([])` | always resolves empty; our board is AUDS-backed |
+| `customEvent(...)` | no | real | the Game Events guide steers all checkpoints through `measure()` |
+| `logError(...)` | no | real | `captureError()` already routes failures to the portal dashboard |
+| `muteAd()` | no | real | mutes the ad, not the game; we mute our own audio |
+| `roundStart()`, `roundEnd()` | no | `()=>{}` | empty; `gameplayStart/Stop` is the documented lifecycle |
+| `setPlayerAge()` | no | `()=>{}` | empty; age gating belongs to the portal placement |
+| `generateScreenshot()` | no | resolves `null` | no data URL; we render our own share card |
+| `initWithVideoHB()` | no | `()=>this.init()` | a video-heartbeat init variant; plain `init()` is the documented path |
+| `setDebugTouchOverlayController()` | no | `()=>{}` | empty; Inspector touch-overlay debugging only |
+| `setPlaytestCanvas()` | no | real | alias of `playtestSetCanvas`, which the adapter does call |
 
 ## Game Events (`measure`) — the rules the SDK enforces
 

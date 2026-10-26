@@ -3,9 +3,10 @@
  *
  * The score already had two kinds of reaction:
  *
- *   • *intensity* (`MusicArc.ts` → `audio.setMusicIntensity`) — one number that
+ *   • *intensity* (`audio.setMusicIntensity`) — one number that
  *     opens the filter, nudges the tempo and swells the tension hats;
- *   • *moments* (`MusicMoments.ts`) — bounded gestures for the comedy beats.
+ *   • *moments* — bounded gestures for the comedy beats, fired as direct
+ *     `Audio` triggers from game events.
  *
  * What it did not have is the thing a real score does with a run: **change the
  * instrumentation**. Riding one arrangement louder is why adaptive game music so
@@ -17,7 +18,7 @@
  * of *multipliers on the mix the engine already tuned* (`Music.apply()`):
  *
  *   `launch`  the first seconds — the kit is held back so the band has room to
- *             arrive; the pad and bass carry the take-off (MusicArc's swell).
+ *             arrive; the pad and bass carry the take-off swell.
  *   `cruise`  the tuned mix, untouched. Every multiplier is exactly 1, so this
  *             module cannot make an ordinary flight sound different from the
  *             score that was already shipped and tested.
@@ -28,7 +29,7 @@
  *             flip back to the menu on purpose: that is the moment it exists for.
  *
  * Everything here is a pure function of scalars with no audio graph, no DOM and
- * no game state — the same rule `MusicArc.ts` and `SpeedFeel.ts` follow — so the
+ * no game state — the same rule `SpeedFeel.ts` follows — so the
  * whole feel of the arrangement can be unit-tested and re-tuned in one file.
  */
 

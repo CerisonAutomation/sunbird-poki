@@ -116,18 +116,26 @@ describe("Autonomous Squad and Upgraded Shop Engine", () => {
     expect(save.state.wallet).toBe(initialWallet + 250);
     expect(save.state.lastStipendClaimed).toBe("2026-09-16");
 
-    // Ace Pilot Crate purchase
+    // Ace Pilot Crate purchase. Buying a one-flight booster now goes through
+    // storage first — the same two calls `buyBoost` makes — so the armed list
+    // is a selection out of what the player owns rather than the ownership
+    // record itself. Arming something unbought is a no-op by design.
     const canAfford = save.spend(240);
     expect(canAfford).toBe(true);
-    save.armBoost("shield");
-    save.armBoost("sunflask");
-    save.armBoost("magnet");
+    for (const id of ["shield", "sunflask", "magnet"]) {
+      save.stockBoost(id);
+      save.armBoost(id);
+    }
     save.ownTrail("trail_tide");
     save.addCoins(250);
 
     expect(save.state.armedBoosts).toContain("shield");
     expect(save.state.armedBoosts).toContain("sunflask");
     expect(save.state.armedBoosts).toContain("magnet");
+    // Stronger than the old assertion: every armed copy is backed by stock.
+    for (const id of ["shield", "sunflask", "magnet"]) {
+      expect(save.boostStocked(id), `${id} is armed but not owned`).toBeGreaterThanOrEqual(save.boostArmed(id));
+    }
     expect(save.state.tournaments.trails).toContain("trail_tide");
   });
 });

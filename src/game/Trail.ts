@@ -4,6 +4,10 @@ import * as THREE from "three";
 const TRAIL_MAX = 48;
 const TRAIL_LIFE = 0.65;
 const TRAIL_SPACING = 0.45;
+/** Longest jump the ribbon will BRIDGE. Past this the strip is cut and
+ *  restarted, because a quad drawn between two samples that far apart is a
+ *  straight line across the screen, not a trail. */
+const TRAIL_MAX_GAP = 12;
 const TRAIL_Z = 0.28;
 
 type TrailSample = { x: number; y: number; age: number };
@@ -34,6 +38,15 @@ export class TrailRibbon {
   private width = 0.5;
   private peak = 0.55;
   private vis = 0;
+  /**
+   * Floating-origin recenter point (see `TerrainSystem.recenter()`). Samples
+   * are pushed in true world x — that is what makes them seed-deterministic —
+   * so the subtraction happens here, at the single point where a sample
+   * becomes a vertex. The mesh itself carries no transform, so without this
+   * the whole ribbon sits at x≈4096 the moment the origin rebases, off-screen
+   * for the rest of an Endless run.
+   */
+  private originX = 0;
 
   constructor() {
     const maxQuads = TRAIL_MAX - 1;
@@ -80,8 +93,19 @@ export class TrailRibbon {
 
     this.mesh = new THREE.Mesh(this.geo, this.mat);
     this.mesh.frustumCulled = false;
-    // Depth contract: terrain/collectibles -> trail -> particles -> bird.
-    // The ribbon is a wake, never a foreground costume.
+    // Ordering note, because the obvious "fix" here is wrong.
+    //
+    // The intent is terrain/collectibles -> trail -> particles -> bird, but
+    // `renderOrder` only sorts WITHIN a render queue. The ribbon is
+    // `transparent: true` and the bird's materials are opaque, so three draws
+    // every opaque object first and the ribbon second — the ribbon paints over
+    // the bird whatever this number says.
+    //
+    // Do not "fix" that by flipping `depthTest` on. The terrain is a heightfield
+    // at z=0 spanning TERRAIN_HALF_Z, and TRAIL_Z puts the ribbon in front of
+    // it, so depth-testing would let hills occlude the wake. `depthTest: false`
+    // is deliberate. The ribbon is kept off the bird by ANCHORING it at the
+    // tail tip (`Bird.tailPoint`) rather than at the bird's centroid.
     this.mesh.renderOrder = 30;
     this.mesh.visible = false;
   }
@@ -102,10 +126,45 @@ export class TrailRibbon {
     this.peak = Math.max(0, Math.min(1, p));
   }
 
-  /** Record the bird's current position — offset behind bird to prevent bird/trail overlap */
+  /**
+   * Shift the ribbon into the new render frame. Called from
+   * `Game.maybeRecenter()`; see `originX`.
+   */
+  setRenderOrigin(originX: number): void {
+    this.originX = originX;
+  }
+
+  /**
+   * Record the ribbon's current head position, in true world coordinates.
+   *
+   * The caller is responsible for anchoring this BEHIND the bird — the bird's
+   * centroid puts the head inside its own body. `Bird.tailPoint()` is the
+   * anchor the game uses. This comment used to claim the offset was applied
+   * here; it never was, which is why the wake started mid-body.
+   */
   push(x: number, y: number): void {
     const last = this.samples[this.samples.length - 1];
+    // Too close to the head: a redundant sample that would only add a
+    // zero-length quad.
     if (last && Math.abs(x - last.x) < TRAIL_SPACING && Math.abs(y - last.y) < TRAIL_SPACING) return;
+    // Too far: the ribbon was not being sampled for a while, and connecting
+    // across that gap draws a long straight sweep through the sky.
+    //
+    // This is not hypothetical. `Game.updateTrailRibbon` only pushes a sample
+    // while `show` is true, and `show` is a speed gate (speed > 48, or fever,
+    // or boost). A player crossing that threshold — which happens constantly
+    // around it — leaves a time gap, and the bird can cover a lot of ground in
+    // it: at 2.8 km the gaps were hundreds of units. The old check only
+    // de-duplicated CLOSE samples, so every one of those gaps was bridged, and
+    // oscillating around the threshold produced loops of ribbon arcing over
+    // the top of the screen.
+    //
+    // Cutting instead is also what the eye expects: a trail that has just
+    // resumed is short, and grows. A bridge is not a trail resuming, it is a
+    // line drawn between two places the bird was never between.
+    if (last && (x - last.x) ** 2 + (y - last.y) ** 2 > TRAIL_MAX_GAP * TRAIL_MAX_GAP) {
+      this.samples.length = 0;
+    }
     this.samples.push({ x, y, age: 0 });
     if (this.samples.length > TRAIL_MAX) this.samples.shift();
   }
@@ -188,7 +247,7 @@ export class TrailRibbon {
 
   private setVert(i: number, x: number, y: number, a: number): void {
     const o = i * 3;
-    this.pos[o] = x;
+    this.pos[o] = x - this.originX;
     this.pos[o + 1] = y;
     this.pos[o + 2] = TRAIL_Z;
     this.alpha[i] = a;

@@ -45,7 +45,7 @@ const RESUMERS = Number(opt("resumers", 4));
 const REQUIRE_ANTICHEAT = flag("require-anticheat");
 const JSON_OUT = opt("json", "");
 
-/** Wire rate the shipped client uses (`Realtime.ts` SEND_HZ). */
+/** Wire rate the shipped client uses (`RoomSync.ts` SEND_HZ). */
 const SEND_HZ = 15;
 /** Physics ceiling: MAX_SPEED_FEVER × wingboost 1.5 + BOOST_EXTRA_SPEED. */
 const MAX_SPEED = 234;

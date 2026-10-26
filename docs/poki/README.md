@@ -49,6 +49,7 @@ carries an obligation was dropped.
 | File | What it is |
 |---|---|
 | `00-guide-overview.md` … `17-partnering.md` | The extracted guide, one page per topic, every rule numbered |
+| [`ENGAGEMENT_PLAYBOOK.md`](./ENGAGEMENT_PLAYBOOK.md) | The action layer: the 2026-10-04 Player Fit audit, the 3-minute bar, and the ranked psychological/game-technique levers |
 | [`requirements.json`](./requirements.json) | Machine-readable rule list: `id`, `section`, `kind`, `rule`, `verify`, `evidence`, `status` |
 | [`COMPLIANCE.md`](./COMPLIANCE.md) | **Generated** — the audit result per rule (`pnpm poki:audit`) |
 | [`REBUILD_REPORT.md`](./REBUILD_REPORT.md) | What this extraction changed in the game, why, and the evidence |
@@ -58,7 +59,7 @@ carries an obligation was dropped.
 
 ```bash
 pnpm poki:audit        # run every automated rule check, rewrite COMPLIANCE.md, exit non-zero on failure
-pnpm build:portals     # produce sunbird-poki.zip / -crazy.zip / -generic.zip + the generated poki-upload/
+pnpm build:poki        # produce sunbird-poki.zip + the generated poki-upload/ folder
 pnpm upload:poki       # build Poki only + prove the Inspector can accept the folder (see UPLOAD.md)
 pnpm verify:upload     # the Inspector-shaped gate: root index.html, fresh, uploadable files only
 pnpm verify:portals    # the shippability gate on those zips (Poki size/asset/external-URL rules)

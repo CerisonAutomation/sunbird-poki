@@ -302,6 +302,30 @@ export function tierFor(input: TierInput): DeviceTier {
   return "standard";
 }
 
+/**
+ * The tier the *world builders* take. `TerrainSystem` and `Collectibles` both
+ * size their world off a third vocabulary of their own — `"lite" | "mid" |
+ * "high"` — which is why a device tier has to be translated before it can
+ * reach them.
+ */
+export type WorldTier = "lite" | "mid" | "high";
+
+/**
+ * Translate a device tier into the world builders' vocabulary.
+ *
+ * `DeviceTier` has three names the builders do not share: `standard` has no
+ * builder equivalent, and the builders' `mid` was never a device report. So
+ * `standard` keeps the builders' own `high` default rather than being
+ * quietly promoted into `mid` — that promotion is a real budget decision
+ * (fewer chunks, fewer coins, coarser columns) and it wants a measurement on a
+ * mid-range phone, not to arrive as a side effect of connecting a wire. Only
+ * the lite tier changes shape, and it was previously unreachable: the
+ * builders' lite branches were dead code because nothing passed a tier at all.
+ */
+export function worldTierFor(tier: DeviceTier): WorldTier {
+  return tier === "lite" ? "lite" : "high";
+}
+
 /* ---------------------------------------------------------------- profile */
 
 export function detectDeviceProfile(scope: DeviceScope = liveScope()): DeviceProfile {

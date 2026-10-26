@@ -1,6 +1,6 @@
 # SUNBIRD Rust Migration Plan
 
-> **Status:** archived — migration plan written *before* the Rust workspace existed. Its central premise, "no Rust backend exists", is now false: `rust/` ships `sunbird-protocol` + `sunbird-server`, pinned by `pnpm isolation:check`. Kept as the design rationale for the split; do not read it as current state. See [`../../rust/README.md`](../../rust/README.md).
+> **Status:** archived — migration plan written *before* the Rust workspace existed. Its central premise, "no Rust backend exists", is now false: `rust/` ships `sunbird-protocol` + `sunbird-server`, pinned by `pnpm isolation:check`. Kept as the design rationale for the split; do not read it as current state. See the parent monorepo's `rust/` workspace (not in this checkout).
 
 Status: architecture plan only. No Rust workspace or production backend exists in the repository at the time of this document.
 

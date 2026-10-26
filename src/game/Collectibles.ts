@@ -53,17 +53,6 @@ const MAX_COINS_BASE = 512; // base for high tier
 const MAX_GEMS = 96;
 const MAX_RINGS_BASE = 120; // base for high tier
 const MAX_BALLOONS_BASE = 24; // base for high tier
-// Legacy constants kept for tests that import them — actual pools use instance fields maxCoins/maxRings/maxBalloons
-const _MAX_COINS = MAX_COINS_BASE;
-const _MAX_RINGS = MAX_RINGS_BASE;
-const _MAX_BALLOONS = MAX_BALLOONS_BASE;
-const MAX_COINS = _MAX_COINS;
-const MAX_RINGS = _MAX_RINGS;
-const MAX_BALLOONS = _MAX_BALLOONS;
-// Keep TS happy — these legacy names are imported by tests
-void MAX_COINS;
-void MAX_RINGS;
-void MAX_BALLOONS;
 const BALLOON_COLORS = [0xff6b6b, 0xffc14a, 0x6ad8ff, 0xb18cff, 0x7fe8a0];
 const coinDummy = new THREE.Object3D();
 
@@ -104,6 +93,14 @@ export class Collectibles {
   private readonly activeBalloons: Balloon[] = [];
   private readonly balloonMats: THREE.MeshLambertMaterial[] = [];
   private readonly knotMat: THREE.MeshLambertMaterial;
+  // Balloon part geometries, hoisted like every other collectible geometry
+  // above (coinGeo, gemGeo, pickupGeo, ringGeo). allocBalloon() used to mint a
+  // private copy of all three per pooled instance, so 24 balloons owned 72
+  // identical buffers. Nothing transforms or mutates them per instance — the
+  // meshes carry the transforms — so one shared copy is identical on screen.
+  private readonly balloonBodyGeo: THREE.SphereGeometry;
+  private readonly balloonKnotGeo: THREE.ConeGeometry;
+  private readonly balloonStringGeo: THREE.CylinderGeometry;
   private readonly seedN: number;
   private readonly seedStr: string;
   private spawnedUntil = -1;
@@ -115,6 +112,13 @@ export class Collectibles {
   private maxCoins: number;
   private maxRings: number;
   private maxBalloons: number;
+  /**
+   * Floating-origin recenter point (see TerrainSystem.recenter()). Entity
+   * x/y stay true world coordinates (gameplay math — magnet pull, pickup
+   * radii — all reads bird.x/c.x directly); only the rendered sprite/mesh
+   * position below shifts.
+   */
+  private originX = 0;
 
   constructor(seedN: number, seedStr = String(seedN), qualityTier: "lite" | "mid" | "high" = "high") {
     this.seedN = seedN;
@@ -164,6 +168,9 @@ export class Collectibles {
     uploadDensePrefix(this.ringMesh.instanceMatrix, this.ringMesh.count);
 
     this.knotMat = new THREE.MeshLambertMaterial({ color: 0x7a4a20 });
+    this.balloonBodyGeo = new THREE.SphereGeometry(2.1, 14, 12);
+    this.balloonKnotGeo = new THREE.ConeGeometry(0.42, 0.8, 6);
+    this.balloonStringGeo = new THREE.CylinderGeometry(0.05, 0.05, 5, 5);
     for (const c of BALLOON_COLORS) {
       this.balloonMats.push(new THREE.MeshLambertMaterial({ color: c, emissive: 0x1a0a00 }));
     }
@@ -173,6 +180,11 @@ export class Collectibles {
   setLayer(layer: number): void {
     this.layer = layer;
     this.group.traverse((o) => o.layers.set(layer));
+  }
+
+  /** Floating-origin recenter — see TerrainSystem.recenter(). */
+  setRenderOrigin(x: number): void {
+    this.originX = x;
   }
 
   reset(): void {
@@ -255,7 +267,7 @@ export class Collectibles {
       }
       c.phase += dt;
       c.x += c.drift * dt;
-      c.sprite.position.set(c.x, c.y + Math.sin(c.phase) * 0.6, c.z);
+      c.sprite.position.set(c.x - this.originX, c.y + Math.sin(c.phase) * 0.6, c.z);
       if (c.kind !== "plain") {
         const p = 1 + Math.sin(c.phase * 2.4) * 0.05;
         c.sprite.scale.set(9.6 * p, 4.6 * p, 1);
@@ -277,7 +289,7 @@ export class Collectibles {
         continue;
       }
       p.phase += dt;
-      p.mesh.position.set(p.x, p.y + Math.sin(p.phase * 2.2) * 0.35, 0);
+      p.mesh.position.set(p.x - this.originX, p.y + Math.sin(p.phase * 2.2) * 0.35, 0);
       p.mesh.rotation.y += dt * 1.8;
       p.mesh.rotation.x += dt * 0.9;
       p.mesh.scale.setScalar(1 + Math.sin(p.phase * 4) * 0.08);
@@ -316,7 +328,7 @@ export class Collectibles {
       }
       b.phase += dt;
       b.x += b.drift * dt;
-      b.root.position.set(b.x, b.y + Math.sin(b.phase * 1.4) * 1.1, 0);
+      b.root.position.set(b.x - this.originX, b.y + Math.sin(b.phase * 1.4) * 1.1, 0);
       b.root.rotation.z = Math.sin(b.phase * 0.9) * 0.06;
       // Pop on contact — a soft reward that launches you back into the sky.
       if (Math.hypot(bird.x - b.x, bird.y - b.y) < 4.4) {
@@ -342,11 +354,12 @@ export class Collectibles {
     for (const c of this.cloudPool) (c.sprite.material as THREE.Material).dispose();
     this.ringGeo.dispose();
     this.ringMat.dispose();
-    for (const b of this.balloonPool) {
-      b.root.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.geometry.dispose();
-      });
-    }
+    // Balloon geometries are shared across the pool, so they are disposed once
+    // here rather than by walking the pool (which would release a buffer that
+    // every balloon mesh still points at, 24 times over).
+    this.balloonBodyGeo.dispose();
+    this.balloonKnotGeo.dispose();
+    this.balloonStringGeo.dispose();
     for (const m of this.balloonMats) m.dispose();
     this.knotMat.dispose();
   }
@@ -469,7 +482,10 @@ export class Collectibles {
         const r = rng.next();
         if (isCrest && r < 0.16) this.placePickup(this.pickPowerup(rng), x, hh + 3.2);
         else if (isRamp && r > 0.93) this.placePickup("rocket", x + 16, hh + 14);
-        else if (r > 0.985) this.placePickup("sun", x, hh + 3);
+        // Sun is the clock's only mid-island refill. At 1.5% per cell it was
+        // rarer than one per island, which left daylight as a pure speed test
+        // with no pickups to reward a good line; this is roughly one per 900 m.
+        else if (r > 0.972) this.placePickup("sun", x, hh + 3);
       }
       if (lx > 700 && lx < RAMP_START && rng.next() < 0.06) this.placePickup("shield", x, hh + 3);
     }
@@ -536,7 +552,7 @@ export class Collectibles {
     cloud.sprite.material.needsUpdate = true;
     cloud.sprite.scale.set(kind === "plain" ? 9.2 : 9.6, kind === "plain" ? 4.4 : 4.6, 1);
     cloud.sprite.visible = true;
-    cloud.sprite.position.set(x, y, z);
+    cloud.sprite.position.set(x - this.originX, y, z);
     this.activeClouds.push(cloud);
   }
 
@@ -547,7 +563,7 @@ export class Collectibles {
     p.phase = hash01(Math.floor(x), this.seedN) * 6;
     p.taken = false;
     p.mesh.visible = true;
-    p.mesh.position.set(x, y, 0);
+    p.mesh.position.set(x - this.originX, y, 0);
     this.activePickups.push(p);
   }
 
@@ -570,7 +586,7 @@ export class Collectibles {
   private writeCoin(c: Coin, time: number, slot = c.slot): void {
     if (c.slot < 0) return;
     const mesh = c.gem ? this.gemMesh : this.coinMesh;
-    coinDummy.position.set(c.x, c.y + Math.sin(time * 5 + c.x * 0.35) * 0.22, 0);
+    coinDummy.position.set(c.x - this.originX, c.y + Math.sin(time * 5 + c.x * 0.35) * 0.22, 0);
     coinDummy.rotation.set(c.gem ? time * 0.8 : 0, c.gem ? time * 1.6 : time * 3.2, c.gem ? time * 0.45 : Math.PI / 2);
     coinDummy.scale.setScalar(1);
     coinDummy.updateMatrix();
@@ -631,13 +647,13 @@ export class Collectibles {
     if (idle) return idle;
     const root = new THREE.Group();
     const mat = this.balloonMats[this.balloonPool.length % this.balloonMats.length]!;
-    const body = new THREE.Mesh(new THREE.SphereGeometry(2.1, 14, 12), mat);
+    const body = new THREE.Mesh(this.balloonBodyGeo, mat);
     body.position.y = 2.1;
     body.castShadow = true;
-    const knot = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.8, 6), this.knotMat);
+    const knot = new THREE.Mesh(this.balloonKnotGeo, this.knotMat);
     knot.rotation.x = Math.PI;
     knot.position.y = 0.4;
-    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 5, 5), this.knotMat);
+    const string = new THREE.Mesh(this.balloonStringGeo, this.knotMat);
     string.position.y = -2.3;
     root.add(body, knot, string);
     root.traverse((o) => o.layers.set(this.layer));

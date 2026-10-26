@@ -3,6 +3,7 @@ import { storage } from "../game/Storage";
 // (see scripts/gen-i18n-packs.mjs). All locales including English are loaded
 // dynamically to avoid circular dependency warnings and improve code splitting.
 import { SUPPORTED_LOCALES, type SupportedLocale } from "./locales";
+import packKeys from "./pack-keys.json";
 
 // Re-exported so every existing `from "./i18n"` import keeps working. The data
 // itself lives in ./locales, which has no imports and so is safe to load in
@@ -131,11 +132,27 @@ let EN: Pack = {};
 
 const packs = new Map<string, Pack>();
 
-/** Vite-native per-file dynamic imports: each pack becomes its own chunk. */
-const PACK_MODULES = import.meta.glob("./packs/*.json") as Record<
-  string,
-  () => Promise<{ default: Pack }>
->;
+/**
+ * Packs are fetched, not bundled.
+ *
+ * They used to be `import.meta.glob`ed, which made each locale its own lazy
+ * chunk — and then `vite-plugin-singlefile` inlined every one of those chunks
+ * into the shipped HTML, so a player downloaded all 36 locales to use one.
+ * With real translations that inlining costs 688 KB and pushed the single-file
+ * payload over budget; the null-compaction that used to hide it only worked
+ * because most cells were still English.
+ *
+ * The packs now live in `public/i18n/` and are fetched on demand at the
+ * relative path, exactly like the `fonts/` and `icons/` sidecars the portal
+ * zip already ships. A player downloads the English pack plus the one locale
+ * they picked. `base` is "./", so the path resolves from a deep portal subpath.
+ */
+const packUrl = (locale: string): string => `./i18n/${encodeURIComponent(locale)}.json`;
+
+/** In-flight fetches, so two callers racing for the same locale (the boot
+ *  preload and the startup locale resolving to English) share one request
+ *  instead of both hitting the network. */
+const loading = new Map<string, Promise<boolean>>();
 
 let packVersion = 0;
 const packListeners = new Set<() => void>();
@@ -161,20 +178,42 @@ if (typeof window !== "undefined") {
  * fetched — callers keep English text rather than raw keys. */
 export async function loadPack(locale: string): Promise<boolean> {
   if (packs.has(locale)) return true;
+  const inFlight = loading.get(locale);
+  if (inFlight) return inFlight;
+  const request = fetchPack(locale).finally(() => loading.delete(locale));
+  loading.set(locale, request);
+  return request;
+}
+
+async function fetchPack(locale: string): Promise<boolean> {
 
   // One pack per supported locale, same filename as the code. The old mapping
   // special-cased `pt-BR` → `pt` and `zh-CN` → `zh` because the locale list
   // carried region codes; `matchLocale()` already folds a regional tag
   // ("pt-BR", "zh-CN") down to its base before this runs, so the indirection
   // only ever hid a missing pack.
-  const load = PACK_MODULES[`./packs/${locale}.json`];
-  if (!load) return false;
   try {
-    const mod = await load();
-    packs.set(locale, mod.default);
+    const res = await fetch(packUrl(locale));
+    if (!res.ok) return false;
+    // A slot is `string | null`: the generator collapses every cell that is
+    // byte-identical to English down to `null` rather than storing the same
+    // characters twice. Skipping those slots leaves the key absent from the
+    // pack, so `t()`'s `pack[key] ?? EN[key]` resolves it to English — the
+    // same result, without the duplicated bytes.
+    const packArray = (await res.json()) as (string | null)[];
+    // Convert array pack to object pack using pack-keys mapping
+    const packObj: Pack = {};
+    for (let i = 0; i < packArray.length; i++) {
+      const key = packKeys[i];
+      const text = packArray[i];
+      if (key && text != null) {
+        packObj[key] = text;
+      }
+    }
+    packs.set(locale, packObj);
     // Also cache as EN if this is English for fallback
     if (locale === "en") {
-      EN = mod.default;
+      EN = packObj;
     }
     packVersion += 1;
     for (const fn of packListeners) fn();
@@ -219,15 +258,65 @@ export function t(key: string, params?: Record<string, string | number>, default
     const rawText = pack[key] ?? EN[key] ?? defaultText;
     if (!rawText) return defaultText ?? key;
     if (!params) return rawText;
+    // Pluralisation happens BEFORE interpolation so a translator can put the
+    // form in the middle of the sentence, where most languages put it.
+    const forms = params["forms"];
+    const resolved: Record<string, string | number> = { ...params };
+    if (typeof forms === "string" && forms.includes("|")) {
+      resolved["n"] = plural(Number(params["count"] ?? params["n"] ?? 0), forms);
+      delete resolved["forms"];
+    }
     let result = rawText;
     for (const [k, v] of Object.entries(params)) {
-      const strVal = String(v);
+      const strVal = String(resolved[k] ?? v);
       result = result.split(`{{${k}}}`).join(strVal).split(`{${k}}`).join(strVal);
     }
     return result;
   } catch {
     return defaultText ?? key;
   }
+}
+
+/**
+ * Plural forms, CLDR-style.
+ *
+ * Assembling plurals in English (`n === 1 ? "day" : "days"`) and interpolating
+ * the noun afterwards is wrong in every language that is not English, and
+ * actively broken in the ones with three or more forms: Russian needs
+ * one/few/many, Arabic needs six. The tournament card shipped exactly that, so
+ * it read "ends in 2 day" wherever the translator had no other option.
+ *
+ * The translator supplies the FORMS and the rule picks one:
+ *
+ *   t("hud.cup.endsIn", { n: 2, forms: "day|days" })   // 2 days
+ *   t("hud.cup.endsIn", { n: 5, forms: "день|дня|дней" }) // 5 дней
+ *
+ * `forms` is pipe-separated and may be a single form. A locale that has not
+ * been translated falls back to the English source, which is two forms, so
+ * English keeps working and a partial translation is never worse than today.
+ */
+const ONE_FORM_LANGS = new Set(["ja", "zh", "ko", "th", "vi", "id", "ms"]);
+
+function pluralFormIndex(count: number, locale: string): number {
+  if (ONE_FORM_LANGS.has(locale)) return 0;
+  const lang = locale.split("-")[0]!;
+  // Slavic three-form rule (ru, uk, pl and friends).
+  if (["ru", "uk", "be", "pl"].includes(lang)) {
+    const n = Math.abs(count);
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 0;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 1;
+    return 2;
+  }
+  return count === 1 ? 0 : 1;
+}
+
+/** The pluralised noun for `count` in the active locale. */
+export function plural(count: number, forms: string, locale = currentLocale): string {
+  const list = forms.split("|");
+  if (list.length === 1) return list[0]!;
+  return list[Math.min(pluralFormIndex(count, locale), list.length - 1)]!;
 }
 
 /**

@@ -89,7 +89,7 @@ export const CAMPAIGN: CampaignChapter[] = [
     story: "The moon keeps score too. Glowing coins, quiet ocean, zero refunds on splashdowns.",
     icon: "moon",
     goals: [
-      { id: "ch5-zen", label: "Hit 10 zeniths lifetime", target: 10, metric: (s) => s.state.lifetime.zeniths },
+      { id: "ch5-zen", label: "Hit 10 apex moments lifetime", target: 10, metric: (s) => s.state.lifetime.apexMoments },
       { id: "ch5-biome", label: "Visit 5 biomes", target: 5, metric: (s) => s.state.biomesSeen.length },
       { id: "ch5-best", label: "Fly 4,000 m in one run", target: 4000, metric: (s) => s.state.bestDistance },
     ],

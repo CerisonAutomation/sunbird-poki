@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BOOSTS, SHOP_TRAILS, SKINS, VIP, dailyDealBoost, skinById } from "../Economy";
+import { BOOSTS, PROMO_CODES, SHOP_TRAILS, SKINS, VIP, dailyDealBoost, skinById } from "../Economy";
 import { SEASON_TIER_DEFS } from "../SeasonPass";
 import { TRAILS } from "../Tournaments";
 import { MODES } from "../Modes";
 import { BIOMES, biomeForIsland } from "../Biomes";
+import { SaveData } from "../SaveData";
 
 describe("skin catalogue", () => {
   it("has a meaningful roster (60+) with unique ids", () => {
@@ -144,8 +145,8 @@ describe("portal coin VIP", () => {
 });
 
 describe("worlds", () => {
-  it("has 9 hand-tuned biomes with unique ids", () => {
-    expect(BIOMES.length).toBe(9);
+  it("has 11 hand-tuned biomes with unique ids", () => {
+    expect(BIOMES.length).toBe(11);
     expect(new Set(BIOMES.map((b) => b.id)).size).toBe(BIOMES.length);
   });
 
@@ -180,16 +181,25 @@ describe("modes", () => {
 });
 
 describe("nest coin sink", () => {
-  it("price curve escalates ×1.5 and the multiplier cap holds", () => {
-    // Mirror of SaveData.nestUpgradePrice: 300 * 1.5^bought.
-    const price = (bought: number): number => Math.round(300 * Math.pow(1.5, bought));
-    expect(price(0)).toBe(300);
-    expect(price(1)).toBe(450);
-    expect(price(2)).toBe(675);
-    // Total cost to max (10 levels) must be a meaningful sink: > 30k coins.
+  it("price curve is tiered (×1.2 for 3, then ×1.3) and the multiplier cap holds", () => {
+    // A flat ×1.5 for all 10 levels put ~33.9k coins between a player and
+    // their first full prestige — the exponential wall this tiering fixes.
+    localStorage.clear();
+    const save = new SaveData();
+    expect(save.nestUpgradePrice()).toBe(300);
+
+    // Buy through all 10 levels and total the real cost via the actual
+    // production function, not a hand-duplicated formula that can drift.
     let total = 0;
-    for (let i = 0; i < 10; i++) total += price(i);
-    expect(total).toBeGreaterThan(30_000);
+    for (let i = 0; i < 10; i++) {
+      const price = save.nestUpgradePrice();
+      total += price;
+      save.state.wallet += price;
+      expect(save.buyNestUpgrade()).toBe(true);
+    }
+    // Meaningful sink, but nowhere near the old ~33.9k wall.
+    expect(total).toBeGreaterThan(5_000);
+    expect(total).toBeLessThan(15_000);
     // Cap: bought levels alone add at most +1.2x (10 × 0.12).
     expect(10 * 0.12).toBeCloseTo(1.2);
   });
@@ -214,5 +224,35 @@ describe("monetization tiers", () => {
   it("vip daily gift pays back the subscription in play terms", () => {
     // 100/day * 30 days = 3000 coins per month — must beat the 1200-coin starter pack.
     expect(100 * 30).toBeGreaterThan(1200 * 2);
+  });
+});
+
+/**
+ * Promo codes ship in plaintext inside the submission zip — there is no server
+ * to validate them against — so the only safe promo code is one that would not
+ * matter if it were printed on the front page of the game.
+ *
+ * Two of them used to grant Gold and one granted VIP: a permanent 2x coin
+ * multiplier, the premium pass track and otherwise-locked skins, handed to
+ * anyone who opened devtools. This pins the rule that replaced them.
+ */
+describe("promo codes cannot grant entitlements", () => {
+  it("every shipped code is a small, one-off coin grant", () => {
+    const codes = Object.entries(PROMO_CODES);
+    expect(codes.length).toBeGreaterThan(0);
+    for (const [name, promo] of codes) {
+      expect(promo.type, `${name} must not grant an entitlement`).toBe("coins");
+      // A code is worth about one good run, never a shortcut past the economy.
+      if (promo.type === "coins") {
+        expect(promo.amount, `${name} is too valuable for a public code`).toBeLessThanOrEqual(500);
+        expect(promo.amount).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("no code grants gold or vip", () => {
+    const kinds = Object.values(PROMO_CODES).map((p) => p.type);
+    expect(kinds).not.toContain("gold");
+    expect(kinds).not.toContain("vip");
   });
 });

@@ -4,7 +4,9 @@ import { storage } from "./Storage";
 
 type Sample = [number, number, number, number]; // t, x, y, rotation
 
-export type GhostRecord = { seed: string; distance: number; samples: Sample[] };
+/** `savedAt` is when the ghost was written, used only by the eviction pass.
+ * Optional because ghosts saved before it existed must still load. */
+export type GhostRecord = { seed: string; distance: number; samples: Sample[]; savedAt?: number };
 
 const KEY_PREFIX = "sunbird.ghost.";
 
@@ -34,7 +36,7 @@ export class GhostRecorder {
   commit(seed: string, distance: number): boolean {
     const prev = GhostRecorder.load(seed);
     if (prev && prev.distance >= distance) return false;
-    const record: GhostRecord = { seed, distance, samples: this.samples };
+    const record: GhostRecord = { seed, distance, samples: this.samples, savedAt: Date.now() };
     try {
       storage.setItem(KEY_PREFIX + seed, JSON.stringify(record));
       // Evict old ghosts to prevent quota exhaustion.
@@ -46,16 +48,34 @@ export class GhostRecorder {
     return true;
   }
 
-  /** Remove ghosts older than 30 days, keeping the 10 most recent. */
+  /** Remove ghosts older than 30 days, keeping the 10 most recent.
+   *
+   *  The timestamp is read from the STORED RECORD, not from the key. The key
+   *  after the prefix is the world seed — a string like "fly-3f9a" — so parsing
+   *  it as an integer produced a meaningless number (0 for almost every seed,
+   *  and a huge wrong one for a seed that happens to start with digits). The
+   *  sort by recency was therefore a no-op, and the age test compared garbage
+   *  against `cutoff`, which for a 0 always passed and so deleted every ghost
+   *  past the tenth regardless of how fresh it was. Records written before
+   *  `savedAt` existed have no timestamp and are treated as ancient, which is
+   *  the correct reading: they are the ones worth reclaiming. */
   private static evictOld(): void {
     const cutoff = Date.now() - 30 * 86_400_000;
     const entries: { key: string; ts: number }[] = [];
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
-      if (key?.startsWith(KEY_PREFIX)) {
-        const ts = parseInt(key.slice(KEY_PREFIX.length), 10) || 0;
-        entries.push({ key, ts });
+      if (!key?.startsWith(KEY_PREFIX)) continue;
+      let ts = 0;
+      try {
+        const raw = storage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<GhostRecord>;
+          ts = Number.isFinite(parsed.savedAt) ? Number(parsed.savedAt) : 0;
+        }
+      } catch {
+        ts = 0; // unreadable record — treat as ancient and reclaim it
       }
+      entries.push({ key, ts });
     }
     entries.sort((a, b) => b.ts - a.ts);
     for (let i = 10; i < entries.length; i++) {
@@ -73,6 +93,9 @@ export class GhostRecorder {
         seed,
         distance: Number(parsed.distance) || 0,
         samples: (parsed.samples as Sample[]).slice(0, GHOST_MAX_SAMPLES),
+        // Carried through, not just read for eviction: a caller that re-commits
+        // a loaded ghost would otherwise silently reset its age to "now".
+        ...(Number.isFinite(parsed.savedAt) ? { savedAt: Number(parsed.savedAt) } : {}),
       };
     } catch {
       return null;
@@ -95,9 +118,18 @@ export class GhostPlayer {
   private readonly mat: THREE.MeshBasicMaterial;
   private readonly wingMat: THREE.MeshBasicMaterial;
   private readonly accentMat: THREE.MeshBasicMaterial;
+  /**
+   * Colorblind-assist marker: a small shape hovering over the bird so two
+   * translucent ghosts (your own ice-blue best vs. a rival's amber one) read
+   * apart by silhouette, not only by tint — hidden unless colour-assist is on.
+   */
+  private readonly marker: THREE.Mesh;
+  private readonly markerMat: THREE.MeshBasicMaterial;
   active = false;
 
-  constructor() {
+  /** `markerShape` distinguishes this ghost from another GhostPlayer on
+   *  screen at the same time by silhouette (see `setMarkerVisible`). */
+  constructor(private readonly markerShape: "circle" | "diamond" = "circle") {
     this.mesh = new THREE.Group();
     this.mat = new THREE.MeshBasicMaterial({
       color: 0x9fd8ff,
@@ -182,9 +214,31 @@ export class GhostPlayer {
     this.wingL.position.set(-0.05, 0.1, 0.42);
     this.wingR.position.set(-0.05, 0.1, -0.42);
 
-    this.mesh.add(this.body, this.wingL, this.wingR);
+    // Colorblind-assist marker: a small bright shape floating above the head.
+    // A child of `this.mesh`, so it inherits the group's position/rotation
+    // and needs no extra per-frame bookkeeping in `update()`.
+    this.markerMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.marker = new THREE.Mesh(
+      this.markerShape === "diamond" ? new THREE.OctahedronGeometry(0.22, 0) : new THREE.RingGeometry(0.13, 0.22, 12),
+      this.markerMat,
+    );
+    this.marker.position.set(0, 1.05, 0);
+    this.marker.visible = false;
+
+    this.mesh.add(this.body, this.wingL, this.wingR, this.marker);
     this.mesh.scale.setScalar(1.18);
     this.mesh.visible = false;
+  }
+
+  /** Show/hide the colorblind-assist marker (see the constructor doc). */
+  setMarkerVisible(visible: boolean): void {
+    this.marker.visible = visible;
   }
 
   addTo(scene: THREE.Scene): void {
@@ -257,6 +311,7 @@ export class GhostPlayer {
     this.mat.dispose();
     this.wingMat.dispose();
     this.accentMat.dispose();
+    this.markerMat.dispose();
     this.record = null;
     this.active = false;
   }

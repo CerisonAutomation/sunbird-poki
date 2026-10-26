@@ -45,36 +45,80 @@ function measureCalls(): { file: string; line: number; values: string[] }[] {
   return calls;
 }
 
-const RESERVED = /[/^]/;
+/**
+ * The characters the LIVE loader will actually accept.
+ *
+ * The Game Events guide says only "do not use `/` or `^`", and this file used
+ * to pin exactly that — so a value like `measure("run", "a,b", "start")` passed
+ * CI while the SDK silently discarded the event. The loader enforces a positive
+ * allowlist instead: it tests `/[^A-Za-z0-9_: .+|-]/` and rejects on a match.
+ * Pin the loader's rule, not the summary in the docs.
+ */
+const DISALLOWED = /[^A-Za-z0-9_: .+|-]/;
 
 describe("Poki game events", () => {
-  it("never puts a reserved '/' or '^' in a measure() value", () => {
+  it("keeps every measure() value inside the loader's allowlist", () => {
     const offenders = measureCalls().filter((call) =>
       call.values.some((value) => {
         // Only string literals can be judged statically; identifiers (a mode
-        // id, a placement label) are checked for the reserved characters at
-        // their own definition sites below.
+        // id, a placement label) are checked at their own definition sites below.
         const literal = value.match(/^"([^"]*)"$/);
-        return literal ? RESERVED.test(literal[1]!) : false;
+        return literal ? DISALLOWED.test(literal[1]!) : false;
       }),
     );
     expect(offenders.map((c) => `${c.file}:${c.line} ${c.values.join(" | ")}`)).toEqual([]);
   });
 
-  it("keeps dynamic measure() values free of reserved characters at their source", () => {
+  it("keeps dynamic measure() values inside the allowlist at their source", () => {
     // Call sites pass two non-literal values: `this.modeId` (mode slugs from
     // ModeCatalog) and `continuePlacementLabel(kind)`. Both are checked where
-    // they are defined, because that is where a slash would be introduced.
+    // they are defined, because that is where a stray character is introduced.
     const modes = readFileSync("src/game/Modes.ts", "utf8");
     const modeIds = [...modes.matchAll(/\bid:\s*"([^"]+)"/g)].map((m) => m[1]!);
     expect(modeIds.length).toBeGreaterThan(0);
     for (const id of modeIds) {
-      expect(id, `mode id "${id}" reaches measure() as a value`).not.toMatch(RESERVED);
+      expect(id, `mode id "${id}" reaches measure() as a value`).not.toMatch(DISALLOWED);
     }
     const labels = readFileSync("src/game/ContinueOffer.ts", "utf8");
     const labelTemplate = labels.match(/continuePlacementLabel[\s\S]*?return `([^`]*)`/)?.[1] ?? "";
     expect(labelTemplate.length).toBeGreaterThan(0);
-    expect(labelTemplate).not.toMatch(RESERVED);
+    // Strip `${...}` first: those characters are template syntax, substituted
+    // away before the value ever reaches the SDK. What must be clean is the
+    // literal text around them — and the interpolated kind, which is a
+    // ContinueOffer union checked to be a lowercase slug.
+    expect(labelTemplate.replace(/\$\{[^}]*\}/g, "")).not.toMatch(DISALLOWED);
+    const kinds = [...readFileSync("src/game/ContinueOffer.ts", "utf8").matchAll(/kind:\s*"([^"]+)"/g)].map((m) => m[1]!);
+    expect(kinds.length).toBeGreaterThan(0);
+    for (const k of kinds) expect(k, `continue kind "${k}" is interpolated into measure()`).not.toMatch(DISALLOWED);
+  });
+
+  it("never puts a Poki-reserved character in a measure() value", () => {
+    // GM-03. The portal reserves `/` and `^` — they are its own path and
+    // pointer syntax, and the SDK parses the value as a three-part path, so a
+    // `/` smuggled into a category or label silently splits the event into the
+    // wrong bucket on Poki's side. The client cannot see that happen: the call
+    // succeeds either way, and the loss only shows up in the portal dashboard
+    // weeks later. Hence a source-level check on every value, literals and
+    // dynamic ones alike.
+    //
+    // `DISALLOWED` above is stricter than this and would also fail on other
+    // characters; this test is the narrower, named rule, so a failure points at
+    // the reserved pair specifically.
+    const RESERVED = /[\/^]/;
+    const offenders: string[] = [];
+    for (const call of measureCalls()) {
+      for (const value of call.values) {
+        const literal = value.match(/^"([^"]*)"$/);
+        // Literals are judged directly. The two dynamic sources are checked at
+        // their own definitions by the test above, for the same reason: a
+        // reserved character enters a value where the value is built, not where
+        // it is passed.
+        if (literal && RESERVED.test(literal[1]!)) {
+          offenders.push(`${call.file}:${call.line} reserved char in ${value}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("pairs every rewarded placement with visible + interact", () => {

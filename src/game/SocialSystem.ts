@@ -101,7 +101,7 @@ export class SocialSystem {
   }
   leaveClub(): void { this.social.club = null; this.save.persist(); }
   sendClubChat(text: string): void {
-    const club = this.social.club; if (!club || !text.length) return;
+    const club = this.social.club; if (!club || !text) return;
     club.chatLog.push({ senderId: this.save.state.deviceId, senderName: this.save.state.pilotName || "Pilot",
       text: text.slice(0, 200), timestamp: Date.now() });
     if (club.chatLog.length > 100) club.chatLog.splice(0, club.chatLog.length - 100);
@@ -129,7 +129,11 @@ export class SocialSystem {
   createChallenge(targetDeviceId: string, _targetName: string, kind: FriendChallenge["challengeKind"], value: number, ghostSeed: string, ghostDistance: number): FriendChallenge | null {
     const s = this.social;
     if (s.challenges.some(c => c.targetId === targetDeviceId && c.status === "pending")) return null;
-    const challenge: FriendChallenge = { id: `ch_${Date.now().toString(36)}`, challengerId: this.save.state.deviceId,
+    // Date.now() alone collides when two challenges are posted in the same
+    // millisecond (routine in a fast test, rare-but-real on a fast device);
+    // a challenge id is looked up by exact match in accept/complete, so a
+    // collision would silently resolve the wrong challenge.
+    const challenge: FriendChallenge = { id: `ch_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, challengerId: this.save.state.deviceId,
       challengerName: this.save.state.pilotName || "Pilot", targetId: targetDeviceId, challengeKind: kind,
       challengerValue: value, ghostSeed, ghostDistance, targetValue: null, status: "pending",
       createdAt: dateSeed(), expiresAt: this.dateSeedDaysLater(3) };
@@ -166,6 +170,13 @@ export class SocialSystem {
     const kinds: ClubChallenge["goalKind"][] = ["total_distance", "total_coins", "total_perfects", "total_islands"];
     return { weekKey: this.currentWeekKey(), goalKind: kinds[rng.int(0, kinds.length)], goalTarget: 10000 + rng.int(0, 40000), progress: 0, claimed: false, rewardTier: 0 };
   }
-  private currentWeekKey(): string { const d = new Date(); const day = (d.getDay() + 6) % 7; const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`; }
-  private dateSeedDaysLater(days: number): string { const d = new Date(Date.now() + days * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+  private currentWeekKey(): string {
+    const d = new Date();
+    const day = (d.getDay() + 6) % 7; // Monday = 0
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day);
+    return monday.toISOString().slice(0, 10);
+  }
+  private dateSeedDaysLater(days: number): string {
+    return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  }
 }

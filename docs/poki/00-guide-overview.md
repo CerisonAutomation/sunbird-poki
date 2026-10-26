@@ -27,7 +27,7 @@ web development journey and to streamline launching and improving a game
 - `GK-01` → engine choice is documented as a deliberate decision, not a default:
   see `REBUILD_REPORT.md` §"Engine decision" and `01-web-game-engines.md`.
 - `GK-02` → onboarding (3-step play-signal tutorial), engagement (daily
-  challenges, streaks, season pass, cups), and localization (12 locales,
+  challenges, streaks, season pass, cups), and localization (36 locales,
   browser-language detection) are all first-class systems, not extras.
 - `GK-03` → the rewarded placement lives inside the game loop (the continue
   prompt after a crash), not in a bolted-on menu; measurement events

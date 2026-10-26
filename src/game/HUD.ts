@@ -1,453 +1,146 @@
-import { browseSkins, newShopBrowse, nextBird, type ShopBrowse } from "./ShopBrowse";
-import { flightTakeaway } from "./FlightGuidance";
-import { menuIcon, menuHorizon, arrowUpRightSvg, arrowRightSvg, type MenuIconName } from "./MenuIcons";
-import { paginate } from "./Pagination";
+import { newShopBrowse } from "./ShopBrowse";
+
+import { menuIcon, menuIconSm, pauseSvg, iconGlyph, type SmIconName } from "./MenuIcons";
+
 import { flockLoadingMark } from "./FlockLoading";
-import { PLAY_DESTINATIONS, COLLECTION_DESTINATIONS, PROGRESS_DESTINATIONS, destinationByKey, type MenuDestination } from "./MenuCatalog";
+// Only what the home menu actually renders. `renderMain` lays every section
+// out as one scroll, so there is no tab strip to drive and nothing else to
+// import.
+import { seasonReward } from "./pvp";
 import { OverlayNavigation } from "./OverlayNavigation";
 import { MenuContinuity } from "./MenuContinuity";
 import { MenuSky } from "./MenuSky";
 import { feedbackSlot } from "./HudFeedback";
 import type { AchievementView } from "./Achievements";
-import type { ActivePower } from "./PowerUps";
+
 import type { SessionGoal } from "./Engagement";
-import { PVP_MODES, type ModeDef, type PvpWorldCourse, type ModeId } from "./Modes";
-import type { RacerStats } from "./Racer";
-import { CUSTOM_PILOT_NAMES, LEADERBOARD_CLOUD_LABEL, POKI_EDITION, PORTAL_DISPLAY_NAME, PORTAL_EDITION_NOTE, SELL_AD_REMOVAL, SQUAD_CHAT } from "./edition";
-import { leaderboardBackend } from "./Leaderboard";
-import type { BoardMetric, BoardPage, BoardScope } from "./Leaderboard";
+
+import { CUSTOM_PILOT_NAMES, POKI_EDITION, PORTAL_DISPLAY_NAME } from "./edition";
+
+import { BoardMetric, BoardScope } from "./Leaderboard";
 import type { TournamentView } from "./Tournaments";
-import type { RosterBird, Standing, RivalNameTag } from "./MassRace";
+import { RivalNameTag } from "./MassRace";
 import { formatNumberLocalized, SUPPORTED_LOCALES, getLocale, t } from "../i18n";
 import * as THREE from "three";
-import { DAILY_STIPEND, PIGGY_BANK_CAP, PIGGY_BANK_MIN_SMASH, SHOP_AD_COINS, SHOP_AD_SESSION_CAP, VIP_DAILY_GIFT } from "./constants";
-import { COLLECTIONS, dailyFlashBird, GOLD, skinById, STARTER_PACK, VIP, type BoostView, type ShopTrailView, type SkinView } from "./Economy";
-import { rivalPalette, skinPalette, sunSVG, sunbirdSVG } from "./Sunbird";
-import { formatDistance } from "./math";
-import type { MissionView, QuestReward, QuestView } from "./Missions";
-import type { CampaignChapterView } from "./Campaign";
-import type { MonthlyTheme, WeeklyEvent } from "./Events";
-import { SQUAD_QUESTS, type SquadState } from "./Squad";
-import { seenAgo, type FlightMate } from "./pilots";
-import type { HighScore, Settings } from "./SaveData";
+
+import { sunSVG, sunbirdSVG } from "./Sunbird";
+
+import { MissionRow } from "./Missions";
+
 import { TRACK_NAMES } from "./Music";
-import type { TierView } from "./SeasonPass";
 
-export type UiScreen =
-  | "progress"
-  | "practice"
-  | "main"
-  | "shop"
-  | "paywall"
-  | "checkout"
-  | "settings"
-  | "scores"
-  | "pass"
-  | "trophies"
-  | "account"
-  | "atlas"
-  | "modes"
-  | "board"
-  | "cups"
-  | "live"
-  | "rank"
-  | "challenges"
-  | "campaign"
-  | "squad"
-  | "nameEntry";
+import { streakOpacity } from "./SpeedFeel";
+import { TOAST_OBSCURE_POLL_MS, TOAST_OBSCURE_WAIT_MS, messageHoldMs } from "./MessageTiming";
+import { medalStanding, type Medal } from "./RunMedals";
+import type { HudSnapshot } from "./hud/types";
+import { TOAST_MIN_VISIBLE_MS, decideToast } from "./toastFloor";
+import { SCREEN, escapeHtml, head, sectionTitle } from "./hud/kit";
+import { renderCheckout, renderPaywall, renderShop } from "./hud/shop";
+import { renderLoadout } from "./hud/loadout";
+import { renderMain } from "./hud/home";
+import { boardSource, distanceText, renderScoreTable } from "./hud/parts";
+import { renderAd, renderContinue, renderGameOver } from "./hud/run";
+import { renderProgress, renderPass, renderTrophies, renderAccount, renderCampaign, renderCups } from "./hud/meta";
+import { renderLive, renderRank, renderSquad, renderPractice, renderModes } from "./hud/race";
+import { LANE_GAP_PX, footerAnchoredTop, footerBottomReservation, messageBand } from "./hud/messageBand";
 
-/** Stable screen identifiers used by automation, telemetry, and QA. */
-export const SCREEN = {
-  leaderboard: "scores", raceLobby: "live", aiPvp: "practice", challenges: "challenges",
-  campaign: "campaign", squad: "squad", rivalRank: "rank", tournaments: "cups",
-  gameModes: "modes", atlas: "atlas", shop: "shop", coinStore: "paywall",
-  confirmUnlock: "checkout", highGlides: "progress", nestPass: "pass",
-  trophyCase: "trophies", account: "account",
-} as const;
-/**
- * The English heading for each screen key.
+// The view-model, the shared chrome and the screens now live under ./hud/.
+// This module keeps its public face by re-exporting what Game.ts and the test
+// suite import from here, so nothing outside src/game/hud had to change.
+export type {
+  UiScreen,
+  RivalCard,
+  LoadoutView,
+  AtlasEntry,
+  UiState,
+  SeedMode,
+  CheckoutMode,
+  PortalName,
+  HudSnapshot,
+  DailyCard,
+  GauntletCard,
+  CalendarCard,
+  MasteryRow,
+} from "./hud/types";
+export { SCREEN, SCREEN_HEADINGS, SCREEN_TITLES } from "./hud/kit";
+export { skinAction } from "./hud/shop";
+export { renderCoinMultiplierCard, renderFlightRecap, resultsPrimaryAction } from "./hud/run";
+export { renderSquad } from "./hud/race";
+
+/** The medal line's copy. `toNext` null means the ladder is topped, which says
+ *  so rather than going blank — an empty slot reads as a bug, and "maxed" is
+ *  the payoff for clearing every rung. */
+/** The home screen's launch CTA. Handed to MenuContinuity as the anchor for a
+ * restored view: whatever the player last scrolled, landing on the home menu
+ * must never park the one button that starts a run above the fold. */
+const LAUNCH_CTA = ".home-launch";
+
+function medalText(earned: Medal, toNext: number | null): string {
+  if (toNext === null) return "◆ Maxed";
+  if (earned === "none") return `${toNext} m to first medal`;
+  // Name the tier. The line is tinted per medal (bronze / silver / gold /
+  // platinum, ui.css) and until now the string never said which one you had, so
+  // the colour was the only thing carrying it. Four colours and one string is a
+  // WCAG 1.4.1 failure: a player who reached gold and a player who reached
+  // platinum read identical words in different hues. The tint stays as
+  // decoration; the word is what carries it.
+  return `${earned} · ${toNext} m to next`;
+}
+/** In-flight quest strip: how close a quest must be before it earns screen
+ *  space mid-run. Matches `closestGoalLine`'s default, deliberately — one
+ *  threshold, so the footer and the strip can never disagree. */
+const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
+/** How long a finished quest keeps its row before it leaves the strip. Long
+ *  enough to read "✓ +120", short enough that the panel is not a wall of
+ *  banked rows by the end of a run. The `goalPop` toast carries the celebration
+ *  past this point, so nothing is lost by letting the row go. */
+const QUEST_DONE_LINGER_MS = 4_500;
+/** Ceiling on rows in the one goal panel. Three fits a phone footer; more than
+ *  that is the "wall of permanent bars" the threshold above exists to prevent. */
+const GOAL_STRIP_MAX_ROWS = 3;
+/** Longest single-run distance, used to decide whether a mid-run goal is
+ *  actually actionable. Measured from the shipped build: a good run reaches
+ *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
+ *  it mid-flight is showing a bar that cannot move. */
+const RUN_REACHABLE_M = 3000;
+/** How many bird-position quips may be alive at once. The lane is a stack, not
+ *  a slot: `impact-rise` runs for 1.1s, so a cap of 3 covers a fast burst
+ *  (thud → bop → thud) without letting a sustained scrape pile the play area
+ *  up with words. Mirrors the toast lane's bound. */
+const IMPACT_POPUP_CAP = 3;
+
+/** How long a flavour line stays up before it is retired.
  *
- * These are the `defaultText` passed to `t()`, so the screen shows correct
- * English before a pack lands — and they are asserted word-for-word against the
- * barrel's `sourceText` by screen-titles.test.ts, which keeps the fallback from
- * drifting away from the thing translators are actually translating.
- */
-export const SCREEN_HEADINGS: Readonly<Record<keyof typeof SCREEN, string>> = {
-  leaderboard: "Leaderboard",
-  raceLobby: "Race Lobby",
-  aiPvp: "AI PvP",
-  challenges: "Challenges",
-  campaign: "The Long Migration",
-  squad: "Squad",
-  rivalRank: "Rival Rank",
-  tournaments: "Tournaments",
-  gameModes: "Game modes",
-  atlas: "Island Atlas",
-  shop: "Shop",
-  coinStore: "Coin Store",
-  confirmUnlock: "Confirm Unlock",
-  highGlides: "High glides",
-  nestPass: "Nest Pass",
-  trophyCase: "Trophy Case",
-  account: "Account",
-};
-
-/**
- * Screen id → its barrel key and English fallback.
+ *  A system toast lives 450 ms plus ~415 ms per word. That is sized for "coins
+ *  +12" — you read it in a glance and it has done its job. A quip is the only
+ *  message in the game that is *written* rather than reported, several of them
+ *  run to two lines on a short screen, and the player has to finish the
+ *  sentence to get the joke. On the system-toast timing a two-line quip was
+ *  still being replaced as it was being read.
  *
- * `en` used to be set to the camelCase *key* rather than the English heading,
- * which made the "fallback === sourceText" assertion in screen-titles.test.ts
- * compare "leaderboard" against "Leaderboard" and fail on every screen.
- */
-export const SCREEN_TITLES: Readonly<Record<string, { key: string; en: string }>> = Object.fromEntries(
-  Object.entries(SCREEN).map(([key, value]) => [
-    value,
-    { key: `hud.screen.${key}.title`, en: SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key },
-  ]),
-);
+ *  3.4 s is roughly the old maximum read time (the `messageHoldMs` ceiling was
+ *  6 s for very long toasts) applied to the median quip, and it deliberately
+ *  exceeds the moment-to-moment churn of the flight so a joke is not competing
+ *  with the next coin. */
+const QUIP_HOLD_MS = 4800;
+/** Bounded extra wait so a quip raised while its lane is hidden is released
+ *  rather than leaked — the same ceiling the toast lane uses. */
+const QUIP_OBSCURE_WAIT_MS = 3000;
 
-export type RivalCard = {
-  rating: number;
-  division: string;
-  divisionIcon: string;
-  wins: number;
-  losses: number;
-  streak: number;
-  bestStreak: number;
-  nextName: string;
-  nextNeeded: number;
-  progress: number;
-  matches: { place: number; field: number; mode: string; date: string; won: boolean }[];
-  season: { daysLeft: number; peak: number; peakDivision: string; peakIcon: string; rewardCoins: number };
+/** One live quip. `timer` is the armed hold poll (re-armed every tick),
+ *  `removal` the pending 260 ms fade-out removal. */
+type QuipLive = {
+  el: HTMLElement;
+  count: number;
+  timer: number;
+  removal: number | null;
+  visibleFor: number;
+  lastTick: number;
 };
 
-export type LoadoutView = {
-  bird: string;
-  trail: string;
-  boosts: number;
-};
-
-export type AtlasEntry = {
-  island: number;
-  name: string;
-  emoji: string;
-  tagline: string;
-  color: string;
-  reached: boolean;
-  hazard: string;
-};
-export type UiState = "menu" | "playing" | "paused" | "continue" | "ad" | "gameover";
-export type SeedMode = "today" | "yesterday" | "random";
-export type CheckoutMode = "demo";
-export type PortalName = "none" | "poki";
-
-export type HudSnapshot = {
-  state: UiState;
-  screen: UiScreen;
-  checkoutSku: "sunbird_gold" | "sunbird_vip" | "sunbird_starter";
-  portalName: PortalName;
-  version: number;
-  distance: number;
-  coins: number;
-  /** True once this run's 3× coin bonus has been claimed (one claim per run). */
-  multiplierClaimed: boolean;
-  daylight: number;
-  daylightMax: number;
-  fever: number;
-  feverOn: boolean;
-  multiplier: number;
-  bestDistance: number;
-  score: number;
-  island: number;
-  perfects: number;
-  clouds: number;
-  zeniths: number;
-  rings: number;
-  balloons: number;
-  sunflowers: number;
-  hint: string;
-  magnetTimer: number;
-  shield: number;
-  boostTimer: number;
-  gold: boolean;
-  vip: boolean;
-  vipDaysLeft: number;
-  vipExpiredNotice: boolean;
-  adsLeftToday: number;
-  /** True when the portal offers its own leaderboard overlay. */
-  portalLeaderboard: boolean;
-  ghostDelta: number | null;
-  /** True when this finished run beat the previous personal-best distance. */
-  newBest: boolean;
-  continueTimer: number;
-  /** Context-driven reason line for the continue card (Poki MON-19). */
-  continueReason: string;
-  /** True when the offer context is worth a little extra emphasis (still optional). */
-  continueHighlight: boolean;
-  continueCost: number;
-  canAffordContinue: boolean;
-  adAvailable: boolean;
-  adTimer: number;
-  adTotal: number;
-  adReason: "continue" | "interstitial";
-  /**
-   * Whether the GAME may end this break. Only the non-portal placeholder ad is
-   * game-driven (it runs a local countdown and the player waits it out). A
-   * portal-served break is owned by the SDK: it ends when the platform's ad
-   * promise resolves, so the game must not render or enable a skip that would
-   * cut it short and still award the reward.
-   */
-  adSkippable: boolean;
-  seedLabel: string;
-  /** Career wings: lifetime-distance rank shown on the title screen. */
-  wings: { icon: string; name: string; progress: number; nextName: string; nextNeeded: number; lifetime: number };
-  /** Flight recap: downsampled [metresFromStart, altitude] profile. */
-  flightPath: [number, number][];
-  /** Active incoming rival challenge: "name|distance", or "" when none. */
-  rivalBanner: string;
-  seedMode: SeedMode;
-  wallet: number;
-  streakDays: number;
-  nestLevel: number;
-  nestPrice: number;
-  nestMaxed: boolean;
-  nestMult: number;
-  missions: MissionView[];
-  quests: QuestView[];
-  highScores: HighScore[];
-  todayBest: number;
-  runsPlayed: number;
-  newlyCompleted: string[];
-  claimedQuests: QuestReward[];
-  skins: SkinView[];
-  boosts: BoostView[];
-  shopTrails: ShopTrailView[];
-  settings: Settings;
-  goldPrice: string;
-  starterPrice: string;
-  starterFeatures: string[];
-  starterOwned: boolean;
-  goldFeatures: string[];
-  vipPrice: string;
-  vipFeatures: string[];
-  checkoutMode: CheckoutMode;
-  checkoutUrl: string;
-  checkoutBusy: boolean;
-  checkoutError: string;
-  checkoutOk: boolean;
-  checkoutWaiting: boolean;
-  restoreMessage: string;
-  resetArmed: boolean;
-  season: { tier: number; maxTier: number; have: number; need: number; label: string; tiers: TierView[] };
-  trophies: AchievementView[];
-  trophyCounts: { unlocked: number; total: number };
-  referralCode: string;
-  referralRedeemed: boolean;
-  referralMessage: string;
-  cloudCode: string;
-  cloudMessage: string;
-  canInstall: boolean;
-  shareBusy: boolean;
-  /** A/B test "results_cta_order": when true, the Share CTA leads the card. */
-  expShareFirst: boolean;
-  combo: number;
-  speedNorm: number;
-  gust: number;
-  inThermal: boolean;
-  biomeName: string;
-  biomeEmoji: string;
-  atlas: AtlasEntry[];
-  farthestIsland: number;
-  showTutorialHand: boolean;
-  /* --- momentum / flight readouts --- */
-  launchBanner: string;
-  launchBannerT: number;
-  launchRating: string;
-  altitude: number;
-  altZone: number;
-  maxAltitude: number;
-  powers: ActivePower[];
-  modes: ModeDef[];
-  modeId: string;
-  modeName: string;
-  modeIcon: string;
-  countdown: number;
-  versus: boolean;
-  splitLayout: "off" | "vertical" | "horizontal";
-  versusWinner: number;
-  p1Stats: RacerStats | null;
-  p2Stats: RacerStats | null;
-  raceFinish: number;
-  /* --- engagement --- */
-  sessionGoals: SessionGoal[];
-  /** Nearest beat-the-mark flag in the cue window, or null when nothing is close. */
-  beatLine: { kind: string; label: string; metres: string; gap: number } | null;
-  /** One-line next-action message shown on the results card; empty string = omit. */
-  nextAction: string;
-  goalPop: string;
-  goalPopKind: "goal" | "quest";
-  rankUp: string;
-  nearMiss: string;
-  skillLabel: string;
-  skill: number;
-  bestAltitude: number;
-  bestCombo: number;
-  runGems: number;
-  /* --- competitive --- */
-  pilotName: string;
-  board: BoardPage | null;
-  boardLoading: boolean;
-  boardScope: BoardScope;
-  boardMetric: BoardMetric;
-  boardOnline: boolean;
-  /**
-   * Top three pilots from the board already cached at menu time, for the home
-   * strip. Empty until a page is in hand — the strip then renders nothing at
-   * all rather than an empty box, and no extra request is made to fill it.
-   */
-  homeBoard: { name: string; value: string; you: boolean }[];
-  /** Signed-in portal username, or "" when signed out / no portal accounts. */
-  portalAccountName: string;
-  /** Live sky-ring chain: how many in a row, and how long the window is open. */
-  ringChain: number;
-  ringChainFrac: number;
-  slopeChain: number;
-  slopeScore: number;
-  cups: TournamentView[];
-  trails: { id: string; label: string; equipped: boolean }[];
-  lastPrize: string;
-  standings: Standing[];
-  racePlace: number;
-  /** Finish line in metres for the live race progress strip (0 = endless). */
-  raceFinishM: number;
-  raceField: number;
-  raceFinishTime: number;
-  massRace: boolean;
-  multiplayerLive: boolean;
-  /** True when this build has any live-race transport (URL or Poki Netlib). */
-  multiplayerConfigured: boolean;
-  /* --- live room + roster --- */
-  roster: RosterBird[];
-  roomCode: string;
-  roomCount: number;
-  roomCapacity: number;
-  roomReady: boolean;
-  roomReadyCount: number;
-  /** True when the room is the local AI fallback, not networked pilots. */
-  roomAiFallback: boolean;
-  roomSize: number;
-  roomSkill: string;
-  roomMuted: boolean;
-  roomRivals: { id: string; name: string; skill: number; hue: number }[];
-  netState: string;
-  linkQuality: "unknown" | "good" | "fair" | "poor";
-  netError: string;
-  draft: number;
-  finishRemaining: number;
-  nemesis: string;
-  photoFinish: string;
-  rival: RivalCard;
-  loadout: LoadoutView;
-  lobbyRivals: { name: string; tag: string; ready?: boolean; skin?: string }[];
-  raceRated: boolean;
-  /** True when the room server (single-threaded referee) confirmed the place. */
-  raceVerified: boolean;
-  ratingDelta: number;
-  ratingBonus: number;
-  /* --- duels --- */
-  duel: { wins: number; losses: number; streak: number; bestStreak: number };
-  duelWas: "" | "won" | "lost";
-  duelDelta: number;
-  duelFoe: { name: string; tag: string; rating: number };
-  /* --- daily challenge / weekly gauntlet / calendar / mastery --- */
-  daily: DailyCard;
-  gauntlet: GauntletCard;
-  calendar: CalendarCard;
-  mastery: MasteryRow[];
-  challengeOutcome: string;
-  /* --- live-ops events + campaign + squad --- */
-  weeklyEvent: WeeklyEvent;
-  monthlyTheme: MonthlyTheme;
-  eventClearsWeek: number;
-  eventClearsMonth: number;
-  themeTrailClaimed: boolean;
-  themeTrailNeed: number;
-  campaign: CampaignChapterView[];
-  campaignDone: number;
-  campaignTotal: number;
-  squad: SquadState;
-  /** Real pilots from rooms this device shared — see src/game/pilots.ts. */
-  recentPilots: FlightMate[];
-  /** AUDS shared-run state (async multiplayer by code, Poki platform only). */
-  share: {
-    available: boolean;
-    code: string;
-    busy: boolean;
-    error: string;
-    loaded: { name: string; seed: string; mode: string; distance: number; timeMs: number; place: number; bird: string } | null;
-  };
-  squadNotice: string;
-  dailyFlash?: { id: string; price: number; originalPrice: number; discountPct: number };
-  stipendClaimed?: boolean;
-  /** This month's rank prize has already been claimed (one per season). */
-  rankPrizeClaimed: boolean;
-  /** The one-time Ace Wingman crate was bought (it pays 250 for 240 — no re-claims). */
-  wingmanBundle: boolean;
-  /* --- monetization max value & portal loops --- */
-  piggyCoins: number;
-  prestigeLevel: number;
-  prestigeMult: number;
-  canFreeSpin: boolean;
-  /* --- pvp modes & worlds catalog --- */
-  pvpModes: ModeDef[];
-  pvpWorlds: PvpWorldCourse[];
-  selectedPvpMode: ModeId;
-  selectedPvpWorld: string;
-};
-
-export type DailyCard = {
-  title: string;
-  modeName: string;
-  modeIcon: string;
-  modifierIcon: string;
-  modifierLabel: string;
-  modifierDesc: string;
-  metric: string;
-  target: number;
-  reward: number;
-  done: boolean;
-  dailiesDone: number;
-};
-
-export type GauntletCard = {
-  week: string;
-  stages: { index: number; label: string; modeName: string; modeIcon: string; metric: string; target: number; reward: number; done: boolean }[];
-  clearBonus: number;
-  cleared: boolean;
-  lifetimeClears: number;
-};
-
-export type CalendarCard = {
-  cycleDay: number;
-  claimedToday: boolean;
-  days: { day: number; label: string; claimed: boolean; today: boolean; milestone: boolean }[];
-};
-
-export type MasteryRow = {
-  modeId: string;
-  name: string;
-  icon: string;
-  runs: number;
-  level: number;
-  nextAt: number | null;
-  progress: number;
-  /** Active perk line ("+4% coins" or the signature skill when maxed). */
-  perk: string;
-  /** Signature level-5 skill this mode builds toward. */
-  skillName: string;
-  skillDesc: string;
-  maxed: boolean;
-};
+/** How long GO! stays painted, and therefore how long the countdown slot holds.
+ *  Matches the CSS exit duration so the slot releases exactly as GO fades. */
+const GO_VISIBLE_MS = 700;
 
 type ActionHandler = (action: string, id: string) => void;
 
@@ -463,29 +156,34 @@ export function emoteWheelVisible(s: Pick<HudSnapshot, "massRace">): boolean {
 }
 
 /**
- * The action behind the results card's primary button — and behind a tap on the
- * bare backdrop beside that card, which is the same affordance with a larger hit
- * area.
+ * The emote picker's `[wire id, artwork, label]`.
  *
- * A placed mass race rematches at the same stakes (an online field goes back
- * through the honest search; a duel or an AI flock replays locally). Every other
- * run just flies again.
- *
- * Both callers must agree, so the decision lives here instead of being
- * re-derived inline at each site. It previously existed only inside the render
- * string, and the backdrop tap dispatched `restart-flight` — an action `Game`
- * honours only while paused or playing, so tapping the results backdrop was a
- * silent no-op. It looked like it worked because a touch on the bare overlay
- * also armed the dive gesture and `holdToStart()` restarted the run that way;
- * once overlays stopped arming gameplay gestures (they own the finger, so the
- * card can scroll and the tap can land) that accidental path disappeared and the
- * dead action was exposed.
+ * The FIRST entry is the wire value and is the emoji itself: it is what
+ * `data-id` carries, what `sendEmote` broadcasts and what the receiving pilot
+ * renders in their emote bubble. That payload is a multiplayer contract —
+ * changing it would silently break every client already on the network, so it
+ * stays exactly as it was. The SECOND entry is only the artwork drawn in the
+ * button, and that is an inline SVG now.
  */
-export function resultsPrimaryAction(
-  s: Pick<HudSnapshot, "massRace" | "racePlace" | "duelWas">,
-): "rematch" | "retry" {
-  return s.massRace && s.racePlace > 0 && !s.duelWas ? "rematch" : "retry";
-}
+const EMOTE_CHOICES: readonly (readonly [string, SmIconName, string])[] = [
+  ["👋", "wave", "Wave"],
+  ["🔥", "fire", "Fire"],
+  ["😂", "laugh", "Laugh"],
+  ["🙌", "bravo", "Bravo"],
+  ["👑", "crown", "Crown"],
+  ["🤝", "handshake", "GG"],
+];
+
+/** How many extra frames `publishStack` publishes for, and when it may stop
+ *  early. Two is the floor because a `transition` reports its START value for
+ *  two frames, not one: the frame the change is first recalculated in, and the
+ *  frame after it. Measured at 568x320, the first two settling passes both read
+ *  the quip lane at y 180.5 and only the third read y 138.5 — so a loop that
+ *  stops as soon as two passes agree stops exactly one frame too early, which
+ *  is the defect it was written to remove. Four is the ceiling, so a header
+ *  that reflows on every coin cannot spend the run re-measuring. */
+const STACK_SETTLE_MIN_PASSES = 2;
+const STACK_SETTLE_MAX_PASSES = 4;
 
 export class HUD {
   readonly root: HTMLDivElement;
@@ -494,6 +192,10 @@ export class HUD {
   private distanceEl!: HTMLElement;
   private coinsEl!: HTMLElement;
   private bestEl!: HTMLElement;
+  private bestRowEl!: HTMLElement;
+  /** Live medal line under the distance block. */
+  private medalLine!: HTMLElement;
+  private lastMedalKey = "";
   private islandEl!: HTMLElement;
   private multEl!: HTMLElement;
   private goldChip!: HTMLElement;
@@ -508,12 +210,17 @@ export class HUD {
   private ringChainCount!: HTMLElement;
   private ringChainFill!: HTMLElement;
   private slopeChainEl!: HTMLElement;
+  private slopeChainText!: HTMLElement;
+  private slopeChainFill!: HTMLElement;
   private hintEl!: HTMLElement;
   private menuEl!: HTMLElement;
   private menuCard!: HTMLElement;
   private pauseEl!: HTMLElement;
   private pauseBtnEl!: HTMLElement;
   private muteBtnEl!: HTMLButtonElement;
+  private fpsChipEl!: HTMLElement;
+  /** Last painted FPS, so the chip's text node is only touched when it moves. */
+  private fpsShown = -1;
   /** Live run-stats shown on the pause card (updated every frame while paused). */
   private pauseDistanceEl!: HTMLElement;
   private pauseAltitudeEl!: HTMLElement;
@@ -534,17 +241,36 @@ export class HUD {
   private overEl!: HTMLElement;
   private overCard!: HTMLElement;
   private toastLayer!: HTMLElement;
-  private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number }>();
+  /** Toasts waiting for the incumbent to finish being readable. */
+  private readonly toastQueue: { text: string; kind: string; icon: string; mustShow?: boolean }[] = [];
+  private toastDrainTimer: number | null = null;
+  private readonly liveToasts = new Map<string, { el: HTMLElement; count: number; timer: number; bornAt: number }>();
+  /** The quip lane: flavour lines, on their own surface.
+   *
+   *  These used to be poured into `.toasts` alongside every system message —
+   *  211 quips sharing a channel capped at ONE visible pill with 267 system
+   *  call sites. In flight the game emits a near-continuous stream of wind,
+   *  thermal, goal and coin messages, so a quip was routinely born and evicted
+   *  inside the same 100 ms. They all fired; almost none survived to be read,
+   *  which is exactly the report that the funny messages "don't even show up".
+   *  See toastFloor.ts for the eviction policy this escapes. */
+  private quipLayer!: HTMLElement;
+  private readonly liveQuips = new Map<string, QuipLive>();
   private flashEl!: HTMLElement;
   private comboEl!: HTMLElement;
   private biomeChip!: HTMLElement;
   private speedLines!: HTMLElement;
   private handEl!: HTMLElement;
+  private handHintEl!: HTMLElement;
+  /** The measured message band. Its `top` and height are arithmetic published
+   *  by `publishMessageBand`, so it is a `const` in every stylesheet. */
+  private messagesEl!: HTMLElement;
   private altGauge!: HTMLElement;
   private altFill!: HTMLElement;
   private altBird!: HTMLElement;
   private altRead!: HTMLElement;
   private launchBanner!: HTMLElement;
+  private chainReadout!: HTMLElement;
   private powerStrip!: HTMLElement;
   private countdownEl!: HTMLElement;
   private versusBar!: HTMLElement;
@@ -568,19 +294,48 @@ export class HUD {
   private emoteBubble!: HTMLElement;
   private emoteBubbleTimer = 0;
   private impactPopupsEl!: HTMLElement;
+  private wingsNear!: HTMLElement;
   private lastStandings = "";
   private lastRoster = "";
   private lastRosterAt = 0;
   private lastStandingsAt = 0;
   private lastVersusKey = "";
   private lastGoals = "";
-  private lastBeatLine = "";
+
   private lastGoalPop = "";
+  /** First frame each quest was seen complete, so the linger window has a start.
+   *  Cleared when the row goes back to open, and pruned on reset. */
+  private readonly doneRowAt = new Map<string, number>();
   private lastPowers = "";
   private lastBanner = "";
   private lastCountdown = "";
+  /** Wall-clock end of the GO! beat. Holds `data-feedback="countdown"` so GO!
+   *  is actually painted — see `feedbackSlot`.
+   *
+   *  A timestamp rather than a per-frame decrement because `update()` is
+   *  throttled to 30 Hz: a fixed 1/60 step would run at half rate on a 30 Hz
+   *  HUD and release the slot late. */
+  private goUntil = 0;
+  /**
+   * Tournament countdown urgency (mid-week push): cup ids the "only N days
+   * left" toast has already fired for. Never needs manual reset — a cup's
+   * `def.id` embeds the ISO week (see Tournaments.weekKey), so it is a
+   * different id every week regardless of when this HUD instance was made.
+   */
+  private tournamentPushed = new Set<string>();
   private lastCombo = -1;
   private lastBiome = "";
+  private lastIsland = -1;
+  /**
+   * Mobile HUD declutter (P0 fix): the island chip only needs to grab
+   * attention right when it changes — on a 375px phone it otherwise
+   * permanently competes with the biome/multiplier chips for the same row.
+   * `.recent` keeps it visible for 3s after a change; the pending timer (from
+   * `this.after`, so `dispose()` already sweeps it) lets a second island
+   * change — e.g. a fast restart — restart the window instead of letting an
+   * earlier timeout hide it early.
+   */
+  private islandRecentTimer: number | null = null;
   /** Per-frame text write memoization: DOM writes only when content changes. */
   private readonly textCache = new Map<string, string>();
   private readonly styleCache = new Map<string, string>();
@@ -615,12 +370,16 @@ export class HUD {
   }
   private contTimerEl: HTMLElement | null = null;
   private adBarEl: HTMLElement | null = null;
-  private adSkipEl: HTMLButtonElement | null = null;
+  private adSkipEl: HTMLElement | null = null;
+  private adSkipCountEl: HTMLElement | null = null;
   private adHeaderEl: HTMLElement | null = null;
   private adLabelEl: HTMLElement | null = null;
   private lastKey = "";
   private lastHint = "";
+  private coachStepsEl!: HTMLElement;
+  private lastCoachKey = "";
   private readonly shopBrowse = newShopBrowse();
+  private lastChainKey = "";
   private shopSnapshot: HudSnapshot | null = null;
   private currentSnapshot: HudSnapshot | null = null;
   private lastChips = "";
@@ -628,6 +387,8 @@ export class HUD {
   /** Live nametag elements, reused per frame (see updateNameTags). */
   private readonly nameTagEls = new Map<string, HTMLDivElement>();
   private readonly nameTagKeys = new Map<string, string>();
+  /** Last measured box per tag, so declutter never has to force a reflow. */
+  private readonly nameTagSizes = new Map<string, { w: number; h: number }>();
 
   constructor(parent: HTMLElement) {
     this.menuSky = new MenuSky();
@@ -637,18 +398,28 @@ export class HUD {
       <div class="play-hud hidden" data-ref="playHud">
         <div class="top-bar">
           <div class="stat-block">
-            <div class="stat-label">${t("hud.stat.distance", undefined, "Distance")}</div>
+            <div class="stat-label">${menuIconSm("ruler")}<span>${t("hud.stat.distance", undefined, "Distance")}</span></div>
             <div class="stat-value" data-ref="distance">0 m</div>
-            <div class="stat-sub">best <span data-ref="best">0</span></div>
+            <!-- Merge: main's trophy icon plus this branch's hidden attribute.
+                 A fresh save showed "best 0" beside a 1.65 km run for the whole
+                 of a record-setting flight, which reads as a bug rather than an
+                 empty state; the row stays out of the layout until a real
+                 record exists, and then never disappears mid-run. -->
+            <div class="stat-sub" data-ref="bestRow" hidden>${menuIconSm("trophy")}<span>best</span> <span data-ref="best">0</span></div>
+            <div class="stat-medal" data-ref="medalLine"></div>
           </div>
           <div class="sun-meter" title="Daylight">
             <div class="sun-track">
               <div class="sun-fill" data-ref="sunFill"></div>
               <div class="sun-knob" data-ref="sunKnob">${menuIcon("daily")}</div>
             </div>
-            <div class="sun-caption">${t("hud.stat.daylight", undefined, "daylight")}</div>
+            <div class="sun-caption">${menuIconSm("sun")}<span>${t("hud.stat.daylight", undefined, "daylight")}</span></div>
           </div>
           <div class="stat-block right">
+            <!-- No icon on this label, and that is deliberate. Every other stat
+                 label now carries a glyph so the readouts scan as a set, but the
+                 coin's glyph already sits in the VALUE below it. Putting a coin
+                 up here as well is the two-circles report, verbatim. -->
             <div class="stat-label">${t("hud.stat.coins", undefined, "Coins")}</div>
             <div class="stat-value coin">${COIN_SVG}<span data-ref="coins">0</span></div>
           </div>
@@ -661,14 +432,15 @@ export class HUD {
             <i class="alt-fill" data-ref="altFill"></i>
             <b class="alt-bird" data-ref="altBird">${menuIcon("bird")}</b>
           </div>
-          <div class="alt-read" data-ref="altRead">0 m</div>
+          <div class="alt-read" data-ref="altRead">${menuIconSm("glide")}<span>0 m</span></div>
         </div>
+        <div class="chain-readout" data-ref="chainReadout" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="launch-banner" data-ref="launchBanner"></div>
         <div class="power-strip" data-ref="powerStrip"></div>
-        <div class="goal-strip" data-ref="goalStrip"></div>
+        <div class="goal-strip" data-ref="goalStrip" role="list" aria-label="${escapeHtml(t("hud.progress.strip", undefined, "What this flight grew"))}"></div>
         <div class="goal-pop" data-ref="goalPop" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="rank-up" data-ref="rankUp" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="countdown" data-ref="countdown"></div>
+        <div class="countdown" role="status" aria-live="assertive" aria-atomic="true" data-ref="countdown"></div>
         <div class="versus-bar hidden" data-ref="versusBar"></div>
         <div class="standings hidden" data-ref="standings"></div>
         <div class="roster-bar hidden" data-ref="rosterBar"></div>
@@ -677,15 +449,23 @@ export class HUD {
         <div class="finish-countdown hidden" data-ref="finishCd"></div>
         <div class="emote-bubble hidden" data-ref="emoteBubble" role="status" aria-live="polite" aria-atomic="true"></div>
         <div class="emote-wheel hidden" data-ref="emoteWheel">
-          <button class="emotes-toggle" data-ui data-action="toggle-emotes" aria-expanded="false" aria-controls="flight-emotes">💬 Emotes</button>
-          <div class="emote-options hidden" id="flight-emotes">${[["👋", "Wave"], ["🔥", "Fire"], ["😂", "Laugh"], ["🙌", "Bravo"], ["👑", "Crown"], ["🤝", "GG"]].map(([icon, label]) => `<button data-ui data-action="emote" data-id="${icon}" aria-label="Send ${label}" title="Send ${label}">${icon} ${label}</button>`).join("")}</div>
+          <button class="emotes-toggle" data-ui data-action="toggle-emotes" aria-expanded="false" aria-controls="flight-emotes">${menuIconSm("chat")} ${t("hud.emotes.label", undefined, "Emotes")}</button>
+          <!-- The word is in its own span so the short-frame block in index.css
+               can hide exactly the label and leave the glyph, the title and the
+               aria-label alone. Without the span the only way to drop it was
+               "font-size: 0", which also collapses .icon-sm — it is sized in em
+               — and takes the glyph with it. The space stays OUTSIDE the span
+               for the same reason: it separates the glyph from the word at
+               every other size, and a flex container does not turn
+               whitespace into an item, so it costs nothing on the short frame. -->
+          <div class="emote-options hidden" id="flight-emotes">${EMOTE_CHOICES.map(([id, icon, label]) => `<button data-ui data-action="emote" data-id="${id}" aria-label="Send ${label}" title="Send ${label}">${menuIconSm(icon)} <span class="emote-label">${label}</span></button>`).join("")}</div>
         </div>
         <div class="mid-meta">
-          <div class="island-chip" data-ref="island">Island 1</div>
+          <div class="island-chip" data-ref="island">${t("hud.ui.I1", undefined, "Island 1")}</div>
           <div class="biome-chip" data-ref="biome"></div>
           <div class="mult-chip" data-ref="mult">×1.0</div>
-          <div class="gold-chip hidden" data-ref="goldChip">✦ GOLD</div>
-          <div class="vip-chip hidden" data-ref="vipChip">♛ VIP</div>
+          <div class="gold-chip hidden" data-ref="goldChip">${menuIconSm("half_day")}<span>GOLD</span></div>
+          <div class="vip-chip hidden" data-ref="vipChip">${menuIconSm("crown")}<span>VIP</span></div>
           <div class="ghost-chip hidden" data-ref="ghostChip"></div>
         </div>
         <div class="power-chips" data-ref="powers"></div>
@@ -693,27 +473,39 @@ export class HUD {
              until the first hoop of a chain, then it counts down the window so
              the player can see the next ring is still worth diving for. -->
         <div class="ring-chain hidden" data-ref="ringChain">
+          <span class="ring-chain-icon" aria-hidden="true">${menuIconSm("fire")}</span>
           <b data-ref="ringChainCount">×2</b>
           <i><s data-ref="ringChainFill"></s></i>
         </div>
-        <div class="slope-chain hidden" data-ref="slopeChain">〽 FLOW ×1</div>
-        <div class="fever-wrap" data-ref="feverWrap">
+        <!-- Colorblind-friendly: the flow chain used to be identified only by a
+             coral-on-teal color and an ambiguous 〽 glyph — a shape cue (a ruler)
+             plus a fill bar mirror the ring chain's own icon + count + bar
+             pattern so color is never the only signal. -->
+        <div class="slope-chain hidden" data-ref="slopeChain">
+          <span class="slope-chain-icon" aria-hidden="true">${menuIconSm("ruler")}</span>
+          <span data-ref="slopeChainText">FLOW ×1</span>
+          <i><s data-ref="slopeChainFill"></s></i>
+        </div>
+        <div class="fever-wrap hidden" data-ref="feverWrap">
           <div class="fever-label">FEVER</div>
           <div class="fever-bar"><div class="fever-fill" data-ref="feverFill"></div></div>
         </div>
-        <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="Mute sound" title="Mute sound"><span class="audio-glyph" aria-hidden="true"></span></button>
-        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="Pause">❙❙</button>
+        <div class="fps-chip hidden" data-ref="fpsChip" role="status" aria-label="${t("hud.aria.fps", undefined, "Frames per second")}"></div>
+        <button class="icon-btn mute-btn" data-ui data-action="set-mute" data-ref="muteBtn" aria-label="${t("hud.ui.MSound", undefined, "Mute sound")}" title="${t("hud.ui.MSoundx", undefined, "Mute sound")}"><span class="audio-glyph" aria-hidden="true"></span></button>
+        <button class="icon-btn pause-btn" data-ui data-action="pause" data-ref="pauseBtn" aria-label="${t("hud.aria.pause", undefined, "Pause")}">${pauseSvg()}</button>
         <div class="combo" data-ref="combo"></div>
+        <div class="coach-steps hidden" data-ref="coachSteps" role="progressbar" aria-valuemin="1" aria-valuenow="1" aria-label="${t("hud.aria.coachProgress", undefined, "Coach progress")}"></div>
         <div class="hint" data-ref="hint" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="hand" data-ref="hand">☝<span class="hand-hint">Tap · Space · ↑</span></div>
+        <div class="hand" data-ref="hand">${menuIconSm("hand")}<span class="hand-hint" data-ref="handHint"></span></div>
+        <div class="wings-near hidden" data-ref="wingsNear"><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></i><span aria-hidden="true"></span></div></div>
       </div>
 
       <div class="overlay menu hidden" data-ref="menu"><div class="paper-card" data-ref="menuCard"></div></div>
 
-      <div class="overlay pause hidden" data-ref="pause" role="dialog" aria-modal="true" aria-label="Paused">
+      <div class="overlay pause hidden" data-ref="pause" role="dialog" aria-modal="true" aria-label="${t("hud.aria.paused", undefined, "Paused")}">
         <div class="paper-card slim pause-card">
-          <div class="pause-kicker">FLIGHT ON HOLD</div>
-          <h2>Take a breath</h2>
+          <div class="pause-kicker">${t("hud.ui.FHOLD", undefined, "FLIGHT ON HOLD")}</div>
+          <h2>${t("hud.ui.TBreath", undefined, "Take a breath")}</h2>
           <p class="tagline">Your run is safe. Adjust settings, grab boosts, or rally your flock — ready when you are.</p>
           <div class="pause-run-stats">
             <span class="prs"><em>Distance</em><b data-ref="pauseDistance">0 m</b></span>
@@ -721,26 +513,26 @@ export class HUD {
             <span class="prs"><em>Combo</em><b data-ref="pauseCombo">×1</b></span>
           </div>
           <div class="pause-actions">
-            <button class="primary-btn pause-resume" data-ui data-action="resume"><span class="pause-action-icon">${menuIcon("flight")}</span>Keep flying</button>
+            <button class="primary-btn pause-resume" data-ui data-action="resume"><span class="pause-action-icon">${menuIcon("flight")}</span>${t("hud.pause.resume", undefined, "Keep flying")}</button>
           </div>
-          <div class="pause-quick-grid" role="group" aria-label="Quick access">
+          <div class="pause-quick-grid" role="group" aria-label="${t("hud.ui.QAccess", undefined, "Quick access")}">
             <button class="pause-q pause-mute" data-ui data-action="set-mute" data-ref="pauseMute" aria-pressed="false">
-              <i data-ref="pauseMuteIco">${menuIcon("sound")}</i><span data-ref="pauseMuteLbl">Sound on</span>
+              <i data-ref="pauseMuteIco">${menuIcon("sound")}</i><span data-ref="pauseMuteLbl">${t("hud.ui.S", undefined, "Sound on")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="settings">
-              <i>${menuIcon("settings")}</i><span>Settings</span>
+              <i>${menuIcon("settings")}</i><span>${t("hud.menu.settings", undefined, "Settings")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="shop">
               <i>${menuIcon("shop")}</i><span>Shop</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="board">
-              <i>${menuIcon("board")}</i><span>Global Board</span>
+              <i>${menuIcon("board")}</i><span>${t("hud.pause.globalBoard", undefined, "Global Board")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="scores">
-              <i>${menuIcon("scores")}</i><span>My Scores</span>
+              <i>${menuIcon("scores")}</i><span>${t("hud.pause.myScores", undefined, "My Scores")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="pass">
-              <i>${menuIcon("pass")}</i><span>Nest Pass</span>
+              <i>${menuIcon("pass")}</i><span>${t("hud.ui.NPass", undefined, "Nest Pass")}</span>
             </button>
             <button class="pause-q" data-ui data-action="pause-to" data-id="squad">
               <i>${menuIcon("squad")}</i><span>Squad</span>
@@ -756,8 +548,8 @@ export class HUD {
             </button>
           </div>
           <div class="pause-exit-row">
-            <button class="soft-btn" data-ui data-action="restart-flight"><span class="pause-inline-icon">${menuIcon("flight")}</span>Restart flight</button>
-            <button class="ghost-btn danger-btn" data-ui data-action="menu"><span class="pause-inline-icon">${menuIcon("daily")}</span>Exit to menu</button>
+            <button class="soft-btn" data-ui data-action="restart-flight"><span class="pause-inline-icon">${menuIcon("flight")}</span>${t("hud.pause.restart", undefined, "Restart flight")}</button>
+            <button class="ghost-btn danger-btn" data-ui data-action="menu"><span class="pause-inline-icon">${menuIcon("daily")}</span>${t("hud.pause.exitMenu", undefined, "Exit to menu")}</button>
           </div>
           <p class="pause-exit-note">Resume keeps your momentum. Restart begins a fresh flight. Exit returns you to the launch pad.</p>
         </div>
@@ -767,20 +559,21 @@ export class HUD {
       <div class="overlay ad hidden" data-ref="ad"><div class="ad-card" data-ref="adCard"></div></div>
       <div class="overlay gameover hidden" data-ref="over"><div class="paper-card" data-ref="overCard"></div></div>
 
-      <div class="toasts" data-ref="toasts"></div>
+      <div class="toasts" data-ref="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+      <div class="quips" data-ref="quips" role="status" aria-live="polite" aria-atomic="false"></div>
       <div class="flash" data-ref="flash"></div>
       <div class="impact-popups" data-ref="impactPopups"></div>
       <div class="matchmaking hidden" data-ref="matchmaking" role="status" aria-live="polite">
         ${flockLoadingMark()}
         <div class="matchmaking-title" data-ref="matchmakingTitle">Searching for live pilots…</div>
         <div class="matchmaking-count" data-ref="matchmakingCount">0 live pilots</div>
-        <div class="matchmaking-label" data-ref="matchmakingLabel">Reading the sky…</div>
+        <div class="matchmaking-label" data-ref="matchmakingLabel">Searching for pilots…</div>
         <div class="matchmaking-rooms hidden" data-ref="matchmakingRooms"></div>
         <div class="btn-row mm-actions">
           <button class="primary-btn mm-ready hidden" data-ui data-ref="matchmakingReady" data-action="mm-ready">Ready up ✓</button>
-          <button class="primary-btn gold mm-ai hidden" data-ui data-ref="matchmakingAi" data-action="mm-ai">🤖 Race the AI flock instead</button>
-          <button class="soft-btn mm-keep hidden" data-ui data-ref="matchmakingKeep" data-action="mm-keep-search">Keep searching</button>
-          <button class="soft-btn mm-cancel" data-ui data-action="mm-cancel">Cancel</button>
+          <button class="primary-btn gold mm-ai hidden" data-ui data-ref="matchmakingAi" data-action="mm-ai">${menuIconSm("robot")} ${t("hud.mm.aiInstead", undefined, "Race the AI flock instead")}</button>
+          <button class="soft-btn mm-keep hidden" data-ui data-ref="matchmakingKeep" data-action="mm-keep-search">${t("hud.ui.KSearching", undefined, "Keep searching")}</button>
+          <button class="soft-btn mm-cancel" data-ui data-action="mm-cancel">${t("common.cancel", undefined, "Cancel")}</button>
         </div>
       </div>
     `;
@@ -804,7 +597,30 @@ export class HUD {
     // puts them there, in normal flow, rather than an absolute offset that has
     // to be kept in sync with the button row's height.
     const header = lane("hud-header", [".top-bar", ".power-strip", ".mid-meta", ".power-chips", ".roster-bar", ".versus-bar"]);
-    lane("flight-messages", [".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown"]);
+    // `.chain-readout` belongs in this lane and was missing from the list.
+    //
+    // ui.css:5609 documents the intent — "In the flight-messages lane, not
+    // floating at 22% of the screen… Lane placement is what the sibling
+    // announcements already do and is size-proof" — and the rule sets
+    // `position: static`, which only makes it a flow child INSIDE a lane. The
+    // element was never added here, so it stayed a static in-flow child of
+    // `.play-hud` itself: a full-width text block at the top of the play area.
+    // That is the "CHAIN x2 prints over the distance bar" problem the comment
+    // was written to prevent, arriving by a different route.
+    //
+    // It also escaped `e2e/layout.spec.ts`, whose overlap assertion names the
+    // lanes — an element in no lane cannot be asserted into one. The assertion
+    // picks it up automatically now that the lane exists.
+    //
+    // `.coach-steps` joins the same lane for the same reason. It was absolutely
+    // positioned at `top: 30%` with a hand-tuned `margin-top: -46px` that had to
+    // guess how tall the sentence below it was — and the guess was 16px short on
+    // a two-line coaching cue. As the first flow child it takes its own line
+    // above the sentence, and the sentence wraps under it however tall it turns
+    // out to be. First in the list so the bar reads above the words it marks.
+    const messages = lane("flight-messages", [".coach-steps", ".launch-banner", ".hint", ".goal-pop", ".finish-countdown", ".countdown", ".chain-readout"]);
+    this.messagesEl = messages;
+
     // `.fever-wrap` stays in the footer lane: it is `position: static` there
     // (see `.flight-footer .fever-wrap`), so it is a flow child of the footer.
     // Moving it out made the absolutely-positioned base rule resolve against
@@ -823,17 +639,208 @@ export class HUD {
     // Observe only these small flow containers, not the full scene or per-frame
     // positions. Header/footer wrapping automatically reserves feedback space.
     this.resizeObs = new ResizeObserver(() => {
-      // Measure the FULL offset from the play-hud edge so that absolutely-
-      // positioned elements cleared by this variable actually sit below the
-      // header (or above the footer). contentRect.height omits the play-hud
-      // padding, causing the elements to land inside the header/footer.
-      const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
-      this.root.style.setProperty(`--hud-header-height`, `${header.getBoundingClientRect().bottom - hudRect.top}px`);
-      this.root.style.setProperty(`--hud-footer-height`, `${hudRect.bottom - footer.getBoundingClientRect().top}px`);
+      // Defer to rAF to avoid "ResizeObserver loop completed with undelivered
+      // notifications" — the CSS variable writes in publishStack() can resize
+      // the observed elements, which would re-enter the observer synchronously.
+      this.stackSignature = "";
+      if (!this.stackRafPending) {
+        this.stackRafPending = true;
+        requestAnimationFrame(() => {
+          this.stackRafPending = false;
+          this.publishStack();
+        });
+      }
     });
     this.resizeObs.observe(header);
     this.resizeObs.observe(footer);
+    this.resizeObs.observe(this.quipLayer);
+    // The band ITSELF, and this is not belt-and-braces. `--hud-messages-max`
+    // and `--hud-stack-bottom` are both derived from the band's own height, but
+    // nothing used to re-publish when that height changed — only the header,
+    // the footer and the quip lane were watched. A coaching cue that rewraps
+    // from one line to two therefore grew the band from 30px to 46px while
+    // the published maximum still said 30, so the stack the toast lane hangs
+    // from stayed 16px short and the toasts rode up over the text.
+    //
+    // Measured at 390x844, the most common phone frame: the band reported
+    // `--hud-messages-max: 30px` and occupied 347..392 while the toasts were
+    // placed from a `stackBottom` computed for the old height.
+    this.resizeObs.observe(this.messagesEl);
   }
+
+  /**
+   * Measure the header and the footer, publish their reservations, and publish
+   * the message stack off them. Extracted from the `ResizeObserver` so that the
+   * settling loop below can run the identical measurement on later frames.
+   *
+   * The extra frames are not belt and braces. `.quips` and `.slope-chain` are
+   * anchored to `--hud-footer-bottom`, which this method publishes, and every
+   * lane carries the project-wide `transition: all 0.00001s` — the rule that
+   * makes transitions observable at all. A transitioned property keeps
+   * reporting its previous value until the frame in which the transition
+   * renders has been committed, so writing `--hud-footer-bottom` and reading
+   * `.quips` in the same task measures the lane one frame too low. And because
+   * `.quips` is an empty 0x0 box, moving it fires no ResizeObserver, so nothing
+   * ever came back to correct it.
+   *
+   * Measured at 568x320 in the practice lobby: opening the emote picker grows
+   * the footer from an 85.5px card to 127.5px, and the band was published with
+   * the quip lane at y 180.5 when it settles at y 138.5 — a 42px error, and
+   * `messageBand`'s `room` term is `quipY - 60`, so 0.5px of that error was the
+   * whole difference between the band sitting on its ceiling and sitting 62px
+   * lower, inside the footer.
+   *
+   * So the stack is republished until the measured inputs stop moving, one
+   * frame at a time, and the signature is what stops it: a pass that reads the
+   * same numbers as the pass before it has nothing left to correct. The floor
+   * is there because a transition reports its start value for two frames, not
+   * one, so agreeing early is the failure mode rather than the success one —
+   * see `STACK_SETTLE_MIN_PASSES`.
+   */
+  private publishStack(): void {
+    const header = this.root.querySelector<HTMLElement>(".hud-header")!;
+    const footer = this.root.querySelector<HTMLElement>(".flight-footer")!;
+    // Measure the FULL offset from the play-hud edge so that absolutely-
+    // positioned elements cleared by this variable actually sit below the
+    // header (or above the footer). contentRect.height omits the play-hud
+    // padding, causing the elements to land inside the header/footer.
+    const hudRect = header.offsetParent?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
+    const headerPx = header.getBoundingClientRect().bottom - hudRect.top;
+    // The footer is bottom-anchored on landscape and TOP-anchored in the
+    // portrait override (design-polish.css), so the reserved band must be
+    // measured from whichever edge it actually sits against. Measuring
+    // always from the bottom returned most of the viewport in portrait —
+    // a 740px `--hud-footer-height` at 390x844, should be ~115 — and that
+    // bogus number clamped the altitude gauge to its floor and pushed the
+    // toast lane to `top: -15px`, half off-screen.
+    const fRect = footer.getBoundingClientRect();
+    const anchoredTop = footerAnchoredTop({ footerTop: fRect.top, hudTop: hudRect.top, headerPx });
+    const footerPx = anchoredTop
+      ? Math.max(0, fRect.bottom - hudRect.top)
+      : Math.max(0, hudRect.bottom - fRect.top);
+    for (const [name, px] of [["header", headerPx], ["footer", footerPx]] as [string, number][]) {
+      this.root.style.setProperty(`--hud-${name}-height`, `${px}px`);
+    }
+    // In portrait the goal strip moved to the physical bottom (design-polish.css),
+    // so anchoredTop is false — the footer reservation from the bottom is correct.
+    // But coaching text and the toast lane still belong near the header, not pushed
+    // down to the quip lane as landscape bottom-anchored layout would do.
+    const isPortrait = window.matchMedia("(max-aspect-ratio: 3/4)").matches;
+    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx, isPortrait);
+    const signature = [
+      headerPx,
+      footerPx,
+      anchoredTop,
+      this.quipLayer.getBoundingClientRect().top - hudRect.top,
+      this.messagesEl.offsetHeight,
+    ].join("|");
+    if (
+      this.stackPasses >= STACK_SETTLE_MAX_PASSES
+      || (this.stackPasses >= STACK_SETTLE_MIN_PASSES && signature === this.stackSignature)
+    ) {
+      this.stackPasses = 0;
+      return;
+    }
+    this.stackSignature = signature;
+    this.stackPasses += 1;
+    this.stackFrame = requestAnimationFrame(() => {
+      this.stackFrame = 0;
+      this.publishStack();
+    });
+  }
+
+  /**
+   * Publish the one measured stack every transient message lane hangs off.
+   *
+   * The toast lane, the coach hand and the impact-popup lane were each anchored
+   * by their own hand-written `calc()` — each restating the header offset, each
+   * with its own per-breakpoint override. Four lanes, four independent guesses
+   * about the same band, and they drifted: at 1200x762 the messages band and
+   * the popup reservation overlapped by 27,040px², and in portrait the
+   * messages band landed inside the goal strip by 10,012px².
+   *
+   * So the band is measured once and everything below reads it:
+   *
+   *   --hud-messages-top    the band's own `top`
+   *   --hud-messages-bottom the band's bottom edge, INCLUDING the coach hand
+   *                        when it is showing (the hand hangs off the band)
+   *   --hud-lane-floor      the top of the quip lane, the lowest thing the band
+   *                        may push into
+   *   --hud-footer-bottom   the footer's reservation measured from the BOTTOM.
+   *                        Distinct from `--hud-footer-height`, which in portrait
+   *                        measures a top-anchored footer downward and is
+   *                        therefore meaningless as a bottom inset.
+   *
+   * The band's `top` is arithmetic rather than a CSS clamp because a clamp
+   * cannot know which edge the footer sits against — that is the bug itself:
+   * `calc(100% - var(--hud-footer-height) - 60px)` reads a portrait footer
+   * measured downward as though it reserved from the bottom, and loses.
+   */
+  private publishMessageBand(
+    hudRect: { top: number; bottom: number },
+    headerPx: number,
+    anchoredTop: boolean,
+    footerPx: number,
+    forceTopLayout = false,
+  ): void {
+    // The band's height is the one value here that is not arithmetic, and it is
+    // measured with the ceiling released first: `--hud-messages-max` is derived
+    // from `laneFloor`, so measuring through it would feed the answer back into
+    // its own input.
+    this.root.style.setProperty("--hud-messages-max", "none");
+    // A `display:none` lane measures 0x0 at the ORIGIN, so reading its top
+    // unconditionally reported the bottom obstruction as sitting at the very
+    // top of the play area. `messageBand` takes `min(quipY, slopeY)`, so a
+    // hidden slope chain dragged the band's floor to y 0: `room` collapsed onto
+    // the ceiling, `maxPx` went to 0, and the coaching band rendered with no
+    // height at all — silently, on every flight with no chain active, which is
+    // most of them. A lane that is not painted obstructs nothing, so it reports
+    // as past the bottom of the play area and `Math.min` ignores it.
+    const hudPx = Math.max(0, hudRect.bottom - hudRect.top);
+    const slopeChain = this.root.querySelector<HTMLElement>(".slope-chain")!;
+    // The footer's BOTTOM reservation is published before the quip lane is
+    // measured, because `.quips` hangs off this value —
+    // `bottom: calc(var(--hud-footer-bottom, 90px) + 42px)` — and `messageBand`
+    // reads `quipY` as one of the two obstructions that place the band. The
+    // read still has to wait for the frame: every lane carries a project-wide
+    // `transition: all 0.00001s`, so a transitioned property reports its
+    // previous value until the frame ends. `publishStack` is what supplies that
+    // frame, and it is documented there.
+    const footerBottom = footerBottomReservation({ anchoredTop, footerPx });
+    this.root.style.setProperty("--hud-footer-bottom", `${footerBottom}px`);
+    const band = messageBand({
+      hudPx,
+      headerPx,
+      anchoredTop,
+      footerPx,
+      forceTopLayout,
+      quipY: this.quipLayer.getBoundingClientRect().top - hudRect.top,
+      slopeY: getComputedStyle(slopeChain).display === "none"
+        ? hudPx
+        : slopeChain.getBoundingClientRect().top - hudRect.top,
+      // The hand hangs off the band rather than off the header, so it
+      // contributes its own height to the stack. While it is `display:none`
+      // the offset is zero and the stack stops at the band.
+      handPx: this.handEl.offsetHeight,
+      naturalBandPx: this.messagesEl.offsetHeight,
+    });
+    for (const [name, px] of [
+      ["messages-top", band.top],
+      ["messages-max", band.maxPx],
+      ["messages-bottom", band.bottom],
+      ["stack-bottom", band.stackBottom],
+      ["lane-floor", band.laneFloor],
+      ["chain-clear", band.chainClear],
+      // The gap the lanes are offset BY, published so the stylesheet's `top`
+      // expressions and the arithmetic above are one number and not two that
+      // happen to agree.
+      ["lane-gap", LANE_GAP_PX],
+    ] as [string, number][]) {
+      this.root.style.setProperty(`--hud-${name}`, `${px}px`);
+    }
+  }
+
+
 
   /** Matchmaking overlay: live pilot count + honest countdown to backfill. */
   /**
@@ -868,7 +875,7 @@ export class HUD {
         : searching
           ? secsLeft > 0.5
             ? `Looking for pilots on this circuit · ${Math.ceil(secsLeft)}s`
-            : "Reading the sky…"
+            : "Searching for pilots…"
           : "The search stays open — anyone who arrives can still join this room";
     this.matchmakingRooms.textContent = rooms;
     this.matchmakingRooms.classList.toggle("hidden", !rooms);
@@ -918,6 +925,14 @@ export class HUD {
         // an explicit choice on the card's own buttons.
         return;
       }
+      if (e.target === this.adEl) {
+        // While a break is live the ad owns the whole screen, and a tap on its
+        // bare backdrop must stay inert: the break is ended by the SDK promise
+        // (or the automatic safety valve) and by nothing the player presses.
+        // `hidden` already makes every other screen un-hittable, but this is
+        // the ad's own guard against a stray tap ever reaching a `data-action`.
+        return;
+      }
       if (e.target === this.menuEl && this.currentSnapshot && this.currentSnapshot.screen !== "main") {
         handler("back", "");
         return;
@@ -942,14 +957,6 @@ export class HUD {
         const filter = (t.dataset.id ?? "all") as import("./ShopBrowse").ShopFilter;
         if (filter) this.shopBrowse.filter = filter;
         if (this.shopSnapshot) this.renderStatic(this.shopSnapshot);
-        return;
-      }
-      if (t.dataset.action === "preview-skin") {
-        this.shopBrowse.preview = t.dataset.id ?? "";
-        if (this.shopSnapshot) this.renderStatic(this.shopSnapshot);
-        const preview = this.menuCard.querySelector<HTMLElement>(".shop-hero-name");
-        preview?.focus({ preventScroll: true });
-        this.menuCard.querySelector(".shop-hero")?.scrollIntoView({ block: "start" });
         return;
       }
       if (t.dataset.action === "shop-section") {
@@ -1029,7 +1036,10 @@ export class HUD {
     this.dismissCopy();
     const dialog = document.createElement("div");
     dialog.className = "overlay copy-dialog";
-    dialog.innerHTML = '<div class="paper-card slim"><h2>Copy manually</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="Text to copy" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">Done</button></div>';
+    // Backticks, not single quotes. With `'…'` the ${t(...)} expressions were
+    // emitted as literal text, so the dialog heading literally read
+    // `${t("hud.ui.CManually", …)}` in every locale.
+    dialog.innerHTML = `<div class="paper-card slim"><h2>${t("hud.ui.CManually", undefined, "Copy manually")}</h2><p class="tagline">Your browser blocked automatic copying. Select the text below and use Copy.</p><textarea class="cloud-box" aria-label="${t("hud.ui.TCopy", undefined, "Text to copy")}" readonly rows="4"></textarea><button class="soft-btn wide" data-ui data-action="dismiss-copy">${t("common.done", undefined, "Done")}</button></div>`;
     const field = dialog.querySelector("textarea")!;
     field.value = text; // never inject codes/URLs as markup
     this.root.appendChild(dialog);
@@ -1072,7 +1082,13 @@ export class HUD {
   /** Mirror a name field's current length into its character counter. */
   private syncNameCount(field: HTMLInputElement | HTMLTextAreaElement): void {
     const count = field.closest(".name-input-wrapper")?.querySelector(".name-char-count span");
-    if (count) count.textContent = String(field.value.length);
+    if (!count) return;
+    const next = String(field.value.length);
+    // Write only on a real change. This runs on every HUD push while the name
+    // screen is mounted, and an unconditional `textContent` write is a mutation
+    // on every frame — which re-ran layout and left the dice button next to it
+    // permanently "moving" as far as a click was concerned.
+    if (count.textContent !== next) count.textContent = next;
   }
 
   updateNameTags(tags: RivalNameTag[], camera: THREE.Camera, width: number, height: number): void {
@@ -1083,6 +1099,7 @@ export class HUD {
     if (!container.childElementCount && this.nameTagEls.size > 0) {
       this.nameTagEls.clear();
       this.nameTagKeys.clear();
+      this.nameTagSizes.clear();
     }
     // DOM reuse: positions are cheap style writes (composited), while the
     // tag CONTENT is only re-parsed when rank/name/emote/draft actually
@@ -1090,6 +1107,10 @@ export class HUD {
     // packed field — a full HTML parse + node churn on every frame, which is
     // where mobile PVP frame times went to die.
     const seen = new Set<string>();
+    // Boxes already placed this frame. Tags arrive in relevance order (the
+    // ones you are drafting, then the nearest), so whoever claims a spot keeps
+    // it and anyone landing on top of it is dropped.
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
     for (const tag of tags ?? []) {
       this.tmpNameTagVec.set(tag.worldX, tag.worldY, -3.5);
       this.tmpNameTagVec.project(camera);
@@ -1107,6 +1128,7 @@ export class HUD {
         this.nameTagEls.set(tag.id, el);
         this.nameTagKeys.set(tag.id, "");
       }
+      el.style.display = "";
       el.style.left = `${px.toFixed(1)}px`;
       el.style.top = `${py.toFixed(1)}px`;
 
@@ -1117,13 +1139,46 @@ export class HUD {
         el.innerHTML =
           `${tag.emote ? `<b class="rt-emote" aria-hidden="true">${escapeHtml(tag.emote)}</b>` : ""}` +
           `<span class="rank-badge">#${tag.place}</span><span>${escapeHtml(tag.name)}</span>`;
+        // Measured here, while the tag is displayed, and only when its CONTENT
+        // changed — offsetWidth forces layout, and reading it per frame is the
+        // thing this loop already avoids. A zero means the play HUD was still
+        // hidden, which reads as a zero-size box and would silently disable
+        // declutter for the rest of the race; keep the nominal size instead and
+        // let the next content change measure it for real.
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        if (w > 0 && h > 0) this.nameTagSizes.set(tag.id, { w, h });
       }
+      // `translate(-50%, -100%)`: centred on px, sitting on py. Nominal size
+            // until one has been measured. Measured in-browser, a pill with a rank
+            // badge is 46px wide at 3 characters and 103px at 14 — and 14 is
+            // NAME_MAX, the protocol's hard cap, so this nominal is sized to the
+            // worst case a tag can ever be. It can therefore over-hide a tag in the
+            // frame before its first measurement (invisible) but never let two stack
+            // (the bug being fixed).
+            const size = this.nameTagSizes.get(tag.id) ?? { w: 105, h: 19 };
+      const half = size.w / 2;
+      let clash = false;
+      for (const p of placed) {
+        if (px + half > p.x0 && px - half < p.x1 && py > p.y0 && py - size.h < p.y1) {
+          clash = true;
+          break;
+        }
+      }
+      if (clash) {
+        // Hidden rather than removed: the cache stays warm, so a tag that
+        // reappears next frame is a style write, not a rebuild.
+        el.style.display = "none";
+        continue;
+      }
+      placed.push({ x0: px - half, x1: px + half, y0: py - size.h, y1: py });
     }
     for (const [id, el] of this.nameTagEls) {
       if (!seen.has(id)) {
         el.remove();
         this.nameTagEls.delete(id);
         this.nameTagKeys.delete(id);
+        this.nameTagSizes.delete(id);
       }
     }
   }
@@ -1132,6 +1187,10 @@ export class HUD {
     this.currentSnapshot = s;
     if (s.state === "playing" && !this.wasInFlight) this.resultsContinuity.reset();
     this.wasInFlight = s.state === "playing";
+    // Tournament countdown urgency push: menu-only, so it never interrupts a
+    // flight in progress with a toast about something the player can't act
+    // on until they land anyway.
+    if (s.state === "menu") this.maybeTournamentPush(s.cups);
     // Keep the menu bird animated by default. The in-game Reduce motion
     // switch remains the explicit opt-out; relying solely on the browser's
     // media query made the hero appear frozen on some desktop profiles.
@@ -1139,7 +1198,11 @@ export class HUD {
     // Network presence is asynchronous and doesn't increment the save/UI
     // version. Include it or a connected room stays stuck on disabled Ready.
     const roomKey = s.state === "menu" && s.screen === "live"
-      ? `${s.netState}|${s.netError}|${s.roomCode}|${s.roomCount}|${s.roomReady}|${s.roomReadyCount}|${JSON.stringify(s.lobbyRivals)}` : "";
+      // Key on SHAPE, not content. This serialised the whole rival array 30x a
+      // second - a few KB of fresh string per tick, thrown away - and it never
+      // short-circuited, because the array is a new object on every presence
+      // tick. The rows rebuild only when the roster's SIZE or ready-flags move.
+      ? `${s.netState}|${s.netError}|${s.roomCode}|${s.roomCount}|${s.roomReady}|${s.roomReadyCount}|${s.lobbyRivals.length}|${s.lobbyRivals.map((r) => (r.ready ? 1 : 0)).join("")}` : "";
     const key = `${s.state}|${s.screen}|${s.version}|${roomKey}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
@@ -1154,7 +1217,8 @@ export class HUD {
     if (this.root.dataset.uiState !== s.state) this.root.dataset.uiState = s.state;
     const flying = String(inPlay);
     if (this.root.dataset.flying !== flying) this.root.dataset.flying = flying;
-    const feedback = feedbackSlot(s);
+    const goHold = this.goUntil > Date.now() ? 1 : 0;
+    const feedback = feedbackSlot({ ...s, goHold });
     if (this.root.dataset.feedback !== feedback) this.root.dataset.feedback = feedback;
     // Menu overlay: (a) main menu/attract, (b) post-crash postcards, or
     // (c) paused-run sub-screens (shop/settings/... overlaid on a frozen flight).
@@ -1174,6 +1238,14 @@ export class HUD {
     // crash "second wind" card is up so it can't read as a dead button.
     this.pauseBtnEl.classList.toggle("hidden", s.state !== "playing");
     this.muteBtnEl.classList.toggle("hidden", !inPlay);
+    // Optional FPS counter (settings > display). Painted only when the value
+    // moves: a textContent write per frame is a layout trigger per frame.
+    const showFps = inPlay && s.settings.showFps && s.fps > 0;
+    this.fpsChipEl.classList.toggle("hidden", !showFps);
+    if (showFps && s.fps !== this.fpsShown) {
+      this.fpsShown = s.fps;
+      this.fpsChipEl.textContent = `${s.fps} fps`;
+    }
     const muted = s.settings.mute;
     if (this.playMuteShown !== muted) {
       this.playMuteShown = muted;
@@ -1209,9 +1281,59 @@ export class HUD {
     if (inPlay) {
       this.setText(this.distanceEl, "dist", distanceText(s.distance));
       this.setText(this.coinsEl, "coins", formatNumberLocalized(s.coins));
-      this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      // A fresh save has no best yet, and "1.65 km / best 0 m" reads as a bug
+      // rather than as an empty state. The row stays out of the layout until
+      // there is a real record to beat; once there is, it never disappears
+      // again mid-run, so the HUD does not reflow under the player.
+      if (s.bestDistance > 0) {
+        if (this.bestRowEl?.hidden) this.bestRowEl.hidden = false;
+        this.setText(this.bestEl, "best", distanceText(s.bestDistance));
+      }
+      // The medal ladder, shown WHILE flying rather than only at the end.
+      //
+      // "340 m, best 340 m" tells a player where they are and nothing about
+      // what is next. This is the line that answers the question they are
+      // actually asking on the attempt after a near miss, and it is worth far
+      // more in the top-left corner — where the eye already is for the distance
+      // number — than in a results card the player sees once it is over.
+      //
+      // Keyed rather than rewritten every push, same as the other HUD text
+      // here, so a 30Hz push does not churn a node for a string that rarely
+      // changes (once per metre at most).
+      {
+        const m = medalStanding(s.distance);
+        const mkey = `${m.earned}${m.toNext ?? ""}`;
+        if (mkey !== this.lastMedalKey) {
+          this.lastMedalKey = mkey;
+          this.medalLine.textContent = medalText(m.earned, m.toNext);
+          this.medalLine.dataset.medal = m.earned;
+          // Near-miss emphasis: within 25% of the next rung, the goal is close
+          // enough to steer by, and that is the moment it is worth shouting.
+          this.medalLine.classList.toggle("close", m.toNext !== null && m.toNext <= (m.nextAt ?? Infinity) * 0.25);
+        }
+      }
       this.setText(this.islandEl, "island", `Island ${s.island + 1}`);
+      // Mobile HUD declutter: the island chip flashes "recent" for 3s right
+      // after the island changes, then fades back to unobtrusive (CSS scopes
+      // `.recent` to <=640px only — desktop/tablet keep it always visible).
+      if (s.island !== this.lastIsland) {
+        this.lastIsland = s.island;
+        this.islandEl.classList.add("recent");
+        if (this.islandRecentTimer !== null) this.cancelTimer(this.islandRecentTimer);
+        this.islandRecentTimer = this.after(() => {
+          this.islandEl.classList.remove("recent");
+          this.islandRecentTimer = null;
+        }, 3000);
+      }
       this.setText(this.multEl, "mult", `×${s.multiplier.toFixed(1)}`);
+      // Mobile HUD declutter: the multiplier chip is only "relevant" once it
+      // is actually boosting the run — at the baseline ×1.0 it is hidden on
+      // narrow phones (CSS scopes this to <=640px; desktop keeps it visible).
+      this.multEl.classList.toggle("active", s.multiplier > 1);
+      // Mobile HUD declutter: the biome chip only matters when a hazard is
+      // live nearby (headwind gust or thermal) — otherwise it just crowds the
+      // same row as island/multiplier on a 375px phone.
+      this.biomeChip.classList.toggle("hazard-near", s.gust > 0.3 || s.inThermal);
       this.goldChip.classList.toggle("hidden", !s.gold);
       this.vipChip.classList.toggle("hidden", !s.vip);
       if (this.vipChip.textContent !== `♛ VIP · ${s.vipDaysLeft}d`) this.vipChip.textContent = `♛ VIP · ${s.vipDaysLeft}d`;
@@ -1220,7 +1342,9 @@ export class HUD {
       } else {
         this.ghostChip.classList.remove("hidden");
         const ahead = s.ghostDelta >= 0;
-        this.ghostChip.textContent = `👻 ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
+        // The arrow is a shape cue that survives colorblindness — the
+        // ahead/behind background tint alone (green vs. coral) is not enough.
+        this.ghostChip.innerHTML = `${menuIconSm("ghost")} ${ahead ? "▲" : "▼"} ${ahead ? "+" : ""}${Math.round(s.ghostDelta)}m`;
         this.ghostChip.classList.toggle("ahead", ahead);
         this.ghostChip.classList.toggle("behind", !ahead);
       }
@@ -1230,14 +1354,25 @@ export class HUD {
       this.setStyle(this.sunKnob, "sunKnob", "left", `${day * 100}%`);
       this.sunFill.classList.toggle("low", day < 0.28);
 
-      this.feverWrap.classList.toggle("on", s.feverOn);
+      // Visible whenever the meter has something to say. It was shown only
+      // while fever was LIT, but off-fever it carries the chain->fever
+      // progress — which is the moment the player is actually asking "how close
+      // am I?", and the moment it was hidden.
+      this.feverWrap.classList.toggle("on", s.feverOn || s.fever > 0);
+      this.feverWrap.classList.toggle("hidden", !s.feverOn && s.fever <= 0);
       this.setStyle(this.feverFill, "feverFill", "width", `${Math.max(0, Math.min(1, s.fever)) * 100}%`);
 
       // Ring chain: the airborne objective, so it is always visible while it
       // is live — count first (big), remaining window second (the bar).
       const slopeLinked = s.slopeChain > 0;
       this.slopeChainEl.classList.toggle("hidden", !slopeLinked);
-      if (slopeLinked) this.setText(this.slopeChainEl, "slopeChain", `〽 FLOW ×${s.slopeChain} · ${s.slopeScore}`);
+      if (slopeLinked) {
+        this.setText(this.slopeChainText, "slopeChainText", `FLOW ×${s.slopeChain} · ${s.slopeScore}`);
+        // No timed window backs this chain (unlike the ring chain's countdown
+        // fraction) — the fill instead reads as "how established is the
+        // streak", climbing toward full at a 5-landing chain.
+        this.setStyle(this.slopeChainFill, "slopeChainFill", "width", `${Math.max(0, Math.min(1, s.slopeChain / 5)) * 100}%`);
+      }
 
       const chained = s.ringChain > 1;
       this.ringChainEl.classList.toggle("hidden", !chained);
@@ -1249,22 +1384,27 @@ export class HUD {
 
       // Timed power-ups live ONLY in the power strip (countdown bars) — chips
       // here double-printed the same power-up (the old bug: pickup magnet fed
-      // both magnetTimer AND PowerUps, so "🧲" showed twice). Chips remain as
-      // a fallback for armed-boost timers the strip doesn't know about, plus
+      // both magnetTimer AND PowerUps, so the magnet showed twice). Chips remain
+      // as a fallback for armed-boost timers the strip doesn't know about, plus
       // shield stock and weather calls to action.
       const chips: string[] = [];
       if (s.boostTimer > 0 && !s.powers.some((p) => p.kind === "rocket"))
-        chips.push(`<span class="pchip boost">🚀 boost</span>`);
+        chips.push(`<span class="pchip boost">${menuIconSm("rocket")} boost</span>`);
       if (s.magnetTimer > 0 && !s.powers.some((p) => p.kind === "magnet"))
-        chips.push(`<span class="pchip magnet">🧲 ${Math.ceil(s.magnetTimer)}s</span>`);
-      if (s.shield > 0) chips.push(`<span class="pchip shield">🛡 ×${s.shield}</span>`);
-      if (s.gust > 0.3) chips.push(`<span class="pchip gust">🌬 headwind — dive!</span>`);
-      if (s.inThermal) chips.push(`<span class="pchip thermal">♨ thermal — release!</span>`);
+        chips.push(`<span class="pchip magnet">${menuIconSm("magnet")} ${Math.ceil(s.magnetTimer)}s</span>`);
+      if (s.shield > 0) chips.push(`<span class="pchip shield">${menuIconSm("shield")} ×${s.shield}</span>`);
+      if (s.gust > 0.3) chips.push(`<span class="pchip gust">${menuIconSm("wind")} headwind — dive!</span>`);
+      if (s.inThermal) chips.push(`<span class="pchip thermal">${menuIconSm("thermal")} thermal — release!</span>`);
       const html = chips.join("");
 
       if (s.combo !== this.lastCombo) {
         this.lastCombo = s.combo;
-        this.comboEl.textContent = s.combo >= 2 ? `×${s.combo} chain` : "";
+        // "streak", not "chain": this counter is the launch streak (it counts
+        // great OR perfect launches, and decays on a grace timer), while the
+        // centre readout is the perfect-launch chain that drives Fever. One
+        // word over two different numbers read as the HUD disagreeing with
+        // itself — which it was, the moment anyone landed a single "great".
+        this.comboEl.textContent = s.combo >= 2 ? `×${s.combo} streak` : "";
         this.comboEl.classList.toggle("show", s.combo >= 2);
         if (s.combo >= 2) {
           this.comboEl.classList.remove("pop");
@@ -1277,14 +1417,34 @@ export class HUD {
         this.lastBiome = biomeTxt;
         this.biomeChip.innerHTML = `<span class="biome-art">${menuIcon("atlas")}</span><span>${escapeHtml(biomeTxt)}</span>`;
       }
-      this.setStyle(this.speedLines, "speedlines", "opacity", String(Math.max(0, (s.speedNorm - 0.55) * 1.6)));
+      // Speed lines, from the tuned curve. This used to inline its own
+      // `Math.max(0, (speedNorm - 0.55) * 1.6)`, which meant the 2026-09-24
+      // retune of `SPEED_BANDS` never reached the player: different threshold,
+      // different slope, and the copy could not be re-tuned in one file. The
+      // band definitions live in `SpeedFeel.ts`; this is the consumer.
+      this.setStyle(this.speedLines, "speedlines", "opacity", String(streakOpacity(s.speedNorm)));
 
       // altitude gauge (log-ish so low hops still read, big launches still climb)
       const aN = Math.min(1, Math.pow(s.altitude / 340, 0.65));
       this.setStyle(this.altFill, "altFill", "height", `${aN * 100}%`);
       this.setStyle(this.altBird, "altBird", "bottom", `calc(${aN * 100}% - 9px)`);
-      this.setText(this.altRead, "altRead", `${Math.round(s.altitude)} m`);
+      // The readout now holds an icon plus a <span>, so the writer has to
+      // target the span — setting textContent on the wrapper would delete the
+      // glyph on the first frame.
+      this.setText(this.altRead.querySelector("span") ?? this.altRead, "altReadNum", `${Math.round(s.altitude)} m`);
       this.altGauge.dataset.zone = String(s.altZone);
+
+      const chainKey = `${s.chainLabel}|${s.chainTier}`;
+      if (chainKey !== this.lastChainKey && this.chainReadout) {
+        this.lastChainKey = chainKey;
+        this.chainReadout.textContent = s.chainLabel;
+        this.chainReadout.className = `chain-readout tier-${s.chainTier}`;
+        // Custom properties rather than inline style strings assembled per
+        // frame: the tier class carries the look, the scale and pulse carry the
+        // magnitude, and the browser does the interpolating.
+        this.chainReadout.style.setProperty("--chain-scale", s.chainScale.toFixed(3));
+        this.chainReadout.style.setProperty("--chain-pulse", `${s.chainPulse.toFixed(2)}s`);
+      }
 
       const bannerKey = `${s.launchBanner}|${s.launchBannerT > 0}`;
       if (bannerKey !== this.lastBanner) {
@@ -1299,7 +1459,7 @@ export class HUD {
         this.powerStrip.innerHTML = s.powers
           .map(
             (p) =>
-              `<span class="pu${p.time < 1.8 ? " expiring" : ""}${p.level === 2 ? " lv2" : ""}" title="${escapeHtml(p.label)}${p.level === 2 ? " II (overcharged)" : ""}"><i>${escapeHtml(p.icon)}</i>${p.level === 2 ? `<em class="pu-lv">II</em>` : ""}<b style="width:${Math.max(0, Math.min(1, p.time / p.total)) * 100}%"></b><u>${Math.ceil(p.time)}</u></span>`,
+              `<span class="pu${p.time < 1.8 ? " expiring" : ""}${p.level === 2 ? " lv2" : ""}" title="${escapeHtml(p.label)}${p.level === 2 ? " II (overcharged)" : ""}"><i>${menuIconSm(p.icon)}</i>${p.level === 2 ? `<em class="pu-lv">II</em>` : ""}<b style="width:${Math.max(0, Math.min(1, p.time / p.total)) * 100}%"></b><u>${Math.ceil(p.time)}</u></span>`,
           )
           .join("");
       }
@@ -1314,7 +1474,8 @@ export class HUD {
         } else if (wasLive) {
           this.countdownEl.textContent = "GO!";
           this.countdownEl.className = "countdown show go";
-          setTimeout(() => {
+          this.goUntil = Date.now() + GO_VISIBLE_MS;
+          this.after(() => {
             if (this.countdownEl.textContent === "GO!") {
               this.countdownEl.textContent = "";
               this.countdownEl.className = "countdown";
@@ -1326,7 +1487,12 @@ export class HUD {
         }
       }
 
-      // Goal strip: max 2 rows — beat row + closest goal, OR closest goal + career.
+      // ONE goal panel. Session goals and quests used to be two separate
+      // panels — the strip centre-bottom, and a `.mission-strip` pinned to the
+      // left edge — each drawing the same label / progress / bar row in the
+      // same corner of a phone screen. That is the "why are there two goal
+      // bars" report, and the player was not misreading it: there were two.
+      // They are now rows in one strip, capped at GOAL_STRIP_MAX_ROWS.
       let lead: SessionGoal | null = null;
       for (const g of s.sessionGoals) {
         if (g.done) continue;
@@ -1336,7 +1502,45 @@ export class HUD {
       const blKey = bl ? `${bl.kind}:${Math.ceil(bl.gap / 25)}` : "";
       const gk = lead ? `${lead.id}:${Math.floor((lead.progress / lead.target) * 20)}` : "";
       const wk = s.wings ? `${Math.round(s.wings.progress * 100)}:${s.wings.nextNeeded}` : "";
-      const stripKey = `${blKey}|${gk}|${wk}`;
+      const ntRaw = s.nearestTrophy as AchievementView | null;
+      const nt = ntRaw && ntRaw.def && typeof ntRaw.def.target === "number" && ntRaw.def.target > 0 && typeof ntRaw.progress === "number" ? ntRaw : null;
+      const tk = nt ? `${nt.def.id}:${Math.floor((nt.progress / nt.def.target) * 20)}` : "";
+
+      // Quests: what is worth showing right now.
+      //
+      // The expiry is the "goals are stuck on the HUD" report. The filter kept
+      // `r.done` UNCONDITIONALLY, so a quest you had already banked sat on
+      // screen for the rest of the flight with a full gold bar, permanently.
+      // Completion is a moment, not a state: a finished row lingers long enough
+      // for the payoff to land, then leaves. `goalPop` carries the celebration
+      // past that point.
+      const now = performance.now();
+      const questRows: MissionRow[] = [];
+      for (const r of s.missionRows) {
+        if (r.done) {
+          if (!this.doneRowAt.has(r.id)) this.doneRowAt.set(r.id, now);
+          if (now - this.doneRowAt.get(r.id)! > QUEST_DONE_LINGER_MS) continue;
+        } else {
+          this.doneRowAt.delete(r.id);
+          // A row sitting at zero trains the player to stop reading the strip —
+          // `closestGoalLine` says so in its own comment, and gates its line on
+          // 50%+. The strip now uses the same threshold.
+          if (r.pct < IN_FLIGHT_MISSION_MIN_PCT) continue;
+        }
+        questRows.push(r);
+      }
+      // The remaining linger is bucketed INTO the key, or a key that never
+      // changes is a row that never leaves — the exact bug being fixed.
+      const questKey = questRows
+        .map((r) => {
+          const left = r.done
+            ? Math.ceil((QUEST_DONE_LINGER_MS - (now - (this.doneRowAt.get(r.id) ?? now))) / 400)
+            : 0;
+          return `${r.id}${Math.round(r.pct * 200)}${r.done ? `D${left}` : ""}${r.justDone ? "J" : ""}`;
+        })
+        .join("|");
+
+      const stripKey = `${blKey}|${gk}|${wk}|${tk}|${questKey}`;
       if (stripKey !== this.lastGoals) {
         this.lastGoals = stripKey;
         const rows: string[] = [];
@@ -1351,16 +1555,51 @@ export class HUD {
         }
 
         // Row 2a: closest goal (if beat row is showing) or Row 1: closest goal
-        if (lead && (!bl || rows.length < 2)) {
+        if (lead && rows.length < GOAL_STRIP_MAX_ROWS) {
           const pct = Math.min(100, (lead.progress / lead.target) * 100);
           const close = pct >= 70;
-          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${lead.progress}/${lead.target} · +${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs ${close ? "close" : ""}"><em>${escapeHtml(lead.label)}</em><u>${Math.round(lead.progress)}/${Math.round(lead.target)} · +${COIN_SVG}${lead.reward}</u><i><b style="width:${pct.toFixed(1)}%"></b></i></span>`);
         }
 
-        // Career rung: only when no beat row and there's a next rank to chase
-        if (!bl && s.wings && s.wings.nextNeeded > 0 && rows.length < 2) {
+        // Career rung: only when no beat row and there's a next rank to chase.
+        //
+        // ...and only when a SINGLE RUN can actually move it. A run covers a
+        // few hundred metres to a couple of km, and the career ladder is measured
+        // in tens of km — so this row was permanently unreachable and permanently
+        // on screen. The shipped build showed "Paper Wings -> Bronze Wings /
+        // 25.00 km to go" during runs measured in hundreds of metres: a progress
+        // bar that cannot move, competing with the terrain, for the whole run.
+        //
+        // This is the same defect the quest strip had, and the same fix. A goal
+        // worth showing mid-run is one the player can chase RIGHT NOW. The full
+        // career ladder is on the progress screen, where a number that big
+        // belongs. The bar is only hidden while a run is in flight; a goal that
+        // becomes reachable mid-run shows itself, because `nextNeeded` is part
+        // of the strip key.
+        if (!bl && s.wings && s.wings.nextNeeded > 0 && s.wings.nextNeeded <= RUN_REACHABLE_M && rows.length < GOAL_STRIP_MAX_ROWS) {
           const cpct = Math.min(100, s.wings.progress * 100);
-          rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${s.wings.nextNeeded} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
+          rows.push(`<span class="gs gs-career"><em>${escapeHtml(s.wings.name)} → ${escapeHtml(s.wings.nextName)}</em><u>${distanceText(s.wings.nextNeeded)} to go</u><i><b style="width:${cpct.toFixed(1)}%"></b></i></span>`);
+        }
+
+        // Trophy progress: lowest priority — only when a slot is still free.
+        if (nt && rows.length < GOAL_STRIP_MAX_ROWS) {
+          const tpct = Math.min(100, (nt.progress / nt.def.target) * 100);
+          rows.push(`<span class="gs gs-trophy"><em>${menuIconSm("trophy")} ${escapeHtml(nt.def.title)}</em><u>${Math.round(nt.progress)}/${Math.round(nt.def.target)} toward trophy</u><i><b style="width:${tpct.toFixed(1)}%"></b></i></span>`);
+        }
+
+        // Quests fill whatever slots the session goals left. They are the same
+        // `.gs` widget, so the panel reads as one list rather than two panels
+        // that happen to both be progress bars.
+        for (const r of questRows) {
+          if (rows.length >= GOAL_STRIP_MAX_ROWS) break;
+          const qpct = Math.min(100, r.pct * 100);
+          const cls = r.done ? " done" : r.pct >= 0.7 ? " close" : "";
+          const num = r.done
+            ? `✓ ${COIN_SVG}${r.reward}`
+            : `${Math.round(r.progress)}/${Math.round(r.target)} · +${COIN_SVG}${r.reward}`;
+          rows.push(
+            `<span class="gs gs-quest${cls}${r.justDone ? " just" : ""}"><em>${escapeHtml(r.title)}</em><u>${num}</u><i><b style="width:${qpct.toFixed(1)}%"></b></i></span>`,
+          );
         }
 
         this.goalStrip.innerHTML = rows.join("");
@@ -1397,13 +1636,13 @@ export class HUD {
           const gapTxt = !you || you.finished ? "FINISHED" : you.place === 1 ? "LEADER" : `-${gapM}m`;
           this.rosterBar.innerHTML =
             `<div class="roster-top"><span class="rp-place ${you && you.place <= 3 ? "podium" : ""}">${placeTxt}</span>` +
-            `<span class="rm-lead">👑 ${escapeHtml(leader ? leader.name : "—")}</span>` +
+            `<span class="rm-lead">${menuIconSm("crown")} ${escapeHtml(leader ? leader.name : "—")}</span>` +
             `<span class="rm-gap">${gapTxt}</span>` +
             `<span class="rm-count">${s.roster.length} birds</span>` +
             `${s.roomCode ? `<span class="rm-room">ROOM ${escapeHtml(s.roomCode)}</span>` : ""}` +
             `<span class="rm-net ${s.netState}">${s.multiplayerLive ? s.netState : "practice"}</span>` +
-            `${s.multiplayerLive && s.linkQuality !== "unknown" ? `<span class="link-quality ${s.linkQuality}" title="Live state cadence">${s.linkQuality} link</span>` : ""}</div>` +
-            `<div class="roster-track" role="img" aria-label="Live race positions">${s.roster
+            `${s.multiplayerLive && s.linkQuality !== "unknown" ? `<span class="link-quality ${s.linkQuality}" title="${t("hud.ui.LStateCadence", undefined, "Live state cadence")}">${s.linkQuality} link</span>` : ""}</div>` +
+            `<div class="roster-track" role="img" aria-label="${t("hud.ui.LRacePositions", undefined, "Live race positions")}">${s.roster
               .map(
                 (r) =>
                   `<span class="rb ${r.you ? "you" : ""} ${r.remote ? "remote" : ""} ${r.ghost ? "ghost" : ""} ${r.finished ? "done" : ""}" ` +
@@ -1459,9 +1698,9 @@ export class HUD {
             `<div class="st-head"><span>LIVE</span><span>${s.standings.length} shown</span></div>` +
             s.standings
               .map((r) => {
-                const gap = top && r.place > top.place ? `-${Math.max(0, Math.round(top.distance - r.distance))}m` : r.finished ? "🏁" : "—";
+                const gap = top && r.place > top.place ? `-${Math.max(0, Math.round(top.distance - r.distance))}m` : r.finished ? menuIconSm("flag") : "—";
                 return `<div class="st-row ${r.you ? "you" : ""} ${r.kind === "remote" ? "remote" : ""} ${r.place <= 3 ? "p" + r.place : ""}">
-                <span class="st-p">${r.place <= 3 ? ["🥇", "🥈", "🥉"][r.place - 1] : r.place}</span>
+                <span class="st-p">${r.place <= 3 ? menuIconSm(["medal_1", "medal_2", "medal_3"][r.place - 1]) : r.place}</span>
                 <span class="st-n">${escapeHtml(r.name)}${r.kind === "remote" ? " ⇄" : ""}</span>
                 <span class="st-d">${r.you || r.place <= 3 ? `${Math.round(r.distance)}m` : gap}</span>
               </div>`;
@@ -1479,12 +1718,27 @@ export class HUD {
           this.lastVersusKey = vkey;
           const lead1 = s.p1Stats.distance >= s.p2Stats.distance;
           this.versusBar.innerHTML =
-            `<div class="vs-row p1 ${lead1 ? "lead" : ""}"><span>P1${lead1 ? " 👑" : ""}</span><i><b style="width:${pct(s.p1Stats.distance)}%"></b></i><em>${Math.round(s.p1Stats.distance)}m</em></div>` +
-            `<div class="vs-row p2 ${lead1 ? "" : "lead"}"><span>P2${lead1 ? "" : " 👑"}</span><i><b style="width:${pct(s.p2Stats.distance)}%"></b></i><em>${Math.round(s.p2Stats.distance)}m</em></div>` +
+            `<div class="vs-row p1 ${lead1 ? "lead" : ""}"><span>P1${lead1 ? ` ${menuIconSm("crown")}` : ""}</span><i><b style="width:${pct(s.p1Stats.distance)}%"></b></i><em>${Math.round(s.p1Stats.distance)}m</em></div>` +
+            `<div class="vs-row p2 ${lead1 ? "" : "lead"}"><span>P2${lead1 ? "" : ` ${menuIconSm("crown")}`}</span><i><b style="width:${pct(s.p2Stats.distance)}%"></b></i><em>${Math.round(s.p2Stats.distance)}m</em></div>` +
             `<div class="versus-guide"><span>P1: A / Space · ${s.splitLayout === "horizontal" ? "top" : "left"}</span><span>P2: L / Enter · ${s.splitLayout === "horizontal" ? "bottom" : "right"}</span></div>`;
         }
       }
       this.handEl.classList.toggle("show", s.showTutorialHand);
+      // One verb, one source. The hand said "Tap . Space . up" - a TAP on a
+      // HOLD game, naming two keys that do not exist on the device this
+      // ships to - on screen at the same moment as a coach saying HOLD.
+      //
+      // And when the coach line IS up, the hand does not repeat it. Both were
+      // showing at once in the shipped build: "HOLD to dive down the hill" with
+      // "Hold to dive" stacked directly beneath it, saying the same thing
+      // twice, mid-screen, over the terrain the player is trying to read. The
+      // hand still gestures - a gesture is not noise, it is the affordance -
+      // it just stops talking while something else already is.
+      this.handHintEl.textContent = s.hint
+        ? ""
+        : s.settings.tapToggleDive
+          ? t("onboarding.tapToDive", undefined, "Tap to dive")
+          : t("onboarding.tapToDiveHold", undefined, "Hold to dive");
       if (html !== this.lastChips) {
         this.lastChips = html;
         this.powersEl.innerHTML = renderCoins(html);
@@ -1494,6 +1748,51 @@ export class HUD {
         this.lastHint = s.hint;
         this.hintEl.textContent = s.hint;
         this.hintEl.classList.toggle("show", Boolean(s.hint));
+      }
+
+      // Coach progress, as its own element beside the sentence rather than
+      // three unicode circles welded onto the front of it. See `Game.coachHint`
+      // for what those cost: they rendered as whatever the display font mapped
+      // them to (the "current" pip came out a hollow ring), and their ~70px of
+      // width forced the sentence onto a second line, which printed "hill"
+      // across the press-hand SVG underneath.
+      const coachOn = s.coachStep >= 0 && s.coachSteps > 1;
+      this.coachStepsEl.classList.toggle("hidden", !coachOn);
+      // Same fade as the sentence it belongs to. `coachOn` already implies the
+      // coach line is up, so the bar and the text can never disagree about
+      // being visible.
+      this.coachStepsEl.classList.toggle("show", coachOn);
+      if (coachOn) {
+        const key = `${s.coachStep}/${s.coachSteps}`;
+        if (key !== this.lastCoachKey) {
+          this.lastCoachKey = key;
+          this.coachStepsEl.innerHTML = Array.from({ length: s.coachSteps }, (_, i) => {
+            const state = i < s.coachStep ? "done" : i === s.coachStep ? "now" : "todo";
+            return `<i class="${state}"></i>`;
+          }).join("");
+          this.coachStepsEl.setAttribute("aria-valuemax", String(s.coachSteps));
+          this.coachStepsEl.setAttribute("aria-valuenow", String(s.coachStep + 1));
+        }
+      }
+
+      const prox = s.proximity;
+      this.wingsNear.classList.toggle("hidden", !prox.visible);
+      if (prox.visible) {
+        const pct = Math.round(prox.fill * 100);
+        const remainingText = distanceText(prox.remaining);
+        const label = t("hud.progress.proximity", { n: remainingText, name: prox.name }, `${remainingText} to ${prox.name}`);
+        const bar = this.wingsNear.firstElementChild as HTMLElement;
+        bar.style.width = `${pct}%`;
+        // The bar is the accessible element, not the mirrored text beside it:
+        // it updates every frame, so it must NOT be a live region (that would
+        // announce a new distance ~30×/s) — `role="progressbar"` with
+        // `aria-valuetext` reports it on demand instead, and the visible text
+        // is `aria-hidden` so it is not read twice.
+        if (bar.getAttribute("aria-valuenow") !== String(pct)) {
+          bar.setAttribute("aria-valuenow", String(pct));
+          bar.setAttribute("aria-valuetext", label);
+        }
+        (this.wingsNear.lastElementChild as HTMLElement).textContent = label;
       }
     }
 
@@ -1508,10 +1807,21 @@ export class HUD {
       // and started over" right when the player was about to be let out.
       const p = done ? 1 : 1 - Math.max(0, s.adTimer) / Math.max(0.01, s.adTotal);
       if (this.adBarEl) this.adBarEl.style.width = `${p * 100}%`;
-      if (this.adSkipEl && s.adSkippable) {
-        this.adSkipEl.disabled = !done;
-        const txt = done ? (s.adReason === "continue" ? "Wake up ▶" : "Continue ▶") : `Continues in ${Math.ceil(s.adTimer)}`;
-        if (this.adSkipEl.textContent !== txt) this.adSkipEl.textContent = txt;
+      if (this.adSkipCountEl) {
+        // Only the NUMBER is live. This used to rewrite the whole element's
+        // textContent every frame, which is fine for a bare label and fatal
+        // for one containing an icon — it wiped the clock on the first tick
+        // after render. The countdown now lives in its own <b>, and the
+        // surrounding words and the glyph are written once.
+        const left = String(Math.ceil(Math.max(0, s.adTimer)));
+        if (this.adSkipCountEl.textContent !== left) this.adSkipCountEl.textContent = left;
+      }
+      if (this.adSkipEl) {
+        // The chip is a status readout, not a control, so there is no disabled
+        // state to drive and nothing to press when the countdown lands — the
+        // break ends itself (Game.fixedUpdate). `done` only changes how the
+        // chip reads.
+        this.adSkipEl.classList.toggle("done", done);
       }
       // The header/label are baked into the initial render and, unlike the bar
       // and skip button above, were never touched again — so a placeholder
@@ -1528,21 +1838,75 @@ export class HUD {
     this.overlayNavigation.sync(this.copyDialog ?? (this.matchmakingEl.classList.contains("hidden") ? this.root.querySelector<HTMLElement>(".overlay:not(.hidden)") : this.matchmakingEl));
   }
 
-  toast(text: string, kind = "info"): void {
+  /**
+   * Tournament Countdown Urgency mid-week push: fires once, the moment a cup
+   * crosses into its final 3 days, and only when there is still a tier worth
+   * climbing for — a player already at Diamond gets no nag, since there is
+   * nothing left to reach.
+   */
+  private maybeTournamentPush(cups: readonly TournamentView[]): void {
+    for (const cup of cups) {
+      const daysLeft = Math.ceil(cup.endsInMs / 86_400_000);
+      if (daysLeft > 3 || daysLeft < 1 || !cup.nextTier) continue;
+      if (this.tournamentPushed.has(cup.def.id)) continue;
+      this.tournamentPushed.add(cup.def.id);
+      const tierLabel = cup.nextTier[0]!.toUpperCase() + cup.nextTier.slice(1);
+      this.toast(`Only ${daysLeft} day${daysLeft === 1 ? "" : "s"} left to reach ${tierLabel} tier!`, "warn");
+    }
+  }
+
+  toast(text: string, kind = "info", icon = "", opts: { mustShow?: boolean } = {}): void {
+    // An empty pill is worse than no pill: it occupies the one flight slot,
+    // so it evicts a real message and then renders as nothing. Translation can
+    // resolve a key to "" (a blank string is a legitimate translation), and
+    // several call sites interpolate values that can stringify empty.
+    if (!text || !text.trim()) return;
     // Dedup: firing the same line while it is still on screen bumps a ×n
     // counter instead of stacking identical pills (ash storms, repeat
     // pickups). Never show the same words twice at once.
     const live = this.liveToasts.get(text);
     if (live && live.el.isConnected) {
       live.count += 1;
-      live.el.textContent = `${text} ×${live.count}`;
+      // Target the text span, not the pill. Assigning `textContent` on the pill
+      // would also destroy the icon element rendered next to it — the ×n bump
+      // would silently strip every picture off a repeated message.
+      const body = live.el.querySelector(".toast-text");
+      if (body) body.textContent = `${text} ×${live.count}`;
+      else live.el.textContent = `${text} ×${live.count}`;
       // Updating a duplicate must not force a synchronous browser layout.
       this.cancelTimer(live.timer);
-      live.timer = this.scheduleToastOut(live.el, text);
+      live.timer = this.scheduleToastOut(live.el, text, () => this.toastLaneObscured(), (id) => { live.timer = id; });
       return;
     }
     // One readable pill in flight, at most two on menu screens.
     const cap = this.root.dataset.flying === "true" ? 1 : 2;
+
+    // Eviction used to be unconditional and immediate: a new toast killed the
+    // incumbent no matter how long it had been up. In flight, where the game
+    // emits a near-continuous stream of system messages, that meant a pill
+    // could be born and destroyed inside the same 100 ms — which is why the
+    // flavour lines never appeared. They were all firing; almost none of them
+    // survived to be read. See toastFloor.ts.
+    const incumbent = this.oldestToast();
+    const decision = decideToast(
+      this.toastLayer.children.length,
+      cap,
+      incumbent?.ageMs ?? Number.POSITIVE_INFINITY,
+      this.toastQueue.length,
+      incumbent?.holdMs ?? messageHoldMs(text),
+      opts.mustShow === true,
+    );
+    if (decision.action === "drop") return;
+    if (decision.action === "defer") {
+      this.toastQueue.push({ text, kind, icon, mustShow: opts.mustShow });
+      if (this.toastDrainTimer === null) {
+        this.toastDrainTimer = this.after(() => {
+          this.toastDrainTimer = null;
+          this.drainToastQueue();
+        }, decision.waitMs);
+      }
+      return;
+    }
     while (this.toastLayer.children.length >= cap) {
       const oldest = this.toastLayer.firstElementChild;
       if (!oldest) break;
@@ -1554,28 +1918,298 @@ export class HUD {
     }
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
-    el.textContent = text;
+    // `textContent` cannot hold markup, which is exactly why every toast that
+    // wanted a picture used to paste a TEXT GLYPH into its own sentence:
+    // `iconGlyph("magnet")` is "⊕", so the magnet pickup announced itself as a
+    // circled plus, and golden hour announced itself as "◑". Both had correct
+    // SVG artwork sitting unused in MenuIcons. `icon` is now a first-class
+    // argument rendered as a real `<svg class="icon-sm">` in its own slot.
+    if (icon) {
+      const mark = document.createElement("span");
+      mark.className = "toast-icon";
+      mark.setAttribute("aria-hidden", "true");
+      mark.innerHTML = menuIconSm(icon);
+      el.appendChild(mark);
+    }
+    const body = document.createElement("span");
+    body.className = "toast-text";
+    body.textContent = text;
+    el.appendChild(body);
     this.toastLayer.appendChild(el);
     requestAnimationFrame(() => el.classList.add("in"));
-    const timer = this.scheduleToastOut(el, text);
-    this.liveToasts.set(text, { el, count: 1, timer });
+    // Merge: main's obscured-lane callback plus this branch's readability
+    // floor. They solve different halves of the same complaint — main stops
+    // a toast expiring while something is covering it, this stops a toast
+    // being evicted by the next one before it has been on screen at all.
+    const fresh = { el, count: 1, timer: -1, bornAt: Date.now() };
+    this.liveToasts.set(text, fresh);
+    // The map entry must exist before scheduling: `onTimer` writes straight
+    // into it, and the poll re-arms itself every 100 ms.
+    fresh.timer = this.scheduleToastOut(el, text, () => this.toastLaneObscured(), (id) => { fresh.timer = id; });
   }
 
-  /** Long lines earn longer reads: 1.2 s base + 28 ms/char, capped at 4 s. */
-  private scheduleToastOut(el: HTMLElement, key: string): number {
-    const hold = Math.min(4000, 1200 + Math.max(0, el.textContent!.length - 16) * 28);
-    return this.after(() => {
-      // Once exit starts, a repeat is a new toast rather than refreshing a
-      // node that already has a pending removal callback.
-      if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
-      el.classList.remove("in");
-      el.classList.add("out");
-      this.after(() => {
-        el.remove();
-        const live = this.liveToasts.get(key);
-        if (live && live.el === el) this.liveToasts.delete(key);
-      }, 420);
-    }, hold);
+  /** A flavour line, on its own lane.
+   *
+   *  Deliberately NOT `toast()`. The 211 quips used to share `.toasts` with
+   *  every system message in a lane capped at one visible pill, which meant a
+   *  joke could be evicted by a coin pickup in the same 100 ms it appeared. They
+   *  were firing correctly and being read not at all.
+   *
+   *  This lane has its own cap, its own eviction (newest wins, no queue) and its
+   *  own timer, so a quip can only be replaced by another quip. System messages
+   *  keep their own channel and can no longer take a joke's slot.
+   *
+   *  Quips are held longer than system toasts and are allowed to wrap: they are
+   *  the only messages in the game whose whole job is to be read to the end. */
+  quip(text: string, kind = "cloud"): void {
+    if (!text || !text.trim()) return;
+    const q = this.liveQuips.get(text);
+    if (q && q.el.isConnected) {
+      q.count += 1;
+      const body = q.el.querySelector(".toast-text");
+      if (body) body.textContent = `${text} ×${q.count}`;
+      this.cancelTimer(q.timer);
+      q.visibleFor = 0;
+      q.lastTick = Date.now();
+      q.timer = this.scheduleQuipOut(q.el, text, q);
+      return;
+    }
+    // One quip at a time. A second replaces the first outright rather than
+    // queueing: the backlog a queue would build is exactly the backlog that
+    // used to make these lines feel arbitrary.
+    for (const [k, v] of this.liveQuips) {
+      this.cancelTimer(v.timer);
+      if (v.removal !== null) this.cancelTimer(v.removal);
+      this.liveQuips.delete(k);
+    }
+    this.quipLayer.replaceChildren();
+
+    const el = document.createElement("div");
+    el.className = `quip ${kind}`;
+    const body = document.createElement("span");
+    body.className = "toast-text";
+    body.textContent = text;
+    el.appendChild(body);
+    this.quipLayer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("in"));
+    // Registered BEFORE the hold is armed: `scheduleQuipOut` re-arms itself
+    // every poll and writes its id straight into the entry.
+    const fresh: QuipLive = { el, count: 1, timer: -1, removal: null, visibleFor: 0, lastTick: Date.now() };
+    this.liveQuips.set(text, fresh);
+    fresh.timer = this.scheduleQuipOut(el, text, fresh);
+  }
+
+  /**
+   * Hold a quip for QUIP_HOLD_MS of *visible* time.
+   *
+   * The same accounting the toast lane uses, for the same reason: `.quips` is
+   * hidden under the countdown / launch / finish feedback slots, and
+   * `Game.onLaunch` fires a BIG_LAUNCH quip inside the launch banner's own
+   * 1.25 s window. A flat timer therefore burned roughly a third of the read
+   * window of a lane whose entire job is to be read to the end.
+   */
+  private scheduleQuipOut(el: HTMLElement, text: string, q: QuipLive): number {
+    const budget = QUIP_HOLD_MS + QUIP_OBSCURE_WAIT_MS;
+    const startedAt = Date.now();
+    const tick = (): void => {
+      const now = Date.now();
+      const dt = now - q.lastTick;
+      q.lastTick = now;
+      if (!this.quipLaneObscured()) q.visibleFor += dt;
+      if (q.visibleFor >= QUIP_HOLD_MS || now - startedAt >= budget) {
+        this.expireQuip(el, text);
+        return;
+      }
+      q.timer = this.scheduleTick(tick);
+    };
+    return this.scheduleTick(tick);
+  }
+
+  private expireQuip(el: HTMLElement, text: string): void {
+    // Delete first, and delete whenever the entry is OURS even if the node has
+    // already been detached. Guarding the whole body on `isConnected` used to
+    // leave the map entry behind in exactly that case — a leak waiting for any
+    // future reordering of the clear loop and `replaceChildren()`.
+    const q = this.liveQuips.get(text);
+    if (q && q.el === el) this.liveQuips.delete(text);
+    if (!el.isConnected) return;
+    el.classList.remove("in");
+    el.classList.add("out");
+    const removal = this.after(() => el.remove(), 260);
+    if (q && q.el === el) q.removal = removal;
+  }
+
+  private quipLaneObscured(): boolean {
+    if (!this.quipLayer.isConnected) return true;
+    // Same three properties as `toastLaneObscured`, and deliberately so. Today
+    // the stylesheet only ever hides `.quips` with `visibility:hidden`, so the
+    // two extra checks would be dead — but two adjacent lanes answering "can
+    // this be read?" by different rules is how the next hiding rule gets added
+    // to one of them and silently not to the other. Reading all three cannot
+    // drift.
+    const cs = getComputedStyle(this.quipLayer);
+    return cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0";
+  }
+
+  /** Real age and readable-hold of the longest-standing pill.
+   *
+   *  This used to be a boolean dressed as an age: it returned 0 while the pill
+   *  was still in `toastSeen`'s grace period and `Infinity` once it had been
+   *  added, so the only two answers the floor policy ever got were "brand new"
+   *  and "infinitely old". `decideToast` compares the age against a hold
+   *  requirement, so with a real requirement the branch was decided by the
+   *  requirement's *sign*, not its value: a pill was evicted at 520ms and never
+   *  at 1280ms, 3.4s or 6s. The hold `scheduleToastOut` prices for reading was
+   *  paid only when nothing else arrived, which during flight is almost never —
+   *  the lane emits continuously, so every message was replaced mid-word.
+   *
+   *  Both numbers are now real, and the hold is the same `messageHoldMs` the
+   *  exit timer uses: one number for "how long does this need", read by both
+   *  ends of the lane's life. */
+  private oldestToast(): { ageMs: number; holdMs: number } | null {
+    const oldest = this.liveToasts.entries().next();
+    if (oldest.done) return null;
+    const [text, entry] = oldest.value;
+    // The map is keyed by text and the DOM is ordered by arrival, so the two only
+    // agree while the first pill is the map's first entry. If they ever drift,
+    // treat the incumbent as unreadable rather than as infinitely readable.
+    if (this.toastLayer.firstElementChild !== entry.el) return null;
+    return { ageMs: Date.now() - entry.bornAt, holdMs: messageHoldMs(text) };
+  }
+
+
+
+
+  /** Replay the deferred backlog once the incumbent has had its look. */
+  private drainToastQueue(): void {
+    const next = this.toastQueue.shift();
+    if (!next) return;
+    this.toast(next.text, next.kind, next.icon, { mustShow: next.mustShow === true });
+    // `toast` re-queues if the floor still is not met, so this terminates:
+    // each pass either shows one or re-defers with a strictly shorter wait.
+    if (this.toastQueue.length > 0 && this.toastDrainTimer === null) {
+      this.toastDrainTimer = this.after(() => {
+        this.toastDrainTimer = null;
+        this.drainToastQueue();
+      }, TOAST_MIN_VISIBLE_MS);
+    }
+  }
+
+
+
+  /**
+   * Is the toast lane currently unable to be read?
+   *
+   * Measured, not inferred: `getComputedStyle` on the lane itself answers the
+   * question the stylesheet actually implements, including the three rules
+   * that hide it (`visibility:hidden` while a countdown / launch / finish
+   * message owns the screen) and the two more that hide it by state. Guessing
+   * from `data-feedback` would have to be kept in sync with the stylesheet by
+   * hand; reading the computed value cannot drift.
+   *
+   * `getComputedStyle` forces style resolution, so it is polled rather than
+   * read every frame — see `TOAST_OBSCURE_POLL_MS`.
+   */
+  private toastLaneObscured(): boolean {
+    const cs = getComputedStyle(this.toastLayer);
+    return cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0";
+  }
+
+  /**
+   * How long a message must stay up to actually be read.
+   *
+   * The old model was 1.2 s + 28 ms per character. Measured against the real
+   * corpus — 211 quips, median 35 characters, about six words — that gave a
+   * median quip 1.73 s. Which is how long six words TAKE to read, with nothing
+   * left for finding the text. The message was arriving unread.
+   *
+   * The fix is a word-based model, because the reading literature is:
+   *
+   *   need = ACQUIRE + words x MS_PER_WORD
+   *
+   * ACQUIRE_MS is the cost of a PERIPHERAL novel target on a moving
+   * background — a one-button game pins gaze to the bird, and the fovea is
+   * only 1.5-2 degrees, so anything off the bird is read at a discount.
+   * MS_PER_WORD is 470 ms: 238 wpm (Brysbaert 2019, meta-analysis of 190
+   * studies) raised for a global second-language audience, then reduced for
+   * peripheral placement and divided attention (see MessageTiming.ts).
+   *
+   * Words, not characters, because a character is the wrong unit: a two-letter
+   * word costs more per character than a seven-letter one, so a char model
+   * misprices both ends.
+   *
+   * Floor and ceiling both earn their keep. The floor is because a one-word
+   * toast still has to be SEEN. The ceiling is because the layer can be
+   * occupied, and an unbounded hold deadlocks it.
+   *
+   * `isObscured` is the part that was missing. The hold used to start the
+   * instant the pill was created, but three of the five feedback slots
+   * (`countdown`, `launch`, `finish`) set `visibility:hidden` on the whole
+   * toast lane in CSS — the launch banner, the countdown and the finish
+   * counter are all in the flight-messages lane, and the stylesheet hides
+   * everything else while they own the screen. A quip fired during one of
+   * those windows was therefore created, sat there for its entire read
+   * window with nobody able to see it, and was then removed. Measured on a
+   * real flight: 48 of 44 sampled frames reported `feedback=countdown`
+   * with the lane hidden, and the `launch` slot alone is ~1 s after EVERY
+   * launch, which in a game about launching is most of the run.
+   *
+   * So the hold must be spent VISIBLE, not merely elapsed. The timer below
+   * measures only the frames the lane is actually painted, and the total is
+   * still bounded — by `TOAST_CEIL_MS` plus the wait, so a message that
+   * arrives at the tail of a long countdown waits rather than vanishing, and
+   * a message whose lane never opens is released anyway rather than leaked.
+   */
+  private scheduleToastOut(
+    el: HTMLElement,
+    key: string,
+    isObscured?: () => boolean,
+    onTimer?: (id: number) => void,
+  ): number {
+    const text = el.textContent ?? "";
+    const hold = messageHoldMs(text);
+    const budget = hold + TOAST_OBSCURE_WAIT_MS;
+    const startedAt = Date.now();
+    let visibleFor = 0;
+    let lastTick = startedAt;
+    const tick = (): void => {
+      const now = Date.now();
+      const dt = now - lastTick;
+      lastTick = now;
+      // Only bank time the player could actually read.
+      if (!isObscured?.()) visibleFor += dt;
+      if (visibleFor >= hold || now - startedAt >= budget) {
+        // Once exit starts, a repeat is a new toast rather than refreshing a
+        // node that already has a pending removal callback.
+        if (this.liveToasts.get(key)?.el === el) this.liveToasts.delete(key);
+        el.classList.remove("in");
+        el.classList.add("out");
+        this.after(() => {
+          el.remove();
+          const live = this.liveToasts.get(key);
+          if (live && live.el === el) this.liveToasts.delete(key);
+        }, 420);
+        return;
+      }
+      // Re-arm and publish the NEW id. The caller's stored id is the one that
+      // just fired, so handing back a fresh one is what makes cancelTimer work:
+      // before this, a dedup refreshed nothing and an eviction left an orphan
+      // poll loop running against a detached node.
+      onTimer?.(this.scheduleTick(tick));
+    };
+    const first = this.scheduleTick(tick);
+    onTimer?.(first);
+    return first;
+  }
+
+  /** Poll interval while a toast is waiting for its lane to open. */
+  private scheduleTick(fn: () => void): number {
+    // Mirrors `after`: the id leaves the set when the callback fires, so a
+    // long session polling at ~10 Hz per live pill does not grow the set
+    // without bound.
+    const timer = window.setTimeout(() => { this.timers.delete(timer); fn(); }, TOAST_OBSCURE_POLL_MS);
+    this.timers.add(timer);
+    return timer;
   }
 
   flash(kind: "perfect" | "fever" | "island" | "sleep"): void {
@@ -1596,6 +2230,13 @@ export class HUD {
     this.timers.delete(timer);
   }
   private resizeObs: ResizeObserver | null = null;
+  /** The settling loop `publishStack` runs: the handle that cancels the armed
+   *  frame if the HUD is disposed mid-flight, the signature that says "the last
+   *  pass read what this one read", and the passes used so far. */
+  private stackFrame = 0;
+  private stackSignature = "";
+  private stackPasses = 0;
+  private stackRafPending = false;
   private readonly menuContinuity = new MenuContinuity();
   private readonly resultsContinuity = new MenuContinuity();
   private copyDialog: HTMLElement | null = null;
@@ -1604,11 +2245,17 @@ export class HUD {
 
   dispose(): void {
     this.resizeObs?.disconnect();
+    // The settling pass is armed on a frame; a disposed HUD must not publish
+    // into a detached root on the next one.
+    if (this.stackFrame) cancelAnimationFrame(this.stackFrame);
+    this.stackFrame = 0;
     this.menuSky.dispose();
     this.overlayNavigation.dispose();
     for (const timer of this.timers) window.clearTimeout(timer);
     this.timers.clear();
     this.liveToasts.clear();
+    this.liveQuips.clear();
+    this.toastQueue.length = 0;
     this.root.remove();
   }
 
@@ -1621,7 +2268,17 @@ export class HUD {
       // never add "wide" — pause overlays should stay compact over the flight.
       const wide = s.state === "paused" ? "" : (s.screen === "shop" || s.screen === "pass" ? "wide" : "");
       const cls = `paper-card ${s.state === "menu" && s.screen === "main" ? "menu-hero" : wide}`;
-      this.menuContinuity.render(this.menuCard, s.screen, renderCoins(this.renderScreen(s)), cls);
+      this.menuContinuity.render(this.menuCard, s.screen, renderCoins(this.renderScreen(s)), cls, LAUNCH_CTA);
+      // The character counter is rendered from the snapshot, but the field it
+      // describes is not owned by the snapshot: boot writes the generated call
+      // sign into it, and the async portal identity adoption rewrites it again
+      // when it resolves. Whichever of those lands last, a counter rendered
+      // from an older snapshot is simply wrong — measured on the portal build:
+      // a 14-character field under a counter frozen at "12". Reading the field
+      // back after every mount makes the two agree by construction, whatever
+      // order the writes land in.
+      const nameField = this.menuCard.querySelector<HTMLInputElement>('[data-ref="pilotNameInput"]');
+      if (nameField) this.syncNameCount(nameField);
     }
     if (s.state === "gameover") this.resultsContinuity.render(this.overCard, "results", renderCoins(renderGameOver(s)), "paper-card results-card");
     if (s.state === "continue") {
@@ -1632,6 +2289,7 @@ export class HUD {
       this.adCard.innerHTML = renderCoins(renderAd(s));
       this.adBarEl = this.adCard.querySelector('[data-live="adBar"]');
       this.adSkipEl = this.adCard.querySelector('[data-live="adSkip"]');
+      this.adSkipCountEl = this.adSkipEl?.querySelector("b") ?? null;
       this.adHeaderEl = this.adCard.querySelector(".portal-ad-wait h3");
       this.adLabelEl = this.adCard.querySelector(".ad-label");
     }
@@ -1640,7 +2298,9 @@ export class HUD {
 
   private renderScreen(s: HudSnapshot): string {
     switch (s.screen) {
-      case "shop":
+      case "loadout":
+      return renderLoadout(s);
+    case "shop":
         this.shopSnapshot = s;
         return renderShop(s, this.shopBrowse);
       case "paywall":
@@ -1688,10 +2348,13 @@ export class HUD {
 
   private bind(): void {
     const grab = (name: string): HTMLElement => this.root.querySelector(`[data-ref="${name}"]`) as HTMLElement;
+    this.chainReadout = grab("chainReadout");
     this.playHud = grab("playHud");
     this.distanceEl = grab("distance");
     this.coinsEl = grab("coins");
     this.bestEl = grab("best");
+    this.bestRowEl = grab("bestRow");
+    this.medalLine = grab("medalLine");
     this.islandEl = grab("island");
     this.multEl = grab("mult");
     this.goldChip = grab("goldChip");
@@ -1706,12 +2369,16 @@ export class HUD {
     this.ringChainCount = grab("ringChainCount");
     this.ringChainFill = grab("ringChainFill");
     this.slopeChainEl = grab("slopeChain");
+    this.slopeChainText = grab("slopeChainText");
+    this.slopeChainFill = grab("slopeChainFill");
     this.hintEl = grab("hint");
+    this.coachStepsEl = grab("coachSteps");
     this.menuEl = grab("menu");
     this.menuCard = grab("menuCard");
     this.pauseEl = grab("pause");
     this.pauseBtnEl = grab("pauseBtn");
     this.muteBtnEl = grab("muteBtn") as HTMLButtonElement;
+    this.fpsChipEl = grab("fpsChip");
     this.pauseDistanceEl = grab("pauseDistance");
     this.pauseAltitudeEl = grab("pauseAltitude");
     this.pauseComboEl = grab("pauseCombo");
@@ -1725,11 +2392,13 @@ export class HUD {
     this.overEl = grab("over");
     this.overCard = grab("overCard");
     this.toastLayer = grab("toasts");
+    this.quipLayer = grab("quips");
     this.flashEl = grab("flash");
     this.comboEl = grab("combo");
     this.biomeChip = grab("biome");
     this.speedLines = grab("speedlines");
     this.handEl = grab("hand");
+    this.handHintEl = grab("handHint");
     this.altGauge = grab("altGauge");
     this.altFill = grab("altFill");
     this.altBird = grab("altBird");
@@ -1756,22 +2425,60 @@ export class HUD {
     this.emoteWheel = grab("emoteWheel");
     this.emoteBubble = grab("emoteBubble");
     this.impactPopupsEl = grab("impactPopups");
+    this.wingsNear = grab("wingsNear");
   }
 
   /** Floating impact text that rises from a screen position and fades out.
    *  x/y are screen fractions 0–1 (0,0 = top-left). kind controls the color.
    *  Use projectBirdToScreen() in Game.ts to get the position. */
-  popup(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "zenith" | "splash" | "power", sx: number, sy: number): void {
+  /**
+   * The `kind` union is the class modifier, so it must match a real rule in
+   * ui.css. It said `zenith` while every caller, the whole game's vocabulary
+   * (`apexChime`, `FlightCue`, `ChallengeMetric`, `telemetry.track`) and the
+   * stylesheet itself all say `apex` — there has never been an
+   * `.impact-popup--zenith`. So the apex popups were styled correctly at
+   * runtime and the annotation was simply stale, which still cost two things:
+   * `pnpm typecheck` failed on a gate the project is required to pass, and the
+   * union advertised a kind that would render an unstyled popup if anyone
+   * believed it.
+   */
+  popup(text: string, kind: "perfect" | "great" | "thud" | "bop" | "fever" | "apex" | "splash" | "power", sx: number, sy: number): void {
     const el = document.createElement("div");
     el.className = `impact-popup impact-popup--${kind}`;
     el.textContent = text;
     // Project into the protected flight corridor, not over menus/controls.
     const lane = this.impactPopupsEl.getBoundingClientRect();
-    if (lane.width < 80 || lane.height < 70) return;
+    const short = window.innerHeight <= 500;
+    // The popup's own line box at this viewport: `clamp(13px,2.2vw,17px)` on
+    // short screens, `clamp(14px,2.5vw,22px)` above it, both in index.css.
+    const fontPx = short
+      ? Math.min(17, Math.max(13, window.innerWidth * 0.022))
+      : Math.min(22, Math.max(14, window.innerWidth * 0.025));
+    // A lane has to be able to hold one popup plus the edge margin its own
+    // placement clamps keep. That used to be a flat 70px — a number matching
+    // neither the popup's height nor the clamps' margins — so it silently
+    // suppressed every popup at 844x390 and 320x568, the two frames Poki embeds
+    // most. The lane there is real and correctly placed; it was simply shorter
+    // than a threshold nobody had measured.
+    if (lane.width < fontPx + 20 || lane.height < fontPx + 8) return;
     const viewport = this.root.getBoundingClientRect();
-    el.style.left = `${Math.max(40, Math.min(lane.width - 40, sx * viewport.width + viewport.left - lane.left))}px`;
-    el.style.top = `${Math.max(50, Math.min(lane.height - 20, sy * viewport.height + viewport.top - lane.top))}px`;
-    this.impactPopupsEl.replaceChildren(el);
+    const margin = fontPx + 8;
+    el.style.left = `${Math.max(margin, Math.min(lane.width - margin, sx * viewport.width + viewport.left - lane.left))}px`;
+    el.style.top = `${Math.max(margin, Math.min(lane.height - margin, sy * viewport.height + viewport.top - lane.top))}px`;
+    // Append + cap, NOT replaceChildren. Replacing meant the lane held exactly
+    // one popup, so two quips landing inside the same 1100ms window killed the
+    // first on the tick the second arrived — during continuous thudding the
+    // player saw one word flicker instead of a run of them. Coexisting popups do
+    // not collide: `impact-rise` is time-based and travels upward, so by the
+    // time a second one spawns at the bird the first is already higher in its
+    // own arc. The cap is what bounds the lane, exactly as the toast lane's
+    // eviction bounds that one.
+    while (this.impactPopupsEl.children.length >= IMPACT_POPUP_CAP) {
+      const oldest = this.impactPopupsEl.firstElementChild;
+      if (!oldest) break;
+      oldest.remove();
+    }
+    this.impactPopupsEl.appendChild(el);
     // Trigger animation on next frame then remove after it finishes.
     requestAnimationFrame(() => el.classList.add("rise"));
     this.after(() => el.remove(), 1100);
@@ -1781,10 +2488,10 @@ export class HUD {
     const btns = this.root.querySelectorAll<HTMLButtonElement>('[data-action="toggle-fullscreen"]');
     for (const b of btns) {
       if (b.classList.contains("menu-fullscreen")) {
-        b.textContent = active ? "🗗" : "⛶";
+        b.textContent = active ? iconGlyph("fullscreen_exit") : iconGlyph("fullscreen");
         b.title = active ? "Exit Fullscreen" : "Full Screen";
       } else if (b.textContent?.includes("Fullscreen")) {
-        b.textContent = active ? "🗗 Exit Fullscreen" : "⛶ Fullscreen mode";
+        b.textContent = active ? `${iconGlyph("fullscreen_exit")} Exit Fullscreen` : `${iconGlyph("fullscreen")} Fullscreen mode`;
       }
     }
   }
@@ -1792,94 +2499,46 @@ export class HUD {
 
 /* ---------- templates ---------- */
 
-/** Icons for screens that exist but are not home destinations. */
-const SCREEN_ICONS: Record<string, MenuIconName> = {
-  raceLobby: "online",
-  aiPvp: "online",
-  coinStore: "shop",
-  confirmUnlock: "shop",
-  highGlides: "trophy",
-};
-
-function head(key: string, backAction = "back", right = ""): string {
-  const icon = destinationByKey(key)?.icon ?? SCREEN_ICONS[key];
-  const title = t(`hud.screen.${key}.title`, undefined, SCREEN_HEADINGS[key as keyof typeof SCREEN] ?? key);
-  const back = t("common.back", undefined, "Back");
-  return `<div class="screen-head"><button class="back-btn" data-ui data-action="${backAction}" aria-label="${escapeHtml(back)}">‹</button><h2>${icon ? `<span class="heading-art">${menuIcon(icon)}</span>` : ""}${escapeHtml(title)}</h2><span>${right}</span></div>`;
-}
-
-function upsellStrip(): string {
-  if (!SELL_AD_REMOVAL) return "";
-  return `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Sunbird Gold &amp; VIP</b><span>2× coins · ad-free · Phoenix &amp; Aurora skins · Nest Pass</span></div><span class="mini-btn gold">Unlock · ● 500</span></button>`;
-}
-
-function renderMissions(list: MissionView[], newly: string[] = []): string {
-  return `<div class="missions"><div class="mission-head">Nest missions</div>${list
-    .map((m) => {
-      const fresh = newly.includes(m.def.id);
-      return `<div class="mission ${m.done ? "done" : ""} ${fresh ? "fresh" : ""}">
-        <span class="check">${m.done ? "✓" : ""}</span>
-        <div><div class="mt">${m.def.title}</div><div class="md">${m.def.desc}</div></div>
-        <span class="mp">${Math.min(m.progress, m.def.target)}/${m.def.target}</span>
-      </div>`;
-    })
-    .join("")}</div>`;
-}
-
-function renderQuests(list: QuestView[]): string {
-  return `<div class="quests"><div class="mission-head">Today's quests</div>${list
-    .map((q) => {
-      const pct = Math.min(100, (q.progress / q.def.target) * 100);
-      return `<div class="quest ${q.done ? "done" : ""}">
-        <div><div class="mt">${q.def.label}</div><div class="qb"><i style="width:${pct}%"></i></div></div>
-        <span class="qr">${q.claimed ? "✓ claimed" : `● ${q.def.reward}`}</span>
-      </div>`;
-    })
-    .join("")}</div>`;
-}
-
-/**
- * Distance, formatted for the player's chosen language.
- *
- * One place so a locale switch reaches every readout that shows a distance —
- * the flight HUD, the board, the recap, the results strip — instead of each
- * call site having to remember the second argument. The "m"/"km" units are
- * locale-neutral by convention in this game (they match the metric toggle in
- * Settings) and are left as-is; only the digits follow the locale.
- */
-function distanceText(meters: number): string {
-  return formatDistance(meters, getLocale());
-}
-
-function renderScoreTable(rows: HighScore[]): string {
-  if (!rows.length) return `<div class="score-table"><div class="row empty">No flights yet</div></div>`;
-  return `<div class="score-table">${rows
-    .map(
-      (h, i) =>
-        `<div class="row ${h.vip ? "vip" : ""}"><span>${i + 1}${h.vip ? "<i class='spark'>✦</i>" : ""}</span><span>${distanceText(h.distance)}</span><span>${h.coins}c</span><span>${Math.floor(h.score).toLocaleString()}</span></div>`,
-    )
-    .join("")}</div>`;
-}
-
-/** Board names come from a network payload — always escape before injecting. */
-function escapeHtml(v: string): string {
-  return v.replace(/[&<>"']/g, (c) =>
-    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
-  );
-}
-
 /** Inline-SVG sun-coin glyph. The UI used to mark coin amounts with the raw
  *  unicode bullet "●" (U+25CF), but neither Fredoka nor Atkinson Hyperlegible
  *  ship that codepoint in their latin subsets — the browser fell back to a
  *  random system font where the glyph was oversized and overlapped adjacent
  *  digits, producing the "● 250" blob that sat on top of the First Flight
  *  Pack header. An inline SVG matches the current text size and color, sits
- *  cleanly on the baseline, and never needs a fallback font. */
+ *  cleanly on the baseline, and never needs a fallback font.
+ *
+ *  One disc and one highlight arc. That is the whole rule, and it is worth
+ *  stating precisely because this glyph has now carried TWO different fixes for
+ *  the same "two circles" complaint and both were wrong:
+ *
+ *   - v1 added a small filled pupil (r=1.8) inside the body circle.
+ *   - v2 removed the pupil but replaced it with a stroked ring at r=6.3 —
+ *     reasoning that "fill=none can never be mistaken for a second disc".
+ *
+ *  v2 is why players still saw two circles. A 30%-white ring sitting inside a
+ *  filled disc is not a rim; at the ~18px the HUD renders it, it is a second
+ *  concentric circle, and it reads *more* like a separate disc than the pupil
+ *  did because it is a complete closed curve at high contrast. Changing how a
+ *  shape is filled does not change the silhouette the eye reads.
+ *
+ *  The fix is to have only ONE closed curve in the glyph. The highlight is now
+ *  an open arc (a path with two endpoints, no `Z`), which gives the metal its
+ *  shine without adding a second circle anywhere inside the disc. The dark
+ *  stroke on the outer circle is the edge, not an inner ring.
+ *
+ *  v3 — the second disc is gone from the STYLESHEET, not from here. This
+ *  glyph was already correct: one filled disc plus one open highlight arc. The
+ *  other circle players kept seeing was a `.stat-value.coin::before`
+ *  radial-gradient painted BESIDE this SVG in index.css, so the counter showed
+ *  a gradient dot AND a gold disc side by side. That pseudo-element is deleted
+ *  (see index.css). Nothing about the colour was lost with it: this disc fills
+ *  with `currentColor`, and `.stat-value.coin .coin-glyph` sets that to
+ *  `var(--amber)`, so the single remaining disc is still gold — it just gets
+ *  its colour from the theme instead of from a second circle. */
 const COIN_SVG =
   '<svg class="coin-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
   '<circle cx="12" cy="12" r="8.7" fill="currentColor" stroke="rgba(0,0,0,0.22)" stroke-width="1.2"/>' +
-  '<path d="M7.5 11.5Q12 7.8 16.5 11.5Q12 15.2 7.5 11.5Z" fill="rgba(255,255,255,0.58)"/>' +
-  '<circle cx="12" cy="12" r="1.8" fill="rgba(255,255,255,0.86)"/>' +
+  '<path d="M6.4 9.6A7.4 7.4 0 0 1 10.6 5.5" fill="none" stroke="rgba(255,255,255,0.66)" stroke-width="1.7" stroke-linecap="round"/>' +
   "</svg>";
 
 /** Replace every leading bullet with the SVG coin glyph. Runs on the final
@@ -1889,34 +2548,6 @@ function renderCoins(html: string): string {
   // Match "●" optionally followed by a space and then digits/punctuation
   // (the coin amount). We keep the whitespace as a non-breaking thin gap.
   return html.replace(/●\s?/g, COIN_SVG);
-}
-
-/**
- * Where the numbers on the board actually come from, in the player's language.
- *
- * The chip used to read "Local" on every build, which was wrong on the portal
- * editions: those publish and read through the portal's own cloud when that is
- * configured. Naming the source honestly is the difference between a board the
- * player trusts and one that looks like a placeholder.
- */
-function boardSource(_s: HudSnapshot): { chip: string; sentence: string } {
-  const backend = leaderboardBackend();
-  if (backend === "auds") {
-    return { chip: LEADERBOARD_CLOUD_LABEL, sentence: `Scores sync to ${PORTAL_DISPLAY_NAME}'s worldwide board.` };
-  }
-  if (backend === "http") {
-    return { chip: "🌐 global", sentence: "Scores sync to the global leaderboard." };
-  }
-  // Portal builds name the portal: a Poki player reading "Local" on a Poki page
-  // concludes the board is broken, when what is true is narrower — this build
-  // has no cloud board configured, so the standings are the ones on this
-  // device. Say that, in the portal's own words. The rows named "· Practice"
-  // are the device's generated benchmarks, and the sentence says so rather than
-  // letting a new player infer that twenty named humans are ahead of them.
-  const offlineBench = "Rungs marked “Practice” are this device's benchmarks, not pilots.";
-  return POKI_EDITION
-    ? { chip: `${PORTAL_DISPLAY_NAME} · on-device`, sentence: `This build keeps scores on your device. ${offlineBench}` }
-    : { chip: "💾 local", sentence: `Rankings are stored on this device. Fly well to climb! ${offlineBench}` };
 }
 
 function renderBoard(s: HudSnapshot): string {
@@ -1944,7 +2575,7 @@ function renderBoard(s: HudSnapshot): string {
     s.boardMetric === "distance" || s.boardMetric === "altitude"
       ? `${Math.round(v)} m`
       : s.boardMetric === "score"
-        ? Math.round(v).toLocaleString()
+        ? formatNumberLocalized(Math.round(v))
         : String(Math.round(v));
 
   // Never imply a device-only ladder is worldwide.
@@ -1952,17 +2583,17 @@ function renderBoard(s: HudSnapshot): string {
   const status = !s.boardOnline
     ? `<span class="board-badge local">${source.chip}</span>`
     : page?.stale
-      ? `<span class="board-badge warn">Offline — showing cached</span>`
+      ? `<span class="board-badge warn">${t("hud.renderBoard.OShowingCached", undefined, "Offline — showing cached")}</span>`
       : `<span class="board-badge live">${source.chip}</span>`;
 
-  const medals = ["🥇", "🥈", "🥉"];
+  const medals = ["medal_1", "medal_2", "medal_3"] as const;
   const rows =
     page && page.entries.length
       ? `<div class="board-podium">${page.entries
           .slice(0, 3)
           .map(
             (e, i) => `<div class="pod p${i + 1} ${e.you ? "you" : ""}">
-              <span class="pod-medal">${medals[i]}</span>
+              <span class="pod-medal">${menuIconSm(medals[i])}</span>
               <span class="pod-name">${escapeHtml(e.name)}</span>
               <span class="pod-val">${fmt(e.value)}</span>
             </div>`,
@@ -1989,243 +2620,83 @@ function renderBoard(s: HudSnapshot): string {
       .map((x) => `<button data-ui data-action="board-metric" data-id="${x.id}" class="${s.boardMetric === x.id ? "on" : ""}">${x.label}</button>`)
       .join("")}</div>
     <div class="board-list">${rows}</div>
-    ${page && page.yourRank > 0 ? `<div class="board-rank">Your rank · <b>#${page.yourRank}</b> of ${page.total}</div>` : ""}
+    ${page && page.yourRank > 0 ? `<div class="board-rank">${t("hud.renderBoard.R", undefined, "Your rank · ")}<b>#${page.yourRank}</b> of ${page.total}</div>` : ""}
     ${s.portalLeaderboard
-      ? `<button class="soft-btn wide" data-ui data-action="open-portal-leaderboard">🏆 ${PORTAL_DISPLAY_NAME} leaderboard</button>`
+      ? `<button class="soft-btn wide" data-ui data-action="open-portal-leaderboard">${menuIconSm("trophy")} ${PORTAL_DISPLAY_NAME} leaderboard</button>`
       : ""}
     ${
       CUSTOM_PILOT_NAMES
         ? `<div class="redeem pilot-name-row">
-      <input data-ui data-ref="pilotName" aria-label="Pilot name" maxlength="14" placeholder="Pilot name" value="${escapeHtml(s.pilotName)}" />
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Autogenerate random pilot name">🎲 Random</button>
-      <button class="mini-btn primary" data-ui data-action="rename-pilot">Save</button>
+      <input data-ui data-ref="pilotName" aria-label="${t("hud.aria.pilotName", undefined, "Pilot name")}" maxlength="14" placeholder="${t("hud.aria.pilotName", undefined, "Pilot name")}" value="${escapeHtml(s.pilotName)}" />
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.ARandomPilotName", undefined, "Autogenerate random pilot name")}">${menuIconSm("dice")} ${t("common.random", undefined, "Random")}</button>
+      <button class="mini-btn primary" data-ui data-action="rename-pilot">${t("common.save", undefined, "Save")}</button>
     </div>`
         : /* Portal editions broadcast this name to real players, so it is a
            curated generated name rather than free text — read-only display
            plus the dice, no typing surface at all. */
           `<div class="redeem pilot-name-row">
-      <span class="pilot-name-readonly" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Roll a new pilot name">🎲 Random</button>
+      <span class="pilot-name-readonly" aria-label="${t("hud.renderBoard.PName", undefined, "Pilot name")}">${escapeHtml(s.pilotName)}</span>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.renderBoard.RNewPilotName", undefined, "Roll a new pilot name")}">${menuIconSm("dice")} ${t("common.random", undefined, "Random")}</button>
     </div>`
     }
     <div class="prize-card">
-      <div class="section-title">🏆 Tournament Rank Prizes</div>
+      ${sectionTitle("trophy", "Tournament Rank Prizes")}
       <div class="prize-grid">
-        <div class="prize-tier gold"><span>🥇 1st Place</span><b>500 Coins + Crown</b></div>
-        <div class="prize-tier silver"><span>🥈 2nd Place</span><b>250 Coins + 10 Gems</b></div>
-        <div class="prize-tier bronze"><span>🥉 3rd Place</span><b>100 Coins</b></div>
+        <div class="prize-tier gold"><span>${menuIconSm("medal_1")} ${t("hud.rank.peak", undefined, "Peak rating")}</span><b>${seasonReward(s.rival.rating).division.name} &middot; ${seasonReward(s.rival.rating).coins} coins</b></div>
+        <div class="prize-tier silver"><span>${menuIconSm("medal_2")} ${t("hud.rank.now", undefined, "You now")}</span><b>${escapeHtml(s.rival.division ?? seasonReward(s.rival.rating).division.name)}</b></div>
+        <div class="prize-tier bronze"><span>${menuIconSm("medal_3")} ${t("hud.rank.resets", undefined, "Resets")}</span><b>${t("hud.rank.resetsBody", undefined, "every month")}</b></div>
       </div>
       ${s.rankPrizeClaimed
         ? `<div class="pc-claimed" style="width:100%; justify-content:center; padding:8px;">✓ Claimed · next prize at the season rollover</div>`
-        : `<button class="primary-btn gold wide" data-ui data-action="claim-rank-prize">Claim Rank Prize 🏆</button>`}
+        : `<button class="primary-btn gold wide" data-ui data-action="claim-rank-prize">Claim Rank Prize ${menuIconSm("trophy")}</button>`}
     </div>
     <button class="soft-btn wide" data-ui data-action="board-refresh">${s.boardLoading ? "Refreshing…" : "↻ Refresh"}</button>
     <p class="fineprint">${source.sentence}</p>
   `;
 }
 
-/** Compact top-wings leaderboard embedded on the main menu. */
-function renderLive(s: HudSnapshot): string {
-  const connected = s.netState === "lobby" || s.netState === "racing";
-  // The AI fallback seats four generated pilots in the same roster as real
-  // ones, so "Connected" and "live" would both be claims about people who are
-  // not there. The badge, the presence line and every peer row say AI instead.
-  const status = s.roomAiFallback
-    ? "AI flock · offline"
-    : connected ? "Connected" : s.netState === "connecting" ? "Flock Ready" : "Local Flock";
-  const live = s.lobbyRivals.filter((r) => r.tag.includes("live") || r.tag.includes("AI"));
-
-  const modePills = (s.pvpModes || []).map((m) => `
-    <button class="pvp-pill ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="select-pvp-mode" data-id="${m.id}" title="${m.blurb}">
-      <span>${m.icon}</span> <b>${m.name}</b> <small>${m.finish}m</small>
-    </button>
-  `).join("");
-
-  const worldPills = (s.pvpWorlds || []).map((w) => `
-    <button class="world-pill ${s.selectedPvpWorld === w.id ? "on" : ""}" data-ui data-action="select-pvp-world" data-id="${w.id}" title="${w.tagline}">
-      <span>${w.emoji}</span> <b>${w.name}</b> <small>${w.difficulty}</small>
-    </button>
-  `).join("");
-
-  const activeMode = (s.pvpModes || []).find((m) => m.id === s.selectedPvpMode) ?? (s.pvpModes || [])[0] ?? { name: "Sprint GP", icon: "⚡", finish: 1500 };
-  const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0] ?? { name: "Emerald Circuit", emoji: "🌿" };
-
-  return `${head(SCREEN.raceLobby)}
-    <p class="tagline">40-pilot live &amp; neural AI racing across 9 scenic worlds.</p>
-    ${s.netState === "error" && s.netError ? `<p class="network-notice" role="alert">${escapeHtml(s.netError)}</p>` : ""}
-    <p class="race-fairness">${menuIcon("medal")} Equal flight equipment · your bird, your timing. Store boosts are saved for solo play.</p>
-
-    ${s.roomCode ? `      <section class="race-section private-session" aria-label="Your private room">
-        <div class="race-section-head">
-          <h3>Flock Room: <strong>${escapeHtml(s.roomCode)}</strong></h3>
-          <span class="board-badge ${connected ? "live" : "island"}" role="status">${status}</span>
-        </div>
-        <div class="room-now">
-          <span class="room-now-label">Invite code</span>
-          <strong class="room-now-code">${escapeHtml(s.roomCode)}</strong>
-          <button class="mini-btn" data-ui data-action="copy-invite">Copy link</button>
-        </div>
-
-        <div class="lobby-selector-box">
-          <div class="lobby-selector-label"><span>Race Format</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
-          <div class="pills-scroll">${modePills}</div>
-          <div class="lobby-selector-label"><span>World Circuit</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
-          <div class="pills-scroll">${worldPills}</div>
-        </div>
-
-        <p class="room-presence" role="status">${Math.max(1, s.roomCount)} ${s.roomAiFallback ? "in room · AI pilots" : "connected"} · ${s.roomReadyCount} ready</p>
-
-        <div class="room-actions-bar">
-          <button class="primary-btn gold large-btn" data-ui data-action="start-room-now">⚡ Start Race Now (${s.roomCount > 1 ? "Launch Room" : "Fill with AI flock"})</button>
-          <button class="soft-btn ${s.roomReady ? "on" : ""}" data-ui data-action="ready-room" aria-pressed="${s.roomReady}" ${connected ? "" : "disabled"} title="${connected ? "" : "Race connection lost — close the room to race again"}">${s.roomReady ? "Cancel ready" : "Ready up ✓"}</button>
-        </div>
-
-        <div class="room-flock" aria-label="Pilots in this room">
-          <div class="room-bird ${s.roomReady ? "is-ready" : ""}">
-            ${sunbirdSVG({ width: 48, palette: s.skins.some((v) => v.equipped) ? skinPalette(s.skins.find((v) => v.equipped)!.def) : undefined })}
-            <b>You</b>
-            <small>${s.roomReady ? "Ready ✓" : "In room"}</small>
-          </div>
-          ${live.slice(0, 7).map((p, i) => `
-            <div class="room-bird ${p.ready ? "is-ready" : ""}">
-              ${sunbirdSVG({ width: 48, palette: s.skins.some((v) => v.def.id === p.skin) ? skinPalette(s.skins.find((v) => v.def.id === p.skin)!.def) : rivalPalette(i + 1) })}
-              <b>${escapeHtml(p.name)}</b>
-              <small>${p.ready ? "Ready ✓" : s.roomAiFallback ? "AI pilot" : "In room"}</small>
-            </div>
-          `).join("")}
-        </div>
-        ${live.length === 0 ? `<p class="fineprint">Just you so far — share the code above and the room fills with real pilots.</p>` : ""}
-        ${s.roomCount > 8 ? `<p class="fineprint">And ${s.roomCount - 8} more ${s.roomAiFallback ? "AI pilots" : "connected pilots"}</p>` : ""}
-
-        <button class="ghost-btn" data-ui data-action="room-close">Leave room</button>
-      </section>` : `
-      <section class="race-section quick-match-hero" aria-label="Quick Match">
-        <div class="race-section-head">
-          <h3>⚡ Quick Match</h3>
-          <span class="board-badge live">Live search</span>
-        </div>
-        <p class="qm-desc">Search this circuit for live pilots. If nobody answers, you choose — keep waiting or race the AI flock.</p>
-
-        <div class="quick-match-btns">
-          <button class="primary-btn gold large-btn" data-ui data-action="quick-match-instant">⚡ ${activeMode.name} on ${activeWorld.name}</button>
-          <button class="soft-btn" data-ui data-action="quick-match-shuffle">🎲 Surprise me — random race</button>
-          <button class="soft-btn" data-ui data-action="pvp-casual">Search Online Pilots</button>
-        </div>
-
-        <details class="customize-race">
-          <summary>Customize · format &amp; world (${activeMode.name} · ${activeWorld.name})</summary>
-          <div class="lobby-selector-box">
-            <div class="lobby-selector-label"><span>PvP Format</span> <b>${activeMode.icon} ${activeMode.name} (${activeMode.finish} m)</b></div>
-            <div class="pills-scroll">${modePills}</div>
-            <div class="lobby-selector-label"><span>World Circuit</span> <b>${activeWorld.emoji} ${activeWorld.name}</b></div>
-            <div class="pills-scroll">${worldPills}</div>
-          </div>
-        </details>
-      </section>
-
-      <section class="race-section room-entry" aria-label="Invite friends">
-        <div class="room-entry-crest">${menuIcon("online")}</div>
-        <h3>Fly with your flock</h3>
-        ${s.multiplayerConfigured
-          ? `<p>Create a private room with a custom code and link. Race your squad on any course!</p>
-        <button class="primary-btn" data-ui data-action="host-room">Create Private Room</button>`
-          : `<p class="pilot-note island" role="note">Live rooms are not available in this edition. AI practice and same-screen 1v1 below still race.</p>
-        <button class="primary-btn" data-ui data-action="host-room" disabled>Create Private Room</button>`}
-        <!-- Room-code entry is shared markup: the id must exist exactly once
-             in the document (duplicate ids break label/for and getElementById). -->
-        <label class="field-label" for="race-room-code">Or enter a friend's room code</label>
-        <div class="redeem">
-          <input id="race-room-code" data-ui data-ref="roomCode" data-enter-action="join-room" aria-label="Room code" maxlength="2048" placeholder="Code or invite link" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-          <button class="mini-btn" data-ui data-action="join-room" ${s.multiplayerConfigured ? "" : "disabled"}>Join</button>
-        </div>
-      </section>
-      <nav class="destination-grid" aria-label="More ways to race">
-        <button class="destination" data-ui data-action="open-practice"><span class="destination-art">${menuIcon("compass")}</span><span class="destination-copy"><b>AI Practice</b><span>Custom opponent count &amp; skill</span></span></button>
-        <button class="destination" data-ui data-action="versus"><span class="destination-art">${menuIcon("versus")}</span><span class="destination-copy"><b>Same-screen 1v1</b><span>Local split-screen flight</span></span></button>
-        <button class="destination" data-ui data-action="open-squad"><span class="destination-art">${menuIcon("squad")}</span><span class="destination-copy"><b>Squad</b><span>${SQUAD_CHAT ? "Friends &amp; club chat" : "Friends &amp; clubs"}</span></span></button>
-      </nav>`}
-    <button class="soft-btn wide" data-ui data-action="open-shop">Change loadout</button>
-    <p class="fineprint">Hold downhill to build speed. Release uphill to launch. Slipstream behind rivals for slingshot surges!</p>`;
-}
-
-function renderPractice(s: HudSnapshot): string {
-  return `${head(SCREEN.aiPvp)}
-    <section class="race-section" aria-label="AI race practice">
-      <div class="race-section-head"><h3>Race the AI flock offline</h3><span class="section-step">AI pilots · no waiting</span></div>
-      <p>Every format below starts immediately against computer-controlled birds — no server, no room, no rating. Learning the circuits here is the fastest way to win them online.</p>
-      <div class="room-controls">
-        <div class="room-ctl"><span class="room-ctl-label">AI opponents <small>plus you</small></span><div class="seg" role="group" aria-label="AI opponents">${[5, 10, 20, 40].map((n) => `<button data-ui data-action="room-size" data-id="${n}" aria-pressed="${s.roomSize === n}" class="${s.roomSize === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
-        <div class="room-ctl"><span class="room-ctl-label">AI skill</span><div class="seg" role="group" aria-label="AI skill">${(["chill", "sharp", "ace"] as const).map((k) => `<button data-ui data-action="room-skill" data-id="${k}" aria-pressed="${s.roomSkill === k}" class="${s.roomSkill === k ? "on" : ""}">${k === "chill" ? "Chill" : k === "sharp" ? "Sharp" : "Ace"}</button>`).join("")}</div></div>
-      </div>
-      <button class="primary-btn gold wide" data-ui data-action="ai-pvp" data-id="${s.selectedPvpMode}">🤖 Race the AI flock · ${(s.pvpModes || []).find((m) => m.id === s.selectedPvpMode)?.name ?? "Sprint GP"}</button>
-      <div class="practice-formats"><h3>Race formats</h3>
-        <p class="fineprint">Dynamic AI pilots adapt locally with neural downslope timing, slipstream drafting, and slingshot attacks. No server connection required!</p>
-        ${PVP_MODES.map((m) => `<button class="soft-btn wide ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="ai-pvp" data-id="${m.id}">${m.icon} ${m.name} · ${m.blurb}</button>`).join("")}
-        <button class="soft-btn wide" data-ui data-action="pvp-duel">⚔ 1v1 Seeded Rival Duel</button>
-        <button class="soft-btn wide" data-ui data-action="practice-storm">⛈ Stormfront Race · wild weather</button>
-        <button class="soft-btn wide" data-ui data-action="practice-ranked">🏆 40-Pilot Flock Grand Prix</button>
-      </div>
-    </section>
-    <button class="soft-btn wide" data-ui data-action="open-live">🌐 Want human rivals? Open PvP</button>
-    <button class="soft-btn wide" data-ui data-action="open-shop">Change loadout</button>`;
-}
-
 function renderChallenges(s: HudSnapshot): string {
   const d = s.daily;
   const g = s.gauntlet;
   const c = s.calendar;
-  const modePills = (s.pvpModes || []).map((m) => `
-    <button class="pvp-pill ${s.selectedPvpMode === m.id ? "on" : ""}" data-ui data-action="select-pvp-mode" data-id="${m.id}" title="${escapeHtml(m.blurb)}">
-      <span>${escapeHtml(m.icon)}</span> <b>${escapeHtml(m.name)}</b> <small>${m.finish}m</small>
-    </button>`).join("");
-  const worldPills = (s.pvpWorlds || []).map((w) => `
-    <button class="world-pill ${s.selectedPvpWorld === w.id ? "on" : ""}" data-ui data-action="select-pvp-world" data-id="${w.id}" title="${escapeHtml(w.tagline)}">
-      <span>${escapeHtml(w.emoji)}</span> <b>${escapeHtml(w.name)}</b> <small>${escapeHtml(w.difficulty)}</small>
-    </button>`).join("");
-  const activeMode = (s.pvpModes || []).find((m) => m.id === s.selectedPvpMode) ?? (s.pvpModes || [])[0];
-  const activeWorld = (s.pvpWorlds || []).find((w) => w.id === s.selectedPvpWorld) ?? (s.pvpWorlds || [])[0];
   const raceChallenges = `
-    <section class="race-section challenge-races" aria-label="Race challenges">
-      <div class="race-section-head"><h3>${menuIcon("versus")} Race challenges</h3><span class="section-step">PvP · AI · worlds</span></div>
-      <p class="fineprint">Choose a format and world once. Then race online when available, or launch the same challenge against the AI flock.</p>
-      <div class="lobby-selector-label"><span>Format</span><b>${activeMode ? `${escapeHtml(activeMode.name)} · ${activeMode.finish}m` : "Choose a format"}</b></div>
-      <div class="pills-scroll challenge-pills">${modePills}</div>
-      <div class="lobby-selector-label"><span>World</span><b>${activeWorld ? escapeHtml(activeWorld.name) : "Choose a world"}</b></div>
-      <div class="pills-scroll challenge-pills">${worldPills}</div>
+    <section class="race-section challenge-races" aria-label="${t("hud.renderChallenges.RChallenges", undefined, "Race challenges")}">
+      <div class="race-section-head"><h3>${menuIcon("online")} PvP · vs AI</h3><span class="section-step">auto-matched</span></div>
+      <p class="fineprint">${t("hud.renderChallenges.WFormatAreMatchedWhoeverSAvailableJumpRace", undefined, "World and format are matched to whoever's available — jump in and race.")}</p>
       <div class="quick-match-btns challenge-actions">
-        <button class="primary-btn gold" data-ui data-action="quick-match-instant">${menuIcon("online")} Race this challenge</button>
-        <button class="soft-btn" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">${menuIcon("versus")} Practice vs AI</button>
+        <button class="primary-btn gold wide" data-ui data-action="quick-match-shuffle">${menuIconSm("lightning")} ${t("hud.quickMatch.randomRace", undefined, "Race Now · random match")}</button>
+        <button class="soft-btn wide" data-ui data-action="ai-pvp" data-id="${escapeHtml(s.selectedPvpMode)}">${menuIconSm("robot")} ${t("hud.pvp.vsAiInstant", undefined, "vs AI flock · instant")}</button>
       </div>
     </section>`;
   const daily = `
-    <div class="section-title">Daily challenge <small>resets at midnight</small></div>
+    ${sectionTitle(null, "Daily challenge", "resets at midnight")}
     <div class="daily-card ${d.done ? "done" : ""}">
-      <div class="daily-head"><span class="daily-icon">${d.modeIcon}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
-      <div class="daily-mod"><b>${d.modifierIcon} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
+      <div class="daily-head"><span class="daily-icon">${menuIconSm(d.modeIcon)}</span><div><b>${d.title}</b><em>${d.modeName} · ${escapeHtml(d.metric)} ≥ ${d.target}</em></div><span class="pill coin">● ${d.reward}</span></div>
+      <div class="daily-mod"><b>${menuIconSm(d.modifierIcon)} ${d.modifierLabel}</b><span>${escapeHtml(d.modifierDesc)}</span></div>
       ${
         d.done
           ? `<div class="reward-strip">✓ Complete · come back tomorrow (${d.dailiesDone} lifetime)</div>`
-          : `<button class="primary-btn" data-ui data-action="play-daily">☀ FLY THE CHALLENGE</button>`
+          : `<button class="primary-btn" data-ui data-action="play-daily">${menuIconSm("sun")} ${t("hud.daily.flyChallenge", undefined, "FLY THE CHALLENGE")}</button>`
       }
     </div>`;
 
   const gauntlet = `
-    <div class="section-title">Weekly gauntlet <small>3 stages · resets Monday</small></div>
+    ${sectionTitle(null, "Weekly gauntlet", "3 stages · resets Monday")}
     <div class="gauntlet">
       ${g.stages
         .map(
           (st) => `<div class="g-stage ${st.done ? "done" : ""}">
             <span class="g-num">${st.done ? "✓" : st.index + 1}</span>
-            <div class="g-body"><b>${st.modeIcon} ${escapeHtml(st.label)}</b><em>${st.modeName} · ${escapeHtml(st.metric)} ≥ ${st.target}</em></div>
+            <div class="g-body"><b>${menuIconSm(st.modeIcon)} ${escapeHtml(st.label)}</b><em>${st.modeName} · ${escapeHtml(st.metric)} ≥ ${st.target}</em></div>
             ${st.done ? `<span class="tag on">Clear</span>` : `<button class="mini-btn" data-ui data-action="play-gauntlet" data-id="${st.index}">Fly · ● ${st.reward}</button>`}
           </div>`,
         )
         .join("")}
-      <div class="g-bonus ${g.cleared ? "done" : ""}">${g.cleared ? `🏆 Gauntlet cleared this week · +${g.clearBonus} paid` : `Clear all 3 → +${g.clearBonus} coins`}${g.lifetimeClears > 0 ? ` · ${g.lifetimeClears} lifetime clears` : ""}</div>
+      <div class="g-bonus ${g.cleared ? "done" : ""}">${g.cleared ? `${menuIconSm("trophy")} Gauntlet cleared this week · +${g.clearBonus} paid` : `Clear all 3 → +${g.clearBonus} coins`}${g.lifetimeClears > 0 ? ` · ${g.lifetimeClears} lifetime clears` : ""}</div>
     </div>`;
 
   const calendar = `
-    <div class="section-title">Login calendar <small>day ${c.cycleDay || "—"} of 28</small></div>
+    ${sectionTitle(null, "Login calendar", `day ${c.cycleDay || "—"} of 28`)}
     <div class="cal-grid">
       ${c.days
         .map(
@@ -2236,22 +2707,22 @@ function renderChallenges(s: HudSnapshot): string {
     </div>
     ${
       c.claimedToday
-        ? `<div class="reward-strip">📅 Today's gift claimed — see you tomorrow</div>`
-        : `<button class="primary-btn" data-ui data-action="claim-calendar">📅 CLAIM TODAY'S GIFT</button>`
+        ? `<div class="reward-strip">${menuIconSm("calendar")} Today's gift claimed — see you tomorrow</div>`
+        : `<button class="primary-btn" data-ui data-action="claim-calendar">${menuIconSm("calendar")} ${t("hud.daily.claimGift", undefined, "CLAIM TODAY’S GIFT")}</button>`
     }`;
 
   const mastery = `
-    <div class="section-title">Mode mastery <small>fly every mode</small></div>
+    ${sectionTitle(null, "Mode mastery", "fly every mode")}
     <div class="mastery-list">
       ${s.mastery
         .map(
           (m) => `<div class="mastery-row ${m.maxed ? "maxed" : ""}">
-            <span class="m-icon">${m.icon}</span>
+            <span class="m-icon">${menuIconSm(m.icon)}</span>
             <div class="m-body"><b>${m.name}${m.maxed ? ` <span class="m-skill">★ ${m.skillName}</span>` : ""}</b>
             <em>${
               m.maxed
                 ? `Mastered · ${m.skillDesc} — always on in this mode`
-                : `${m.runs} runs · next level at ${m.nextAt}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
+                : `${m.runs} runs · next level at ${formatNumberLocalized(Math.round(m.nextAt ?? 0))}${m.perk ? ` · ${m.perk}` : ` · Lv.5 skill: ${m.skillName} (${m.skillDesc})`}`
             }</em>
             ${m.maxed ? "" : `<div class="qb"><i style="width:${Math.round(m.progress * 100)}%"></i></div>`}</div>
             <span class="m-stars">${"★".repeat(m.level)}${"☆".repeat(Math.max(0, 5 - m.level))}</span>
@@ -2264,21 +2735,21 @@ function renderChallenges(s: HudSnapshot): string {
   const th = s.monthlyTheme;
   const trailDone = s.themeTrailClaimed;
   const event = `
-    <div class="section-title">Live event <small>new twist every week</small></div>
+    ${sectionTitle(null, "Live event", "new twist every week")}
     <div class="event-card">
-      <div class="daily-head"><span class="daily-icon">${ev.icon}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
-      <div class="event-meta"><span>Fly ${ev.target.toLocaleString()} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
-      <button class="primary-btn" data-ui data-action="play-event">${ev.icon} FLY THE EVENT</button>
+      <div class="daily-head"><span class="daily-icon">${menuIconSm(ev.icon)}</span><div><b>${ev.name}</b><em>${escapeHtml(ev.desc)}</em></div><span class="pill coin">● ${ev.reward}</span></div>
+      <div class="event-meta"><span>Fly ${formatNumberLocalized(ev.target)} m in one event run</span><span>${s.eventClearsWeek > 0 ? `✓ ${s.eventClearsWeek} clear${s.eventClearsWeek > 1 ? "s" : ""} this week` : "No clears yet this week"}</span></div>
+      <button class="primary-btn" data-ui data-action="play-event">${menuIconSm(ev.icon)} FLY THE EVENT</button>
       <div class="theme-strip ${trailDone ? "done" : ""}">
-        <span class="theme-icon">${th.icon}</span>
+        <span class="theme-icon">${menuIconSm(th.icon)}</span>
         <div class="theme-body"><b>${th.name}</b><em>${escapeHtml(th.tagline)}</em></div>
-        <span class="theme-prog">${trailDone ? "✨ trail claimed" : `${Math.min(s.eventClearsMonth, s.themeTrailNeed)}/${s.themeTrailNeed} clears → trail`}</span>
+        <span class="theme-prog">${trailDone ? `${menuIconSm("sparkle")} trail claimed` : `${Math.min(s.eventClearsMonth, s.themeTrailNeed)}/${s.themeTrailNeed} clears → trail`}</span>
       </div>
     </div>`;
 
   return `
-    ${head(SCREEN.challenges, "back", `<span class="pill">Daily · Weekly</span>`)}
-    <p class="tagline">Same hills as everyone else today. Modifiers change how you fly them.</p>
+    ${head(SCREEN.challenges, "back", `<span class="pill">${t("hud.renderChallenges.DWeekly", undefined, "Daily · Weekly")}</span>`)}
+    <p class="tagline">${t("hud.renderChallenges.SHillsAsEveryoneElseTodayModifiersChangeHowFlyThe", undefined, "Same hills as everyone else today. Modifiers change how you fly them.")}</p>
     ${raceChallenges}
     ${event}
     ${daily}
@@ -2288,423 +2759,33 @@ function renderChallenges(s: HudSnapshot): string {
   `;
 }
 
-function renderCampaign(s: HudSnapshot): string {
-  const rows = s.campaign
-    .map((ch) => {
-      const goals = ch.goals
-        .map(
-          (g) => `<div class="camp-goal ${g.done ? "done" : ""}">
-            <span class="check">${g.done ? "✓" : ""}</span>
-            <span class="cg-label">${escapeHtml(g.def.label)}</span>
-            <span class="cg-prog">${Math.floor(g.progress).toLocaleString()}/${g.def.target.toLocaleString()}</span>
-          </div>`,
-        )
-        .join("");
-      const cta = !ch.unlocked
-        ? `<span class="tag">🔒 Finish chapter ${ch.index} first</span>`
-        : ch.claimed
-          ? `<span class="tag on">✓ ${escapeHtml(ch.def.rewardLabel)}</span>`
-          : ch.complete
-            ? `<button class="mini-btn gold" data-ui data-action="claim-campaign" data-id="${ch.def.id}">CLAIM ● ${ch.def.rewardCoins}</button>`
-            : `<span class="tag">● ${ch.def.rewardCoins} on completion</span>`;
-      return `<div class="camp-chapter ${!ch.unlocked ? "locked" : ""} ${ch.claimed ? "claimed" : ""}">
-        <div class="camp-head"><span class="camp-icon">${ch.def.icon}</span><div><b>Chapter ${ch.index + 1} · ${escapeHtml(ch.def.title)}</b><em>${escapeHtml(ch.def.story)}</em></div></div>
-        ${ch.unlocked ? goals : ""}
-        <div class="camp-foot">${cta}</div>
-      </div>`;
-    })
-    .join("");
-  return `
-    ${head(SCREEN.campaign, "back", `<span class="pill">${s.campaignDone}/${s.campaignTotal}</span>`)}
-    <p class="tagline">A journey in eight chapters. Progress accrues from every flight — no separate grind.</p>
-    <div class="camp-list">${rows}</div>
-  `;
-}
-
-/** Exported so the Pilot Lookup panel can be tested without a live game. */
-export function renderSquad(s: HudSnapshot): string {
-  const sq = s.squad;
-  const friendPage = paginate(sq.friends, sq.friendPage);
-  const clubPage = paginate(sq.clubs, sq.clubPage);
-  const pages = (kind: string, view: { page: number; pages: number }): string => view.pages < 2 ? "" : `<nav class="collection-pager" aria-label="${kind} pages"><button class="mini-btn" data-ui data-action="squad-page" data-id="${kind}:${view.page - 1}" aria-label="Previous ${kind}" ${view.page === 0 ? "disabled" : ""}>‹</button><span>${view.page + 1} / ${view.pages}</span><button class="mini-btn" data-ui data-action="squad-page" data-id="${kind}:${view.page + 1}" aria-label="Next ${kind}" ${view.page === view.pages - 1 ? "disabled" : ""}>›</button></nav>`;
-  const notice = s.squadNotice ? `<div class="reward-strip">${escapeHtml(s.squadNotice)}</div>` : "";
-
-  const quests = `
-    <div class="section-title">Squadron Team Quests <small>Co-Op Milestones</small></div>
-    <div class="squad-quests">
-      ${SQUAD_QUESTS.map((q) => {
-        const prog = q.id === "migration" ? Math.min(q.target, Math.round(s.bestDistance * 1.5)) : q.id === "drafting" ? Math.min(q.target, Math.round(s.runsPlayed * 5)) : Math.min(q.target, Math.round(s.todayBest / 100));
-        return `<div class="squad-quest-card">
-          <div class="sq-info"><b>${escapeHtml(q.title)}</b><span>${escapeHtml(q.desc)}</span></div>
-          <div class="sq-action">
-            ${prog >= q.target
-              ? `<button class="mini-btn gold" data-ui data-action="claim-squad-quest" data-id="${q.id}">Claim ● ${q.rewardCoins}</button>`
-              : `<span class="sq-prog-label">${prog}/${q.target}</span>`}
-          </div>
-        </div>`;
-      }).join("")}
-    </div>
-  `;
-
-  // ---------------------------------------------------------- pilot lookup
-  // The panel never invents a pilot. Every row below is either a code the
-  // service resolved, a wingman row the service returned, or a pilot this
-  // device actually shared a room with.
-  const lookup = sq.lookup;
-  const lookupCard = (() => {
-    if (!lookup) return "";
-    if (lookup.status !== "ok") {
-      const tone = lookup.status === "unavailable" ? "island" : "warn";
-      return `<div class="pilot-note ${tone}" role="status">${escapeHtml(lookup.message)}${lookup.query ? ` <b>${escapeHtml(lookup.query)}</b>` : ""}</div>`;
-    }
-    const stats = [
-      lookup.club ? `🏰 ${escapeHtml(lookup.club)}` : "",
-      lookup.bestDistance > 0 ? `🛫 best ${lookup.bestDistance.toLocaleString()} m` : "",
-      lookup.rank > 0 ? `#${lookup.rank} global` : "",
-    ].filter(Boolean).join(" · ");
-    const action = lookup.friend
-      ? `<span class="fineprint">Already in your wingmen</span>`
-      : lookup.incoming
-        ? `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">Accept their request</button>`
-        : lookup.outgoing
-          ? `<span class="fineprint">Request sent — waiting for them</span>`
-          : `<button class="primary-btn" data-ui data-action="pilot-add" data-id="${escapeHtml(lookup.code)}">🪽 Add wingman</button>`;
-    return `
-      <div class="pilot-card">
-        <div class="pilot-card-head">
-          <b>${escapeHtml(lookup.name)}</b>
-          <span class="pilot-dot ${lookup.online ? "on" : ""}">${lookup.online ? "● Online now" : "○ Offline"}</span>
-        </div>
-        <div class="pilot-card-meta"><span class="pilot-code">${escapeHtml(lookup.code)}</span>${stats ? `<span>${stats}</span>` : ""}</div>
-        <div class="pilot-card-actions">
-          ${action}
-          <button class="mini-btn" data-ui data-action="pilot-invite" data-id="${escapeHtml(lookup.name)}">Invite to my room</button>
-          <button class="mini-btn" data-ui data-action="pilot-copy" data-id="${escapeHtml(lookup.code)}">Copy code</button>
-        </div>
-      </div>`;
-  })();
-
-  const requests = (() => {
-    const rows = [
-      ...sq.requestsIn.map((r) => `<div class="friend-row"><span class="fr-name">📨 ${escapeHtml(r.name)}</span><span class="fr-code">wants to fly with you</span><button class="mini-btn" data-ui data-action="req-accept" data-id="${escapeHtml(r.requestId)}">Accept</button><button class="mini-btn ghost" data-ui data-action="req-decline" data-id="${escapeHtml(r.requestId)}">Decline</button></div>`),
-      ...sq.requestsOut.map((r) => `<div class="friend-row"><span class="fr-name">📤 ${escapeHtml(r.name)}</span><span class="fr-code">request pending</span><button class="mini-btn ghost" data-ui data-action="req-cancel" data-id="${escapeHtml(r.requestId)}">Cancel</button></div>`),
-    ];
-    if (!rows.length) return "";
-    return `<div class="section-title">Requests <small>${rows.length} waiting</small></div><div class="friend-list">${rows.join("")}</div>`;
-  })();
-
-  const lookupPanel = `
-    <div class="section-title">🔍 Pilot Lookup <small>${sq.live && !sq.isAutonomous ? "online directory" : "offline build"}</small></div>
-    <p class="fineprint">Look a pilot up by their exact code. Results come from the pilot directory — nothing here is invented, and an unknown or unreachable code says so.</p>
-    <div class="redeem">
-      <input data-ui data-ref="pilotCode" data-enter-action="pilot-add" aria-label="Friend code" placeholder="Friend code (SUN-9F3K2A)" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${escapeHtml(sq.pilotQuery)}" />
-      <button class="mini-btn" data-ui data-action="pilot-lookup">${sq.lookupBusy ? "Looking…" : "Look up"}</button>
-    </div>
-    ${lookupCard}
-    ${requests}`;
-
-  const wingmen = (() => {
-    const page = sq.friends.length > 0 ? friendPage : { items: [], page: 0, pages: 0 };
-    if (!sq.friends.length) {
-      return `<div class="section-title">🪽 Wingmen <small>0</small></div>
-        <div class="empty-note">No wingmen yet. Look one up by code above, or save a pilot you have actually raced with below. Your code is <b>${escapeHtml(sq.myCode || "…")}</b>.</div>`;
-    }
-    return `
-    <div class="section-title">🪽 Wingmen <small>${sq.friends.length}</small></div>
-    <div class="friend-list">${(page.items as typeof sq.friends)
-      .map((f) => {
-        const presence = f.local ? "met in a race" : f.online ? "● online" : "○ offline";
-        const best = f.bestDistance && f.bestDistance > 0 ? ` · best ${Math.round(f.bestDistance).toLocaleString()} m` : "";
-        return `<div class="friend-row"><span class="fr-name">🐦 ${escapeHtml(f.name)} <small>${escapeHtml(presence)}${best}</small></span><span class="fr-code">${escapeHtml(f.code || "")}</span><button class="mini-btn ghost" data-ui data-action="squad-remove" aria-label="Remove ${escapeHtml(f.name)}" data-id="${escapeHtml(f.code || f.name)}">✕</button></div>`;
-      })
-      .join("")}</div>${pages("friends", page)}`;
-  })();
-
-  // Real history: rooms this device actually shared with other pilots.
-  const flewWith = (() => {
-    const mates = s.recentPilots.filter((m) => !sq.friends.some((f) => f.name.toLowerCase() === m.name.toLowerCase()));
-    if (!s.recentPilots.length) {
-      return `<div class="section-title">🛫 Flew with <small>0</small></div><div class="empty-note">Pilots who share a room with you appear here — real rooms, real names, remembered on this device.</div>`;
-    }
-    const rows = mates.slice(0, 8).map((m) => `<div class="friend-row">
-      <span class="fr-name">🐦 ${escapeHtml(m.name)}</span>
-      <span class="fr-code">room ${escapeHtml(m.roomCode)} · ${escapeHtml(seenAgo(m.lastSeenAt, Date.now()))}${m.bestDistance > 0 ? ` · ${m.bestDistance.toLocaleString()} m` : ""}</span>
-      <button class="mini-btn" data-ui data-action="mate-wingman" data-id="${escapeHtml(m.name)}">Save</button>
-      <button class="mini-btn ghost" data-ui data-action="mate-invite" data-id="${escapeHtml(m.name)}">Invite</button>
-      <button class="mini-btn ghost" data-ui data-action="mate-forget" data-id="${escapeHtml(m.name)}" aria-label="Forget ${escapeHtml(m.name)}">✕</button>
-    </div>`).join("");
-    return `<div class="section-title">🛫 Flew with <small>${s.recentPilots.length} remembered</small></div>
-      <p class="fineprint">Kept on this device from races you actually flew together.</p>
-      <div class="friend-list">${rows || `<div class="empty-note">Everyone you flew with is already in your wingmen.</div>`}</div>`;
-  })();
-
-  const friends = `${lookupPanel}${wingmen}${flewWith}`;
-  const myClub = sq.clubs.find((c) => c.id === sq.myClubId);
-  const clubChat = SQUAD_CHAT && myClub
-    ? `
-    <div class="club-chat">
-      <div class="chat-box" data-scroll-memory="squad-chat" data-stick-bottom role="log" aria-label="Club chat history">
-        ${sq.chat.length
-          ? sq.chat.map((m) => `<div class="chat-line"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(m.text)}</span></div>`).join("")
-          : `<div class="empty-note">Say hello to your club — messages stay between members.</div>`}
-      </div>
-      <div class="redeem">
-        <input data-ui data-enter-action="squad-chat" aria-label="Club message" placeholder="Message your club" maxlength="140" autocomplete="off" />
-        <button class="mini-btn" data-ui data-action="squad-chat">Send</button>
-      </div>
-    </div>`
-    : "";
-  const clubs = myClub
-    ? `
-    <div class="section-title">Your club <small>${myClub.members}/30 members</small></div>
-    <div class="club-card mine">
-      <div class="daily-head"><span class="daily-icon">🏰</span><div><b>${escapeHtml(myClub.name)}</b><em>${escapeHtml(myClub.motto)}</em></div><button class="mini-btn ghost" data-ui data-action="squad-leave-club">Leave</button></div>
-    </div>
-    ${clubChat}`
-    : `
-    <div class="section-title">Flight Clubs <small>join or found one</small></div>
-    ${
-      sq.clubs.length
-        ? `<div class="club-list">${clubPage.items
-            .map(
-              (c) => `<div class="club-row"><div><b>🏰 ${escapeHtml(c.name)}</b><em>${escapeHtml(c.motto)} · ${c.members}/30</em></div><button class="mini-btn" data-ui data-action="squad-join-club" data-id="${c.id}" ${c.members >= 30 ? "disabled" : ""}>Join</button></div>`,
-            )
-            .join("")}</div>`
-        : `<div class="empty-note">No clubs yet — found the first one.</div>`
-    }
-    ${pages("clubs", clubPage)}
-    <div class="redeem"><input data-ui data-enter-action="squad-create-club" aria-label="Club name" placeholder="Club name" maxlength="24" autocomplete="off" /><button class="mini-btn gold" data-ui data-action="squad-create-club">Found club</button></div>`;
-
-  const hubBanner = sq.isAutonomous
-    ? `<div class="reward-strip" style="background:linear-gradient(135deg,#fff8e1,#ffe082); color:#5d4037; border:1px solid #ffcc80; margin-bottom:12px;">📴 Offline build · wingman requests and pilot lookup need the online service. Pilots you actually raced with still work.</div>`
-    : "";
-
-  // A lost Squad key never blocks the pilot: flight progress, coins and
-  // birds live in the save file, not in the Squad service. The honest path
-  // is an explicit, confirmed re-enrollment into a fresh profile.
-  const recovery = sq.credentialError && !sq.isAutonomous
-    ? `<section class="squad-recovery" role="region" aria-label="Squad profile recovery">
-        <div class="section-title">Squad profile recovery <small>key missing</small></div>
-        <p>${escapeHtml(sq.error || "This browser cannot unlock the saved Squad profile.")} Your flight progress, coins and birds are untouched — only the Squad identity is locked.</p>
-        <label class="recovery-consent"><input type="checkbox" data-ui /> I understand this creates a separate Squad profile.</label>
-        <div class="room-actions-bar">
-          <button class="primary-btn" data-ui data-action="squad-new-profile" ${sq.busy || sq.loading ? "disabled" : ""}>Create a new Squad profile</button>
-          <button class="soft-btn" data-ui data-action="squad-refresh" ${sq.loading ? "disabled" : ""}>Try reconnecting</button>
-        </div>
-      </section>`
-    : "";
-
-  return `
-    ${head(SCREEN.squad, "back", sq.myCode ? `<span class="pill">${escapeHtml(sq.myCode)}</span>` : "")}
-    <p class="tagline">A little flock. A bigger adventure.</p>
-    ${hubBanner}
-    ${recovery}
-    ${sq.myCode ? `<div class="squad-invite"><span class="squad-invite-art">${menuIcon("squad")}</span><div><b>Your friend code</b><p>Share it with someone you want to fly with.</p></div><button class="mini-btn" data-ui data-action="squad-copy-code">Copy code</button></div>` : ""}
-    ${notice}
-    ${quests}
-    <fieldset class="squad-fields"><legend class="sr-only">Squad actions</legend>${friends + clubs}</fieldset>
-    <button class="soft-btn wide" data-ui data-action="squad-refresh" ${sq.loading || sq.busy ? "disabled" : ""}>${sq.loading ? "Connecting…" : "Refresh Squad"}</button>
-    <button class="soft-btn wide" data-ui data-action="open-live">Race with friends</button>
-  `;
-}
-
-function renderRank(s: HudSnapshot): string {
-  const r = s.rival;
-  const wl = r.wins + r.losses > 0 ? Math.round((r.wins / (r.wins + r.losses)) * 100) : 0;
-  return `
-    ${head(SCREEN.rivalRank, "back", `<span class="pill">${boardSource(s).chip}</span>`)}
-    <div class="rank-hero">
-      <div class="rank-div-big">${r.divisionIcon}</div>
-      <div class="rank-hero-num">${r.rating}</div>
-      <div class="rank-hero-div">${r.division}</div>
-      <div class="rank-bar big"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
-      <div class="rank-hero-next">${r.nextNeeded > 0 ? `${r.nextNeeded} rating to ${r.nextName}` : "Top division — defend it"}</div>
-    </div>
-    <div class="rank-stats">
-      <div><span>W–L</span><b>${r.wins}–${r.losses}</b></div>
-      <div><span>Win rate</span><b>${wl}%</b></div>
-      <div><span>Streak</span><b class="streak-b ${r.streak > 0 ? "lit" : ""}"><svg viewBox="0 0 24 24" class="fl"><path d="M12 2C13 6 17 8 17 13a5 5 0 0 1-10 0c0-2 1-3.4 2-4.6 0 1.6.6 2.6 1.8 3 -.4-3.4 1.4-6.6 1.2-9.4z" fill="currentColor"/></svg>${r.streak}</b></div>
-      <div><span>Best</span><b>×${r.bestStreak}</b></div>
-    </div>
-    <div class="season-card">
-      <div class="season-head"><b>Season</b><span class="pill">${r.season.daysLeft}d left</span></div>
-      <div class="season-body">Peak ${r.season.peakIcon} ${r.season.peak} · pays <b>● ${r.season.rewardCoins}</b> at reset, then ratings drift halfway back to 1000.</div>
-    </div>
-    <div class="section-title">Recent races <small>this device only</small></div>
-    ${
-      r.matches.length
-        ? `<div class="match-list">${[...r.matches]
-            .reverse()
-            .map(
-              (m) =>
-                `<div class="match-row ${m.won ? "won" : ""}"><span class="m-place">${m.won ? "🏅" : ""}P${m.place}</span><span class="m-meta">of ${m.field} · ${escapeHtml(m.mode)}</span><span class="m-date">${escapeHtml(m.date)}</span></div>`,
-            )
-            .join("")}</div>`
-        : `<p class="fineprint">No ranked races yet. Your first 40-bird finish sets the tone.</p>`
-    }
-    <div class="section-title">Duels <small>ranked 1v1 · ±16 rating</small></div>
-    <div class="duel-card">
-      <div class="vs-stage slim">
-        <div class="vs-you"><span class="bird-badge you">${sunbirdSVG({ width: 62, flap: 0.55, title: "Your sunbird" })}</span><b>YOU</b><span class="vs-sub">${r.rating}</span></div>
-        <div class="vs-mark">VS</div>
-        <div class="vs-foes"><div class="vs-foe"><span class="bird-badge">${sunbirdSVG({ palette: rivalPalette(0), width: 54, flap: 0.35, title: s.duelFoe.name })}</span><b>${escapeHtml(s.duelFoe.name)}</b><span class="vs-sub">${escapeHtml(s.duelFoe.tag)} · ~${s.duelFoe.rating}</span></div></div>
-      </div>
-      <div class="rank-stats">
-        <div><span>Duel W–L</span><b>${s.duel.wins}–${s.duel.losses}</b></div>
-        <div><span>Streak</span><b class="streak-b ${s.duel.streak > 0 ? "lit" : ""}"><svg viewBox="0 0 24 24" class="fl"><path d="M12 2C13 6 17 8 17 13a5 5 0 0 1-10 0c0-2 1-3.4 2-4.6 0 1.6.6 2.6 1.8 3 -.4-3.4 1.4-6.6 1.2-9.4z" fill="currentColor"/></svg>${s.duel.streak}</b></div>
-        <div><span>Best</span><b>×${s.duel.bestStreak}</b></div>
-        <div><span>Prize</span><b>${s.duel.wins >= 10 ? "🐦 won" : `${s.duel.wins}/10`}</b></div>
-      </div>
-      <button class="primary-btn hero" data-ui data-action="pvp-duel"><span class="hero-label">⚔ DUEL</span><span class="hero-hint">1v1 · first to 4,000 m · win 10 for the Hummingbird</span></button>
-    </div>
-    <button class="primary-btn race40 hero" data-ui data-action="pvp-ranked"><span class="hero-label">⚔ RACE RANKED</span><span class="hero-hint">climb or defend ${r.division}</span></button>
-    <p class="fineprint">Your rating changes based on how you finish in ranked 40-bird races and duels. Reaching Sunbird Legend unlocks the Solstice bird. Seasons soft-reset monthly with a division reward.</p>
-  `;
-}
-
-function renderCups(s: HudSnapshot): string {
-  const hrs = (ms: number): string => {
-    const h = Math.floor(ms / 3600000);
-    return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h`;
-  };
-  const cups = s.cups
-    .map((c) => {
-      const tierLabel = c.tier ? c.tier.toUpperCase() : "UNRANKED";
-      const prize = c.tier ? c.def.prizes[c.tier] : null;
-      return `<div class="cup-card ${c.tier ?? ""}">
-        <div class="cup-head"><span class="cup-icon">${c.def.icon}</span>
-          <div><b>${c.def.name}</b><em>${c.def.blurb}</em></div>
-          <span class="cup-timer">${hrs(c.endsInMs)} left</span>
-        </div>
-        <div class="cup-meta"><span class="cup-tier ${c.tier ?? "none"}">${tierLabel}</span><span>Best ${Math.round(c.entry.best)}</span><span>${c.entry.attempts} runs</span></div>
-        <div class="qb"><i style="width:${Math.round(c.progress * 100)}%"></i></div>
-        <div class="cup-next">${c.nextTier ? `Next: ${c.nextTier} at ${Math.round(c.nextCut)}` : "Diamond secured"}</div>
-        ${
-          c.claimable && prize
-            ? `<button class="mini-btn gold" data-ui data-action="claim-cup" data-id="${c.def.id}">Claim ${prize.icon} ${prize.label}</button>`
-            : `<button class="mini-btn" data-ui data-action="pick-mode" data-id="${c.def.mode}">Fly ${c.def.mode}</button>`
-        }
-      </div>`;
-    })
-    .join("");
-
-  const trails = s.trails.length
-    ? `<div class="section-title">Prize trails</div><div class="btn-row">${s.trails
-        .map((t) => `<button class="soft-btn ${t.equipped ? "gold" : ""}" data-ui data-action="equip-trail" data-id="${t.id}">${t.equipped ? "✓ " : ""}${t.label}</button>`)
-        .join("")}</div>`
-    : "";
-
-  return `
-    ${head(SCREEN.tournaments, "back", `<span class="pill">Weekly</span>`)}
-    <p class="tagline">Two cups run every week. Beat a division cut-off, then claim the prize — it lands in your account immediately.</p>
-    <div class="cup-list">${cups}</div>
-    ${s.lastPrize ? `<div class="reward-strip">Last prize · ${s.lastPrize}</div>` : ""}
-    ${trails}
-    <p class="fineprint">Cups reset every Monday. Won cosmetics are permanent.</p>
-  `;
-}
-
-function renderModes(s: HudSnapshot): string {
-  return `
-    ${head(SCREEN.gameModes)}
-    <p class="tagline">Solo flights below are you against the course. A <b>PvP circuit</b> opens the PvP options — ranked and casual online racing, private rooms, or the AI flock. All modes share your unlocks.</p>
-    <div class="mode-list">
-      ${s.modes
-        .map(
-          (m) => `<button class="mode-card ${m.id === s.modeId ? "on" : ""}" data-ui data-action="pick-mode" data-id="${m.id}">
-            <span class="mode-icon">${m.icon}</span>
-            <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
-            <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
-          </button>`,
-        )
-        .join("")}
-    </div>
-    <div class="section-title">PvAI Circuits</div>
-    <div class="mode-list">
-      ${PVP_MODES
-        .map(
-          (m) => `<button class="mode-card ${m.id === s.modeId ? "on" : ""}" data-ui data-action="pick-mode" data-id="${m.id}">
-            <span class="mode-icon">${m.icon}</span>
-            <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
-            <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
-          </button>`,
-        )
-        .join("")}
-    </div>
-    <div class="section-title">Race the flock offline</div>
-    <button class="primary-btn gold wide" data-ui data-action="open-practice">🤖 AI PvP · pick a circuit &amp; race the neural flock</button>
-    <button class="soft-btn wide" data-ui data-action="versus">👥 Split-screen · 2 players on this device</button>
-  `;
-}
-
-function renderVersusResult(s: HudSnapshot): string {
-  const a = s.p1Stats!;
-  const b = s.p2Stats!;
-  const row = (label: string, x: number, y: number, fmt: (n: number) => string): string => {
-    const win = x === y ? 0 : x > y ? 1 : 2;
-    const max = Math.max(x, y, 1);
-    return `<div class="vs-stat">
-      <span class="${win === 1 ? "w" : ""}">${fmt(x)}</span>
-      <em>${label}<i class="vs-bars"><b class="l" style="width:${Math.round((x / max) * 100)}%"></b><b class="r" style="width:${Math.round((y / max) * 100)}%"></b></i></em>
-      <span class="${win === 2 ? "w" : ""}">${fmt(y)}</span>
-    </div>`;
-  };
-  const time = (r: RacerStats): string => (r.finishedAt > 0 ? `${r.finishedAt.toFixed(1)}s` : "DNF");
-  const margin =
-    a.finishedAt > 0 && b.finishedAt > 0 ? Math.abs(a.finishedAt - b.finishedAt).toFixed(1) + "s" : "by distance";
-  return `
-    <div class="vs-hero ${s.versusWinner === 1 ? "p1win" : "p2win"}">
-      <span class="vs-crown-big">🏆</span>
-      <div class="vs-winner">PLAYER ${s.versusWinner} WINS</div>
-      <div class="vs-margin">by ${margin} · same device, same hills</div>
-    </div>
-    <div class="vs-head"><span class="p1">🟠 P1 · SPACE / left half</span><span class="p2">P2 · ENTER / right half 🔵</span></div>
-    <div class="vs-stats">
-      <div class="vs-stat time"><span>${time(a)}</span><em>race time</em><span>${time(b)}</span></div>
-      ${row("distance", a.distance, b.distance, (n) => `${Math.round(n)}m`)}
-      ${row("max altitude", a.maxAltitude, b.maxAltitude, (n) => `${Math.round(n)}m`)}
-      ${row("perfect ramps", a.perfects, b.perfects, (n) => String(n))}
-      ${row("best combo", a.bestCombo, b.bestCombo, (n) => `×${n}`)}
-      ${row("coins", a.coins, b.coins, (n) => String(n))}
-      ${row("top speed", a.topSpeed, b.topSpeed, (n) => `${Math.round(n)}`)}
-    </div>
-    <button class="primary-btn hero" data-ui data-action="versus"><span class="hero-label">REMATCH</span><span class="hero-hint">swap sides for fairness</span></button>
-    <button class="ghost-btn" data-ui data-action="menu">Menu</button>
-  `;
-}
-
 function renderAtlas(s: HudSnapshot): string {
   return `
     ${head(SCREEN.atlas, "back", `<span class="pill">Farthest: ${s.farthestIsland + 1}</span>`)}
-    <p class="tagline">Every island has its own weather. Learn them, then chain them.</p>
+    <p class="tagline">${t("hud.renderAtlas.EIslandHasItsOwnWeatherLearnThemThenChainThem", undefined, "Every island has its own weather. Learn them, then chain them.")}</p>
     <div class="atlas">
       ${s.atlas
         .map(
           (a) => `<div class="atlas-card ${a.reached ? "reached" : ""}" style="--c:${a.color}">
             <div class="atlas-num">Island ${a.island + 1}</div>
-            <div class="atlas-emoji">${a.reached ? a.emoji : "❔"}</div>
+            <div class="atlas-emoji">${a.reached ? menuIconSm(a.emoji) : menuIconSm("question")}</div>
             <div class="atlas-name">${a.reached ? a.name : "Unknown shores"}</div>
             <div class="atlas-tag">${a.reached ? a.tagline : "Reach it to chart it"}</div>
-            ${a.reached && a.hazard !== "none" ? `<div class="atlas-hazard">${a.hazard === "gust" ? "🌬 headwinds" : "🌩 ash storms"}</div>` : ""}
+            ${a.reached && a.hazard !== "none" ? `<div class="atlas-hazard">${a.hazard === "gust" ? `${menuIconSm("cloud")} headwinds` : `${menuIconSm("lightning")} ash storms`}</div>` : ""}
           </div>`,
         )
         .join("")}
     </div>
     <div class="field-guide">
-      <div class="mission-head">Field guide</div>
-      <div class="fg-row"><b>♨ Thermals</b> Shimmering columns. <em>Release</em> inside one to ride it up.</div>
-      <div class="fg-row"><b>🌬 Headwinds</b> Slow you in the air. <em>Hold</em> to tuck and punch through.</div>
-      <div class="fg-row"><b>🌩 Ash storms</b> Sap your speed. Fly beneath them, or dive early.</div>
-      <div class="fg-row"><b>❄ Snow caps</b> Just pretty — but the peaks are taller. Build speed before them.</div>
+      <div class="mission-head">${t("hud.fieldGuide", undefined, "Field guide")}</div>
+      <div class="fg-row"><b>${menuIconSm("thermal")} Thermals</b> Shimmering columns. Release inside one to ride it up.</div>
+      <div class="fg-row"><b>${menuIconSm("wind")} Headwinds</b> Slow you in the air. Hold to tuck and punch through.</div>
+      <div class="fg-row"><b>${menuIconSm("ash_storm")} Ash storms</b> Sap your speed. Fly beneath them, or dive early.</div>
+      <div class="fg-row"><b>${menuIconSm("snowflake")} Snow caps</b> Just pretty — but the peaks are taller. Build speed before them.</div>
     </div>
   `;
 }
 
-function menuLinks(items: MenuDestination[]): string {
-  return items.map(item =>
-    `<button class="destination" data-ui data-action="${item.action}" data-icon="${item.icon}"><span class="destination-art">${menuIcon(item.icon)}</span><span class="destination-copy"><b>${item.title}</b><span>${item.detail}</span></span><span class="destination-arrow" aria-hidden="true">${arrowUpRightSvg()}</span></button>`,
-  ).join("");
-}
 
 function renderNameEntry(s: HudSnapshot): string {
   // The first-run welcome screen is a name surface like any other, so it obeys
@@ -2725,7 +2806,7 @@ function renderNameEntry(s: HudSnapshot): string {
   // says "We picked a name for you" — only toasted "Please enter a pilot name".
   // A first-run player who did not notice the dice had no way past the screen.
   const field = CUSTOM_PILOT_NAMES
-    ? `<label class="name-entry-label" for="pilot-name-input">Your call sign</label>
+    ? `<label class="name-entry-label" for="pilot-name-input">${t("hud.renderNameEntry.CSign", undefined, "Your call sign")}</label>
       <div class="name-input-row">
         <div class="name-input-wrapper">
           <input
@@ -2735,18 +2816,18 @@ function renderNameEntry(s: HudSnapshot): string {
             data-ref="pilotNameInput"
             placeholder="e.g. Rook, Ivy, Vale…"
             maxlength="14"
-            aria-label="Pilot name"
+            aria-label="${t("hud.homeBoardStrip.PName", undefined, "Pilot name")}"
             autocomplete="off"
             value="${escapeHtml(s.pilotName)}"
           />
           <div class="name-char-count"><span>${s.pilotName.length}</span>/14</div>
         </div>
-        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Suggest a name" aria-label="Random name">🎲</button>
+        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="${t("hud.homeBoardStrip.SName", undefined, "Suggest a name")}" aria-label="${t("hud.homeBoardStrip.RName", undefined, "Random name")}">${menuIconSm("dice")}</button>
       </div>`
-    : `<span class="name-entry-label">Your call sign</span>
+    : `<span class="name-entry-label">${t("hud.renderNameEntry.CSignx", undefined, "Your call sign")}</span>
       <div class="name-input-row">
-        <span class="pilot-name-readonly name-entry-plate" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Roll a new name" aria-label="Random name">🎲</button>
+        <span class="pilot-name-readonly name-entry-plate" aria-label="${t("hud.aria.pilotName", undefined, "Pilot name")}">${escapeHtml(s.pilotName)}</span>
+        <button class="name-random-btn" data-ui data-action="randomize-pilot-name" title="Roll a new name" aria-label="${t("hud.aria.randomName", undefined, "Random name")}">${menuIconSm("dice")}</button>
       </div>`;
 
   return `
@@ -2756,7 +2837,7 @@ function renderNameEntry(s: HudSnapshot): string {
     </div>
 
     <div class="name-entry-headline">
-      <h2 class="name-entry-title">Welcome, Pilot</h2>
+      <h2 class="name-entry-title">${t("hud.renderNameEntry.WPilot", undefined, "Welcome, Pilot")}</h2>
       <p class="name-entry-sub">We picked a name for you — ${CUSTOM_PILOT_NAMES ? "change it" : "roll it"} or fly right now.</p>
     </div>
 
@@ -2764,8 +2845,8 @@ function renderNameEntry(s: HudSnapshot): string {
       ${field}
 
       <label class="name-language" for="welcome-language-select">
-        <span>Language / Idioma</span>
-        <select id="welcome-language-select" data-ui data-action="set-language" aria-label="Choose language">
+        <span>${t("hud.renderNameEntry.LIdioma", undefined, "Language / Idioma")}</span>
+        <select id="welcome-language-select" data-ui data-action="set-language" aria-label="${t("hud.aria.chooseLanguage", undefined, "Choose language")}">
           ${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}
         </select>
       </label>
@@ -2783,549 +2864,6 @@ function renderNameEntry(s: HudSnapshot): string {
   `;
 }
 
-/**
- * "Top wings" — the live board, three rows, on the home screen.
- *
- * Competition is a reason to press play again, so the standing is shown above
- * the Play grid, not only behind a menu page. It is a view onto the page the
- * menu already fetches, and it disappears when there is nothing to show.
- */
-function homeBoardStrip(s: HudSnapshot): string {
-  const rows = s.homeBoard.slice(0, 3);
-  if (!rows.length) return "";
-  // Rank badges are drawn, not emoji: medal glyphs render as tofu boxes on
-  // font sets without the emoji face (several platforms ship none by default),
-  // and a row of empty squares under "Top pilots" reads as broken.
-  const medals = ["1", "2", "3"];
-  // Three compact rows in ONE panel, not three stacked cards. The rows are the
-  // live top of the ladder — the player's own line is marked, so the strip says
-  // "you belong on this board" instead of "here is a table" — and the whole
-  // panel opens the full leaderboards. Density is what keeps it above the Play
-  // grid: the earlier three-card version cost ~3x this height and pushed PvP
-  // off a 640-tall phone entirely.
-  return `
-    <button class="home-board" data-ui data-action="open-board" aria-label="Open the leaderboards">
-      <span class="hb-head">
-        <span class="hb-title">🏆 Top pilots</span>
-        <span class="hb-go">All boards ›</span>
-      </span>
-      ${rows
-        .map(
-          (row, i) => `<span class="hb-row${row.you ? " you" : ""}">
-            <span class="hb-medal">${medals[i]}</span>
-            <span class="hb-name">${escapeHtml(row.name)}</span>
-            <span class="hb-val">${row.value}</span>
-          </span>`,
-        )
-        .join("")}
-    </button>`;
-}
-
-function renderMain(s: HudSnapshot): string {
-  // MenuCatalog is the single source of truth for home navigation. Keep the
-  // renderer declarative: filtering destinations here used to leave stale PvP
-  // entries in the catalog and made other screens drift from the home menu.
-  const playDestinations = PLAY_DESTINATIONS;
-  const progressDestinations = PROGRESS_DESTINATIONS;
-  return `
-    <button
-      class="icon-btn menu-mute"
-      data-ui
-      data-action="set-mute"
-      data-menu-mute
-      aria-pressed="${s.settings.mute ? "true" : "false"}"
-      aria-label="${s.settings.mute ? "Unmute sound" : "Mute sound"}"
-      title="${s.settings.mute ? "Unmute sound" : "Mute sound"}"
-    >${s.settings.mute ? "\u{1F507}" : "\u{1F50A}"}</button>
-    <header class="hero">
-      ${menuHorizon()}
-      <!-- Sun and bird both come from Sunbird.ts, so the title screen, the
-           lobby and the flock in the menu sky are literally one sun and one
-           bird. This SVG *is* the reference the whole game is drawn from. -->
-      <div class="hero-sun-wrap">${sunSVG({ size: 64, className: "hero-sun" })}</div>
-      ${sunbirdSVG({ className: "hero-bird", width: 92, title: "Sunbird", animateWings: true })}
-      <div class="hero-title">
-        <span class="hero-kicker">chase the daylight</span>
-        <h1>SUNBIRD</h1>
-        <p class="hero-sub">Hold to dive. Release to soar.<br>Master the glide across endless islands.</p>
-      </div>
-    </header>
-
-    <button class="primary-btn home-launch" data-ui data-action="pvp-practice" aria-label="Play free flight now"><span class="launch-art">${menuIcon("flight")}</span><span class="launch-copy"><small>${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</small><b>Fly now</b><span>${t("onboarding.launchSub", undefined, "Hold to dive · release to glide")}</span></span><span class="launch-arrow" aria-hidden="true">${arrowRightSvg()}</span></button>
-    ${s.runsPlayed < 2 ? `<section class="onboarding-route" aria-label="Your first flight plan">
-      <div class="onboarding-route-head"><span>✦ START HERE</span><small>one input · three small wins</small></div>
-      <div class="onboarding-route-steps">
-        <button class="onboarding-route-step active" data-ui data-action="pvp-practice"><b>01</b><span><strong>Feel the glide</strong><small>Hold downhill · release to soar</small></span><i>Fly ›</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-shop"><b>02</b><span><strong>Choose your bird</strong><small>Spend the coins you just earned</small></span><i>Shop ›</i></button>
-        <button class="onboarding-route-step" data-ui data-action="open-challenges"><b>03</b><span><strong>Race the flock</strong><small>Choose online or AI when you are ready</small></span><i>Race ›</i></button>
-      </div>
-    </section>` : ""}
-    <!-- 01 — PLAY. PvP, AI PvP and the solo modes are all ways of playing, so
-         they sit under the Play heading as one grid. Standings then close the
-         section as a single full-width bar instead of a sixth row of choices:
-         "how am I doing" is a different question from "what shall I play", and
-         one bar at the end reads as the section's full stop. -->
-    <div class="home-section-title"><span>Play now</span><small>FLY · RACE · EXPLORE</small></div>
-    <nav class="destination-grid play-destinations home-hub-grid" aria-label="Play">${menuLinks(playDestinations)}</nav>
-    ${homeBoardStrip(s)}
-    <div class="home-section-title"><span>Personalize</span><small>BIRD · FLOCK · SETTINGS</small></div>
-    <nav class="destination-grid utility-destinations" aria-label="Your hangar">${menuLinks(COLLECTION_DESTINATIONS)}</nav>
-    <div class="home-section-title"><span>Progress</span><small>GOALS · RANK · REWARDS</small></div>
-    <nav class="destination-grid progress-destinations home-hub-grid" aria-label="Progress">${menuLinks(progressDestinations)}</nav>
-    <div class="home-record"><span class="record-art">${menuIcon("medal")}</span><span>${t("hud.menu.personalBest", undefined, "Personal best")} <b>${distanceText(s.bestDistance)}</b></span><span class="record-pass" data-ui data-action="open-pass">Nest Pass Lv.${s.season.tier}/${s.season.maxTier}</span><span class="record-wallet">● ${s.wallet.toLocaleString()} <small>${t("hud.menu.coinBalance", undefined, "coins")}</small></span></div>
-  `;
-}
-
-function renderProgress(s: HudSnapshot): string {
-  const portal = s.portalName !== "none";
-  const modes: { id: SeedMode; label: string }[] = [
-    { id: "today", label: "Today" },
-    { id: "yesterday", label: "Yesterday" },
-    { id: "random", label: "Wild" },
-  ];
-  const seedPicker = !portal && s.gold
-    ? `<div class="seg">${modes
-        .map((m) => `<button data-ui data-action="seed-${m.id}" class="${s.seedMode === m.id ? "on" : ""}">${m.label}</button>`)
-        .join("")}</div>`
-    : portal
-      ? `<p class="portal-note">${PORTAL_EDITION_NOTE}</p>`
-      : SELL_AD_REMOVAL ? `<button class="lock-chip" data-ui data-action="open-paywall">✦ Pick your hills with Gold</button>` : "";
-  // The subtitle below is deliberately NOT wrapped in t(). It had a t() call
-  // whose key was never added to the barrel, so it read as translated in the
-  // source while rendering the English fallback for all 20 locales. The
-  // source→barrel coverage test (i18n/__tests__/locales.test.ts) fails on
-  // exactly that now; until a real translation exists for every shipped
-  // locale, a plain literal is the honest representation of its state.
-  return `${head(t("hud.progress.title", undefined, "Your progress"))}
-    <p class="tagline">Missions and rewards from all your flights, in one place.</p>
-    <div class="hero-meta">
-      <span class="pill seed-pill">${s.seedLabel}</span>
-      <span class="pill wings-pill" title="${distanceText(s.wings.lifetime)} lifetime">${s.wings.icon} ${s.wings.name}</span>
-    </div>
-    ${
-      s.wings.nextNeeded > 0
-        ? `<div class="wings-track" aria-label="Career progress"><i style="width:${Math.round(s.wings.progress * 100)}%"></i><span>${distanceText(s.wings.nextNeeded)} to ${s.wings.nextName}</span></div>`
-        : ""
-    }
-    ${s.rivalBanner ? renderRivalBanner(s.rivalBanner) : ""}
-    ${seedPicker}
-
-    <div class="pc pc--blue pc-row">
-      <span class="pc-icon">🎡</span>
-      <div class="pc-body">
-        <b>Daily Lucky Wheel</b>
-        <span>Spin to win up to ● 1,000 Coins &amp; Mystery Vault Keys!</span>
-      </div>
-      ${s.canFreeSpin
-        ? `<button class="primary-btn gold" data-ui data-action="spin-wheel">Free Spin! 🎡</button>`
-        : `<button class="soft-btn" disabled>🎡 Tomorrow</button>`}
-    </div>
-
-    <div class="pc pc--pink pc-row">
-      <span class="pc-icon">🐷</span>
-      <div class="pc-body">
-        <b>Coin Piggy Bank</b>
-        <span>+20% flight bonus accumulated: ● ${s.piggyCoins} / ${PIGGY_BANK_CAP}</span>
-      </div>
-      ${s.piggyCoins >= PIGGY_BANK_MIN_SMASH
-        ? `<button class="primary-btn gold" data-ui data-action="smash-piggy">Smash 🔨</button>`
-        : `<span class="tag need">Fly to fill</span>`}
-    </div>
-
-    ${s.nestLevel >= 5 || s.prestigeLevel > 0
-      ? `<div class="pc pc--purple pc-row">
-          <span class="pc-icon">👑</span>
-          <div class="pc-body">
-            <b>Solar Crown Prestige ${s.prestigeLevel > 0 ? `Rank ${s.prestigeLevel}` : ""}</b>
-            <span>Permanent coin boost: +${Math.round((s.prestigeMult - 1) * 100)}%</span>
-          </div>
-          <button class="primary-btn gold" data-ui data-action="perform-prestige">Rebirth 👑</button>
-        </div>`
-      : ""}
-
-    <div class="section-title">Local rank <small>practice field · not global</small></div>
-    <button class="rank-card" data-ui data-action="open-rank" aria-label="View local Rival rank (practice field)">
-      <span class="rank-div">${s.rival.divisionIcon} ${s.rival.division}</span>
-      <span class="rank-num">${s.rival.rating}</span>
-      <span class="rank-bar"><i style="width:${Math.round(s.rival.progress * 100)}%"></i></span>
-      <span class="rank-sub">${
-        s.rival.nextNeeded > 0
-          ? `${s.rival.nextNeeded} to ${s.rival.nextName}`
-          : "Top division — defend it"
-      } · 🔥${s.rival.streak} streak</span>
-    </button>
-
-    <button class="event-strip" data-ui data-action="play-event">
-      <span class="ds-icon">${s.weeklyEvent.icon}</span>
-      <span class="ds-body"><b>Event · ${s.weeklyEvent.name}</b><em>${s.monthlyTheme.icon} ${s.monthlyTheme.name} · fly ${s.weeklyEvent.target.toLocaleString()} m · ● ${s.weeklyEvent.reward}</em></span>
-      <span class="ds-go">${s.eventClearsWeek > 0 ? `✓${s.eventClearsWeek}` : "FLY"}</span>
-    </button>
-    ${!s.calendar.claimedToday ? `<button class="cal-strip" data-ui data-action="claim-calendar">📅 Daily gift ready — day ${(s.calendar.cycleDay % 28) + 1} of 28 <b>CLAIM</b></button>` : ""}
-
-    <div class="wallet-row">
-      <span class="pill coin">● ${s.wallet}</span>
-      <span class="pill">🔥 ${s.streakDays}-day streak</span>
-      <span class="pill">Nest Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)}</span>
-       ${!portal && s.gold ? '<span class="pill gold">✦ Gold</span>' : ""}
-       ${!portal && s.vip ? '<span class="pill vip">♛ VIP</span>' : ""}
-      <span class="pill skill">${s.skillLabel}</span>
-    </div>
-
-    ${renderGoalList(s.sessionGoals)}
-    ${renderQuests(s.quests)}
-    ${renderMissions(s.missions)}
-    <div class="menu-stats"><div>Best <b>${distanceText(s.bestDistance)}</b></div><div>Today <b>${distanceText(s.todayBest)}</b></div></div>
-`;
-}
-
-function skinRarity(d: { goldOnly?: boolean; vipOnly?: boolean; prizeOnly?: string; price: number; rarity?: string }): { key: string; label: string } {
-  if (d.prizeOnly) return { key: "prize", label: "PRIZE" };
-  // Explicit rarity from the catalogue wins over inferred price bands.
-  if (d.rarity && d.rarity !== "starter") return { key: d.rarity, label: d.rarity.toUpperCase() };
-  if (d.vipOnly) return { key: "mythic", label: "MYTHIC" };
-  if (d.goldOnly) return { key: "legendary", label: "LEGENDARY" };
-  if (d.price >= 700) return { key: "epic", label: "EPIC" };
-  if (d.price >= 400) return { key: "rare", label: "RARE" };
-  if (d.price > 0) return { key: "common", label: "COMMON" };
-  return { key: "starter", label: "STARTER" };
-}
-
-function skinStatBars(d: { speedMult: number; feverBonus: number; daylightBonus: number; magnetAlways: boolean }): string {
-  const bars: [string, number, string][] = [
-    ["Speed", Math.min(100, Math.round(((d.speedMult - 1) / 0.08) * 100)), `${d.speedMult > 1 ? "+" : ""}${Math.round((d.speedMult - 1) * 100)}%`],
-    ["Fever", Math.min(100, Math.round((d.feverBonus / 5) * 100)), d.feverBonus > 0 ? `+${d.feverBonus}s` : "—"],
-    ["Daylight", Math.min(100, Math.round((d.daylightBonus / 12) * 100)), d.daylightBonus > 0 ? `+${d.daylightBonus}s` : "—"],
-  ];
-  return `<div class="sk-stats">${bars
-    .map(([k, pct, val]) => `<span class="sk-stat"><em>${k}</em><i><b style="width:${pct}%"></b></i><u>${val}</u></span>`)
-    .join("")}${d.magnetAlways ? `<span class="sk-stat mag">🧲 always-on</span>` : ""}</div>`;
-}
-
-/** Group the 60+ bird wall into browsable collections with owned counters. */
-function renderSkinCollections(s: HudSnapshot, browse: ShopBrowse): string {
-  const matches = browseSkins(s.skins, browse);
-  const filtered = browse.query.trim() !== "" || browse.filter !== "all";
-  if (!matches.length) return `<div class="shop-empty">${menuIcon("compass")}<b>No birds in this view</b><p>Try a bird name, a perk, or a different filter.</p><button class="soft-btn" data-ui data-action="shop-clear">Show all birds</button></div>`;
-  const portal = s.portalName !== "none";
-  const byId = new Map<string, SkinView[]>();
-  for (const v of matches) {
-    const cid = v.def.collection ?? "starter";
-    if (!byId.has(cid)) byId.set(cid, []);
-    byId.get(cid)!.push(v);
-  }
-  return COLLECTIONS.filter((c) => byId.has(c.id))
-    .map((c) => {
-      const skins = byId.get(c.id)!;
-      const collection = s.skins.filter(v => (v.def.collection ?? "starter") === c.id);
-      const got = collection.filter(v => v.owned).length;
-      const complete = got === collection.length;
-      const bonus = 100 + collection.length * 25;
-      return `<details class="collection ${complete ? "complete" : ""}" data-ref="collection-${c.id}${filtered ? "-filtered" : ""}" ${filtered ? "open" : ""}>
-        <summary class="coll-head"><span class="collection-art">${menuIcon(c.id === "tournament" ? "trophy" : c.id === "achievement" ? "medal" : c.id === "cosmic" ? "endless" : c.id === "premium" ? "rank" : c.id === "elements" ? "boost" : c.id === "nature" ? "atlas" : "bird")}</span><b>${c.name}</b>
-        <span class="coll-count">${complete ? "✓ complete" : `${got}/${collection.length} · bonus ● ${bonus}`}</span></summary>
-        <div class="skin-grid">${skins.map((v) => renderSkinCard(v, portal, browse.preview, s.wallet)).join("")}</div>
-      </details>`;
-    })
-    .join("");
-}
-
-function skinAction(v: SkinView, portal: boolean, wallet: number): string {
-  const d = v.def;
-  const price = v.dealPrice ?? d.price;
-  const priceLabel = v.dealPrice !== undefined ? `<s>● ${d.price}</s> ● ${price}` : `● ${price}`;
-  let action: string;
-  if (v.equipped) action = `<span class="tag on">✓ In use</span>`;
-  else if (v.owned) action = `<button class="mini-btn" data-ui data-action="equip-skin" data-id="${d.id}">Equip</button>`;
-  else if (d.prizeOnly) action = `<span class="tag prize" title="${d.prizeOnly}">🏆 ${d.prizeOnly}</span>`;
-  else if (v.locked && portal)
-    action = `<span class="tag portal-lock">Portal event</span>`;
-  else if (v.locked && SELL_AD_REMOVAL)
-    action = `<button class="mini-btn ${v.lockReason === "vip" ? "vip" : "gold"}" data-ui data-action="open-paywall">${v.lockReason === "vip" ? "♛ VIP" : "✦ Gold"}</button>`;
-  else if (v.locked)
-    action = `<span class="tag portal-lock">Gold perk</span>`;
-  else
-    action = `<button class="mini-btn ${v.affordable ? (v.dealPrice !== undefined ? "gold" : "") : "off"}" data-ui data-action="buy-skin" data-id="${d.id}" ${v.affordable ? "" : "disabled"} aria-label="${v.affordable ? `Buy ${d.name} for ${price} coins` : `${d.name} costs ${price} coins; earn more coins to unlock`}">${priceLabel}</button>`;
-  return action + (!v.owned && !v.locked && !d.prizeOnly && !v.affordable ? `<small class="purchase-shortfall">${Math.max(0, price - wallet)} more coins</small>` : "");
-}
-
-function renderSkinCard(v: SkinView, portal: boolean, preview: string, wallet: number): string {
-  const d = v.def, rarity = skinRarity(d);
-  const birdSvg = sunbirdSVG({ palette: skinPalette(d), width: 88, flap: 0.38 });
-  const dealTag = v.dealPrice !== undefined && !v.owned ? `<span class="deal-tag">TODAY −40%</span>` : "";
-  return `<div class="skin-card r-${rarity.key} ${v.equipped ? "equipped" : ""} ${v.owned ? "owned" : ""} ${v.dealPrice !== undefined ? "deal" : ""}" data-skin="${d.id}">
-    <span class="rarity">${rarity.label}</span>
-    ${dealTag}
-    <button class="skin-bird skin-preview" data-ui data-action="preview-skin" data-id="${d.id}" aria-label="Preview ${d.name}" aria-pressed="${preview === d.id}">${birdSvg}<span>Preview</span></button>
-    <div class="sk-name">${d.name}</div><div class="sk-perk">${d.perk}</div>${skinStatBars(d)}${skinAction(v, portal, wallet)}</div>`;
-}
-
-function renderRivalBanner(banner: string): string {
-  const [name, dist] = banner.split("|");
-  return `<div class="rival-banner">🥊 <b>${escapeHtml(name)}</b> challenged you — beat <b>${escapeHtml(dist)} m</b> on their hills. Hold to fly.</div>`;
-}
-
-function renderBoostRow(v: BoostView, wallet: number): string {
-  const d = v.def;
-  const price = v.dealPrice ?? d.price;
-  const missing = Math.max(0, price - wallet);
-  const priceLabel = v.dealPrice !== undefined ? `<s>● ${d.price}</s> ● ${price}` : `● ${price}`;
-  const action = v.armed
-    ? `<span class="tag on">${d.permanent ? "Unlocked ✓" : "Armed ✓"}</span>`
-    : v.affordable
-      ? `<button class="mini-btn ${v.dealPrice !== undefined ? "gold" : ""}" data-ui data-action="buy-boost" data-id="${d.id}">${priceLabel}</button>`
-      : `<span class="tag need">Need ${missing}●</span>`;
-  const dealTag = v.dealPrice !== undefined && !v.armed ? `<span class="deal-tag">TODAY −50%</span>` : "";
-  return `<div class="boost-row ${v.armed ? "armed" : ""} ${v.dealPrice !== undefined ? "deal" : ""}"><span class="bi">${menuIcon("boost")}</span><div><div class="mt">${d.name}${d.permanent ? `<span class="boost-once">permanent</span>` : `<span class="boost-once">one flight</span>`}${dealTag}</div><div class="md">${d.desc}</div></div>${action}</div>`;
-}
-
-function renderTrailCard(v: ShopTrailView, wallet: number): string {
-  const d = v.def;
-  const stops = d.css.join(", ");
-  const missing = Math.max(0, d.price - wallet);
-  const action = v.equipped
-    ? `<span class="tag on">✓ In use</span>`
-    : v.owned
-      ? `<button class="mini-btn" data-ui data-action="buy-trail" data-id="${d.id}">Equip</button>`
-      : v.affordable
-        ? `<button class="mini-btn" data-ui data-action="buy-trail" data-id="${d.id}">● ${d.price}</button>`
-        : `<span class="tag need">Need ${missing}●</span>`;
-  return `<div class="trail-card ${v.equipped ? "equipped" : ""}">
-    <span class="trail-swatch" style="background:linear-gradient(90deg, ${stops})"></span>
-    <div class="trail-body"><b>${d.label}</b><em>${d.desc}</em></div>${action}</div>`;
-}
-
-function renderShop(s: HudSnapshot, browse: ShopBrowse): string {
-  const owned = s.skins.filter((v) => v.owned).length;
-  const armedBoosts = s.boosts.filter((b) => b.armed);
-  const equippedSkin = s.skins.find(v => v.def.id === browse.preview) ?? s.skins.find(v => v.equipped);
-  const matches = browseSkins(s.skins, browse).length;
-  const heroSvg = equippedSkin
-    ? sunbirdSVG({ palette: skinPalette(equippedSkin.def), width: 128, flap: 0.45, title: equippedSkin.def.name })
-    : sunbirdSVG({ width: 88, flap: 0.45, title: "Sunbird" });
-
-  const flash = s.dailyFlash ?? dailyFlashBird("today");
-  const flashDef = skinById(flash.id);
-  const flashView = s.skins.find(v => v.def.id === flash.id);
-  const flashOwned = flashView?.owned ?? false;
-  const flashSvg = sunbirdSVG({ palette: skinPalette(flashDef), width: 90, flap: 0.45, title: flashDef.name });
-
-  const filters = [
-    ["all", "All birds"],
-    ["affordable", "Can unlock"],
-    ["owned", "Owned"],
-    ["nature", "Nature 🌿"],
-    ["cosmic", "Cosmic 🌌"],
-    ["elements", "Elements 🌪"],
-    ["legendary", "Legendary ★"],
-  ] as const;
-
-  return `
-    ${head(SCREEN.shop, "back", `<span class="pill coin">● ${s.wallet.toLocaleString()}</span>`)}
-    <p class="shop-intro">YOUR HANGAR <span>Find your wings. Make them yours.</span></p>
-
-    <div class="pc pc--gold pc-row">
-      <span class="pc-icon">🪙</span>
-      <div class="pc-body">
-        <b>Daily Flight Stipend</b>
-        <span>Daily test &amp; hangar allowance</span>
-      </div>
-      ${s.stipendClaimed
-        ? `<span class="tag on">Claimed Today ✓</span>`
-        : `<button class="primary-btn gold" data-ui data-action="claim-daily-stipend">Claim +● ${DAILY_STIPEND}</button>`
-      }
-    </div>
-    ${s.adAvailable ? `
-    <div class="pc pc--gold pc-row">
-      <span class="pc-icon">📺</span>
-      <div class="pc-body">
-        <b>Free Coins</b>
-        <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/visit)</span>
-      </div>
-      <button class="primary-btn gold" data-ui data-action="shop-free-coins">Watch Ad</button>
-    </div>` : ""}
-
-    <div class="pc pc--red">
-      <div class="pc-header">
-        <span class="pc-badge">🔥 DAILY FLASH SALE · 40% OFF</span>
-        <span class="pc-label" style="color:#c62828;">Resets at Midnight</span>
-      </div>
-      <div class="pc-row">
-        <div class="pc-preview">${flashSvg}</div>
-        <div class="pc-body">
-          <b>${flashDef.name}</b>
-          <span>${flashDef.perk}</span>
-          <div class="pc-price">
-            <s>● ${flashDef.price}</s>
-            <b>● ${flash.price}</b>
-          </div>
-        </div>
-        <div class="pc-action">
-          ${flashOwned
-            ? `<span class="tag on">Owned ✓</span>`
-            : s.wallet >= flash.price
-              ? `<button class="primary-btn gold" data-ui data-action="buy-skin" data-id="${flashDef.id}">Unlock · ● ${flash.price}</button>`
-              : `<span class="tag need">Need ● ${flash.price - s.wallet}</span>`
-          }
-          <button class="mini-btn" data-ui data-action="preview-skin" data-id="${flashDef.id}">Preview</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="shop-hero">
-      ${menuHorizon()}
-      <div class="shop-hero-bird">${heroSvg}</div>
-      <div class="shop-hero-info">
-        <small class="shop-preview-label">${equippedSkin?.equipped ? "YOUR EQUIPPED BIRD" : "BIRD PREVIEW · NOT EQUIPPED"}</small>
-        <div class="shop-hero-name" tabindex="-1">${equippedSkin ? equippedSkin.def.name : "Sunbird"}</div>
-        <div class="shop-hero-perk">${equippedSkin ? equippedSkin.def.perk : "The original. Fast, honest, unstoppable."}</div>
-        ${equippedSkin ? `<div class="shop-preview-action">${skinAction(equippedSkin, s.portalName !== "none", s.wallet)}</div>` : ""}
-      </div>
-    </div>
-    <p class="shop-rules">Bird perks are for solo play. Live races use equal flight equipment; your appearance stays yours.</p>
-
-    <div class="pc pc--blue">
-      <div class="pc-header">
-        <span class="pc-badge">📦 ACE PILOT CRATE · SAVE 54%</span>
-        <span class="pc-label">Value Pack</span>
-      </div>
-      <div class="pc-row" style="margin-bottom:10px;">
-        <span class="pc-icon">✈️</span>
-        <div class="pc-body">
-          <b>Ace Wingman Bundle</b>
-          <span>3 Boosts · Tideglass Trail · +${DAILY_STIPEND} Coins</span>
-        </div>
-      </div>
-      ${s.wingmanBundle
-        ? `<span class="pc-claimed" style="justify-content:center;">✓ Unlocked</span>`
-        : s.wallet >= 240
-          ? `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman">Claim · ● 240</button>`
-          : `<button class="primary-btn gold wide" data-ui data-action="buy-bundle" data-id="wingman" disabled>Need ● ${240 - s.wallet} more</button>`
-      }
-    </div>
-
-    <div class="pc pc--vault pc-row">
-      <span class="pc-icon">🥚</span>
-      <div class="pc-body">
-        <b>Golden Mystery Vault</b>
-        <span>35% Rare Bird · 35% Radiant Trail · 30% Coin Jackpot</span>
-      </div>
-      ${s.wallet >= 150
-        ? `<button class="primary-btn gold" data-ui data-action="buy-vault">Open · ● 150</button>`
-        : `<span class="tag need">Need ● ${150 - s.wallet}</span>`
-      }
-    </div>
-
-    <nav class="shop-jumps" aria-label="Shop sections">${[["shopBirds", "bird", "Birds"], ["shopBoosts", "boost", "Boosts"], ["shopTrails", "trail", "Trails"]].map(([id, icon, label]) => `<button class="soft-btn" data-ui data-action="shop-section" data-id="${id}">${menuIcon(icon as "bird" | "boost" | "trail")}<span>${label}</span></button>`).join("")}</nav>
-
-    <section class="shop-browser" aria-label="Browse birds">
-      <div class="section-title shop-section-birds">Bird collection <small>${owned}/${s.skins.length} owned</small></div>
-      <label class="field-label" for="shop-search">Find a bird</label>
-      <input id="shop-search" type="search" data-ui data-ref="shopSearch" value="${escapeHtml(browse.query)}" placeholder="Name, collection or perk" maxlength="80" autocomplete="off" />
-      <div class="shop-filters" role="group" aria-label="Filter birds">${filters.map(([id, label]) => `<button class="mini-btn ${browse.filter === id ? "gold" : ""}" data-ui data-action="shop-filter" data-id="${id}" aria-pressed="${browse.filter === id}">${label}</button>`).join("")}</div>
-      <p class="shop-match-count" role="status">${matches} ${matches === 1 ? "bird" : "birds"} shown${browse.filter === "affordable" ? " · unowned, purchasable with your coins" : ""}</p>
-      ${renderSkinCollections(s, browse)}
-    </section>
-
-    <details class="shop-section"><summary><span class="section-art">${menuIcon("boost")}</span>Boosts &amp; upgrades <span>${armedBoosts.length} armed</span></summary>
-      <p class="fineprint">One-flight boosts are used in solo or casual AI flights. Live races and ranked practice use equal flight equipment and keep these boosts for later. Permanent upgrades stay with you.</p>
-      <div class="boost-list">${s.boosts.map((b) => renderBoostRow(b, s.wallet)).join("")}</div>
-      <div class="section-title">Nest <small>permanent score multiplier</small></div>
-      <div class="boost-list"><div class="boost-row nest-row">
-        <span class="bi">${menuIcon("story")}</span>
-        <div><div class="mt">Nest upgrade <span class="boost-once">forever</span></div>
-        <div class="md">Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score${s.nestMaxed ? " · fully upgraded" : ` · next ×${(s.nestMult + 0.12).toFixed(2)}`}</div></div>
-        ${
-          s.nestMaxed
-            ? `<span class="tag on">MAX ✓</span>`
-            : s.wallet >= s.nestPrice
-              ? `<button class="mini-btn gold" data-ui data-action="buy-nest">● ${s.nestPrice}</button>`
-              : `<span class="tag need">Need ${s.nestPrice - s.wallet}●</span>`
-        }
-      </div></div>
-    </details>
-
-    <details class="shop-section"><summary><span class="section-art">${menuIcon("trail")}</span>Trails <span>Cosmetic · yours forever</span></summary>
-      <div class="trail-list">${s.shopTrails.map((t) => renderTrailCard(t, s.wallet)).join("")}</div>
-    </details>
-
-    ${s.portalName === "none" && !(s.gold && s.vip) ? upsellStrip() : ""}
-    <p class="fineprint">Earn coins by flying, daily quests, streaks and the Nest Pass.</p>
-  `;
-}
-
-function renderPaywall(s: HudSnapshot): string {
-  const starter = !s.starterOwned
-    ? `
-    <div class="starter-card">
-      <div class="starter-flag">ONE-TIME OFFER</div>
-      <h3>🎁 First Flight Pack · ${STARTER_PACK.price}</h3>
-      <ul class="feature-list tight">${s.starterFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
-      ${
-        s.wallet >= STARTER_PACK.coinPrice
-          ? `<button class="primary-btn starter" data-ui data-action="starter-buy">Claim Pack · ${STARTER_PACK.price}</button>`
-          : `<button class="primary-btn starter off" data-ui data-action="starter-buy">Need ● ${STARTER_PACK.coinPrice - s.wallet} more coins</button>`
-      }
-    </div>`
-    : "";
-  return `
-    ${head(SCREEN.coinStore)}
-    <div class="wallet-row" style="margin-bottom:12px"><span class="pill coin">Your Balance: ● ${s.wallet.toLocaleString()}</span></div>
-    ${starter}
-    <div class="gold-hero"><div class="gold-badge">✦</div><div class="gold-price">${GOLD.price}<small> lifetime</small></div></div>
-    <ul class="feature-list">${s.goldFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
-    ${
-      s.gold
-        ? `<div class="owned-banner">You own Sunbird Gold ✦</div>`
-        : s.wallet >= GOLD.coinPrice
-          ? `<button class="primary-btn gold" data-ui data-action="gold-buy">Unlock Gold · ${GOLD.price}</button>`
-          : `<button class="primary-btn gold off" data-ui data-action="gold-buy">Need ● ${GOLD.coinPrice - s.wallet} more coins</button>`
-    }
-    <div class="gold-hero vip"><div class="gold-badge vip">♛</div><div class="gold-price">${VIP.price}<small> 30 days</small></div></div>
-    <ul class="feature-list">${s.vipFeatures.map((f) => `<li>${f}</li>`).join("")}</ul>
-    ${
-      s.vip
-        ? `<div class="owned-banner vip">VIP active — ${s.vipDaysLeft} day${s.vipDaysLeft === 1 ? "" : "s"} left</div>
-           ${s.wallet >= VIP.coinPrice
-             ? `<button class="soft-btn wide vip" data-ui data-action="vip-buy">Extend 30 Days · ${VIP.price}</button>`
-             : `<p class="fineprint">Need ● ${VIP.coinPrice - s.wallet} more coins to extend.</p>`}`
-        : s.wallet >= VIP.coinPrice
-          ? `<button class="primary-btn vip" data-ui data-action="vip-buy">Unlock VIP · ${VIP.price}</button>`
-          : `<button class="primary-btn vip off" data-ui data-action="vip-buy">Need ● ${VIP.coinPrice - s.wallet} more coins</button>`
-    }
-    <div class="redeem"><input data-ui aria-label="Promo code" placeholder="Promo code" maxlength="16" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem">Redeem</button></div>
-    <button class="ghost-btn" data-ui data-action="restore">Restore passes</button>
-    ${s.restoreMessage ? `<p class="note">${s.restoreMessage}</p>` : ""}
-    <p class="fineprint">All passes &amp; packs are earnable 100% through in-game flight coins!</p>
-  `;
-}
-
-function renderCheckout(s: HudSnapshot): string {
-  if (s.checkoutOk) {
-    const okLabel = s.checkoutSku === "sunbird_vip" ? "VIP" : s.checkoutSku === "sunbird_starter" ? "ready for takeoff" : "Gold";
-    return `<div class="check-ok"><div class="gold-badge big">${s.checkoutSku === "sunbird_vip" ? "♛" : s.checkoutSku === "sunbird_starter" ? "🎁" : "✦"}</div><h2>You're ${okLabel}!</h2><p class="tagline">Your perks are active immediately</p><button class="primary-btn gold" data-ui data-action="back">Fly on</button></div>`;
-  }
-  const item =
-    s.checkoutSku === "sunbird_vip"
-      ? { name: "Sunbird VIP", price: VIP.price, coinPrice: VIP.coinPrice, action: "vip-buy" }
-      : s.checkoutSku === "sunbird_starter"
-        ? { name: "First Flight Pack", price: STARTER_PACK.price, coinPrice: STARTER_PACK.coinPrice, action: "starter-buy" }
-        : { name: "Sunbird Gold Pass", price: GOLD.price, coinPrice: GOLD.coinPrice, action: "gold-buy" };
-
-  const canAfford = s.wallet >= item.coinPrice;
-  return `
-    ${head(SCREEN.confirmUnlock, "checkout-cancel")}
-    <div class="sheet">
-      <div class="sheet-row"><span>${item.name}</span><b>${item.price}</b></div>
-      <p class="tagline">Wallet: ● ${s.wallet.toLocaleString()}</p>
-      ${
-        canAfford
-          ? `<button class="primary-btn gold" data-ui data-action="${item.action}">Confirm Unlock · ${item.price}</button>`
-          : `<p class="error">Need ● ${item.coinPrice - s.wallet} more coins to unlock.</p>
-             <button class="primary-btn" data-ui data-action="pvp-practice">Fly &amp; Earn Coins</button>`
-      }
-    </div>
-  `;
-}
 
 function volumeControl(label: string, key: string, value: number): string {
   return `<div class="setting-row setting-volume"><label for="${key}">${label}</label><div class="volume-control"><input id="${key}" data-ui data-action="set-${key}" type="range" min="0" max="100" step="5" value="${Math.min(100, Math.max(0, value))}"/><output for="${key}">${Math.min(100, Math.max(0, value))}%</output></div></div>`;
@@ -3338,45 +2876,48 @@ function renderSettings(s: HudSnapshot): string {
   const sPct = Math.round((s.settings.sfxVolume ?? 0.9) * 100);
   return `
     ${head(t("hud.settings.title", undefined, "Settings"))}
-    <p class="settings-intro">Make the flight feel right for you. Changes save automatically.</p>
-    <div class="section-title">Pilot</div>
+    <p class="settings-intro">${t("hud.renderSettings.MFlightFeelRightChangesSaveAutomatically", undefined, "Make the flight feel right for you. Changes save automatically.")}</p>
+    ${sectionTitle(null, t("hud.settings.section.pilot", undefined, "Pilot"))}
     ${CUSTOM_PILOT_NAMES
       ? `<div class="redeem pilot-name-row">
-      <input data-ui data-ref="pilotName" aria-label="Pilot name" maxlength="14" placeholder="Pilot name" value="${escapeHtml(s.pilotName)}" />
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Autogenerate random pilot name">🎲 Random</button>
-      <button class="mini-btn primary" data-ui data-action="rename-pilot">Save</button>
+      <input data-ui data-ref="pilotName" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}" maxlength="14" placeholder="${t("hud.pilot.name", undefined, "Pilot Name")}" value="${escapeHtml(s.pilotName)}" />
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
+      <button class="mini-btn primary" data-ui data-action="rename-pilot">${t("common.save", undefined, "Save")}</button>
     </div>`
       : `<div class="redeem pilot-name-row">
-      <span class="pilot-name-readonly" aria-label="Pilot name">${escapeHtml(s.pilotName)}</span>
-      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="Roll a new pilot name">🎲 Random</button>
+      <span class="pilot-name-readonly" aria-label="${t("hud.pilot.name", undefined, "Pilot Name")}">${escapeHtml(s.pilotName)}</span>
+      <button class="mini-btn autogen-btn" data-ui data-action="autogen-pilot" title="${t("hud.pilot.autogenerate", undefined, "Autogenerate 🎲")}">${t("common.random", undefined, "🎲 Random")}</button>
     </div>`
     }
-    <div class="section-title">Sound</div>
-    ${toggle("Mute all sound", "mute", s.settings.mute)}
-    ${volumeControl("Effects volume", "sfx-vol", sPct)}
-    ${toggle("Music", "music", s.settings.music)}
-    ${volumeControl("Music volume", "music-vol", mPct)}
-    <div class="setting-row setting-select"><label for="music-track">Music track</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>Shuffle all tracks</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
-    <div class="setting-row setting-select"><label for="language-select">Language / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
-    <div class="setting-row"><span>Show distances in</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
-    <div class="section-title">Comfort &amp; controls</div>
-    ${toggle("Haptics", "haptics", s.settings.haptics)}
+    ${sectionTitle(null, t("hud.settings.section.sound", undefined, "Sound"))}
+    ${toggle(t("hud.settings.mute", undefined, "Mute all sound"), "mute", s.settings.mute)}
+    ${volumeControl(t("hud.settings.effectsVolume", undefined, "Effects volume"), "sfx-vol", sPct)}
+    ${toggle(t("hud.settings.musicToggle", undefined, "Music"), "music", s.settings.music)}
+    ${volumeControl(t("hud.settings.music", undefined, "Music Volume"), "music-vol", mPct)}
+    <div class="setting-row setting-select"><label for="music-track">${t("hud.renderSettings.MTrack", undefined, "Music track")}</label><select id="music-track" data-ui data-action="set-track"><option value="shuffle" ${s.settings.musicTrack === "shuffle" ? "selected" : ""}>${t("hud.renderSettings.SAllTracks", undefined, "Shuffle all tracks")}</option>${TRACK_NAMES.map((name, i) => `<option value="${i}" ${s.settings.musicTrack === i ? "selected" : ""}>${i + 1}. ${name}</option>`).join("")}</select></div>
+    <div class="setting-row setting-select"><label for="language-select">${t("hud.settings.language", undefined, "Language")} / Idioma</label><select id="language-select" data-ui data-action="set-language">${SUPPORTED_LOCALES.map(loc => `<option value="${loc.code}" ${getLocale() === loc.code ? "selected" : ""}>${loc.flag} ${loc.name}</option>`).join("")}</select></div>
+    <div class="setting-row"><span>${t("hud.settings.distancesIn", undefined, "Show distances in")}</span><div class="toggle-group"><button class="mini-btn ${s.settings.distUnit !== "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="km">km</button><button class="mini-btn ${s.settings.distUnit === "mi" ? "gold" : ""}" data-ui data-action="set-dist-unit" data-id="mi">mi</button></div></div>
+    ${sectionTitle(null, t("hud.settings.section.comfort", undefined, "Comfort &amp; controls"))}
+    ${toggle(t("hud.settings.haptics", undefined, "Haptics"), "haptics", s.settings.haptics)}
     ${s.boosts.some((b) => b.def.id === "doubletap" && b.armed) ? toggle("Double-tap boost", "doubletap", s.settings.doubleTapBoost) : ""}
-    ${toggle("Reduce motion", "motion", s.settings.reduceMotion)}
-    ${toggle("Colorblind assist", "colorassist", s.settings.colorAssist)}
-    ${toggle("Large text", "bigtext", s.settings.bigText)}
-    <div class="setting-row setting-select"><label for="render-quality">Render quality</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? "Auto · recommended" : q === "high" ? "High · more detail" : "Low · less GPU work"}</option>`).join("")}</select></div>
-    <div class="setting-row"><span>Flights flown</span><b>${s.runsPlayed}</b></div>
-    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">⛶ Fullscreen mode</button>
+    ${toggle(t("hud.settings.reduceMotion", undefined, "Reduce Motion"), "motion", s.settings.reduceMotion)}
+    ${toggle(t("hud.settings.colorAssist", undefined, "Colorblind assist"), "colorassist", s.settings.colorAssist)}
+    ${toggle(t("hud.settings.largeText", undefined, "Large text"), "bigtext", s.settings.bigText)}
+    ${toggle(t("hud.settings.tapToggleDive", undefined, "Tap to dive (no holding)"), "tap-toggle-dive", s.settings.tapToggleDive)}
+    <p class="fineprint">${t("hud.settings.tapToggleDiveHint", undefined, "One tap starts the dive, the next tap ends it — nothing to hold down.")}</p>
+    ${toggle(t("hud.settings.showFps", undefined, "Show FPS counter"), "show-fps", s.settings.showFps)}
+    <div class="setting-row setting-select"><label for="render-quality">${t("hud.settings.renderQuality", undefined, "Render quality")}</label><select id="render-quality" data-ui data-action="set-quality">${["auto", "high", "low"].map(q => `<option value="${q}" ${s.settings.quality === q ? "selected" : ""}>${q === "auto" ? t("hud.settings.quality.auto", undefined, "Auto · recommended") : q === "high" ? t("hud.settings.quality.high", undefined, "High · more detail") : t("hud.settings.quality.low", undefined, "Low · less GPU work")}</option>`).join("")}</select></div>
+    <div class="setting-row"><span>${t("hud.settings.flightsFlown", undefined, "Flights flown")}</span><b>${s.runsPlayed}</b></div>
+    <button class="soft-btn wide" data-ui data-action="toggle-fullscreen">${iconGlyph("fullscreen")} ${t("hud.settings.fullscreen", undefined, "Fullscreen mode")}</button>
     <!-- Privacy policy, linked from inside the game. The platform guide asks
          for exactly this before it approves an external service (multiplayer,
          storage) for a game: a live policy page the player can reach from the
          build. The URL comes from ./legal.ts so each deploy points at its own
          hosted copy. Kept free of any portal name so this template renders
          identically in every edition. -->
-    <button class="soft-btn wide" data-ui data-action="open-privacy">🔒 Privacy policy</button>
-    ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">⬇ Install Sunbird</button>` : ""}
-    <details class="danger-zone"><summary>Manage saved progress</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
+    <button class="soft-btn wide" data-ui data-action="open-privacy">${menuIconSm("lock")} ${t("hud.settings.privacy", undefined, "Privacy Policy")}</button>
+    ${s.canInstall ? `<button class="soft-btn wide" data-ui data-action="install-app">${menuIconSm("download")} ${t("hud.install.app", undefined, "Install Sunbird")}</button>` : ""}
+    <details class="danger-zone"><summary>${t("hud.renderSettings.MSavedProgress", undefined, "Manage saved progress")}</summary><p class="fineprint">Reset deletes progress saved on this device. Export a save code from Account first.</p>
     <button class="ghost-btn danger" data-ui data-action="reset-progress">${s.resetArmed ? "Confirm: erase saved progress" : "Reset progress"}</button></details>
     <p class="fineprint">Sunbird 1.0 · ${s.seedLabel}</p>
   `;
@@ -3384,417 +2925,11 @@ function renderSettings(s: HudSnapshot): string {
 
 function renderScores(s: HudSnapshot): string {
   return `
-    ${head(SCREEN.highGlides)}
+    ${head(SCREEN.savedScores)}
     ${renderScoreTable(s.highScores)}
-    ${!s.highScores.length ? `<p class="tagline">Your first flight starts your story. Fly a little farther each time.</p><button class="primary-btn" data-ui data-action="pvp-practice">Take your first flight</button>` : ""}
-    <div class="menu-stats"><div>Today's best <b>${distanceText(s.todayBest)}</b></div><div>Flights <b>${s.runsPlayed}</b></div></div>
+    ${!s.highScores.length ? `<p class="tagline">${t("hud.renderScores.FFlightStartsStoryFlyLittleFartherEachTime", undefined, "Your first flight starts your story. Fly a little farther each time.")}</p><button class="primary-btn" data-ui data-action="pvp-practice">${t("hud.renderScores.TFirstFlight", undefined, "Take your first flight")}</button>` : ""}
+    <div class="menu-stats"><div>${t("hud.renderScores.TSBest", undefined, "Today's best ")}<b>${distanceText(s.todayBest)}</b></div><div>Flights <b>${s.runsPlayed}</b></div></div>
   `;
 }
 
-function rewardLabel(r: { kind: string; amount?: number; id?: string }): string {
-  if (r.kind === "coins") return `● ${r.amount}`;
-  if (r.kind === "skin") return `🐦 ${r.id}`;
-  if (r.kind === "trail") return `✨ ${r.id?.replace("trail_", "") ?? "trail"}`;
-  return `🎁 ${r.id}`;
-}
 
-function renderPass(s: HudSnapshot): string {
-  const pct = Math.min(100, (s.season.have / s.season.need) * 100);
-  return `
-    ${head(SCREEN.nestPass, "back", `<span class="pill">Lv.${s.season.tier}/${s.season.maxTier}</span>`)}
-    <div class="pass-progress"><i style="width:${pct}%"></i></div>
-    <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks the premium track." : " Fly to unlock rewards."}</p>
-    ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>Double the tier rewards with Gold</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
-    <div class="tier-track">
-      ${s.season.tiers
-        .map((t) => {
-          const canFree = t.unlocked && !t.freeClaimed;
-          const canPremium = t.unlocked && !t.premiumLocked && !t.premiumClaimed;
-          return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
-            <div class="tier-num">Lv.${t.tier}</div>
-            <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui data-action="${canFree ? "claim-pass-free" : ""}" data-id="${t.tier}" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
-            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui data-action="${canPremium ? "claim-pass-premium" : ""}" data-id="${t.tier}" ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
-          </div>`;
-        })
-        .join("")}
-    </div>
-    <p class="fineprint">The Nest Pass resets every month — spend rewards before it does!</p>
-  `;
-}
-
-function renderTrophies(s: HudSnapshot): string {
-  const groups: Record<string, AchievementView[]> = { bronze: [], silver: [], gold: [], platinum: [] };
-  for (const v of s.trophies) groups[v.def.rarity]!.push(v);
-  const order: (keyof typeof groups)[] = ["bronze", "silver", "gold", "platinum"];
-  return `
-    ${head(SCREEN.trophyCase, "back", `<span class="pill">${s.trophyCounts.unlocked}/${s.trophyCounts.total}</span>`)}
-    ${order
-      .map(
-        (rarity) => `
-      <details class="shop-section trophy-collection" data-ref="trophies-${rarity}"><summary>${rarity}<span>${groups[rarity]!.filter(v => v.unlocked).length}/${groups[rarity]!.length} unlocked</span></summary>
-      <div class="trophy-grid">
-        ${groups[rarity]!
-          .map((v) => {
-            const pct = Math.min(100, (v.progress / v.def.target) * 100);
-            return `<div class="trophy ${v.unlocked ? "unlocked" : ""} ${rarity}">
-              <div class="trophy-icon">${v.unlocked ? "🏆" : "🔒"}</div>
-              <div class="trophy-name">${v.def.title}</div>
-              <div class="trophy-desc">${v.def.desc}</div>
-              ${v.unlocked ? "" : `<div class="qb"><i style="width:${pct}%"></i></div>`}
-            </div>`;
-          })
-          .join("")}
-      </div></details>`,
-      )
-      .join("")}
-  `;
-}
-
-function renderAccount(s: HudSnapshot): string {
-  // Portal account block: on Poki the player may be signed in, and the game is
-  // required to be honest about who it thinks they are (their name is what
-  // goes on the board). Sign-in is offered only behind a button — Poki's docs
-  // forbid prompting for an account on load.
-  const portalAccount = s.portalName !== "none"
-    ? `<div class="section-title">${PORTAL_DISPLAY_NAME} account</div>
-    <div class="sheet">
-      ${
-        s.portalAccountName
-          ? `<div class="code-row"><span>Signed in as <b>${escapeHtml(s.portalAccountName)}</b></span><span class="tag on">Linked</span></div>
-             <p class="fineprint">Your progress and leaderboard scores follow this ${PORTAL_DISPLAY_NAME} account across devices.</p>`
-          : `<div class="code-row"><span>Not signed in</span><button class="mini-btn" data-ui data-action="portal-sign-in">Sign in</button></div>
-             <p class="fineprint">Sign in to carry your progress between devices and appear on the board under your own name.</p>`
-      }
-    </div>`
-    : "";
-  return `
-    ${head(SCREEN.account)}
-    ${portalAccount}
-    <div class="section-title">Membership</div>
-    ${!SELL_AD_REMOVAL ? "" : `
-    <div class="sheet">
-      <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
-        s.gold ? `<span class="tag on">Active</span>` : SELL_AD_REMOVAL ? `<button class="mini-btn gold" data-ui data-action="open-paywall">Get Gold</button>` : `<span class="tag">Portal member</span>`
-      }</div>
-      ${SELL_AD_REMOVAL ? `<div class="code-row"><span>♛ VIP · ${s.vip ? `${s.vipDaysLeft} day${s.vipDaysLeft === 1 ? "" : "s"} left` : "inactive"}</span>${
-        s.vip
-          ? `<button class="mini-btn vip" data-ui data-action="vip-buy">Extend</button>`
-          : `<button class="mini-btn vip" data-ui data-action="vip-buy">Subscribe</button>`
-      }</div>` : ""}
-      <p class="fineprint">VIP gifts ${VIP_DAILY_GIFT} coins every day you play and adds a fourth daily quest. ${
-        s.vip ? "" : "Cancel anytime — no auto-renewal in this build; your 30 days simply run out."
-      }${
-        /* Only the direct build schedules its own interstitials; on a portal the
-           platform owns ad frequency, so the game must not describe (or count)
-           breaks it does not control. */
-        s.portalName === "none" ? ` Sponsored breaks respect a hard cap: <b>${s.adsLeftToday}</b> left today.` : ""
-      }</p>
-    </div>
-    `}
-
-    <div class="section-title">Invite friends</div>
-    <div class="sheet">
-      <p class="tagline">Share your code — friends who redeem it get a welcome bonus on their device.</p>
-      <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>
-      ${
-        s.referralRedeemed
-          ? `<p class="note">You've already redeemed a friend code. Thanks for joining!</p>`
-          : `<div class="redeem"><input data-ui data-ref="friendcode" aria-label="Friend referral code" placeholder="Friend's code (SUN-XXXXXX)" maxlength="10" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem-referral">Apply</button></div>`
-      }
-      ${s.referralMessage ? `<p class="note">${s.referralMessage}</p>` : ""}
-    </div>
-    <div class="section-title">Transfer saved progress</div>
-    <div class="sheet">
-      <p class="tagline">Copy this code to move your progress to another device.</p>
-      <textarea class="cloud-box" data-ui aria-label="Your exportable save code" readonly rows="3">${s.cloudCode}</textarea>
-      <button class="mini-btn" data-ui data-action="copy-cloud">Copy code</button>
-      <p class="tagline" style="margin-top:10px">Paste a code from another device to restore it here:</p>
-      <textarea class="cloud-box" data-ui aria-label="Save code to import" rows="3" placeholder="Paste save code…"></textarea>
-      <label class="import-confirm"><input type="checkbox" data-ui/>Replace progress on this device with this save.</label>
-      <button class="mini-btn" data-ui data-action="import-cloud">Import save</button>
-      ${s.cloudMessage ? `<p class="note" role="status">${s.cloudMessage}</p>` : ""}
-    </div>
-    <p class="fineprint">Copy your save code to transfer progress between devices.</p>
-  `;
-}
-
-function renderGoalList(goals: SessionGoal[]): string {
-  if (!goals.length) return "";
-  return `<div class="quests"><div class="mission-head">Session goals</div>${goals
-    .map((g) => {
-      const pct = Math.min(100, (g.progress / g.target) * 100);
-      return `<div class="quest ${g.done ? "done" : ""}">
-        <div><div class="mt">${g.label}</div><div class="qb"><i style="width:${pct}%"></i></div></div>
-        <span class="qr">● ${g.reward}</span>
-      </div>`;
-    })
-    .join("")}</div>`;
-}
-
-/** The run's silhouette: an SVG sparkline of the altitude profile. */
-export function renderFlightRecap(path: [number, number][]): string {
-  if (path.length < 3) return "";
-  const w = 320;
-  const hgt = 64;
-  let maxX = 1;
-  let maxY = 12;
-  for (const [x, y] of path) {
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
-  }
-  const px = (x: number): number => (x / maxX) * (w - 4) + 2;
-  const py = (y: number): number => hgt - 4 - (Math.max(0, y) / maxY) * (hgt - 10);
-  const line = path.map(([x, y], i) => `${i === 0 ? "M" : "L"}${px(x).toFixed(1)} ${py(y).toFixed(1)}`).join(" ");
-  const area = `${line} L${px(path[path.length - 1]![0]).toFixed(1)} ${hgt - 2} L${px(path[0]![0]).toFixed(1)} ${hgt - 2} Z`;
-  // Peak marker — the flight's zenith deserves a dot.
-  let peak = path[0]!;
-  for (const p of path) if (p[1] > peak[1]) peak = p;
-  return `
-    <div class="flight-recap" aria-label="Flight altitude profile">
-      <svg viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none">
-        <defs><linearGradient id="fr-g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#ffb020" stop-opacity="0.55"/>
-          <stop offset="1" stop-color="#ffb020" stop-opacity="0.05"/>
-        </linearGradient></defs>
-        <path d="${area}" fill="url(#fr-g)"/>
-        <path d="${line}" fill="none" stroke="#e08a10" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-        <circle cx="${px(peak[0]).toFixed(1)}" cy="${py(peak[1]).toFixed(1)}" r="3" fill="#ff6b4a"/>
-      </svg>
-      <span class="fr-peak">▲ ${Math.round(peak[1])} m peak</span>
-    </div>`;
-}
-
-/**
- * End-of-run 3× coin bonus card. Pure and exported so the claim contract is
- * unit-testable: the bonus claims ONCE per run (Game.multiplierClaimed).
- * On portal builds the button triggers a rewarded ad (🎬 icon); on direct
- * builds it is a free bonus (MON-09: clapperboard only on rewarded placements).
- */
-export function renderCoinMultiplierCard(coins: number, claimed: boolean, rewarded = false): string {
-  if (coins <= 0) return "";
-  if (claimed) {
-    return `<div class="multiplier-cta-card claimed">✓ 3× bonus applied &nbsp;+● ${formatNumberLocalized(coins * 2)} extra coins</div>`;
-  }
-  if (rewarded) {
-    // Portal editions route the bonus through the platform's rewarded ad: the
-    // reward is stated BEFORE the tap (Poki's rewarded-copy rule), the icon
-    // marks it as an ad, and a declined ad never steals the card away.
-    return `<div class="multiplier-cta-card">
-      <div class="multiplier-cta-text">
-        <b>3× Flight Coin Bonus</b>
-        <span>Watch a short ad · triple ● ${coins} → ● ${coins * 3}</span>
-      </div>
-      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">🎬 Watch → 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
-    </div>`;
-  }
-  return `<div class="multiplier-cta-card">
-      <div class="multiplier-cta-text">
-        <b>3× Flight Coin Bonus</b>
-        <span>Triple ● ${coins} → ● ${coins * 3}</span>
-      </div>
-      <button class="primary-btn gold wide" data-ui data-action="multiply-run-coins">Claim 3× &nbsp;+● ${formatNumberLocalized(coins * 2)}</button>
-    </div>`;
-}
-
-function renderGameOver(s: HudSnapshot): string {
-  if (s.versus && s.p1Stats && s.p2Stats) return renderVersusResult(s);
-  const questTotal = s.claimedQuests.reduce((a, q) => a + q.reward, 0);
-  const deltaTxt =
-    s.raceRated && s.ratingDelta !== 0
-      ? `<span class="rate-delta ${s.ratingDelta > 0 ? "up" : "down"}">${s.ratingDelta > 0 ? "+" : ""}${s.ratingDelta}</span>`
-      : "";
-  const duelStrip =
-    s.duelWas !== ""
-      ? `<div class="race-hero ${s.duelWas === "won" ? "win" : ""}">
-           <div class="race-medal">${s.duelWas === "won" ? "⚔🥇" : "⚔"}</div>
-           <div class="race-place"><b>DUEL ${s.duelWas === "won" ? "WON" : "LOST"}</b><span>${s.duelWas === "won" ? "+" : ""}${s.duelDelta} rating → ${s.rival.rating}</span></div>
-           <div class="race-rating">Duel record ${s.duel.wins}–${s.duel.losses} · 🔥${s.duel.streak} streak<span class="race-rated-tag">ranked · local</span></div>
-         </div>`
-      : "";
-  const raceStrip =
-    s.duelWas === "" && s.massRace
-      ? s.racePlace > 0
-        ? `<div class="race-hero ${s.racePlace === 1 ? "win" : s.racePlace <= 3 ? "podium" : ""}">
-           <div class="race-medal">${s.racePlace === 1 ? "🥇" : s.racePlace === 2 ? "🥈" : s.racePlace === 3 ? "🥉" : "🏁"}</div>
-           <div class="race-place"><b>P${s.racePlace}</b><span>of ${s.raceField} pilots · ${s.raceFinishTime.toFixed(1)}s</span></div>
-           ${s.raceVerified ? `<div class="verified-tag">✓ placement refereed by the room server</div>` : ""}
-           <div class="race-bar"><i style="width:${Math.round((1 - (s.racePlace - 1) / Math.max(1, s.raceField)) * 100)}%"></i></div>
-           ${
-             s.raceRated
-               ? `<div class="race-rating">Rival rating ${s.rival.rating} ${deltaTxt}<span class="race-rated-tag">ranked · local</span></div>`
-               : `<div class="race-rating"><span class="race-rated-tag">casual · rating frozen</span></div>`
-           }
-           ${
-             s.rival.streak >= 2
-               ? `<div class="race-streak">🔥 ${s.rival.streak}-race win streak${s.ratingBonus > 0 ? ` · +${s.ratingBonus}● streak bonus` : ""}</div>`
-               : ""
-           }
-         </div>
-         ${s.photoFinish ? `<div class="reward-strip photo">📸 ${escapeHtml(s.photoFinish)}</div>` : ""}
-`
-        : `<div class="race-hero dnf">
-           <div class="race-medal">💥</div>
-           <div class="race-place"><b>${s.modeId === "pvp_knockout" ? "KNOCKED OUT" : "RACE INCOMPLETE"}</b><span>${s.modeId === "pvp_knockout" ? "Eliminated by the countdown timer" : `DNF · Reached ${Math.round(s.distance)}m of ${s.raceFinishM}m`}</span></div>
-           ${
-             s.raceRated
-               ? `<div class="race-rating">Rival rating ${s.rival.rating} ${deltaTxt}<span class="race-rated-tag">ranked · local</span></div>`
-               : `<div class="race-rating"><span class="race-rated-tag">casual · rating frozen</span></div>`
-           }
-         </div>`
-      : "";
-  // Clipboard score fallback — always visible when AUDS isn't available so
-  // players always have *some* share action on the results screen.
-  const clipboardShare = !s.share.available && !s.share.loaded && !s.share.code
-    ? `<button class="soft-btn wide" data-ui data-action="copy-score">📋 Copy score to clipboard</button>`
-    : "";
-
-  // Async multiplayer by code. Only rendered when this build can actually
-  // talk to AUDS (Poki + game id) or when the player has already loaded a run.
-  const shareBlock =
-    s.share.available || s.share.loaded || s.share.code
-      ? `
-    <div class="share-run">
-      <div class="section-title">🔗 Shared run <small>friend's code · async race</small></div>
-      ${
-        s.share.code
-          ? `<div class="friend-row"><span class="fr-name">Run code</span><span class="fr-code">${escapeHtml(s.share.code)}</span><button class="mini-btn" data-ui data-action="copy-share">Copy code</button></div>`
-          : `<button class="soft-btn wide" data-ui data-action="share-run" ${s.share.busy ? "disabled" : ""}>${s.share.busy ? "Publishing…" : "Share this run for a friend"}</button>`
-      }
-      <div class="redeem">
-        <input data-ui data-enter-action="load-run" aria-label="Shared run code" placeholder="A friend's run code" maxlength="40" autocomplete="off" spellcheck="false" />
-        <button class="mini-btn" data-ui data-action="load-run" ${s.share.busy ? "disabled" : ""}>Load</button>
-      </div>
-      ${
-        s.share.loaded
-          ? `<div class="pilot-note">Loaded <b>${escapeHtml(s.share.loaded.name)}</b>'s run — ${Math.round(s.share.loaded.distance).toLocaleString()} m on the same hills. <button class="mini-btn gold" data-ui data-action="race-share">Race their mark</button></div>`
-          : ""
-      }
-      ${s.share.error ? `<div class="pilot-note warn" role="status">${escapeHtml(s.share.error)}</div>` : ""}
-    </div>`
-      : "";
-
-  return `
-    <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
-    <h2>${t("hud.gameover.title", undefined, "Flight completed")}</h2>
-    <p class="tagline">${s.massRace ? "Your place, your progress, your next race." : "A little farther. A little smoother. One more flight?"}</p>
-    <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? "Back to race lobby" : s.massRace && s.racePlace > 0 ? "Race again · same stakes" : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
-    ${!s.massRace ? `<p class="fineprint replay-note">Fly again replays this exact course so you can race the ghost of the run you just flew 👻</p>` : ""}
-    ${s.newBest ? `<div class="new-best">👑 NEW BEST · ${distanceText(s.distance)}<small>your farthest flight yet</small></div>` : ""}
-    ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">Leaderboard rank · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
-
-    ${shareBlock}
-    ${renderFlightRecap(s.flightPath)}
-    <div class="over-stats result-summary">
-      <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>Score</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
-      <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
-    </div>
-
-    ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
-
-    ${renderNextFlight(s)}
-    <details class="result-details"><summary>Flight details <span>Landmarks &amp; skill</span></summary><div class="over-stats">
-      <div><span>Perfects</span><b>${s.perfects}</b></div>
-      <div><span>Skyline moments</span><b>${s.zeniths}</b></div>
-      <div><span>Rings</span><b>${s.rings}</b></div>
-      <div><span>Balloons</span><b>${s.balloons}</b></div>
-      <div><span>Sunflowers</span><b>${s.sunflowers}</b></div>
-      <div><span>Slope flow</span><b>${s.slopeScore} pts · ×${s.slopeChain}</b></div>
-      <div><span>Islands</span><b>${s.island + 1}</b></div>
-    </div></details>
-    ${s.ghostDelta !== null ? `<div class="reward-strip ${s.ghostDelta >= 0 ? "" : "nest"}">${s.ghostDelta >= 0 ? `Beat your ghost by ${Math.round(s.ghostDelta)}m! 👻` : `${Math.round(-s.ghostDelta)}m behind your best ghost`}</div>` : ""}
-    ${questTotal ? `<div class="reward-strip">Daily quest${s.claimedQuests.length > 1 ? "s" : ""} complete · +${questTotal} coins</div>` : ""}
-    ${s.newlyCompleted.length ? `<div class="reward-strip nest">Nest upgraded → Lv.${s.nestLevel} · ×${s.nestMult.toFixed(2)} score</div>` : ""}
-    ${s.nearMiss ? `<div class="nearmiss">${s.nearMiss}</div>` : ""}
-    ${s.challengeOutcome ? `<div class="reward-strip ${s.challengeOutcome.includes("missed") ? "nest" : ""}">${escapeHtml(s.challengeOutcome)}</div>` : ""}
-    ${duelStrip}
-    ${raceStrip}
-    <div class="reached-strip">Reached <b>${s.biomeEmoji} ${s.biomeName}</b> · Island ${s.island + 1}</div>
-
-    ${clipboardShare}
-    ${s.expShareFirst
-      ? `<button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>
-         <button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>`
-      : `<button class="soft-btn wide" data-ui data-action="throw-challenge">${menuIcon("versus")} Challenge a rival on these hills</button>
-         <button class="soft-btn wide" data-ui data-action="share" ${s.shareBusy ? "disabled" : ""}>${s.shareBusy ? "Preparing…" : `${menuIcon("share")} Share this flight`}</button>`}
-    <div class="btn-row result-links">
-      <button class="soft-btn gold-tint" data-ui data-action="open-shop">${menuIcon("shop")} Shop</button>
-      <button class="soft-btn" data-ui data-action="open-pass">${menuIcon("pass")} Pass</button>
-      <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
-
-    </div>
-    ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
-    <details class="result-details"><summary>Progress &amp; rewards <span>Goals, quests &amp; records</span></summary>
-    ${renderGoalList(s.sessionGoals)}
-    ${renderQuests(s.quests)}
-    ${renderMissions(s.missions, s.newlyCompleted)}
-    <h3 class="table-title">High glides</h3>
-    ${renderScoreTable(s.highScores.slice(0, 5))}</details>
-  `;
-}
-
-function renderNextFlight(s: HudSnapshot): string {
-  const lesson = flightTakeaway(s), bird = nextBird(s.skins);
-  return `<section class="next-flight" aria-label="Next flight plan"><span class="next-flight-art">${menuIcon("compass")}</span><div><small>TAKE THIS INTO YOUR NEXT FLIGHT</small><b>${lesson.title}</b><p>${lesson.tip}</p>${bird ? `<p class="next-unlock">${s.wallet >= bird.def.price ? `${bird.def.name} is within reach · ${bird.def.price} coins in the Shop` : `${bird.def.name} · ${bird.def.price - s.wallet} more coins to unlock`}</p>` : ""}</div></section>`;
-}
-
-function renderContinue(s: HudSnapshot): string {
-  const portal = s.portalName !== "none";
-  // MON-19: the reason line is context-driven (record / near-best / streak /
-  // momentum). It explains why this run is worth resuming — it never changes
-  // what the options are, and the standard non-ad options stay in the primary
-  // position above the rewarded one (MON-05…MON-08).
-  // One card language for the whole app: the second-wind offer is a *recap*
-  // screen like any other, so it uses the same kicker / heading / stat strip /
-  // action row as the results card instead of the old bespoke "zzz" panel.
-  // MON-05…MON-08 still hold: the standard options sit above the rewarded one,
-  // the rewarded button keeps its 🎬 label, and "let it sleep" is a plain
-  // exit — never hidden, never the only way out.
-  return `
-    <div class="results-kicker">${escapeHtml(s.modeName)} · flight recap</div>
-    <h2>Second wind?</h2>
-    <p class="tagline">Sunbird is dozing off at ${distanceText(s.distance)}.</p>
-    ${s.continueReason ? `<p class="continue-reason${s.continueHighlight ? " is-highlight" : ""}">${escapeHtml(s.continueReason)}</p>` : ""}
-    <div class="over-stats result-summary">
-      <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>Score</span><b>${Math.floor(s.score).toLocaleString()}</b></div>
-      <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
-    </div>
-    ${s.adAvailable
-      ? `<button class="reward-strip wake-strip wake-ad-btn" data-ui data-action="continue-ad" role="status">🎬 ${portal ? "Watch for Second Wind" : "Watch a short clip → Second Wind"} · <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s left</button>`
-      : `<div class="reward-strip wake-strip" role="status">⏳ Second wind closes in <b data-live="contTimer">${Math.ceil(s.continueTimer)}</b>s</div>`}
-    <div class="result-actions">
-      <button class="play-again-btn ${s.canAffordContinue ? "" : "off"}" data-ui data-action="continue-coins" ${s.canAffordContinue ? "" : "disabled"}>Spend ● ${s.continueCost} <small>(you have ${s.wallet})</small></button>
-      <button class="soft-btn" data-ui data-action="continue-sleep">Let it sleep</button>
-    </div>
-    ${!portal && s.gold ? `<button class="soft-btn wide" data-ui data-action="continue-gold">✦ Gold · free wake-up</button>` : ""}
-    <p class="fineprint replay-note">Sleep ends the flight and shows your recap. Waking up keeps this run alive from where it landed.</p>
-  `;
-}
-
-function renderAd(s: HudSnapshot): string {
-  const portal = s.portalName !== "none";
-  const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
-  const label = portal
-    ? `${PORTAL_DISPLAY_NAME} · sponsored break`
-    : `Sponsored break · ${s.adReason === "continue" ? "your second wind is loading…" : "back to flying in a moment"}`;
-  const header = portal
-    ? `Advertisement`
-    : `Your ad is loading`;
-  const subtext = portal
-    ? `Your run is paused while the portal serves this break.`
-    : `Back to flying in a moment.`;
-  return `
-    <div class="ad-label">${label}</div>
-    <div class="portal-ad-wait"><div class="spinner"></div><h3>${header}</h3><p>${subtext}</p></div>
-    <div class="ad-bar"><i data-live="adBar"></i></div>
-    <div class="ad-actions">
-      ${
-        s.adSkippable
-          ? `<button class="mini-btn" data-ui data-action="ad-skip" data-live="adSkip" disabled>Continues in ${Math.ceil(s.adTimer)}</button>`
-          : ""
-      }
-      ${canRemoveBreaks ? `<button class="mini-btn gold" data-ui data-action="ad-gold">✦ Remove breaks</button>` : ""}
-    </div>
-  `;
-}

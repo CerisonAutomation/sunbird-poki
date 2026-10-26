@@ -19,6 +19,7 @@
  * that code"), never an invented pilot.
  */
 import type { PokiAuds } from "../sdk/auds";
+import { pokiGameId } from "../sdk/env";
 
 /** Public, listable key: one record per pilot code. */
 export const PILOT_KEY = "sb:pilot:v1";
@@ -44,13 +45,14 @@ export const PILOT_CODE_RE = /^SUN-[A-Z0-9]{6}$/;
 
 /**
  * True when this build can publish/look up pilots: a Poki build with an AUDS
- * game id. Import-free by design — the AUDS client must not enter another
- * edition's bundle (see scripts/verify-isolation.mjs).
+ * game id. The only import is `sdk/env`, which is a leaf — no AUDS client, no
+ * `auds.poki.io`, nothing that could enter another edition's bundle (see
+ * scripts/verify-isolation.mjs). The id and its validation used to be
+ * duplicated here verbatim.
  */
 export function directoryAvailable(): boolean {
   if (import.meta.env.VITE_PORTAL_TARGET !== "poki") return false;
-  const id = import.meta.env.VITE_POKI_GAME_ID as string | undefined;
-  return typeof id === "string" && /^[a-z0-9-]+$/i.test(id);
+  return pokiGameId() !== null;
 }
 
 /** `sun-9f3k2a` → `SUN-9F3K2A`; anything that is not a code → null. */

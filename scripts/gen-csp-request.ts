@@ -5,7 +5,7 @@
  * Why generated: Poki's external-resources policy asks for the exact links a
  * build needs plus a short explanation of what each is used for, and it will
  * not store any custom CSP until a privacy policy URL is on file. Both facts
- * already live in code (`legal.edition.poki.ts` host table, `PRIVACY_POLICY_URL`
+ * already live in code (`legal.edition.ts` host table, `PRIVACY_POLICY_URL`
  * in `legal.ts`), so a hand-written request document would be a third copy of
  * the same truth and would drift the first time a host changed. This reads the
  * shipped arrays and writes the document.
@@ -19,8 +19,8 @@
 import { writeFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LEGAL_EDITION } from "../src/game/legal.edition.poki";
-import { PRIVACY_POLICY_VERSION } from "../src/game/legal";
+import { LEGAL_EDITION } from "../src/game/legal.edition";
+import { PRIVACY_POLICY_VERSION, PRIVACY_URL } from "../src/game/legal";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "docs/poki/CSP_REQUEST.md");
@@ -32,22 +32,22 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
 /**
  * The absolute public policy URL, which is what a portal reviewer must be given.
  *
- * Taken from the environment when this runs inside a portal build, and otherwise
- * read back out of the `build:poki` script in package.json — the same single
- * place the build itself gets it from, so the submission document can never
- * quote a URL the shipped bundle does not use. A relative `/privacy` would be
- * worthless here: inside the portal iframe the game's origin is the portal CDN.
+ * Read from `PRIVACY_URL` in `src/game/legal.ts` — the same binding the shipped
+ * bundle uses, so the submission document can never quote a URL the game does
+ * not. It used to re-derive the value from the environment and the
+ * `build:poki` script, neither of which sets `VITE_PRIVACY_URL`; this function
+ * therefore threw on every run and the documented regeneration step was dead.
+ * A relative `/privacy` would also be worthless here: inside the portal iframe
+ * the game's origin is the portal CDN.
  */
 function policyUrl(): string {
   const fromEnv = (process.env.VITE_PRIVACY_URL ?? "").trim();
   if (fromEnv) return fromEnv;
-  const fromBuild = /VITE_PRIVACY_URL=(\S+)/.exec(pkg.scripts?.["build:poki"] ?? "")?.[1]?.trim();
-  if (!fromBuild) {
-    throw new Error(
-      "no absolute privacy URL: set VITE_PRIVACY_URL, or keep it in the build:poki script",
-    );
+  const fromCode = PRIVACY_URL.trim();
+  if (!/^https?:\/\//.test(fromCode)) {
+    throw new Error(`PRIVACY_URL is not absolute: ${JSON.stringify(fromCode)}`);
   }
-  return fromBuild;
+  return fromCode;
 }
 const PRIVACY_POLICY_URL = policyUrl();
 
@@ -97,7 +97,7 @@ ${webrtc.map((h) => `- \`${h.host}\` — ${h.purpose}`).join("\n")}`
 const doc = `# Poki Content-Security-Policy request
 
 **Generated:** ${new Date().toISOString().slice(0, 10)} by \`pnpm gen-csp\` — do not edit by hand.
-**Source of truth:** \`src/game/legal.edition.poki.ts\` (host table) and \`src/game/legal.ts\` (policy URL).
+**Source of truth:** \`src/game/legal.edition.ts\` (host table) and \`src/game/legal.ts\` (policy URL).
 **Build:** Sunbird ${pkg.version ?? "1.0.0"} · privacy policy version ${PRIVACY_POLICY_VERSION}
 
 Poki's external-resources policy requires the exact links a build needs, a short

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HUD_SOURCE } from "./hudSource";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,7 +18,7 @@ import { join } from "node:path";
  * all three legs: the markup exists, it is bound to the live counter, and no
  * stylesheet hides it.
  */
-const HUD = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
+const HUD = HUD_SOURCE;
 const SHEETS = ["src/index.css", "src/game/ui.css", "src/game/menu-polish.css"].map((p) => [
   p,
   readFileSync(join(process.cwd(), p), "utf8"),
@@ -34,6 +35,13 @@ describe("second wind countdown", () => {
     expect(HUD).toMatch(/class="reward-strip wake-strip" role="status"/);
   });
 
+  it("keeps the ad CTA a real button: the live region wraps it, not the button itself", () => {
+    // role= on a <button> overrides the button role in AT — the countdown
+    // wrapper carries role="status" and the inner control stays a button.
+    expect(HUD).toMatch(/<div role="status"><button class="reward-strip wake-strip wake-ad-btn"/);
+    expect(HUD).not.toMatch(/<button[^>]*role="status"/);
+  });
+
   it("binds the number to the snapshot's timer", () => {
     expect(HUD).toMatch(/data-live="contTimer"/);
     expect(HUD).toMatch(/Math\.ceil\(s\.continueTimer\)/);
@@ -45,6 +53,19 @@ describe("second wind countdown", () => {
     // its first value while the window kept running down.
     expect(HUD).toMatch(/this\.contTimerEl = this\.contCard\.querySelector/);
     expect(HUD).toMatch(/s\.state === "continue" && this\.contTimerEl/);
+  });
+
+  it("says what it is asking, in plain words (2026-10-04 copy pass)", () => {
+    // The card is read under a ticking clock. The old copy made the player
+    // decode a metaphor first ("Sunbird is dozing off", "Let it sleep") before
+    // they could choose. The headline is now the actual question the card
+    // asks, the exit says what it does, and the coin option says what it
+    // buys — no store pitch smuggled into the decision line.
+    expect(HUD).toMatch(/How far can you get\?/);
+    expect(HUD).toMatch(/End the flight/);
+    expect(HUD).toMatch(/Keep flying/);
+    expect(HUD).not.toMatch(/dozing off/);
+    expect(HUD).not.toMatch(/Let it sleep/);
   });
 
   it("is not hidden by any stylesheet", () => {

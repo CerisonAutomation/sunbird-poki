@@ -2,8 +2,8 @@
  * Shared harness for tests that mount the real flight HUD in jsdom.
  *
  * Extracted from `flight-goal-strip.test.ts` when a second suite needed the same
- * mount: the snapshot stub is a Proxy because `HudSnapshot` has ~120 fields and a
- * test that cares about four of them should not have to invent the other 116.
+ * mount: the snapshot stub is a Proxy because `HudSnapshot` has 227 fields and a
+ * test that cares about four of them should not have to invent the other 223.
  * Vitest hooks stay in each test file — a hook registered from an imported module
  * is invisible at the call site.
  */

@@ -135,6 +135,37 @@ describe("the strip shows the run's goals, not just the nearest one", () => {
     expect(career!.count).toContain("to go");
   });
 
+  it("formats a fractional career gap instead of dumping the raw float", async () => {
+    // Regression: lifetime distance accumulates in fractional metres, so
+    // `wings.nextNeeded` (tier.min - lifetime) is not always an integer. The
+    // strip must run it through the same distance formatter as every other
+    // readout, not interpolate it raw (was rendering "47192.0397376381 to go").
+    // The gap used to be 47192.04 — far enough away that the strip now (rightly)
+    // HIDES the row, because a run covers metres-to-km and a 47 km bar cannot
+    // move during one. So the formatter is exercised with a fractional gap that
+    // IS reachable; the hiding is pinned separately below.
+    const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 2999.0397376381 } });
+    const career = rows(strip).find((r) => r.career);
+
+    expect(career, "a reachable career rung must fly even with a fractional gap").toBeTruthy();
+    expect(career!.count).toBe("3.00 km to go");
+    expect(career!.count).not.toContain("0397376381");
+  });
+
+  it("hides a career rung no single run can reach", async () => {
+    // A 47 km career bar during a run measured in hundreds of metres is a
+    // progress indicator that cannot move, sitting in the terrain-reading zone
+    // for the whole run. Same defect the quest strip had; the full ladder is on
+    // the progress screen, where a number that big belongs.
+    const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 47192.04 } });
+    expect(rows(strip).find((r) => r.career), "an unreachable rung must not fly mid-run").toBeFalsy();
+  });
+
+  it("brings it back as soon as the rung becomes reachable", async () => {
+    const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 100 } });
+    expect(rows(strip).find((r) => r.career), "reaching a tier brings the row back").toBeTruthy();
+  });
+
   it("drops the career rung at the top rank instead of showing a full bar forever", async () => {
     const { strip } = await mount({ sessionGoals: [], wings: { ...WINGS, nextNeeded: 0 } });
 
@@ -222,7 +253,7 @@ describe("the results card ends with one next action, not nine ladders", () => {
 
 /* ------------------------------------------------------------------ the sheet */
 
-const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css"];
+const SHEETS = ["index.css", "game/ui.css", "game/menu-polish.css", "game/design-polish.css"];
 
 
 describe("no viewport is allowed to delete the progress readout", () => {

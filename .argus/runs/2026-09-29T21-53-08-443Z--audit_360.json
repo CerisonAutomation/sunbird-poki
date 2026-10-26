@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "argusVersion": "1.1.0",
+  "runId": "2026-09-29T21-53-08-443Z--audit_360",
+  "timestamp": "2026-09-29T21:53:08.443Z",
+  "timestampHuman": "Tue, 29 Sep 2026 21:53:08 GMT",
+  "repository": "sunbird-poki",
+  "gitCommit": null,
+  "gitBranch": null,
+  "tool": "audit_360",
+  "durationMs": 48563,
+  "payload": {
+    "verdict": "HOLD",
+    "blockers": [
+      "43 secrets in working tree"
+    ],
+    "score": 42,
+    "grade": "F",
+    "label": "Critical — do not ship",
+    "trend": "stable",
+    "delta": 0,
+    "enginesUsed": [
+      "ast-grep",
+      "semgrep",
+      "gitleaks",
+      "trivy",
+      "biome",
+      "rg",
+      "fd"
+    ],
+    "security": {
+      "codeFindings": 19,
+      "secrets": 43,
+      "cves": 0,
+      "criticalCves": 0,
+      "infraMisconfigs": 7,
+      "byCloud": {
+        "Docker": 7
+      }
+    },
+    "quality": {
+      "astAntiPatterns": 98,
+      "avgComplexity": 5.6,
+      "untestableFunctions": 30,
+      "totalFindings": 97,
+      "confidence": 61
+    },
+    "deadCode": {
+      "orphanFiles": 154,
+      "unusedExports": 14,
+      "unusedDependencies": 0,
+      "estimatedDeadLines": 25081
+    },
+    "testing": {
+      "ratio": "85.5%",
+      "untestedExports": 261,
+      "exportCoverage": "78%",
+      "highestRiskUntested": [
+        "storageHealth (api/_lib/store.ts)",
+        "CoinPaymentProvider (src/game/Payments.portal.ts)",
+        "CoinPaymentProvider (src/game/Payments.ts)",
+        "storageHealth (worktrees/worker-sunbird-harness/api/_lib/store.ts)",
+        "CoinPaymentProvider (worktrees/worker-sunbird-harness/src/game/Payments.portal.ts)"
+      ]
+    },
+    "churnHotspots": [
+      {
+        "file": "src/game/HUD.ts",
+        "commits": 43,
+        "risk": "critical"
+      },
+      {
+        "file": "src/game/Game.ts",
+        "commits": 31,
+        "risk": "critical"
+      },
+      {
+        "file": "src/game/ui.css",
+        "commits": 14,
+        "risk": "high"
+      },
+      {
+        "file": "TODO.md",
+        "commits": 13,
+        "risk": "high"
+      },
+      {
+        "file": "package.json",
+        "commits": 11,
+        "risk": "high"
+      }
+    ],
+    "dimensions": [
+      {
+        "name": "Security",
+        "score": 0,
+        "reason": "No critical security issues"
+      },
+      {
+        "name": "Test Coverage",
+        "score": 100,
+        "reason": "230 test files / 269 source files (86%)"
+      },
+      {
+        "name": "Code Quality",
+        "score": 0,
+        "reason": "41 quality findings"
+      },
+      {
+        "name": "Reliability",
+        "score": 0,
+        "reason": "23 memory issues, 7 swallowed errors"
+      },
+      {
+        "name": "Type Safety",
+        "score": 0,
+        "reason": "TypeScript strictness and any usage"
+      },
+      {
+        "name": "Architecture",
+        "score": 0,
+        "reason": "26 oversized files"
+      },
+      {
+        "name": "CI/CD",
+        "score": 90,
+        "reason": "GitHub Actions configured"
+      },
+      {
+        "name": "Documentation",
+        "score": 85,
+        "reason": "README present"
+      },
+      {
+        "name": "Memory",
+        "score": 0,
+        "reason": "23 potential memory leaks"
+      },
+      {
+        "name": "Debt",
+        "score": 100,
+        "reason": "0 TODO/FIXME comments"
+      }
+    ],
+    "topActions": [
+      "Rotate and remove 43 exposed secrets",
+      "Delete 154 orphan files (~25081 dead lines)",
+      "Write tests for storageHealth and 4 other high-risk exports",
+      "Refactor for() — cyclomatic 97"
+    ]
+  }
+}

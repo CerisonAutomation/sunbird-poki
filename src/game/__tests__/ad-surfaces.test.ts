@@ -16,7 +16,8 @@ import type { HudSnapshot } from "../HUD";
  *     and a failed break is handled without inventing one.
  *   • MON-19 — the rewarded offer is context-driven, and the copy matches the
  *     interaction event measured for the same placement.
- *   • REQ-31 — no "remove ads" upsell reaches a portal edition.
+ *   • REQ-20 — no "remove ads" upsell reaches a portal edition (REQ-31 is the
+ *     no-chat rule and does not cover this).
  */
 
 /** Any field the renderer asks for resolves to another stub, so a partial
@@ -83,11 +84,26 @@ describe("the break overlay", () => {
     expect(card!.querySelector('[data-action="ad-skip"]'), "a portal break must not be skippable").toBeNull();
   });
 
-  it("gives the direct build a real countdown and a way out, because there it is our own break", async () => {
+  it("gives the direct build a real countdown — and no way to cut it short", async () => {
+    // Was: "our own break has to end somehow", asserting an `ad-skip` button.
+    // It did have to end somehow, and the somehow was the player skipping it,
+    // because the game never ended a placeholder break by itself. It does now
+    // (Game.fixedUpdate, the moment adTimer lands), so the panel shows a
+    // read-only countdown chip and there is no control to press.
     const root = await render({ state: "ad", portalName: "none", adSkippable: true, adTimer: 3, adTotal: 4 });
     const card = root.querySelector('[data-ref="adCard"]')!;
-    expect(card.querySelector('[data-action="ad-skip"]'), "our own break has to end somehow").not.toBeNull();
+    expect(card.querySelector('[data-action="ad-skip"]'), "a placeholder break must not be skippable either").toBeNull();
+    const chip = card.querySelector(".ad-countdown");
+    expect(chip, "the player still gets to see how long is left").not.toBeNull();
+    expect(chip?.getAttribute("role")).toBe("status");
+    expect(chip?.querySelector("svg"), "every countdown wears a clock").not.toBeNull();
+    expect(chip?.innerHTML ?? "", "and it is the shared timer glyph").toContain("timer-glyph");
     expect(card.textContent ?? "").toMatch(/Continues in/i);
+    // 2026-10-04: a break that cannot be skipped must SAY so. "Continues in
+    // 3s" alone reads like a loading state the player is waiting out; the
+    // words "plays in full" are the contract, stated where it is enforced.
+    expect(chip?.textContent ?? "", "the chip says the break plays in full").toMatch(/plays in full/i);
+    expect(card.querySelector(".portal-ad-wait p")?.textContent ?? "", "and so does the body copy").toMatch(/can't be skipped/i);
   });
 
   it("does not get stuck saying 'loading' with an empty bar once our own break finishes", async () => {
@@ -117,15 +133,50 @@ describe("the break overlay", () => {
     hud.update(snap as unknown as HudSnapshot);
     expect(card.querySelector('[data-live="adBar"]')?.getAttribute("style") ?? "", "a finished break is a full bar, not an empty one").toMatch(/width:\s*100%/);
     expect(card.querySelector(".portal-ad-wait h3")?.textContent ?? "", "the header must stop claiming the ad is still loading").not.toMatch(/loading/i);
-    expect((card.querySelector('[data-live="adSkip"]') as HTMLButtonElement).disabled, "the way out is enabled once it is actually done").toBe(false);
+    // There is no longer a "way out" to enable: the break ends itself the
+    // moment the countdown lands. What must still be true is that the chip
+    // stops counting and says so, and that it keeps its clock through the
+    // live-sync path — which is where the icon was being wiped, because the
+    // updater rewrote the element's whole textContent every frame.
+    const chip = card.querySelector('[data-live="adSkip"]')!;
+    expect(chip.tagName, "the countdown is a status chip, not a control").not.toBe("BUTTON");
+    expect(chip.classList.contains("done"), "a finished break says so").toBe(true);
+    expect(chip.querySelector("b")?.textContent, "the countdown lands on zero, never negative").toBe("0");
+    expect(chip.querySelector("svg"), "the clock survives the live update").not.toBeNull();
   });
 
-  it("never offers to remove breaks on the portal edition (REQ-31)", async () => {
+  it("never offers to remove breaks on the portal edition (REQ-20)", async () => {
     const root = await render({ state: "ad", portalName: "poki", adSkippable: false, adTimer: 0, canRemoveBreaks: true });
     expect(
       root.querySelector('[data-action="ad-gold"]'),
       "Poki forbids selling ad removal, whatever the caller passes",
     ).toBeNull();
+  });
+
+  // REQ-20 throughout: a variant row that offers to sell Gold is an
+  // offer of premium currency, which the portal both forbids and cannot
+  // honour. This render site is the one the e2e policy walk reaches through
+  // `open-shop`, so a guard that held at every other site did not protect it.
+  //
+  // Asserted on `skinAction` directly rather than through a rendered screen:
+  // the shop's rows come from a stubbed collection that renders no locked
+  // variants, so a screen-level assertion passes whether or not the branch is
+  // reachable — which is exactly how this shipped past the unit suite and was
+  // only caught by the browser walk.
+  const lockedGold = {
+    locked: true,
+    lockReason: "gold",
+    owned: false,
+    equipped: false,
+    affordable: true,
+    def: { id: "test-skin", price: 400 },
+  } as never;
+
+  it("never turns a Gold-locked variant into a paywall on the portal edition", async () => {
+    const { skinAction } = await import("../HUD");
+    const html = skinAction(lockedGold, true, 9999);
+    expect(html, "a portal build offered premium currency from a shop row").not.toMatch(/data-action="(open-paywall|gold-buy|vip-buy)"/);
+    expect(html, "the row must still say why the item is locked").toMatch(/portal-lock/);
   });
 });
 

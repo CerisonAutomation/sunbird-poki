@@ -34,6 +34,7 @@ markdown — so this stays true instead of being true once.
 | Use Poki's Arbitrary User Data Store | [`AUDS.md`](./AUDS.md) |
 | Check legal/privacy/security posture | [`LEGAL_SECURITY.md`](../LEGAL_SECURITY.md) |
 | See the ops/service gap register | [`PRODUCTION_READINESS_PLAN.md`](../PRODUCTION_READINESS_PLAN.md) |
+| Walk the pre-release checklist line by line | [`PRODUCTION_CHECKLIST.md`](./PRODUCTION_CHECKLIST.md) |
 | Know which translation debt is left | [`i18n-debt.json`](./i18n-debt.json) (written by `pnpm i18n:audit`) |
 | Read the evidence behind a past decision | [`audits/README.md`](./audits/README.md) |
 
@@ -45,6 +46,10 @@ markdown — so this stays true instead of being true once.
 | [`ROADMAP.md`](../ROADMAP.md) | Real / written-but-undeployed / fiction — the honesty ledger |
 | [`HANDOFF.md`](./HANDOFF.md) | Current state, standing decisions, verification chain, next queue |
 | [`BENCHMARKS.md`](./BENCHMARKS.md) | Category comparison: what the best games do, what Sunbird adopted, what it exceeds |
+| [`../AI_RULES.md`](../AI_RULES.md) | Agent-facing rules for this codebase: stack, what is deliberately pure, which constraints are enforced by a test and which are conventions. Read before changing flight, portals or build output |
+| [`SUNBIRD_REVIEW_360.md`](./SUNBIRD_REVIEW_360.md) | 11-reviewer critique (design, feel, HUD, a11y, perf, audio, balance, ops) with RICE + MoSCoW prioritisation |
+| [`RELEASE-VERDICT.md`](./RELEASE-VERDICT.md) | Dated pre-upload verdict: what was fixed and what was still open when it was written |
+| [`multiplayer-social-audit.md`](./multiplayer-social-audit.md) | Short note on where the multiplayer/social surface stands |
 | [`DEPLOY.md`](../DEPLOY.md) | Hosting a build, env vars, edge functions |
 | [`PORTAL_PUBLISHING.md`](../PORTAL_PUBLISHING.md) | The four `VITE_PORTAL_TARGET` builds and their monetization matrix |
 | [`SUBMISSION_CHECKLIST.md`](../SUBMISSION_CHECKLIST.md) | Human walkthrough of a portal submission |
@@ -57,7 +62,7 @@ markdown — so this stays true instead of being true once.
 | [`DEPLOYMENT_CHECKLIST.md`](./DEPLOYMENT_CHECKLIST.md) | Deploy-time checks (hosting side; portal side lives in `SUBMISSION_CHECKLIST.md`) |
 | [`AUDS.md`](./AUDS.md) | Poki's Arbitrary User Data Store: contract, keys, failure modes |
 | [`poki/`](./poki/) | The Poki developer guide extracted into 131 numbered rules + `requirements.json` |
-| [`../rust/README.md`](../rust/README.md) | The authoritative realtime server (protocol, rooms, anti-cheat) |
+| Parent monorepo's `rust/` workspace | The authoritative realtime server (protocol, rooms, anti-cheat). Not in this checkout — see the note at the top of the root README |
 
 ## Generated — do not hand-edit
 
@@ -71,32 +76,62 @@ markdown — so this stays true instead of being true once.
 
 ## Snapshots — evidence, not guidance
 
-* [`audits/`](./audits/) — 15 dated audits. Each carries a `Status:` line saying
+* [`audits/`](./audits/) — 21 dated audits. Each carries a `Status:` line saying
   whether its findings were resolved, and what replaced it for live status.
+* [`POKI_COMPLIANCE_VERIFICATION_2026-10-06.md`](./POKI_COMPLIANCE_VERIFICATION_2026-10-06.md) — Poki compliance verification snapshot (2026-10-06).
 * [`archive/`](./archive/) — 11 superseded or parked documents (old extracts,
   one-shot agent prompts, a migration plan whose premise is now false, and the
   non-Poki backlog parked on 2026-09-23). Kept for provenance.
 
+<!-- canonical-claims
+These numbers are measured from disk by `pnpm docs:audit` and must match it.
+Adding a test file, a translation key or an audit means updating this block —
+that is the point. Do not hand-edit the prose figures above without this.
+tests: 2914
+testFiles: 235
+barrelKeys: 619
+locales: 36
+nonEnglishCells: 21665
+englishCells: 1105
+audits: 21
+archive: 11
+-->
+
 ## Verification chain
 
 ```bash
-pnpm gate          # lint · audit:ui · i18n:audit · docs:audit · typecheck (client+server)
-                   # · 1,781 unit tests · 48 server tests · verify:prod · build:portals
-                   # · verify:portals · audit:zips · verify:upload · verify:thumbnail
-                   # · isolation:check · policy/artifact/mobile e2e
+pnpm gate          # lint · audit:ui · i18n:audit · typecheck · unit tests
+                   # · verify:prod · build:poki · verify:portals · audit:zips
+                   # · verify:upload · verify:thumbnail · isolation:check
+                   # · policy/artifact/mobile e2e
 pnpm verify:csp      # the built dist-poki bundle vs the CSP request (inside verify:portals)
 pnpm poki:preflight  # the portal half of the gate, ending in a live poki:audit --run
 pnpm poki:audit      # 131 extracted rules → 116 satisfied / 5 human actions / 10 informational
+pnpm docs:audit      # doc link / orphan / snapshot-status gate (run separately)
 ```
 
-Numbers as of 2026-09-24: **1,781 unit tests** across 134 files (+48 server),
-**36 locales × 154 barrel keys** with 100% pack coverage and **312** literal
-player-facing strings still untranslated (ratcheted, only allowed to fall —
-it was 363 before the first two toast batches; the celebration strip removed ten
-by replacing literal run-end toasts with translated beats; batch 3 took all 17
-screen titles and the back-button label, so the `screenTitle` category is zero),
-**three portal zips** —
-poki 940 KB, crazy 927 KB, generic 925 KB — all passing the forbidden-string and
-foreign-portal-marker gates. The three
+Numbers as of 2026-10-04: **2,890 declared unit tests** across 231 files (the
+live-socket suites that need a running room server are skipped in CI-less
+sandboxes — the room server lives in the parent monorepo), **36 locales × 604
+barrel keys** with 100% pack coverage and **635 of 21,140** non-English cells
+still holding English — **3.0%**, down from 55% before the translation pass.
+What remains is correct by design and will not be translated: the brand name
+`Sunbird`, the mode/onomatopoeia names (`FRENZY`, `BOING`, `BONK`, `PERFECT`,
+`RECORD`), acronyms (`AI PvP`), and cognates where the English word *is* the
+native word (`Pilot` in de/tr/pl, `Shop` in de, `Account` in it/nl,
+`Distance`/`Score` in fr).
+
+The locale packs are **fetched, not bundled**. They were once `import.meta.glob`ed
+into lazy chunks that `vite-plugin-singlefile` then inlined whole, so every
+player downloaded all 36 locales to read one. They now ship as an `i18n/`
+sidecar beside `fonts/` and `icons/` and load on demand, which is what lets the
+game carry real translations and still ship at **2.07 MB** against a 2.50 MB
+budget.
+
+This fork builds the **Poki portal edition only** — there are no crazy/generic
+zips. `src/game/edition.ts` is the Poki edition and `vite.config.ts` defines
+`VITE_SELL_AD_REMOVAL` to false for every build, so the ad-removal upsell is
+compiled out of the portal artifact entirely. The one Poki zip is **1,128 KB**.
+The three
 Playwright stages of `pnpm gate` need browser binaries; in a sandbox that cannot
 download them they fail on environment, not on code, and CI runs them for real.

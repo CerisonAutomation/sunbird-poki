@@ -1,8 +1,8 @@
 # Poki Content-Security-Policy request
 
-**Generated:** 2026-09-23 by `pnpm gen-csp` — do not edit by hand.
-**Source of truth:** `src/game/legal.edition.poki.ts` (host table) and `src/game/legal.ts` (policy URL).
-**Build:** Sunbird 1.1.0 · privacy policy version 2026-09-23
+**Generated:** 2026-09-28 by `pnpm gen-csp` — do not edit by hand.
+**Source of truth:** `src/game/legal.edition.ts` (host table) and `src/game/legal.ts` (policy URL).
+**Build:** Sunbird 1.0.0 · privacy policy version 2026-09-24
 
 Poki's external-resources policy requires the exact links a build needs, a short
 explanation of each, and an up-to-date privacy policy hosted on a public page and
@@ -11,7 +11,7 @@ linked from inside the game. This document is that submission.
 ## 1. Privacy policy URL (required before any custom CSP is stored)
 
 ```
-https://sunbird-snowy.vercel.app/privacy
+https://sunbird-snowy.vercel.app/privacy.html
 ```
 
 The page is generated from the same data module the in-game Settings → Privacy
@@ -96,5 +96,5 @@ Verification commands for this submission:
 pnpm gen-csp           # regenerate this document from the shipped host table
 pnpm verify:csp        # the built dist-poki bundle against this host list
 pnpm poki:preflight    # builds every portal target and gates isolation, zips, upload folder
-pnpm poki:audit        # 131-rule Poki compliance audit (docs/poki/COMPLIANCE.md)
+pnpm poki:audit        # 188-rule Poki compliance audit (docs/poki/COMPLIANCE.md)
 ```

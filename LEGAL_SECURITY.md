@@ -154,9 +154,12 @@ leaderboard entries, challenge names) that reach the DOM do so through:
 ### 2.3 Supply chain
 
 - `pnpm audit` → **No known vulnerabilities found** (re-run: `pnpm audit`).
-- No lockfile drift: CI installs from `pnpm-lock.yaml`.
-- Rust server crate is CI-gated (`.github/workflows/rust.yml`); no binaries
-  are committed.
+- No lockfile drift: installs are pinned by `pnpm-lock.yaml` (`--frozen-lockfile`).
+- **No CI in this fork.** The Rust crate is not CI-gated either — its workflow
+  (`.github/workflows/rust.yml`) was deleted along with the others, and the
+  `rust/` crate does not live in this checkout at all. Do not read a green build
+  as a Rust check having run; run `cargo fmt/clippy/test` by hand in the parent
+  monorepo. No binaries are committed here.
 
 ### 2.4 Deployment notes (for whoever runs it)
 

@@ -1,23 +1,24 @@
 /**
  * What the score does when a comedy moment lands.
  *
- * The moment pipeline (`Moments.ts`) already wires eight beats to a shout, an
- * animation, a haptic pattern, a telemetry event, a result-card line and a next
- * action. Music was the one channel left out: the soundtrack played *under* a
- * BONK instead of *being* part of it. That is the difference between a game with
- * a soundtrack and a game with a band that is watching you play.
+ * The moment pipeline (`Moments.ts`) wires each beat to a shout, an animation, a
+ * haptic pattern, a telemetry event and a result-card line. Music was the one
+ * channel left out: the soundtrack played *under* a BONK instead of *being*
+ * part of it. That is the difference between a game with a soundtrack and a game
+ * with a band that is watching you play.
  *
  * The mapping is pure data over a closed set of operations, so:
  *
  *  - it is unit-testable with no WebAudio at all (`__tests__/music-moments.test.ts`);
  *  - every reaction is bounded (no unbounded transposes, no zero-length sweeps);
- *  - the engine stays free of moment knowledge — `Music` grows four primitives
- *    (`faceplant`, `underwater`, `sparkle`, `pushIntensity`) and never imports
- *    this file, so the audio graph has no dependency on gameplay semantics.
+ *  - the engine stays free of moment knowledge — `Music` implements the eight
+ *    primitives and never imports this file, so the audio graph has no
+ *    dependency on gameplay semantics.
  *
  * Design rule behind every row: the reaction must never fight the feeling of
- * flying fast. Comedy beats get a *stop* or a *lift*, never a slow-down of the
- * underlying tempo; intensity pushes are short and decay on their own.
+ * flying fast. A comedy beat gets a *stop* or a *lift*, never a slow-down of the
+ * underlying tempo — the player's hands are reading tempo, and a track that
+ * drags under a BONK reads as the game lagging, not as the joke landing.
  */
 import type { MomentKind } from "./Moments";
 
@@ -63,7 +64,8 @@ export const MOMENT_MUSIC: Record<MomentKind, MusicAction[]> = {
     { op: "push", delta: 0.35, seconds: 1.2 },
   ],
   // PHEW — the exhale after a near miss. Pull intensity down briefly and give
-  // the SFX room; the score relaxes its shoulders.
+  // the SFX room; the score relaxes its shoulders. This is the one kind allowed
+  // to pull intensity, and only gently.
   phew: [
     { op: "duck", amount: 0.3, release: 0.35 },
     { op: "push", delta: -0.2, seconds: 0.8 },
@@ -73,15 +75,15 @@ export const MOMENT_MUSIC: Record<MomentKind, MusicAction[]> = {
     { op: "sparkle", seconds: 0.55 },
     { op: "push", delta: 0.15, seconds: 0.9 },
   ],
-  // PANIC — the heart-rate beat: push intensity hard and pump twice-worth of
-  // bounce in one call. No transposition down; a panic that sounds sad reads as
-  // defeat, and the run is still alive.
+  // PANIC — the heart-rate beat: push intensity hard and pump in one call. No
+  // transposition down; a panic that sounds sad reads as defeat, and the run is
+  // still alive.
   panic: [
     { op: "push", delta: 0.45, seconds: 1.6 },
     { op: "pump", amount: 0.4, duration: 0.25 },
   ],
-  // SLEEP — the mode switch to the music-box lullaby is the real change
-  // (Game.ts sets `sleep`); this just clears the mix for it.
+  // SLEEP — the mode switch to the music-box lullaby is the real change (the
+  // game sets `sleep`); this just clears the mix for it.
   sleep: [{ op: "duck", amount: 0.45, release: 0.8 }],
   // WEE — the speed beat. Everything rises: a short upward transposition, a
   // bell run and an intensity push, so the score leans into the dive the player
@@ -90,6 +92,14 @@ export const MOMENT_MUSIC: Record<MomentKind, MusicAction[]> = {
     { op: "glissando" },
     { op: "sparkle", seconds: 0.4 },
     { op: "push", delta: 0.3, seconds: 1.1 },
+  ],
+  // FRENZY — four clean take-offs in a row. A chain, so it earns the same
+  // upward gesture as BOING but lands on top of it: transpose, lift, and push
+  // hard enough that the arrangement itself tightens for the next stretch.
+  frenzy: [
+    { op: "glissando" },
+    { op: "sparkle", seconds: 0.6 },
+    { op: "push", delta: 0.4, seconds: 1.4 },
   ],
   // RECORD — the whole band: sub drop, star glide, bell run. The loudest thing
   // the score is allowed to do, because it only happens once per record.

@@ -2,9 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Zoom is allowed on purpose. This used to ship
+         `maximum-scale=1.0, user-scalable=no`, which is a direct WCAG 1.4.4
+         (Resize Text, Level AA) failure: it blocks pinch-zoom outright, so a
+         low-vision player cannot enlarge the HUD — the game's own Large Text
+         setting is not a substitute, because it scales HUD type but leaves
+         the browser zoom that a player needs for *everything* unavailable.
+         `maximum-scale=5` is the standard fullscreen-canvas compromise: iOS
+         only permits pinch-zoom in a fullscreen web app when the maximum
+         scale is greater than 1, so this restores real zoom while still
+         refusing the 1x-2x band that a fixed-layout HUD cannot reflow into.
+         `initial-scale=1.0` keeps the opening layout unchanged, so nothing
+         looks different until a player deliberately pinches.
+         Pinned by `shell-a11y.test.ts`. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover"
     />
     <meta name="theme-color" content="#4aa0e8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

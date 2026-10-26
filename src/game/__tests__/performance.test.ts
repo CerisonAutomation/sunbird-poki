@@ -5,11 +5,11 @@ import { AttractPilot } from "../pilot";
 import { Bird } from "../Bird";
 import { endlessSpeedScale, flightProgression, terrainDifficulty } from "../FlightProgression";
 import { FlightCues } from "../FlightCues";
-import { PHYS_DT } from "../constants";
+import { DROP_START, PHYS_DT } from "../constants";
 import { nextBloomBudget } from "../quality";
 
 describe("render and allocation budgets", () => {
-  it("reuses distant geometry and culls static instanced decoration", () => {
+  it("reuses distant geometry and culls static instanced decoration", async () => {
     const terrain = new TerrainSystem("performance");
     terrain.update(64);
     const far = terrain.group.children.slice(0, 4) as Mesh[];
@@ -18,6 +18,10 @@ describe("render and allocation budgets", () => {
       terrain.update(x);
       far.forEach((mesh, i) => expect(mesh.geometry.getAttribute("position")).toBe(buffers[i]));
     }
+    // Chunk geometry (and the decor/sunflower instancing built alongside it)
+    // is now deferred to an idle callback — the spawn budget from the LOD
+    // work — so give pending builds a tick to land before inspecting them.
+    await new Promise(resolve => setTimeout(resolve, 10));
     let instances = 0;
     terrain.group.traverse(object => {
       if (object instanceof InstancedMesh) {
@@ -88,15 +92,22 @@ describe("progressive, bounded difficulty", () => {
       const next = flightProgression(island);
       expect(next.hillScale).toBeGreaterThanOrEqual(previous.hillScale);
       expect(next.hillScale - previous.hillScale).toBeLessThan(0.03);
-      expect(next.hillScale).toBeLessThanOrEqual(1.32);
-      expect(next.rhythmScale).toBeLessThanOrEqual(1.24);
+      // Raised from 1.32 deliberately, not to make a failure go away.
+      // 1.32 was the old asymptote — a third more arch height across an
+      // entire career, which is why late islands stopped feeling like
+      // progress. The ceiling is now 1.55 (worldProgression.HILL_SCALE_MAX).
+      // The bound that actually protects the player is the per-island STEP
+      // asserted just above, and that is unchanged at 0.03: the destination
+      // is further away, the road to it is not steeper.
+      expect(next.hillScale).toBeLessThanOrEqual(1.56);
+      expect(next.rhythmScale).toBeLessThanOrEqual(1.41);
       expect(endlessSpeedScale(island, island * 60)).toBeLessThanOrEqual(1.55);
       previous = next;
     }
     expect(endlessSpeedScale(0, 0)).toBe(1);
     expect(terrainDifficulty(NaN)).toBe(1);
-    expect(terrainDifficulty(100)).toBe(1.16);
-    expect(terrainDifficulty(-5)).toBe(0.86);
+    expect(terrainDifficulty(100)).toBe(1.35);
+    expect(terrainDifficulty(-5)).toBe(0.7);
   });
 });
 
@@ -104,11 +115,11 @@ describe("readable sound landmarks", () => {
   it("plays the momentum scoop once per island, not 120 times per second", () => {
     const cues = new FlightCues();
     const bird = { grounded: true, altitude: 0, vy: -30, speed: () => 70 };
-    expect(cues.update(PHYS_DT, bird, 0, 760)).toBe("runup");
-    for (let i = 0; i < 200; i++) expect(cues.update(PHYS_DT, bird, 0, 760)).toBeNull();
-    expect(cues.update(PHYS_DT, bird, 1, 760)).toBe("runup");
+    expect(cues.update(PHYS_DT, bird, 0, DROP_START + 10)).toBe("runup");
+    for (let i = 0; i < 200; i++) expect(cues.update(PHYS_DT, bird, 0, DROP_START + 10)).toBeNull();
+    expect(cues.update(PHYS_DT, bird, 1, DROP_START + 10)).toBe("runup");
     cues.reset();
-    expect(cues.update(PHYS_DT, bird, 0, 760)).toBe("runup");
+    expect(cues.update(PHYS_DT, bird, 0, DROP_START + 10)).toBe("runup");
   });
   it("marks only a high apex, with a cooldown against repeated chatter", () => {
     const cues = new FlightCues();

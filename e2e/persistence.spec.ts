@@ -8,7 +8,29 @@ import { SunbirdPage } from "./SunbirdPage";
  * progress reset wipes what the UI says it will wipe.
  */
 
-/** Fly a short run and wait for the run to end (continue screen first). */
+/**
+ * A whole solo day, in WALL clock — and the number has to be generous.
+ *
+ * A run ends in `Game.onDaylightOut`, the solo day is `DAYLIGHT_MAX` = 52 s,
+ * and nothing ends it sooner: the settle rule (`stepSettleAndGoals`) needs
+ * `bird.speed() < 4`, while `Bird` holds a `MIN_KEEP_SPEED` = 12 floor along
+ * the ground and in the water, so the `settled` and `water` reasons never fire
+ * and the daylight clock always decides. `Game.fixedUpdate` runs physics on a
+ * fixed step and DROPS the backlog past `MAX_CATCHUP_STEPS`, so a starved
+ * frame rate does not shorten the flight, it runs it in slow motion.
+ *
+ * This helper used to budget 30 s for that flight, and then waited out the
+ * budget on a still-flying bird — its own failure snapshot shows a live
+ * daylight bar, the Pause control, a coach hint and 307 m on the clock.
+ * e2e/results.spec.ts documents the same wall-clock budget and why 240 s is
+ * the number that survives a box running three suites at once.
+ */
+const RUN_END_TIMEOUT = 240_000;
+
+/** Two tests here fly that flight and then do their own work after it. */
+test.describe.configure({ timeout: 420_000 });
+
+/** Fly a real flight to its real end and leave the results card open. */
 async function flyUntilDead(page: Page, app: SunbirdPage): Promise<void> {
   await app.fly();
   // A few flaps so the recorded distance is strictly positive, then cut
@@ -17,7 +39,18 @@ async function flyUntilDead(page: Page, app: SunbirdPage): Promise<void> {
     await page.keyboard.press("Space");
     await page.waitForTimeout(550);
   }
-  await expect(page.locator('[data-ref="continue"]')).toBeVisible({ timeout: 30_000 });
+  // Two destinations, and only two: the second wind counts itself down to the
+  // results card, and an unentitled run goes there directly. Waiting for
+  // `continue` alone means an unentitled run reports "still flying" for the
+  // whole budget when it has in fact been on the results card for seconds.
+  await expect(page.locator('[data-ref="continue"]:not(.hidden), [data-ref="over"]:not(.hidden)')).toBeVisible({
+    timeout: RUN_END_TIMEOUT,
+  });
+  // The free, always-present exit out of the second wind.
+  if (await page.locator('[data-ref="continue"]:not(.hidden)').isVisible()) {
+    await page.locator('[data-ref="continue"] [data-action="continue-sleep"]').click();
+  }
+  await expect(page.locator('[data-ref="over"]:not(.hidden)')).toBeVisible({ timeout: 30_000 });
 }
 
 test("a flown distance becomes the personal best and survives a reload", async ({ page }) => {
@@ -25,14 +58,14 @@ test("a flown distance becomes the personal best and survives a reload", async (
   await app.open();
   await app.ready();
   await flyUntilDead(page, app);
-  // Let the run finish to the results card, then back to the menu.
-  await page.locator('[data-ref="continue"] [data-action="continue-sleep"]').click();
-  await expect(page.locator('[data-ref="over"]')).toBeVisible({ timeout: 15_000 });
   await page.locator('[data-ref="over"] [data-action="menu"]').click();
   await app.ready();
   const bestText = await page.locator(".home-record b").first().textContent();
   expect(bestText).not.toBeNull();
   expect(bestText).not.toBe("0 m");
+  // A real solo day covers hundreds of metres; "0 m" would mean the run was
+  // never recorded at all rather than merely short.
+  expect(Number((bestText ?? "").replace(/[^\d]/g, "")), `personal best read "${bestText}"`).toBeGreaterThan(100);
   // Reload: the menu must restore the same (or a later) best from storage.
   await page.reload({ waitUntil: "commit" });
   await app.ready();
@@ -77,8 +110,6 @@ test("coins earned in a run survive a reload", async ({ page }) => {
   await app.open();
   await app.ready();
   await flyUntilDead(page, app);
-  await page.locator('[data-ref="continue"] [data-action="continue-sleep"]').click();
-  await expect(page.locator('[data-ref="over"]')).toBeVisible({ timeout: 15_000 });
   await page.locator('[data-ref="over"] [data-action="menu"]').click();
   await app.ready();
   const walletText = await page.locator(".home-record .record-wallet").textContent();

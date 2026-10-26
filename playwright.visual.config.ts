@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveChromium } from "./e2e/chromium-executable";
 
 /**
  * Config for the visual regression suite (e2e/visual.spec.ts). It serves the
@@ -12,6 +13,8 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Run: pnpm test:visual    (needs `pnpm build:poki` first)
  */
+const browser = resolveChromium();
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /visual-.*\.spec\.ts/,
@@ -23,7 +26,7 @@ export default defineConfig({
   use: {
     trace: "retain-on-failure",
     launchOptions: {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
+      executablePath: browser.executablePath,
       args: ["--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
     },
   },

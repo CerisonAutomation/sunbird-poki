@@ -32,14 +32,17 @@
  * 1 MB gamesave budget; `src/game/Storage.ts` keeps caches out of that sync
  * with the documented `poki_ignore` key prefix.
  */
-import type {
-  InviteParams,
-  PlatformAdapter,
-  PlatformEvents,
-  PlatformIdentity,
-  PlatformSystemInfo,
-} from "./platform";
-import { localCloudFallback } from "./local";
+import {
+  EMPTY_INFO,
+  type InviteParams,
+  type PlatformAdapter,
+  type PlatformEvents,
+  type PlatformIdentity,
+  type PlatformSystemInfo,
+} from "./platform-contract";
+// The localStorage cloud-save backend, from the neutral module that owns it —
+// NOT from `./local`, which is a sibling ADAPTER. See `./cloud-local.ts`.
+import { localCloudFallback } from "./cloud-local";
 import { setLoadingNet } from "./net";
 import { POKI_DISPLAY_AD_SIZE } from "./banner";
 
@@ -65,7 +68,8 @@ type PokiShareableData = Record<string, string | number | boolean>;
  * `PokiUser`, `PokiShareableData` and `PokiInitOptions` stay local: they
  * describe our call sites, not Poki's published surface.
  */
-import type { PokiSdk } from "./poki-canon";
+import { POKI_LEADERBOARD } from "./env";
+import { measureViaPoki, pokiAuthToken, type PokiSdk } from "./poki-canon";
 
 /**
  * `init({ submitScore })` is Poki's leaderboard handshake: the SDK hands us a
@@ -79,12 +83,15 @@ type PokiInitOptions = {
 };
 
 /**
- * Leaderboard the run score is submitted to. The name must match the board as
- * it is configured in Poki for Developers; `VITE_POKI_LEADERBOARD` lets a
- * build be re-pointed at a renamed board without a code change, and the
- * default stays the one the game has always submitted to.
+ * The placeholder the shipped core returns when nobody is signed in:
+ * `User_${Math.floor(9e8 * Math.random()) + 1e8}` (core build 0df3a52d).
+ *
+ * It is a truthy string, so every "is there a username?" check passes on it.
+ * Without matching it explicitly, an anonymous visitor's throwaway handle
+ * would be adopted as their pilot name and written into their save, where it
+ * would outlive the session and read like a real account to the player.
  */
-const POKI_LEADERBOARD = (import.meta.env.VITE_POKI_LEADERBOARD as string | undefined)?.trim() || "distance";
+const ANONYMOUS_USERNAME = /^User_\d{9,10}$/;
 
 /**
  * The submit function Poki hands us during `init({ submitScore })`. Held at
@@ -92,6 +99,67 @@ const POKI_LEADERBOARD = (import.meta.env.VITE_POKI_LEADERBOARD as string | unde
  * before the adapter is constructed.
  */
 let scoreSubmit: ((leaderboard: string, score: number) => void) | null = null;
+
+/**
+ * True only once Poki's own `init()` has RESOLVED.
+ *
+ * The SDK global is installed the moment the CDN script evaluates, which is
+ * well before `init()` finishes — so "does `window.PokiSDK` exist" is not a
+ * readiness test, it is a boot-order bug waiting to happen. Gating the breaks
+ * on the global's existence is exactly what a phone e2e run caught: the game
+ * asked for an ad while init was still in flight and got back
+ * "Requesting ad before PokiSDK.init() is done" plus a thrown
+ * "The Poki SDK was not yet booted". The HTML5 doc is explicit that init must
+ * complete first, so every ad entry point tests THIS instead.
+ *
+ * Set only on a successful init (see `markPokiBooted`) and never from a catch:
+ * an init that genuinely failed cannot serve an ad, and "not every
+ * commercialBreak() triggers an ad" makes an opportunity that quietly does
+ * nothing ordinary rather than exceptional.
+ *
+ * Declared here, above the module-level `setLoadingNet` registration below, for
+ * the reason src/i18n/index.ts spells out: a module-scope `let` read by code
+ * that runs during module evaluation must come first, or the read is a
+ * ReferenceError against the temporal dead zone on every cold boot.
+ */
+let booted = false;
+
+/** Subscribers waiting for `markPokiBooted`, drained in registration order. */
+const bootWaiters: Array<() => void> = [];
+
+/** Record that `PokiSDK.init()` resolved. Only the boot path calls this. */
+export function markPokiBooted(): void {
+  if (booted) return;
+  booted = true;
+  // Drain into a fresh list first: a waiter may legitimately register another
+  // (a deferred call that then finds itself pre-boot again after a re-init),
+  // and mutating the array being iterated would skip the tail of it.
+  const due = bootWaiters.splice(0, bootWaiters.length);
+  for (const run of due) run();
+}
+
+/** Whether Poki's init handshake has completed. See `booted` above. */
+export function pokiSdkBooted(): boolean {
+  return booted;
+}
+
+/**
+ * Run `fn` once the SDK has booted — immediately if it already has.
+ *
+ * The ad entry points do not need this: a break requested too early is a
+ * documented no-op ("not every commercialBreak() triggers an ad"), so simply
+ * not asking is the correct, complete answer. The LIFECYCLE calls are the
+ * opposite case, because Poki refuses them rather than ignoring them:
+ * `gameplayStart()` is what arms the core's `startAdsAfter` timer, so a start
+ * that lands during boot is not merely refused but LOST, and the session then
+ * never auto-serves a break no matter how long it plays. Those calls are
+ * therefore deferred to boot rather than dropped — see `PokiAdapter`'s
+ * lifecycle block.
+ */
+export function onPokiBooted(fn: () => void): void {
+  if (booted) fn();
+  else bootWaiters.push(fn);
+}
 
 /** Options for the boot path's `PokiSDK.init()` — the leaderboard handshake. */
 export function pokiInitOptions(): PokiInitOptions {
@@ -125,17 +193,6 @@ declare global {
   }
 }
 
-const EMPTY_INFO: PlatformSystemInfo = {
-  countryCode: null,
-  locale: null,
-  deviceType: null,
-  osName: null,
-  osVersion: null,
-  browserName: null,
-  browserVersion: null,
-  applicationType: null,
-};
-
 /** Dismissed share sheet = the surface was shown; report it as handled. */
 function shareDismissed(error: unknown): boolean {
   return error instanceof DOMException && (error.name === "AbortError" || error.name === "NotAllowedError");
@@ -160,8 +217,47 @@ export class PokiAdapter implements PlatformAdapter {
   readonly ready = true;
   /** Container currently holding a display ad, so it can be torn down. */
   private banner: HTMLElement | null = null;
+  /**
+   * Loading phase asked for before the SDK booted; delivered at boot.
+   *
+   * Two slots rather than one: the two markers are independent one-shots, so a
+   * single slot would let a `loadingStart` that arrived before a
+   * `loadingFinished` be overwritten and silently lost.
+   */
+  private pendingLoadingStart = false;
+  private pendingLoadingFinished = false;
+  /** Gameplay state asked for before the SDK booted; delivered at boot. */
+  private pendingGameplay: "start" | "stop" | null = null;
 
-  constructor(private readonly events: PlatformEvents = {}) {}
+  constructor(private readonly events: PlatformEvents = {}) {
+    // Deferred lifecycle calls are delivered here, at the moment boot
+    // completes. Registering from the constructor (rather than from each
+    // pre-boot call) keeps the queue to at most one flush per adapter: the
+    // pending slots below are state, not callbacks, so a burst of pre-boot
+    // calls cannot grow an unbounded waiter list.
+    onPokiBooted(() => this.flushPendingSdkCalls());
+  }
+
+  /**
+   * Deliver whatever the game asked of the portal while `init()` was still in
+   * flight.
+   *
+   * Collapses a burst to the final state rather than replaying it: a pause and
+   * resume during boot is one `gameplayStop` then one `gameplayStart`, and
+   * sending the stop alone would leave Poki believing gameplay never resumed.
+   */
+  private flushPendingSdkCalls(): void {
+    const loadingStart = this.pendingLoadingStart;
+    const loadingFinished = this.pendingLoadingFinished;
+    this.pendingLoadingStart = false;
+    this.pendingLoadingFinished = false;
+    if (loadingStart) this.loadingStart();
+    if (loadingFinished) this.loadingFinished();
+    const gameplay = this.pendingGameplay;
+    this.pendingGameplay = null;
+    if (gameplay === "start") this.gameplayStart();
+    else if (gameplay === "stop") this.gameplayStop();
+  }
 
   portalLanguage(): string | null { return this.getLanguage()?.toLowerCase() ?? null; }
 
@@ -177,8 +273,11 @@ export class PokiAdapter implements PlatformAdapter {
     // "ads" is reported from the live SDK, not from the build target. Off the
     // Poki CDN (local preview, CDN blocked, SDK rejected) there is no ad
     // surface at all, and the game must not offer breaks or rewarded buttons
-    // that can only fail — it offers the coin/gold paths instead.
-    if (typeof this.sdk?.commercialBreak === "function" || typeof this.sdk?.rewardedBreak === "function") {
+    // that can only fail — it offers the coin/gold paths instead. Readiness is
+    // part of that test for the same reason: before init resolves the break
+    // methods exist but refuse, so reporting "ads" then would be offering a
+    // surface the SDK is not yet able to serve.
+    if (pokiSdkBooted() && (typeof this.sdk?.commercialBreak === "function" || typeof this.sdk?.rewardedBreak === "function")) {
       caps.push("ads");
     }
     // Reported from what the deployed SDK actually exposes, so the UI never
@@ -240,11 +339,15 @@ export class PokiAdapter implements PlatformAdapter {
   private loadingStartSent = false;
 
   loadingStart(): void {
-    // Poki marks the loading phase with gameLoadingStart(). bootstrapSdk()
-    // already fired it right after init (before the game's asset work), so
-    // this delegate exists for interface symmetry — re-sending a phase
-    // marker is harmless.
+    // bootstrapSdk() already fired gameLoadingStart() right after init and
+    // before any asset work, so this delegate is a fallback for a caller that
+    // reaches it on a path that skipped the bootstrap. The one-shot guard below
+    // ensures the marker is never sent twice.
     if (this.loadingStartSent) return;
+    // Not dropped, held: pre-boot this would be refused by the core, and the
+    // one-shot flag below would then record a phase marker that never reached
+    // the portal. See `flushPendingSdkCalls`.
+    if (!pokiSdkBooted()) { this.pendingLoadingStart = true; return; }
     this.loadingStartSent = true;
     this.sdk?.gameLoadingStart?.();
   }
@@ -255,6 +358,7 @@ export class PokiAdapter implements PlatformAdapter {
     // Phase markers are one-shot: Poki's "no consecutive duplicates" rule
     // (enforced by the Inspector) is applied to the loading signal too.
     if (this.loadingFinishedSent) return;
+    if (!pokiSdkBooted()) { this.pendingLoadingFinished = true; return; }
     this.loadingFinishedSent = true;
     this.sdk?.gameLoadingFinished?.();
   }
@@ -266,10 +370,16 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   gameplayStart(): void {
+    // The field bug this guards is louder than a console line: the core's
+    // `gameplayStart` arms `startAdsAfter`, and before boot it refuses and
+    // logs "The Poki SDK was not yet booted" instead — so the session loses
+    // automatic breaks for its whole life. Held and replayed, not skipped.
+    if (!pokiSdkBooted()) { this.pendingGameplay = "start"; return; }
     this.sdk?.gameplayStart?.();
   }
 
   gameplayStop(): void {
+    if (!pokiSdkBooted()) { this.pendingGameplay = "stop"; return; }
     this.sdk?.gameplayStop?.();
   }
 
@@ -292,7 +402,14 @@ export class PokiAdapter implements PlatformAdapter {
   /* ads */
   async commercialBreak(): Promise<void> {
     const sdk = this.sdk;
-    if (!sdk?.commercialBreak) return;
+    // Readiness, not existence. The doc requires init to have completed before
+    // any break is requested, and the SDK global is present well before that —
+    // asking anyway is what threw "The Poki SDK was not yet booted" in the
+    // field. A break that cannot be served must simply not happen: the doc's
+    // own "not every commercialBreak() triggers an ad" makes a skipped
+    // opportunity ordinary, so resolving immediately is the correct outcome,
+    // not an error path.
+    if (!pokiSdkBooted() || !sdk?.commercialBreak) return;
     let opened = false;
     try {
       // Exactly the documented shape: the callback pauses audio and input, and
@@ -319,7 +436,11 @@ export class PokiAdapter implements PlatformAdapter {
 
   async rewardedBreak(): Promise<boolean> {
     const sdk = this.sdk;
-    if (!sdk?.rewardedBreak) return false;
+    // Same init gate as the commercial break: a rewarded request raised before
+    // init resolves fails, and a false here is the honest answer — the player
+    // watched nothing, so nothing is owed (doc step 5: the promise's verdict
+    // decides the reward).
+    if (!pokiSdkBooted() || !sdk?.rewardedBreak) return false;
     let opened = false;
     try {
       // Documented shape again: the SDK's own verdict decides the reward, and a
@@ -336,10 +457,6 @@ export class PokiAdapter implements PlatformAdapter {
     } finally {
       if (opened) this.events.onAdClosed?.();
     }
-  }
-
-  async showMidgameAd(): Promise<void> {
-    await this.commercialBreak();
   }
 
   async showRewardedAd(): Promise<boolean> {
@@ -389,6 +506,18 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   /** Cached ad-block detection result (probed once at boot). */
+  /**
+   * Reads Poki's ad-block probe.
+   *
+   * NOTE: this can never report a block. The shipped core build defines
+   * `isAdBlocked = () => !1` (hardcoded false) and the loader's stub returns
+   * undefined; the real detection lives inside the core, is inferred from a
+   * MISSED ad fill, and is used only to annotate its own analytics. So
+   * `hasAdBlock()` below is always false on a Poki build. Kept because the
+   * member is real and a future core build may expose it properly — but do not
+   * write code that depends on it returning true, and do not treat it as the
+   * thing that protects MON-12 (see `syncSettings`).
+   */
   private adBlockProbed = false;
   private cachedAdBlock = false;
 
@@ -403,9 +532,22 @@ export class PokiAdapter implements PlatformAdapter {
     } catch { /* ignore */ }
   }
 
-  /* Cloud gamesaves: Poki syncs localStorage/IndexedDB automatically for
-   * signed-in players. Keep the same storage facade used by the game so the
-   * official SDK owns synchronization instead of a parallel custom ledger. */
+  /* Cloud gamesaves.
+   *
+   * These are NOT Poki SDK methods. `saveCloud`/`loadCloud`/`removeCloud`/
+   * `clearCloud`/`hasCloud` appear nowhere in @poki/sdk@0.0.5, nowhere in the
+   * CDN loader, nowhere in the shipped core build, and nowhere in the HTML5
+   * guide. Poki's portal may sync localStorage/IndexedDB for a signed-in
+   * player, but that is a portal-side behaviour with no client API — the only
+   * cloud-related string in the whole core is a read-only URL flag
+   * (`cloudsavegames=y`).
+   *
+   * So these are a plain localStorage facade, deliberately shaped like a cloud
+   * API so the storage layer has one call site. They are also currently
+   * uncalled: the game persists through `Storage.ts` directly. If Poki's sync
+   * does run, it will pick up whatever is in localStorage; the `poki_ignore.*`
+   * key prefix that Storage.ts writes to opt keys out is likewise undocumented
+   * in the SDK and unverifiable from these artifacts. */
   async saveCloud<T>(key: string, value: T): Promise<void> {
     return localCloudFallback.save(key, value);
   }
@@ -431,6 +573,13 @@ export class PokiAdapter implements PlatformAdapter {
     try {
       const u = await sdk.getUser();
       if (!u || !u.username || u.optedIn === false) return null;
+      // The shipped core substitutes a synthetic anonymous handle
+      // (`User_<random>`) when there is no session, and `optedIn` defaults to
+      // false in that case — but it is truthy, so the `!u.username` guard above
+      // does not catch it. Treating that placeholder as a real account would
+      // let an anonymous visitor's throwaway name be adopted as their pilot
+      // name and persisted into their save. Only a genuine account is identity.
+      if (ANONYMOUS_USERNAME.test(u.username)) return null;
       return {
         id: u.username,
         name: u.username,
@@ -524,15 +673,16 @@ export class PokiAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * Poki's account JWT, for verifying a purchase server-side.
+   *
+   * Shares one short-lived cache with AUDS (`pokiAuthToken`), so a write to
+   * storage and a purchase check in the same minute cost one round trip to the
+   * parent frame rather than one each. The token is deliberately not stored —
+   * it is fetched, handed to the caller, and dropped.
+   */
   async getIapToken(): Promise<string | null> {
-    const sdk = this.sdk;
-    if (!sdk?.getToken) return null;
-    try {
-      const token = await sdk.getToken();
-      return typeof token === "string" && token ? token : null;
-    } catch {
-      return null;
-    }
+    return pokiAuthToken();
   }
 
   /* invites / rooms / share */
@@ -612,16 +762,25 @@ export class PokiAdapter implements PlatformAdapter {
   }
 
   /* game events */
-  measure(category: string, label: string, action: string): void {
-    if (!category || !label || !action || /[^a-zA-Z0-9_.:-]/.test(category) || /[^a-zA-Z0-9_.:-]/.test(label) || !/^(start|complete|fail|clear|win|lose|finish)$/.test(action)) return;
-    try {
-      this.sdk?.measure?.(category, label, action);
-    } catch {
-      /* measurement must never break gameplay */
-    }
+  measure(category: string, label: string, action: string): boolean {
+    // `measureViaPoki` is the single place that validates and forwards to the
+    // SDK, shared with `Telemetry`. This method used to hand-roll the guard
+    // inline and got it wrong: it gated the action on
+    // `^(start|complete|fail|clear|win|lose|finish)$` and the two arguments on
+    // `/[^a-zA-Z0-9_.:-]/`, and it dropped ten of the live `.measure(` call
+    // sites in `Game.ts` on the floor: every `visible` and `interact` placement
+    // event, plus `reached` and `granted`. The events reached this method and
+    // were discarded here, so the Poki dashboard's interaction and reward signal
+    // was simply absent. No test caught it because the tests pinned the pure
+    // function nobody called.
+    return measureViaPoki(category, label, action);
   }
 
   /* ad-block state */
+  /**
+   * Always false on a Poki build — see `probeAdBlock`. Kept on the interface so
+   * the intent survives a core build that implements the probe for real.
+   */
   hasAdBlock(): boolean {
     this.probeAdBlock();
     return this.cachedAdBlock;
@@ -631,9 +790,14 @@ export class PokiAdapter implements PlatformAdapter {
   syncSettings(): void {
     // Poki exposes no "is the site muted" API — its volume controls are for ads,
     // not for the player's preference — so the game's own mute setting is the
-    // single source of truth and there is nothing to poll. The ad-block probe is
-    // still worth taking once at boot, because it is what stops a break being
-    // requested that could never serve (MON-12).
+    // single source of truth and there is nothing to poll.
+    //
+    // The ad-block probe is taken once at boot, but it does NOT gate anything:
+    // the shipped core hardcodes isAdBlocked to false (see `probeAdBlock`), so
+    // this cannot stop a break from being requested. MON-12 is in fact upheld by
+    // the platform instead — the core rejects a blocked break with
+    // ads.limit/busy/stopped and resolves `rewardedBreak` to false, so the
+    // promise never hangs and no reward is granted.
     this.probeAdBlock();
   }
 

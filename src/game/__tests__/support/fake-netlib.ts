@@ -95,6 +95,86 @@ class Signaler {
     return out;
   }
 
+  /**
+   * Evaluate one filter condition against a lobby the way the real signaling
+   * server does. Exposed so tests can assert on the *contract* rather than
+   * only on end-to-end behaviour.
+   *
+   * netlib's postgres.go builds its converter with
+   *   WithNestedJSONB("custom_data", "code", "playerCount",
+   *                   "createdAt", "updatedAt", "latency")
+   * so any key outside that exemption list is redirected into `custom_data`,
+   * and a dotted key aborts the whole query with "invalid column name".
+   */
+  matchFilter(condition: Record<string, unknown>, lobby?: FakeLobby): boolean {
+    const EXEMPT = new Set(["code", "playerCount", "createdAt", "updatedAt", "latency"]);
+    // With no lobby supplied, probe against a representative one.
+    const row: FakeLobby =
+      lobby ??
+      ({
+        code: "PROBE",
+        public: true,
+        playerCount: 1,
+        maxPlayers: 40,
+        hasPassword: false,
+        customData: {},
+        leader: "probe",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        latency: 12,
+      } satisfies FakeLobby);
+
+    for (const [key, expected] of Object.entries(condition)) {
+      if (key.startsWith("$")) continue; // $and handled by the caller
+      if (key.includes(".")) throw new Error(`invalid column name: ${key}`);
+      const actual = EXEMPT.has(key)
+        ? (row as unknown as Record<string, unknown>)[key]
+        : row.customData?.[key];
+      if (expected && typeof expected === "object") {
+        for (const [op, want] of Object.entries(expected as Record<string, unknown>)) {
+          // A switch, not a chain of `if (op === …) return …`: those only
+          // return on MISMATCH, so a satisfied condition falls through to
+          // whatever follows. That is exactly how the "unsupported operator"
+          // guard below ended up throwing on `$eq` matches.
+          switch (op) {
+            case "$eq":
+              if (actual !== want) return false;
+              break;
+            case "$ne":
+              // Postgres evaluates `col <> val` to NULL for a missing key,
+              // which EXCLUDES the row. A naive `actual === want` would pass a
+              // lobby that simply lacks the key — the double would then
+              // disagree with the server it exists to model.
+              if (actual === undefined || actual === want) return false;
+              break;
+            case "$gt":
+              if (!(typeof actual === "number" && actual > (want as number))) return false;
+              break;
+            case "$gte":
+              if (!(typeof actual === "number" && actual >= (want as number))) return false;
+              break;
+            case "$lt":
+              if (!(typeof actual === "number" && actual < (want as number))) return false;
+              break;
+            case "$lte":
+              if (!(typeof actual === "number" && actual <= (want as number))) return false;
+              break;
+            case "$in":
+              if (!Array.isArray(want)) throw new Error(`$in needs an array: ${key}`);
+              if (!(want as unknown[]).includes(actual)) return false;
+              break;
+            default:
+              // An unrecognised operator must not silently pass. A double that
+              // agrees with a bug it does not understand is worse than none.
+              throw new Error(`unsupported filter operator: ${op}`);
+          }
+        }
+      } else if (actual !== expected) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   reset(): void {
     this.lobbies.clear();
     this.members.clear();
@@ -144,37 +224,34 @@ export class FakeNetwork extends Emitter {
   }
 
   async list(filter?: Record<string, unknown>, _sort?: unknown, limit?: number): Promise<FakeLobby[]> {
-    // Accept both the simple { public: true } shape AND the MongoDB-style
-    // { $and: [{ public: { $eq: true } }, ...] } shape that PokiNetlibClient uses.
-    const wantsPublic =
-      filter?.public === true ||
-      (Array.isArray(filter?.$and) &&
-        (filter.$and as Record<string, unknown>[]).some(
-          (c) =>
-            c.public === true ||
-            (c.public as Record<string, unknown> | undefined)?.$eq === true,
-        ));
-    if (!wantsPublic) return [];
+    // This mirrors the REAL signaling server, not a convenient subset of it.
+    // github.com/poki/netlib → internal/signaling/stores/postgres.go builds
+    // its converter with
+    //   filter.WithNestedJSONB("custom_data",
+    //     "code", "playerCount", "createdAt", "updatedAt", "latency")
+    // so every key that is not in that exemption list is redirected into the
+    // lobby's `custom_data` JSONB, and a dotted key is rejected outright with
+    // "invalid column name". The inner query already restricts to
+    // `game = $1 AND public = true`, so `public` is not filterable here.
+    //
+    // A looser double let a real bug through: the client was sending
+    // `{public:{$eq:true}, hasPassword:{$eq:false}, "customData.mode":{$eq:…}}`,
+    // which the real converter REJECTS wholesale, so quick-match always found
+    // zero rooms and quietly created a fresh empty lobby. This fake used to
+    // special-case exactly those keys, which meant it agreed with the bug.
+    const matches = (lobby: FakeLobby, condition: Record<string, unknown>): boolean =>
+      signaler.matchFilter(condition, lobby);
+
+    // The server scopes the query to this game's PUBLIC lobbies before the
+    // caller's filter is applied.
     let rows = [...signaler.lobbies.values()].filter((l) => l.public);
-    // Apply simple $and conditions the tests rely on: hasPassword, playerCount $gt.
-    if (Array.isArray(filter?.$and)) {
-      for (const cond of filter.$and as Record<string, unknown>[]) {
-        if ((cond.hasPassword as Record<string, unknown> | undefined)?.$eq === false) {
-          rows = rows.filter((l) => !l.hasPassword);
+    if (filter) {
+      if (Array.isArray(filter.$and)) {
+        for (const cond of filter.$and as Record<string, unknown>[]) {
+          rows = rows.filter((l) => matches(l, cond));
         }
-        if (typeof (cond.playerCount as Record<string, unknown> | undefined)?.$gt === "number") {
-          const min = (cond.playerCount as Record<string, unknown>).$gt as number;
-          rows = rows.filter((l) => l.playerCount > min);
-        }
-        // customData.mode filter
-        const modeMatch = (cond as Record<string, unknown>)["customData.mode"] as
-          | Record<string, unknown>
-          | undefined;
-        if (modeMatch?.$eq !== undefined) {
-          rows = rows.filter(
-            (l) => l.customData?.mode === modeMatch.$eq,
-          );
-        }
+      } else {
+        rows = rows.filter((l) => matches(l, filter));
       }
     }
     return typeof limit === "number" ? rows.slice(0, limit) : rows;

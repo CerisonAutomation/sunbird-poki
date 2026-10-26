@@ -60,6 +60,9 @@ describe("moment → music coverage", () => {
   });
 
   it.each([
+    ["frenzy", "glissando"],
+    ["wee", "glissando"],
+    ["record", "beatDrop"],
     ["bonk", "faceplant"],
     ["splash", "underwater"],
     ["boing", "glissando"],

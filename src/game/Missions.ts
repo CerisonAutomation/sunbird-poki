@@ -8,7 +8,7 @@ export type StatKey =
   | "perfects"
   | "distance"
   | "fever"
-  | "zenith"
+  | "apex"
   | "pickups";
 
 export type RunStats = Record<StatKey, number>;
@@ -27,7 +27,7 @@ export const MISSION_DEFS: MissionDef[] = [
   { id: "coins25", title: "Gold Rush", desc: "Collect 25 coins in one run", target: 25, kind: "coins" },
   { id: "perfects5", title: "Slide Poet", desc: "Land 5 perfect slides in one run", target: 5, kind: "perfects" },
   { id: "fever1", title: "Catch Fire", desc: "Enter fever mode", target: 1, kind: "fever" },
-  { id: "zenith3", title: "Skyline Chaser", desc: "Hit 3 skyline moments in one run", target: 3, kind: "zenith" },
+  { id: "zenith3", title: "Skyline Chaser", desc: "Hit 3 skyline moments in one run", target: 3, kind: "apex" },
   { id: "distance2k", title: "Marathon Glide", desc: "Travel 2,000 m in one run", target: 2000, kind: "distance" },
   { id: "pickups6", title: "Forager", desc: "Grab 6 power-ups in one run", target: 6, kind: "pickups" },
   { id: "island5", title: "Far Horizon", desc: "Reach island 5", target: 5, kind: "island" },
@@ -63,8 +63,8 @@ const QUEST_POOL: Omit<QuestDef, "id">[] = [
   { kind: "distance", target: 1500, reward: 120, label: "Fly 1,500 m in a run", title: "Marathon" },
   { kind: "island", target: 2, reward: 100, label: "Reach island 2", title: "Island Hop" },
   { kind: "island", target: 3, reward: 200, label: "Reach island 3", title: "Archipelago" },
-  { kind: "zenith", target: 1, reward: 80, label: "Hit a skyline moment", title: "Skyline Touch" },
-  { kind: "zenith", target: 3, reward: 170, label: "Hit 3 skyline moments", title: "Skyline Chaser" },
+  { kind: "apex", target: 1, reward: 80, label: "Hit a skyline moment", title: "Skyline Touch" },
+  { kind: "apex", target: 3, reward: 170, label: "Hit 3 skyline moments", title: "Skyline Chaser" },
   { kind: "fever", target: 1, reward: 100, label: "Enter fever mode", title: "Catch Fire" },
   { kind: "pickups", target: 3, reward: 90, label: "Grab 3 power-ups", title: "Forager" },
 ];

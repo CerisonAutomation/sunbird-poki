@@ -101,3 +101,64 @@ it("keeps a chat reader's position rather than jumping on every update", () => {
   menu.render(card, "squad", chat + '<p>New message</p>');
   expect(card.querySelector<HTMLElement>("[data-scroll-memory]")!.scrollTop).toBe(200);
 });
+
+/** Chrome ignores a scrollTop write on a `display:none` scroller and re-applies
+ * the offset the element held when it was last shown. jsdom has no layout, so
+ * the one browser behaviour this test is about has to be modelled here. */
+function hiddenScroller(card: HTMLElement) {
+  let shown = 0;
+  let visible = true;
+  Object.defineProperty(card, "scrollTop", {
+    configurable: true,
+    get: () => (visible ? shown : 0),
+    set: (value: number) => { if (visible) shown = value; },
+  });
+  return { hide: () => { visible = false; }, show: () => { visible = true; } };
+}
+
+it("does not inherit the offset of the screen hidden before it, when the card is re-shown", async () => {
+  // A pause sub-screen, scrolled to its end, then back to the flight: the card
+  // goes display:none holding that offset. `update()` renders the next screen
+  // BEFORE it unhides the overlay, so the restore lands on a scroller with no
+  // layout box and the browser hands back the stale one — which is how a
+  // player used to arrive at the home menu with "Fly now" off-screen.
+  const { card, menu } = fixture();
+  menu.render(card, "shop", content);
+  const gate = hiddenScroller(card);
+  card.scrollTop = 1435;
+  gate.hide();
+  menu.render(card, "main", content);
+  gate.show();
+  await Promise.resolve();
+  expect(card.scrollTop).toBe(0);
+});
+
+it("still remembers a sub-screen's scroll across a visible round trip", async () => {
+  const { card, menu } = fixture();
+  menu.render(card, "shop", content);
+  card.scrollTop = 1435;
+  menu.render(card, "main", content);
+  await Promise.resolve();
+  expect(card.scrollTop).toBe(0);
+  menu.render(card, "shop", content);
+  await Promise.resolve();
+  expect(card.scrollTop).toBe(1435);
+});
+
+it("pulls a restored view back to the screen's primary action", async () => {
+  const { card, menu } = fixture();
+  const home = '<h2>Home</h2><button class="home-launch" data-action="pvp-practice">Fly now</button><p>rest</p>';
+  // The card's viewport starts 100px down the page; the CTA sits 40px below the
+  // top of its content, so it clears the fold only while scrollTop is under 40.
+  card.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+  const ctaRect = () => ({ top: 140 - card.scrollTop }) as DOMRect;
+  menu.render(card, "main", home, "paper-card", ".home-launch");
+  card.querySelector(".home-launch")!.getBoundingClientRect = ctaRect;
+  card.scrollTop = 900;
+  menu.render(card, "settings", '<h2>Settings</h2>');
+  menu.render(card, "main", home, "paper-card", ".home-launch");
+  // innerHTML replaced the button, so restub the node the deferred write measures.
+  card.querySelector(".home-launch")!.getBoundingClientRect = ctaRect;
+  await Promise.resolve();
+  expect(card.scrollTop).toBe(40);
+});

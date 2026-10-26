@@ -41,7 +41,7 @@ for (const size of SIZES) {
       // Check bounds and overflow, not just visibility behind a clipped card.
       await app.expectMenuFits();
       await expect(page.locator('[data-ref="menuCard"] h1')).toBeVisible();
-      await expect(page.locator('[data-action="open-live"]')).toBeVisible();
+      await expect(app.menuAction("open-live")).toBeVisible();
 
       // A race lobby must also fit (the densest screen).
       await app.openMenu("open-live", "Race Lobby");

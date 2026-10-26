@@ -13,7 +13,6 @@
  * The staged bundle is deliberately minimal and self-contained:
  *   index.html   the whole game (JS + CSS + fonts inlined by vite-singlefile)
  *   icons/       favicons / apple-touch-icon (referenced by the head)
- *   fonts/       self-hosted woff2 (kept for host-side/offline tooling)
  *
  * `i18n/` used to ride along "for host-side tooling". Nothing fetched it: the
  * runtime lazy-loads per-locale packs that vite-singlefile inlines into
@@ -34,8 +33,9 @@
  * `scripts/verify-upload.mjs` (which also proves it is not stale).
  */
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { paymentMarkersIn } from "./portal-markers.mjs";
 import path from "node:path";
 
 const portal = process.argv[2];
@@ -57,14 +57,53 @@ const uploadDir = portal === "poki" ? "poki-upload" : null;
  * the zip and the upload folder are byte-identical by construction.
  */
 function stageHtml() {
-  let html = readFileSync(path.join(src, "index.html"), "utf8")
+  const source = readFileSync(path.join(src, "index.html"), "utf8");
+
+  // THE coin-only gate, and it has to run HERE — on the pre-scrub bundle.
+  //
+  // Portal editions are coin/VIP-only and must carry no payment processor
+  // (a standing project boundary, and Poki's own rules). A payment SDK is
+  // present as plain text in the bundle at this point, so this is the one place
+  // a check can see it. The scrub below used to stand in for this and could not:
+  // it rewrote /stripe/gi across the whole document and then asserted that no
+  // `stripe` remained, which is false for every possible input because the
+  // string had just been removed from everywhere. That also made every
+  // downstream `/stripe/` test (verify-portal.mjs, audit-zips.mjs) incapable of
+  // firing, so "coin-only" was true by inspection rather than by gate.
+  //
+  // It is a text scan, so a processor whose name is assembled at runtime would
+  // still slip past. It is a real gate, not a proof.
+  const paymentHits = paymentMarkersIn(source);
+  if (paymentHits.length) {
+    throw new Error(
+      `payment-processor marker in the ${src} bundle — portal editions are coin-only:\n` +
+        paymentHits.map((h) => `  · ${h}`).join("\n") +
+        `\nRemove the processor from the client, or exclude this bundle from packaging.`,
+    );
+  }
+
+  // Poki, Requirements → Technical standards: "Clean build: remove all
+  // development tools, debug code, and testing artifacts before publication."
+  // `index.html` carries ~1.4 KB of engineering commentary in its <head> —
+  // rationale for the boot shell, for the font strategy, for the viewport
+  // meta. Useful in the repository, not something to hand a portal inside the
+  // shipped artifact. Scoped to the head deliberately: the body holds the
+  // inlined bundle, and a regex for `<!-- … -->` across two megabytes of
+  // minified JavaScript is a way to corrupt a build, not to clean one.
+  const bodyAt = source.indexOf("<body");
+  const stripped =
+    bodyAt > 0
+      ? source.slice(0, bodyAt).replace(/\n?\s*<!--[\s\S]*?-->/g, "") + source.slice(bodyAt)
+      : source;
+
+  let html = stripped
     .replace(/^\s*<link rel="manifest"[^>]*>\n?/m, "")
     .replace(/^\s*<meta property="og:url"[^>]*>\s*\n?/m, "")
-    // Portal editions are coin/VIP-only and must not carry a payment-provider
-    // marker for a scanner to find. The swap is length-preserving and applies
-    // to CSS class names and telemetry ids in the same document, so the
-    // artifact stays internally consistent; the assertion below makes sure the
-    // scrub is total (a leftover would mean a runtime-built string escaped it).
+    // Cosmetic last line of defence, kept because it costs nothing: should a
+    // marker ever survive into a portal build, a portal's own scanner must not
+    // see a payment provider's name. The pre-scrub gate above is what makes
+    // that safe to rely on — and because that gate is fatal, this replace is
+    // provably a no-op on a clean tree. It is hygiene, not verification.
     .replace(/stripe/gi, "portal");
   if (/stripe/i.test(html)) throw new Error("payment-marker scrub incomplete");
   // Poki's HTML5 SDK page: "Add the following HTML within the <head> tags of
@@ -76,12 +115,17 @@ function stageHtml() {
   if (portal === "poki") {
     // Match the TAG, not the hostname: the bundled adapter also contains the
     // CDN URL as a string (it is the fallback loader).
-    const SDK_TAG = '<script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
+    //
+    // `data-sunbird-sdk="poki"` is not decoration. `loadCdn()` in
+    // `src/sdk/platform.ts` looks for exactly that attribute before it injects
+    // a tag of its own; without it, a cold load where `ensureSdk()`'s poll
+    // expires before this script finishes downloading ends with TWO
+    // `poki-sdk.js` script tags in the document. The attribute makes the
+    // adapter adopt this tag instead.
+    const SDK_TAG =
+      '<script data-sunbird-sdk="poki" src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>';
     if (html.includes(SDK_TAG)) throw new Error("Poki SDK tag already staged");
-    html = html.replace(
-      /<head>/i,
-      '<head>\n    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>',
-    );
+    html = html.replace(/<head>/i, `<head>\n    ${SDK_TAG}`);
     if (!html.includes(SDK_TAG)) {
       throw new Error("Poki SDK tag injection failed — the head tag shape changed");
     }
@@ -101,8 +145,66 @@ function stageHtml() {
  * into every build; `pnpm gen-icons` still generates it there for hand-submission
  * to a portal, it just does not ship inside the game package any more.
  */
-const ENTRY_DIRS = ["icons", "fonts"];
+const ENTRY_DIRS = ["icons", "i18n"];
 const ENTRIES = ["index.html", ...ENTRY_DIRS];
+
+/**
+ * Drop shipped files the game can never fetch.
+ *
+ * `fonts/` is the case worth explaining. vite-singlefile inlines every woff2
+ * into index.html as a `data:font/woff2` URI — 6 faces, 112 KB of base64 the
+ * game genuinely loads — and staging then copied those SAME 6 files out of
+ * `public/` as well: another 112 KB that nothing has ever requested. The
+ * directory survived the earlier `i18n/` prune on the argument that it was
+ * "kept for host-side/offline tooling", but there is no host. A portal serves
+ * exactly the folder handed to it, and the game reads its faces out of the
+ * HTML. So those were ~112 KB of dead weight in a size-budgeted upload.
+ *
+ * Both decisions are read out of the staged HTML rather than a hand-kept list,
+ * so a font or icon that IS referenced keeps shipping with no edit here.
+ *
+ * `i18n/` is exempt and always kept. Its packs are fetched from a path built at
+ * runtime (`./i18n/${locale}.json` in src/i18n/index.ts), which never appears
+ * as a literal in the HTML — "not referenced by index.html" is therefore not a
+ * valid reason to drop one, and dropping them would break every non-English
+ * player.
+ */
+function pruneUnreferenced(target, html) {
+  const dropped = [];
+  const drop = (dir, file) => {
+    rmSync(path.join(target, dir, file));
+    dropped.push(`${dir}/${file}`);
+  };
+  const pruneEmpty = (dir) => {
+    const full = path.join(target, dir);
+    if (existsSync(full) && readdirSync(full).length === 0) rmSync(full, { recursive: true, force: true });
+  };
+
+  // Fonts: if any face is inlined, the @font-face rules that pointed at these
+  // files were inlined with it, so the whole directory is unreachable.
+  const fontsInlined = html.includes("data:font/woff2") || html.includes("data:application/font-woff");
+  if (fontsInlined) {
+    const fontDir = path.join(target, "fonts");
+    if (existsSync(fontDir)) {
+      for (const file of readdirSync(fontDir)) drop("fonts", file);
+      pruneEmpty("fonts");
+    }
+  }
+
+  // Icons: keep only what the head actually links.
+  const iconDir = path.join(target, "icons");
+  if (existsSync(iconDir)) {
+    for (const file of readdirSync(iconDir)) {
+      if (!html.includes(file)) drop("icons", file);
+    }
+    pruneEmpty("icons");
+  }
+
+  if (dropped.length) {
+    console.log(`  · pruned ${dropped.length} file(s) the game cannot fetch: ${dropped.join(", ")}`);
+  }
+  return dropped;
+}
 
 /** Write a staged bundle into `target` (fresh every run). */
 function stageInto(target) {
@@ -114,6 +216,7 @@ function stageInto(target) {
     const from = path.join(src, dir);
     if (existsSync(from)) cpSync(from, path.join(target, dir), { recursive: true });
   }
+  pruneUnreferenced(target, html);
   return html;
 }
 
@@ -127,6 +230,22 @@ for (const junk of ["sw.js", "manifest.webmanifest", "service-worker.js"]) {
   if (existsSync(p)) {
     rmSync(p, { force: true });
     console.log(`  · removed ${src}/${junk} (not shippable to a portal)`);
+  }
+}
+
+// Removing the file is only half of it: `index.html` still pointed at
+// `manifest.webmanifest`, so the portal build shipped a <link rel=manifest>
+// resolving to a file that is no longer there and 404ed on every load. The
+// upload folder had its HTML rewritten already, which is why the shipped zip
+// was clean and `dist-poki/` — the folder anyone serves directly to check the
+// build — was the one left dangling.
+const builtIndex = path.join(src, "index.html");
+if (existsSync(builtIndex)) {
+  const before = readFileSync(builtIndex, "utf8");
+  const after = before.replace(/[ \t]*<link\b[^>]*\brel=["']manifest["'][^>]*>\r?\n?/gi, "");
+  if (after !== before) {
+    writeFileSync(builtIndex, after);
+    console.log(`  · removed <link rel="manifest"> from ${src}/index.html`);
   }
 }
 

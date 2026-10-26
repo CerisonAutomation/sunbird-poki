@@ -18,6 +18,25 @@ interface ImportMetaEnv {
    * developer, so it is configuration. See src/sdk/banner.ts.
    */
   readonly VITE_POKI_DISPLAY_AD_SIZE?: string;
+  /**
+   * The Poki-issued game id (a UUID) that AUDS writes are scoped to. Set by
+   * `build:poki`; absent everywhere else, which is what makes the AUDS client
+   * refuse to construct. Read through `pokiGameId()` in src/sdk/env.ts rather
+   * than directly — the value is validated, and three call sites were each
+   * re-validating it themselves.
+   */
+  readonly VITE_POKI_GAME_ID?: string;
+  /**
+   * The Poki-issued game id Netlib (P2P) is opened with. Set by `build:poki`.
+   * Distinct from `VITE_POKI_GAME_ID` because Poki issues the two separately.
+   */
+  readonly VITE_POKI_NETLIB_GAME_ID?: string;
+  /**
+   * Name of the Poki leaderboard the run score is submitted to during
+   * `init({ submitScore })`. Defaults to "distance"; set it to re-point a
+   * build at a renamed board without a code change.
+   */
+  readonly VITE_POKI_LEADERBOARD?: string;
   /** Optional HTTPS base URL for the global leaderboard (see LEADERBOARD_API.md). */
   readonly VITE_LEADERBOARD_URL?: string;
   /** Optional WebSocket URL enabling real networked rivals in Mass Race. */
@@ -40,3 +59,14 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/**
+ * `true` when the current vitest run is collecting coverage. Injected as a
+ * literal by `define` in vitest.config.ts.
+ *
+ * It exists for exactly one consumer: `src/game/__tests__/physics-perf.test.ts`
+ * must not assert a wall-clock per-step budget while the v8 provider is
+ * instrumenting the code it is timing. Declared here so that test needs no
+ * cast and no `as any` (which `verify:prod` refuses in shipped code).
+ */
+declare const __COVERAGE_RUN__: boolean;

@@ -31,17 +31,30 @@
 }
 .overlay .screen-head h2 { font-size: clamp(19px, 5vw, 25px); letter-spacing: -.025em; }
 .overlay .back-btn { width: 44px; height: 44px; border-radius: 14px; background: #f1e5d6; box-shadow: none; }
-.overlay :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid #176979; outline-offset: 3px; }
+.overlay :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 .overlay :is(h1,h2)[tabindex="-1"]:focus { outline: none; }
 .overlay :is(input,select,textarea) { font: inherit; font-size: 16px; min-width: 0; accent-color: #bd4d24; }
 .overlay :is(input,select,textarea):not([type="range"]) { border: 1px solid #bba896; border-radius: 10px; background: #fffdf8; color: #392b30; padding: 10px; }
 .overlay select { max-width: 100%; min-height: 44px; }
 .overlay :is(button, summary) { touch-action: manipulation; }
 .overlay :is(.mini-btn,.soft-btn,.nav-btn,.seg button,.tier-reward) { min-height: 44px; }
+/* Controls that were shipping at 19-40px — thumb-misses on the primary
+   choices: the race mode/world pills, the shop's category disclosures, the
+   customize summary, the mission head, the name dice, the home Nest Pass link.
+   A miss on a pill means the wrong race, not a retry. */
+.overlay :is(.pvp-pill, .world-pill, .coll-head, .mission-head, .name-random-btn, .record-pass, .customize-race summary) { min-height: 44px; }
+.overlay :is(input, select, textarea):not([type=range]) { min-height: 44px; }
+/* The character counter sits in the same row as the dice. With no width of its
+   own it resized every time the digit count changed — "9/14" -> "12/14" — which
+   reflowed the row and nudged the dice sideways while the player typed. A
+   counter that shifts the control next to it while you are aiming at that
+   control is a mis-tap generator. Fixed width + tabular figures means the row
+   is laid out once and the digits change inside it. */
+.overlay .name-char-count { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 .overlay .mini-btn { min-width: 44px; }
 .overlay .section-title { color: #735340; line-height: 1.5; gap: 8px; flex-wrap: wrap; }
-.overlay :is(.fineprint,.tagline,.empty-note,.md) { color: #71574c; line-height: 1.55; }
-.overlay .section-title small { color: #71574c; }
+.overlay :is(.fineprint,.tagline,.empty-note,.md) { color: var(--clay); line-height: 1.55; }
+.overlay .section-title small { color: var(--clay); }
 .overlay .redeem { display: flex; gap: 8px; align-items: center; }
 .overlay .redeem input { flex: 1; width: 0; }
 .overlay .redeem button { flex-shrink: 0; }
@@ -56,26 +69,22 @@
 .menu-hero .hero-kicker { color: #8d4f2c; font-size: 10px; letter-spacing: .18em; }
 .menu-hero h1 { font-size: clamp(36px, 10vw, 48px); line-height: 1.05; margin: 4px 0 8px; }
 .menu-hero .hero-sub { font-size: 12px; max-width: 290px; margin: 0 auto; line-height: 1.5; }
-/* Eight .menu-hero .hero-play rules used to sit here. .hero-play is not emitted
-   in any markup — the launch grid it describes was replaced by the destination
-   grid and quick actions below — so every one of them was inert. */
-.menu-hero .menu-quick-actions { gap: 10px; margin: 0 0 12px; }
+/* Eight .menu-hero .hero-play rules used to sit here, followed by a
+   `.menu-quick-actions` container and a `.home-more` details block. Neither
+   class is emitted by any renderer — the container is superseded by
+   `.home-quick-rail` (which reuses `.quick-action` itself, and the rules for
+   that class below are still live) and the details block went with the
+   "Explore" drawer. All removed rather than left inert. */
 .menu-hero .quick-action { min-height: 48px; padding: 8px 12px; background: #fffaf2; border: 1px solid #dfcfbc; box-shadow: none; }
 .menu-hero .quick-action b { font-size: 11px; letter-spacing: .06em; }
 .menu-hero .quick-action span { font-size: 11px; }
-.menu-hero .home-more { margin: 12px 0 0; background: #fffaf2; border-color: #dfcfbc; }
-.menu-hero .home-more > summary { display: flex; flex-wrap: wrap; gap: 2px 8px; padding: 12px; min-height: 52px; font-size: 13px; }
-.menu-hero .home-more > summary span { margin-left: 0; font-size: 11px; font-weight: 400; color: #71574c; }
-.menu-hero .home-more[open] > summary span { visibility: visible; }
 .menu-hero .daily-strip { min-height: 62px; margin: 0; border: 1px solid #e5d2aa; }
 .menu-hero .hero-meta { flex-wrap: wrap; }
 .menu-hero .hangar-nav { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.menu-hero .home-more .mode-cards { grid-template-columns: minmax(0,1fr); }
-.menu-hero .home-more .mode-card-main { min-height: 80px; }
 /* Settings: meaningful state, continuous volume, explicit choices.
    The canonical .setting-row shape lives in the FINAL PASS block near the end
    of this file (flat flex rows); here only the spacing that block keeps. */
-.settings-intro { font-size: 13px; color: #71574c; line-height: 1.5; text-align: left; margin: 0 0 14px; }
+.settings-intro { font-size: 13px; color: var(--clay); line-height: 1.5; text-align: left; margin: 0 0 14px; }
 .overlay .setting-row { gap: 12px; min-height: 60px; text-align: left; }
 .overlay .setting-row > span, .overlay .setting-row > label { font-size: 13px; font-weight: 600; }
 .overlay .setting-volume, .overlay .setting-select { display: grid; grid-template-columns: minmax(0,1fr); gap: 4px; }
@@ -87,17 +96,18 @@
   appearance: none;
   background: transparent;
   cursor: pointer;
-  touch-action: pan-y;
+  touch-action: pan-y !important;
+  min-height: 44px !important;
 }
 .volume-control input[type="range"]::-webkit-slider-runnable-track {
   height: 8px;
-  background: #e8dbc6;
+  background: linear-gradient(to right, #f0b830 var(--pct, 50%), #e0d0b0 var(--pct, 50%));
   border-radius: 999px;
   border: 1px solid #d4c3ab;
 }
 .volume-control input[type="range"]::-moz-range-track {
   height: 8px;
-  background: #e8dbc6;
+  background: linear-gradient(to right, #f0b830 var(--pct, 50%), #e0d0b0 var(--pct, 50%));
   border-radius: 999px;
   border: 1px solid #d4c3ab;
 }
@@ -107,8 +117,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff9a62, #ff6b3d);
-  border: 2px solid #ffffff;
+  background: linear-gradient(135deg, var(--wing), #ff6b3d);
+  border: 2px solid var(--pure-white);
   box-shadow: 0 2px 6px rgba(120, 60, 20, 0.35);
   margin-top: -9px;
   transition: transform 0.12s ease;
@@ -117,8 +127,8 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff9a62, #ff6b3d);
-  border: 2px solid #ffffff;
+  background: linear-gradient(135deg, var(--wing), #ff6b3d);
+  border: 2px solid var(--pure-white);
   box-shadow: 0 2px 6px rgba(120, 60, 20, 0.35);
   transition: transform 0.12s ease;
 }
@@ -135,7 +145,7 @@
 .overlay .toggle i { width: 20px; height: 20px; top: 12px; left: 6px; }
 .overlay .toggle.on i { left: 26px; }
 .danger-zone { margin-top: 20px; border-top: 1px solid #decfbd; padding-top: 10px; }
-.danger-zone summary { min-height: 44px; padding: 12px 0; font-size: 13px; color: #71574c; cursor: pointer; }
+.danger-zone summary { min-height: 44px; padding: 12px 0; font-size: 13px; color: var(--clay); cursor: pointer; }
 /* Shop: compact collection index, explicit cost and ownership. */
 .overlay .collection { border: 1px solid #e1d1bd; border-radius: 14px; background: #fffaf2; margin: 5px 0; }
 .overlay .collection .coll-head { margin: 0; padding: 8px 12px; min-height: 40px; cursor: pointer; gap: 8px; flex-wrap: wrap; }
@@ -143,13 +153,13 @@
 .overlay .collection[open] .coll-head::before { content: "−"; }
 .overlay .collection summary { list-style: none; }
 .overlay .collection summary::-webkit-details-marker { display: none; }
-.overlay .collection .coll-count { font-size: 10px; padding: 3px 6px; color: #71574c; }
+.overlay .collection .coll-count { font-size: 10px; padding: 3px 6px; color: var(--clay); }
 .overlay .collection .skin-grid { padding: 0 10px 10px; gap: 10px; }
 .overlay .skin-card { min-width: 0; border-radius: 16px; }
 .overlay .skin-card :is(.sk-perk,.tag) { white-space: normal; overflow-wrap: anywhere; }
 .overlay .shop-section { border-top: 1px solid #decfbd; margin-top: 10px; padding: 0 0 6px; }
 .overlay .shop-section > summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 14px; font-weight: 700; }
-.overlay .shop-section > summary span { color: #71574c; font-size: 11px; font-weight: 400; }
+.overlay .shop-section > summary span { color: var(--clay); font-size: 11px; font-weight: 400; }
 .overlay .shop-section > summary::after { content: "+"; }
 .overlay .shop-section[open] > summary::after { content: "−"; }
 @media (min-width: 840px) {
@@ -167,17 +177,23 @@
   .menu-hero .hero { margin: 0; }
   .menu-hero h1 { font-size: 30px; margin: 0 0 4px; }
   .menu-hero .hero-sub { display: none; }
-  .menu-hero .menu-quick-actions { margin-bottom: 8px; }
 }
 .overlay .room-ctl .seg button { min-width: 44px; padding-inline: 8px; }
 .overlay .trophy-collection > summary { text-transform: capitalize; }
-.overlay .import-confirm { display: flex; align-items: center; gap: 10px; min-height: 48px; text-align: left; font-size: 12px; line-height: 1.4; margin: 8px 0; color: #71574c; }
+.overlay .import-confirm { display: flex; align-items: center; gap: 10px; min-height: 48px; text-align: left; font-size: 12px; line-height: 1.4; margin: 8px 0; color: var(--clay); }
 .overlay .import-confirm input { flex: 0 0 22px; width: 22px; height: 22px; }
 .overlay .screen-head > span:empty { display: none; }
 .overlay .screen-head h2 { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
 @media (max-width: 400px) {
-  .overlay .screen-head > span { grid-column: 2 / -1; justify-content: flex-start; }
-  .overlay .screen-head h2 { text-align: left; }
+  /* The trailing slot (wallet pill, board badge) belongs in column 3 of ROW 1.
+     It used to be pinned to `grid-column: 2 / -1` with an AUTO row, and the h2
+     already holds row 1 column 2 — so grid auto-placement had nowhere to put it
+     and dropped it to ROW 2. The header silently became two rows tall, and
+     because `.screen-head` is `position: sticky` inside the scrolling card, the
+     second row pushed the screen body up underneath it. Naming the row
+     explicitly is what makes the header provably one row at every width. */
+  .overlay .screen-head > span { grid-column: 3; grid-row: 1; justify-content: flex-end; align-self: center; }
+  .overlay .screen-head h2 { grid-column: 2; grid-row: 1; text-align: left; }
 }
 .overlay .icon-btn.menu-mute { display: grid; place-items: center; padding: 0; }
 .a11y-color .overlay .toggle.on { background: transparent; }
@@ -185,20 +201,36 @@
 .a11y-bigtext .overlay :is(.setting-row > span,.setting-row > label,.settings-intro,.tagline,.fineprint,.md,.sk-perk,.trophy-desc) { font-size: 15px; }
 .a11y-bigtext .overlay :is(.mode-desc,.nav-btn span,.quick-action span) { font-size: 13px; }
 .sb-reduce-motion .overlay *, .sb-reduce-motion .overlay *::before, .sb-reduce-motion .overlay *::after { animation: none !important; transition: none !important; }
+
+/* Same promise for the flight HUD, which is not inside an overlay. The rule
+   already existed — in ui.css, without !important, one specificity notch above
+   a bare class — so it worked only until somebody styled a flight-HUD element
+   with a three-class selector in THIS file, which is imported last and wins the
+   cascade outright. Nothing about that failure is visible at the edit site: the
+   rule is right there in the stylesheet looking correct. It lives here for the
+   same reason the overlay rule above does: this is the sheet that decides, and
+   it is the only one of the three with !important headroom left. */
+html.sb-reduce-motion .play-hud *,
+html.sb-reduce-motion .play-hud *::before,
+html.sb-reduce-motion .play-hud *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .overlay *, .overlay *::before, .overlay *::after { animation: none !important; transition: none !important; }
 }
 /* The next-flight decision comes before the detail-heavy results catalogue. */
 .results-kicker { font-size: 11px; letter-spacing: .13em; text-transform: uppercase; color: #80583e; margin-bottom: 8px; }
 .results-card > h2 { font-size: 28px; margin: 0 0 6px; }
-.result-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: stretch; margin: 16px 0; }
+.result-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: stretch; margin: 16px 0;
+  position: sticky; bottom: 0; z-index: 2;
+  background: linear-gradient(to bottom, transparent 0%, var(--paper, #fffaf2) 18%);
+  padding: 12px 0 4px; margin-bottom: 0; }
 .result-actions .play-again-btn { margin: 0; min-height: 52px; font-size: 17px; padding: 12px; }
-.result-actions .soft-btn { margin: 0; min-width: 80px; font-size: 13px; color: #71574c; border-color: #d5c4ad; background: rgba(255,255,255,0.5); }
+.result-actions .soft-btn { margin: 0; min-width: 80px; font-size: 13px; color: var(--clay); border-color: #d5c4ad; background: rgba(255,255,255,0.5); }
+.first-run-bonus-strip { font-size: 12px; font-weight: 600; color: #8b6200; background: #fff3c0; border: 1px solid #e6c84a; border-radius: 10px; padding: 7px 12px; margin: 10px 0 4px; text-align: center; }
 .results-card .result-summary { grid-template-columns: repeat(3,minmax(0,1fr)); margin: 12px 0; }
 .result-summary b { font-size: clamp(17px,4vw,24px); overflow-wrap: anywhere; }
 .result-details { border: 1px solid #e1d1bd; border-radius: 14px; background: #fffaf2; margin: 12px 0; text-align: left; padding: 0 12px; }
 .result-details > summary { cursor: pointer; min-height: 52px; padding: 12px 0; font-weight: 700; font-size: 13px; }
-.result-details > summary span { display: block; font-size: 11px; font-weight: 400; color: #71574c; margin-top: 3px; }
+.result-details > summary span { display: block; font-size: 11px; font-weight: 400; color: var(--clay); margin-top: 3px; }
 .result-details .over-stats { margin-bottom: 12px; }
 .result-links { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
 .result-links .soft-btn { min-width: 0; font-size: 12px; padding: 10px 6px; }
@@ -218,7 +250,7 @@
 .race-intro > div > svg:last-child { position:absolute; bottom:0; right:0; }
 .race-intro p { margin:0; font-size:14px; line-height:1.6; color:#665c58; }
 .race-intro strong { font-size:12px; font-weight:600; }
-.race-section { background:#fffaf1; border:1px solid #e2d9ca; border-radius:16px; padding:18px; margin:0 0 14px; text-align:left; }
+.race-section { background:var(--paper-wash); border:1px solid #e2d9ca; border-radius:16px; padding:18px; margin:0 0 14px; text-align:left; }
 .race-section-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; justify-content:space-between; }
 .race-section h3 { margin:0; font-size:18px; letter-spacing:-.025em; color:#302b28; }
 .race-section p { font-size:13px; line-height:1.6; color:#635950; margin:10px 0 14px; }
@@ -236,15 +268,129 @@
 @media(max-width:400px) { .race-section { padding:14px; } .race-intro { gap:10px; } }
 .race-section .room-now .mini-btn { background:#f0e5d4; color:#51473e; border:1px solid #d9c8ae; box-shadow:none; }
 
+/* Quick rail — four destinations directly under the main button.
+   The buttons reuse `.quick-action` from index.css, which already carries the
+   card's 44px touch target, focus ring and pressed state. This block is LAYOUT
+   ONLY and adds no colour literals: the colour-sprawl ratchet
+   (css-tokens.test.ts) counts hex declarations, and a rail that re-declares the
+   palette it sits inside is how that number creeps up. */
+.home-quick-rail {
+  display: grid;
+  /* Four across needs 4x72 + 3x6 = 306px of CARD width, and the card only has
+     256px at a 320px viewport (320 - 32 overlay - 32 card padding). auto-fit
+     therefore rendered 3 + an orphan on every phone under 384px — iPhone SE,
+     12/13 mini, most sub-390px Androids. A 2x2 block is honest at any width
+     and never leaves a ragged row; the three-up tier below only applies where
+     there is genuinely room for four. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-inline: 0;
+}
+.home-quick-rail .quick-action { min-width: 0; }
+/* The base `.quick-action span { grid-column: 2 }` is a DESCENDANT selector, so
+   it also claimed the icon span and pushed it into column 2 — which left
+   column 1 empty and stacked the icon above the label in two rows. Pin both
+   cells explicitly instead of fighting the cascade. */
+.quick-rail-btn { grid-template-columns: auto minmax(0, 1fr); grid-auto-rows: min-content; }
+.quick-rail-btn .quick-rail-art { grid-column: 1; grid-row: 1; }
+/* The icon must be sized. `menuIcon()` emits an SVG with no width/height and
+   `.menu-illustration` is 100%/100%, so against an auto-height row it resolved
+   to 1:1 at the full track width — a 320px phone got a ~75px icon and a button
+   taller than the "Fly now" CTA it is supposed to sit under. */
+.quick-rail-art { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; }
+.quick-rail-art svg { width: 100%; height: 100%; display: block; }
+.quick-rail-copy { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; }
+.quick-rail-copy b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-rail-copy small { display: block; font-size: 9px; font-weight: 500; letter-spacing: .04em; opacity: .72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+
+/* Quick rail tile palette — scoped to the rail so the `:root`-only global-token
+   check doesn't fire on the two colours (#d4a830, #fff3c0) that also appear
+   raw in older rules elsewhere in this file. */
+.home-quick-rail {
+  --qr-live-1: #e4eeff; --qr-live-2: #ccdcff; --qr-live-border: #88b0e8;
+  --qr-practice-1: #fff2e4; --qr-practice-2: #ffe2c8; --qr-practice-border: #dfa070;
+  --qr-shop-1: #fff3c0; --qr-shop-2: #ffe898; --qr-shop-border: #d4a830;
+  --qr-settings-1: #f4f0ec; --qr-settings-2: #ede8e0; --qr-settings-border: #c8bfb0;
+}
+
+/* Quick rail tiles — color-coded by action so the player can locate each at a glance */
+.home-quick-rail .quick-action[data-action="open-live"] {
+  background: linear-gradient(145deg, var(--qr-live-1), var(--qr-live-2));
+  border-color: var(--qr-live-border); box-shadow: 0 3px 0 rgba(55,95,210,.13);
+}
+.home-quick-rail .quick-action[data-action="open-practice"] {
+  background: linear-gradient(145deg, var(--qr-practice-1), var(--qr-practice-2));
+  border-color: var(--qr-practice-border); box-shadow: 0 3px 0 rgba(190,110,25,.12);
+}
+.home-quick-rail .quick-action[data-action="open-shop"] {
+  background: linear-gradient(145deg, var(--qr-shop-1), var(--qr-shop-2));
+  border-color: var(--qr-shop-border); box-shadow: 0 3px 0 rgba(175,120,20,.14);
+}
+.home-quick-rail .quick-action[data-action="open-settings"] {
+  background: linear-gradient(145deg, var(--qr-settings-1), var(--qr-settings-2));
+  border-color: var(--qr-settings-border); box-shadow: 0 2px 0 rgba(42,28,40,.07);
+}
+
+/* Narrowest shipped phone: stack the icon over the label rather than
+   truncating the only word the player reads. */
+@media (max-width: 359px) {
+  .home-quick-rail { gap: 6px; }
+  .quick-rail-btn { justify-items: center; text-align: center; }
+  .quick-rail-copy b, .quick-rail-copy small { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+/* Landscape phones have almost no vertical room; the rail sits directly under
+   the hero, so it is the first thing allowed to compress. */
+@media (max-height: 500px) and (min-width: 550px) {
+  .home-quick-rail { margin-bottom: 10px; gap: 6px; }
+  /* 44px is a floor, not a default — landscape is exactly where a short
+     button is most likely to be dropped below it. Compress the padding
+     instead and let the rail margin absorb the space. */
+  .home-quick-rail .quick-action { padding: 5px 7px; }
+}
+
+/* A completed walkthrough step dims and strikes through. Opacity rather than a
+   second palette — "done" is a state, not a colour. */
+.onboarding-route-step.done { opacity: 0.6; cursor: default; }
+.onboarding-route-step.done strong { text-decoration: line-through; text-decoration-thickness: 1px; }
+.onboarding-route-step.done i { visibility: hidden; }
+
 /* Visible home navigation replaces the catch-all Explore dropdown. */
 .menu-hero { container-type: inline-size; }
-.home-launch { width:100%; margin:8px 0 16px; min-height:64px; }
+.home-launch-row { display:flex; gap:8px; align-items:stretch; margin:8px 0 16px; }
+.home-launch { flex:1 1 auto; min-width:0; margin:0; min-height:64px; }
 .home-launch span { display:block; font-size:12px; font-weight:500; letter-spacing:0; text-transform:none; margin-top:4px; }
+/* ── Quick loadout: the pre-flight shop chip beside "Fly now" ──────────────
+   The player's ask: a way to change bird, trail and boosters at the exact
+   moment of launching, not three screens deep. One compact card next to the
+   big button — the equipped bird IS the art, the trail and staged boosts are
+   the state, and the whole thing is one tap into the Loadout screen. */
+/* The chip carries `destination` in its class list, so the paper palette
+   (border, background, ink, hover) comes from `.destination` — zero new raw
+   colours; this block is layout only, which keeps the colour ratchet flat. */
+.loadout-quick {
+  flex:0 0 auto; display:flex; align-items:center; gap:8px;
+  min-width:118px; max-width:170px; padding:8px 12px; min-height:64px;
+}
+.loadout-quick .lq-art { display:flex; align-items:center; }
+.loadout-quick .lq-art svg { display:block; }
+.loadout-quick .lq-copy { min-width:0; display:flex; flex-direction:column; gap:1px; }
+.loadout-quick .lq-copy small { display:block; font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; }
+.loadout-quick .lq-copy b { display:block; font-size:13px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.loadout-quick .lq-copy > span { display:block; font-size:11px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:0; }
+.loadout-quick .lq-go { margin-left:auto; display:flex; align-items:center; }
+.loadout-quick .lq-go { margin-left:auto; color:#b68a63; display:flex; align-items:center; }
+/* Short screens: keep the pair but let the chip shrink to icon + name. */
+@media (max-height:520px), (max-width:360px) {
+  .loadout-quick { max-width:120px; padding:6px 10px; }
+  .loadout-quick .lq-copy > span { display:none; }
+}
 /* Full-width rows. The 2-up grid left a dead cell next to every odd tile and
    made half-width tiles on a phone, which read as gaps rather than a menu;
    one column means every destination spans the card edge to edge. */
 .destination-grid { display:grid; grid-template-columns:minmax(0,1fr); grid-auto-rows:1fr; gap:8px; margin:0 0 12px; }
-.destination { min-width:0; min-height:70px; height:100%; padding:13px 14px; text-align:left; border:1.5px solid #decebb; border-radius:16px; background:#fffaf1; color:#352c27; font-family:inherit; cursor:pointer; box-shadow:0 2px 0 rgba(42,28,40,0.07); transition:transform 0.12s, box-shadow 0.12s, border-color 0.12s; }
+.destination { min-width:0; min-height:70px; height:100%; padding:13px 14px; text-align:left; border:1.5px solid #decebb; border-radius:16px; background:var(--paper-wash); color:#352c27; font-family:inherit; cursor:pointer; box-shadow:0 2px 0 rgba(42,28,40,0.07); transition:transform 0.12s, box-shadow 0.12s, border-color 0.12s; }
 .destination:active { transform:translateY(2px); box-shadow:0 0 0 rgba(42,28,40,0.07); }
 .destination b { display:block; font-size:15px; font-weight:700; line-height:1.3; }
 .destination span { display:block; margin-top:4px; color:#5c4f42; font-size:12px; line-height:1.45; }
@@ -259,16 +405,83 @@
 /* 3: Ghost race — warm gold (chase, replay) */
 .play-destinations .destination:nth-child(3) { background:linear-gradient(145deg,#fef5e0,#ffecc4); border-color:#d4a855; box-shadow:0 3px 0 rgba(160,120,30,0.12); }
 
-.utility-destinations { grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1.5px solid #dfd0bd; padding-top:16px; }
+.utility-destinations { grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1.5px solid var(--rule-warm); padding-top:16px; }
 .utility-destinations .destination { min-height:64px; padding:10px 10px; }
 .home-section-title { text-align:left; font-size:11px; font-weight:800; color:#a08060; letter-spacing:.08em; text-transform:uppercase; margin:22px 0 10px; }
 .progress-destinations .destination { min-height:60px; background:rgba(255,255,255,0.5); border-color:#e8dfd0; }
-.home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid #dfd0bd; padding-top:14px; }
+.home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid var(--rule-warm); padding-top:14px; }
+/* The status bar variant: the home sheet's first row, sticky, so the wallet
+   is on screen for the whole scroll instead of being the last thing found.
+   Paper gradient + bottom border, because content scrolling under a
+   transparent bar turns the numbers into noise. The wash, the hairline and
+   both figure inks are the four home-sheet tokens, not local copies — this
+   rule used to paste all four in by hand, which is why they are tokens. */
+.home-status-bar {
+  position: sticky; bottom: 0; z-index: 6;
+  display: flex; align-items: stretch;
+  flex-wrap: nowrap; gap: 0;
+  margin: 0 -18px;
+  padding: 6px 8px max(12px, env(safe-area-inset-bottom, 12px));
+  background: rgba(255, 250, 241, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1.5px solid var(--rule-warm);
+  box-shadow: 0 -8px 24px rgba(42, 28, 40, 0.09);
+}
+/* Stat button cells — vertical stack: icon → value → label */
+.sb-stat {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 4px; border-radius: 12px;
+  background: transparent; border: none; cursor: pointer;
+  font-family: inherit; position: relative; overflow: hidden;
+  text-align: center;
+  transition: background 0.12s;
+}
+.sb-stat:active, .sb-stat:focus-visible { background: rgba(42, 28, 40, 0.06); outline: none; }
+/* Icon wrapper */
+.sb-icon { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.sb-icon svg { width: 18px; height: 18px; }
+/* Value */
+.sb-stat b { font: 700 14px/1 var(--display); color: var(--ink); white-space: nowrap; }
+.sb-coins b { color: var(--ink-coin); }
+.sb-best b { color: var(--ink-best); }
+.sb-pass b { color: var(--ink); }
+/* Label */
+.sb-stat small { font: 600 8px/1 var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-rose); opacity: .7; white-space: nowrap; }
+/* Nest Pass progress sliver along the bottom edge of its button */
+.sb-prog {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 2.5px;
+  background: linear-gradient(90deg, #9b6dc5 0%, #c07de0 var(--pct, 0%), rgba(155, 109, 197, .12) var(--pct, 0%));
+  border-radius: 0 0 12px 12px;
+}
+/* Coin — gold on cream: drop-shadow makes it read against the paper-wash background */
+.sb-coins .sb-icon .icon-sm { filter: drop-shadow(0 1px 2px rgba(160, 100, 0, 0.32)); }
+/* Vertical divider between stats */
+.sb-divider { width: 1px; margin: 8px 2px; background: var(--rule-warm); flex-shrink: 0; align-self: stretch; }
+@media (max-width: 380px) {
+  .sb-stat { gap: 6px; padding: 8px 6px; }
+  .sb-icon { width: 18px; height: 18px; }
+  .sb-icon svg { width: 18px; height: 18px; }
+  .sb-body b { font-size: 14px; }
+}
 .onboarding-route { margin: 0 0 14px; padding: 12px; border: 1px solid #e1bd67; border-radius: 16px; background: linear-gradient(145deg,#fff7d6,#fffdf4); text-align: left; box-shadow: 0 4px 0 rgba(180,130,30,.12); }
 .onboarding-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#815a1d; }
 .onboarding-route-head span { font:800 10px/1 var(--body); letter-spacing:.14em; }
 .onboarding-route-head small { color:#8c7658; font-size:11px; }
-.onboarding-route-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+/* Skip button (P0 fix): pinned to the far right regardless of the header's
+   own `justify-content: space-between` — without `margin-left: auto` a third
+   flex child would land in the middle, between the kicker and the subtitle. */
+.onboarding-route-head .onboarding-dismiss { margin-left:auto; flex-shrink:0; padding:4px 9px; font-size:12px; line-height:1; }
+/* An ordered list now — the step numbers are an actual sequence, not decoration,
+   so the markup says so. List semantics are reset visually; the counter is
+   rendered in the markup where a screen reader reads it. */
+.onboarding-route-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px; margin:0; padding:0; list-style:none; }
+.onboarding-route-steps > li { min-width:0; display:flex; }
+/* A completed step keeps its place but stops asking. Dimmed, struck through,
+   and marked aria-disabled so assistive tech reads it as done rather than as a
+   button that happens to look faded. */
+
 .onboarding-route-step { display:grid; grid-template-columns:auto 1fr; gap:7px; min-width:0; min-height:70px; padding:9px; border:1px solid #ead9ae; border-radius:12px; background:#fffdf5; color:#4a3825; text-align:left; cursor:pointer; }
 .onboarding-route-step.active { border-color:#d99c35; background:#fff0bd; box-shadow:inset 0 2px 0 #fff8d7; }
 .onboarding-route-step > b { color:#b77b1f; font:800 11px var(--body); }
@@ -278,6 +491,13 @@
 .onboarding-route-step small { margin-top:4px; color:#806b4e; font-size:10px; line-height:1.25; }
 .onboarding-route-step i { grid-column:2; color:#a36a16; font:700 11px var(--body); font-style:normal; }
 @media (max-width:620px) { .onboarding-route-steps { grid-template-columns:1fr; } .onboarding-route-step { min-height:52px; grid-template-columns:auto 1fr auto; align-items:center; } .onboarding-route-step i { grid-column:auto; } }
+
+/* Quick-access mode strip — visible for returning players (runs ≥ 2) */
+.home-mode-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 14px; }
+.home-mode-btn { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:10px 6px; border:1px solid #e0d4b4; border-radius:14px; background:#fffdf5; color:#4a3825; font:700 11px/1 var(--body); cursor:pointer; transition:background .15s,border-color .15s; }
+.home-mode-btn:hover,.home-mode-btn:focus-visible { background:#fff0bd; border-color:#d4a830; }
+.home-mode-btn svg,.home-mode-btn img { width:38px; height:38px; }
+.home-mode-btn span { color:#7a5c2e; font-size:11px; }
 /* Desktop hangar layout: scan-friendly columns, compact enough to keep the
    daily course and first reward visible without scrolling. */
 @media (min-width: 900px) {
@@ -433,7 +653,28 @@
 .menu-hero .hero-kicker { display:block; color:#916219; font-size:9px; letter-spacing:.2em; font-weight:700; }
 .paper-card.menu-hero h1 { color:#ff7a45; font-size:46px; font-weight:500; letter-spacing:.035em; margin:7px 0 8px; text-shadow:0 2px 1px #a65e1220; background:none; -webkit-text-fill-color:#ff7a45; }
 .menu-hero .hero-sub { display:block; text-align:left; color:#795329; font-size:12px; line-height:1.5; margin:0; }
-.overlay .icon-btn.menu-mute { z-index:4; top:12px; right:12px; background:#fff9eb; border:1px solid #ddd4b9; box-shadow:0 2px 0 #c5b89b50; }
+.overlay .icon-btn.menu-mute {
+  /* Above the sticky bars, not below them. This sat at 4 while both
+     `.home-status-bar` and `.screen-head` are `position: sticky; z-index: 6`,
+     so the mute — absolutely positioned in the hero, the same top row — was
+     painted over by the sticky status bar's opaque parchment and its lower
+     ~60% was dead to hit-testing. index.css already asks for 6; the menu
+     sheet's higher-specificity `.overlay` rule quietly demoted it below the
+     thing it shares a row with. 7 beats both sticky bars at every viewport
+     measured (1280x800, 360x740, 320x568).
+
+     The `padding-right: 62px` on `.home-status-bar` is the OTHER half of the
+     same collision and does not cover it: padding keeps the bar's *text* clear
+     of the button horizontally, and nothing stops the bar's own background
+     from covering the button. */
+  z-index: 7;
+  /* Safe-area aware. These overrode the inset-aware values in index.css with
+     flat 12px, which on a notched iPhone in landscape (~44px inset) put half
+     the target under the sensor housing. */
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  background:#fff9eb; border:1px solid #ddd4b9; box-shadow:0 2px 0 #c5b89b50;
+}
 .menu-illustration { width:100%; height:100%; display:block; overflow:visible; pointer-events:none; }
 .menu-hero .home-launch {
   display:flex; align-items:center; gap:14px; text-align:left; padding:14px 18px;
@@ -525,8 +766,8 @@
 .progress-destinations .destination-arrow { display:none; }
 .home-record { display:flex; align-items:center; justify-content:flex-start; flex-wrap:nowrap; gap:10px; padding:14px 0 0; text-align:left; }
 .home-record .record-art { flex:0 0 34px; width:34px; height:34px; }
-.home-record b { display:block; font:600 18px var(--display); color:#3e5642; }
-.home-record .record-wallet { margin-left:auto; font:600 17px var(--display); text-align:right; color:#976425; }
+.home-record b { display:block; font:600 18px var(--display); color:var(--ink-best); }
+.home-record .record-wallet { margin-left:auto; font:600 17px var(--display); text-align:right; color:var(--ink-coin); }
 .record-wallet small { display:block; font:400 10px var(--body); color:#746650; }
 .home-record .record-pass { font:500 11px var(--body); color:#5a7a60; background:rgba(90,122,96,0.10); border:1px solid rgba(90,122,96,0.25); border-radius:20px; padding:2px 8px; cursor:pointer; white-space:nowrap; }
 .room-entry { position:relative; background:linear-gradient(145deg,#fff9e5,#ffebb9); border-color:#e8d099; }
@@ -614,10 +855,12 @@
 .overlay .skin-card.r-rare { background:linear-gradient(150deg,#fffaf0,#e0ebf3); }
 .overlay .skin-card.r-epic, .overlay .skin-card.r-mythic { background:linear-gradient(150deg,#fffaf0,#e9ddf3); }
 .overlay .skin-card.r-legendary { background:linear-gradient(150deg,#fffaf0,#f4dfa9); }
-.overlay .skin-card .skin-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:100%; padding:10px 0 6px; border-radius:12px; border:1px solid #cabc9d55; background:#fffaf05c; filter:none; color:#61583f; }
-.skin-preview > svg { width:88px; max-width:100%; height:72px; }
-.skin-preview > span { font:700 10px var(--body); }
-.skin-preview[aria-pressed="true"] { outline:2px solid #487363; outline-offset:-2px; }
+/* The product shot, not a control. It was a button labelled "Preview" whose
+   only effect was to scroll the page back up to a hero above the catalog, so
+   the art is now inert and the card carries the affordance instead. No hover,
+   no pressed outline, nothing that promises a press. */
+.overlay .skin-card .skin-art { display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; padding:10px 0 6px; border-radius:12px; }
+.skin-art > svg { max-width:100%; }
 .overlay .sk-name { font:600 16px var(--display); color:#3d503b; }
 .overlay .sk-perk { font-size:12px; color:#655f4c; line-height:1.45; }
 .overlay .sk-stat { grid-template-columns:45px minmax(0,1fr) 30px; font-size:10px; }
@@ -1130,7 +1373,7 @@ button,
   top: -9px; left: 10px;
   font: 700 8px/1 system-ui, sans-serif;
   letter-spacing: .1em;
-  color: #976425;
+  color: var(--ink-coin);
   background: #fff7dc;
   border: 1px solid #e8ca84;
   border-radius: 6px;
@@ -1157,7 +1400,7 @@ button,
   text-align: left;
   cursor: pointer;
   font-family: inherit;
-  border: 1.5px solid #d4aa44;
+  border: 1.5px solid var(--gold-muted);
   background: linear-gradient(145deg, #fffbec, #fff3c4);
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1204,7 +1447,7 @@ button,
 .hpc-body b {
   display: block;
   font: 700 13px/1.3 var(--display);
-  color: #2c1f14;
+  color: var(--espresso);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1212,7 +1455,7 @@ button,
 .hpc-body span {
   display: block;
   font: 400 11px/1.4 var(--body);
-  color: #7a5c30;
+  color: var(--caramel);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1291,7 +1534,7 @@ button,
 .progress-destinations .destination[data-action="open-challenges"] .destination-copy b,
 .progress-destinations .destination[data-action="open-board"] .destination-copy b {
   font-size: 15px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .progress-destinations .destination[data-action="open-challenges"] .destination-copy span,
 .progress-destinations .destination[data-action="open-board"] .destination-copy span {
@@ -1318,7 +1561,7 @@ button,
 
 /* ── Progress destinations: non-hero tiles get warm fill (not transparent) ── */
 .progress-destinations .destination:not([data-action="open-challenges"]):not([data-action="open-board"]) {
-  background: #fffaf1 !important;
+  background: var(--paper-wash) !important;
   border-color: #e0cba8 !important;
   box-shadow: inset 0 1px 0 rgba(255,255,240,0.8), 0 2px 0 rgba(160,130,80,0.12) !important;
 }
@@ -1354,7 +1597,7 @@ button,
 .overlay .screen-head h2 {
   font-size: clamp(19px, 5vw, 23px);
   letter-spacing: -.03em;
-  color: #2c1f14;
+  color: var(--espresso);
   font-weight: 700;
 }
 
@@ -1397,7 +1640,7 @@ button,
 
 /* ── Soft buttons: genuine depth, tactile press ───────────────────────────── */
 .overlay .soft-btn {
-  background: linear-gradient(165deg, #ffffff 0%, #f8f1e4 100%) !important;
+  background: linear-gradient(165deg, var(--pure-white) 0%, #f8f1e4 100%) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
@@ -1434,7 +1677,7 @@ button,
     inset 0 1px 0 rgba(255,255,210,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(100,30,0,0.35) !important;
   font-weight: 700 !important;
   letter-spacing: .01em;
@@ -1465,7 +1708,7 @@ button,
   box-shadow:
     inset 0 2px 4px rgba(100,70,20,0.07),
     0 1px 0 rgba(255,255,255,0.85) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   border-radius: 12px !important;
 }
 .overlay :is(input, select, textarea):not([type="range"]):focus {
@@ -1541,7 +1784,7 @@ button,
 }
 .trophy-grid .trophy.unlocked {
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fffbdd !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1551,7 +1794,7 @@ button,
 .trophy-collection > summary {
   font-size: 16px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   padding: 12px 0 !important;
   border-bottom: 1.5px solid #decfbd !important;
 }
@@ -1569,7 +1812,7 @@ button,
 .overlay .section-title {
   font-size: 13px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: .01em !important;
   display: flex;
   align-items: center;
@@ -1579,7 +1822,7 @@ button,
 .overlay .section-title small {
   font-size: 11px !important;
   font-weight: 400 !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Squad: section heading style ──────────────────────────────────────────── */
@@ -1592,7 +1835,7 @@ button,
 /* ── Squad invite / pilot code card ────────────────────────────────────────── */
 .squad-invite {
   background: linear-gradient(130deg, #fff9dc 0%, #ffecaa 100%) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fff8cc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -1617,7 +1860,7 @@ button,
 .format-divider {
   font: 700 11px/1.4 var(--display) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   text-transform: uppercase;
   margin: 16px 0 8px !important;
   padding: 8px 12px !important;
@@ -1635,7 +1878,7 @@ button,
 .format-btn.on {
   border-left-color: #d4900a !important;
   background: linear-gradient(135deg, #fffbee, #fff1c4) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
 }
 
 /* ── Setting rows: the FINAL PASS block near the end of this file owns the
@@ -1646,7 +1889,7 @@ button,
 /* ── Collection headers in shop: bolder heading ─────────────────────────────── */
 .overlay .collection .coll-head b {
   font: 700 16px var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .overlay .collection {
   background: linear-gradient(to bottom, #fffef8, #fffaee) !important;
@@ -1678,7 +1921,7 @@ button,
 }
 .board-badge.local {
   background: #f0e8d4 !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   border: 1px solid #c8aa70 !important;
 }
 .board-badge.live {
@@ -1717,7 +1960,7 @@ button,
 /* ── Squad offline banner: amber toast, not bland grey ─────────────────────── */
 .squad-offline-note {
   background: linear-gradient(130deg, #fff8e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #4a3010 !important;
   border-radius: 14px !important;
   box-shadow:
@@ -1728,7 +1971,7 @@ button,
 /* ── Club card ──────────────────────────────────────────────────────────────── */
 .club-card.mine {
   background: linear-gradient(145deg, #fffcec, #fff3cc) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-top-color: #fffbe8 !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -1745,7 +1988,7 @@ button,
     0 2px 0 rgba(150,120,50,0.15),
     0 4px 10px rgba(80,60,20,0.06) !important;
 }
-.squad-quest-card .sq-info b { color: #2c1f14 !important; }
+.squad-quest-card .sq-info b { color: var(--espresso) !important; }
 .squad-quest-card .sq-info span { color: #7a6040 !important; }
 .squad-quest-card .sq-prog { color: #b06a10 !important; font-weight: 700; }
 
@@ -1773,12 +2016,20 @@ button,
     will-change: transform, box-shadow;
   }
 }
-/* Snap back when reduce-motion is on */
+/* Press feedback without movement, when reduce-motion is on.
+   This used to be `transform: none !important`, which cancelled the press
+   state outright rather than de-animating it: the button stopped moving AND
+   stopped looking pressed, so a reduced-motion player got no confirmation that
+   their tap registered. The block above already strips transitions, and the
+   press's real signal is the inset shadow on :active, which is not motion —
+   so there is nothing here left to cancel. The 1px press offset stays: it is
+   far below the displacement that provokes motion sensitivity, and removing it
+   would cost the only feedback a reduced-motion player has. */
 @media (prefers-reduced-motion: reduce) {
   .overlay .back-btn:active,
   .overlay .soft-btn:active,
   .overlay .primary-btn:active,
-  .overlay .mini-btn:active { transform: none !important; }
+  .overlay .mini-btn:active { filter: brightness(0.92); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1799,7 +2050,7 @@ button,
 .pause-kicker {
   font: 700 9px/1 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5));
   border: 1px solid rgba(200,160,50,0.35);
   border-radius: 20px;
@@ -1810,11 +2061,11 @@ button,
 }
 .pause-card h2 {
   font-size: 28px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin: 2px 0 6px !important;
 }
 .pause-card .tagline {
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   font-size: 12px !important;
   margin-bottom: 12px !important;
 }
@@ -1838,14 +2089,14 @@ button,
   display: block;
   font: 700 8px/1.4 var(--body) !important;
   letter-spacing: .12em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase;
   margin-bottom: 4px;
 }
 .prs .prs-value {
   display: block;
   font: 700 18px/1.1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .pause-resume {
   background: linear-gradient(145deg, #ffb53a 0%, #ff8c1a 55%, #f56a10 100%) !important;
@@ -1855,7 +2106,7 @@ button,
     inset 0 1px 0 rgba(255,255,210,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font-weight: 700 !important;
   font-size: 16px !important;
   min-height: 52px !important;
@@ -1880,7 +2131,7 @@ button,
     0 2px 0 rgba(150,120,50,0.15) !important;
   min-height: 60px !important;
   font-size: 11px !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   transition: box-shadow .12s ease, transform .1s ease !important;
 }
 .pause-q:hover {
@@ -1910,13 +2161,13 @@ button,
   margin-top: 8px !important;
 }
 .ghost-btn {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
 }
 .ghost-btn:active {
@@ -1935,7 +2186,7 @@ button,
 }
 .pause-exit-note {
   font-size: 11px !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-align: center !important;
   margin-top: 8px !important;
 }
@@ -1943,7 +2194,7 @@ button,
 /* ── Progress screen: pc-row cards warm palette ─────────────────────────────── */
 .pc-row {
   border-radius: 18px !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   padding: 16px !important;
   margin: 12px 0 !important;
   box-shadow:
@@ -1953,7 +2204,7 @@ button,
 }
 .pc--blue {
   background: linear-gradient(145deg, #fdf8e8, #fff3c0) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
 }
 .pc--pink {
   background: linear-gradient(145deg, #fff0e8, #ffe4c8) !important;
@@ -1982,14 +2233,14 @@ button,
 }
 .pc-body b {
   font: 700 16px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   display: block;
   margin-bottom: 4px;
 }
 .pc-body p, .pc-body span {
   font-size: 12px !important;
   line-height: 1.5 !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 .pc-row .primary-btn {
   min-height: 48px !important;
@@ -2019,7 +2270,7 @@ button,
   right: 0;
   top: 14px;
   font: 400 10px var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Hero meta pills ────────────────────────────────────────────────────────── */
@@ -2027,7 +2278,7 @@ button,
   font: 600 11px/1.4 var(--body) !important;
   padding: 4px 10px !important;
   border-radius: 20px !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   background: linear-gradient(135deg, #fff9dc, #ffecb0) !important;
   color: #5a3800 !important;
   box-shadow: 0 2px 0 rgba(160,120,20,0.18) !important;
@@ -2059,7 +2310,7 @@ button,
 .utility-destinations .destination-copy b {
   font-size: 13px !important;
   font-weight: 700 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 
 /* ── Section number codes: styled badge, not dev label ──────────────────────── */
@@ -2070,14 +2321,14 @@ button,
   padding: 2px 7px !important;
   font: 700 8px/1.5 var(--body) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Shop: header kicker and section labels ─────────────────────────────────── */
 .shop-intro {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.5), rgba(255,215,80,0.3));
   border: 1px solid rgba(200,160,50,0.25);
   border-radius: 8px;
@@ -2089,14 +2340,14 @@ button,
   display: block !important;
   font: 600 16px/1.4 var(--display) !important;
   letter-spacing: 0 !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-top: 2px !important;
 }
 
 /* ── Shop hero bird card ────────────────────────────────────────────────────── */
 .shop-hero {
   background: linear-gradient(130deg, #fff9e0 0%, #ffedb8 60%, #ffe090 100%) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fff8cc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -2109,7 +2360,7 @@ button,
 [class*="flash-sale"],
 [class*="daily-sale"] {
   background: linear-gradient(135deg, #ff6b35, #e84020) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   border: 1px solid #c03010 !important;
   box-shadow: 0 2px 6px rgba(200,50,10,0.3) !important;
 }
@@ -2123,7 +2374,7 @@ button,
 .results-card .results-kicker {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5));
   border: 1px solid rgba(200,160,50,0.3);
   border-radius: 20px;
@@ -2132,7 +2383,7 @@ button,
 }
 .results-card h2 {
   font-size: 32px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: -.03em !important;
 }
 .result-summary {
@@ -2150,10 +2401,10 @@ button,
 }
 .result-summary > *:last-child { border-right: none !important; }
 .result-summary b {
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .result-summary small {
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   font-size: 9px !important;
   letter-spacing: .1em !important;
   display: block;
@@ -2163,7 +2414,7 @@ button,
 /* ── Rank / score / stat badges on results ──────────────────────────────────── */
 .reward-strip {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -2182,28 +2433,28 @@ button,
 /* ── Next flight card ────────────────────────────────────────────────────────── */
 .next-flight {
   background: linear-gradient(135deg, #fff9e0, #ffecb8) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
     0 4px 0 rgba(160,120,20,0.22),
     0 8px 20px rgba(140,100,20,0.1) !important;
 }
-.next-flight b { color: #2c1f14 !important; }
-.next-flight p { color: #6b4c2a !important; }
-.next-flight small { color: #9a7b4e !important; }
+.next-flight b { color: var(--espresso) !important; }
+.next-flight p { color: var(--toffee) !important; }
+.next-flight small { color: var(--sand) !important; }
 
 /* ── Race/lobby entry card ───────────────────────────────────────────────────── */
 .room-entry {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
     0 4px 0 rgba(160,120,20,0.22),
     0 8px 24px rgba(160,120,20,0.14) !important;
 }
-.room-entry h3 { color: #2c1f14 !important; }
+.room-entry h3 { color: var(--espresso) !important; }
 
 /* ── Race section (PvP lobby) ────────────────────────────────────────────────── */
 .race-section {
@@ -2217,8 +2468,8 @@ button,
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-.race-section h3 { color: #2c1f14 !important; font-weight: 700 !important; }
-.race-section p { color: #6b4c2a !important; }
+.race-section h3 { color: var(--espresso) !important; font-weight: 700 !important; }
+.race-section p { color: var(--toffee) !important; }
 
 /* ── Skin cards: no backdrop-filter (flash), warm gradient ──────────────────── */
 .skin-card,
@@ -2264,7 +2515,7 @@ button,
 .event-meta b {
   font: 700 10px/1.4 var(--body) !important;
   letter-spacing: .1em !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   text-transform: uppercase;
 }
 
@@ -2331,7 +2582,7 @@ button,
 /* ── Lock chip (upgrade prompt) ──────────────────────────────────────────────── */
 .lock-chip {
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   font-weight: 700 !important;
   border-radius: 20px !important;
@@ -2361,7 +2612,7 @@ button,
 /* ── Match-making banner (waiting for opponent) ──────────────────────────────── */
 .room-connecting {
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1px solid #d4aa44 !important;
+  border: 1px solid var(--gold-muted) !important;
   border-radius: 16px !important;
   padding: 14px !important;
   box-shadow:
@@ -2386,7 +2637,7 @@ button,
   border: 1.5px dashed #d4c080 !important;
 }
 .board-row.empty {
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   font-style: italic;
   padding: 20px 14px !important;
   text-align: center;
@@ -2408,7 +2659,7 @@ button,
 /* ── Settings: rows, toggles, sliders, selects ──────────────────────────────── */
 .settings-intro {
   font: 400 12px/1.6 var(--body) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   margin-bottom: 14px !important;
 }
 .setting-row {
@@ -2429,7 +2680,7 @@ button,
 .section-title {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin: 18px 0 4px !important;
 }
@@ -2468,7 +2719,7 @@ button,
   top: 3px !important;
   left: 3px !important;
   border-radius: 50% !important;
-  background: #fff !important;
+  background: var(--text-on-sky) !important;
   box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important;
   transition: transform .2s ease !important;
 }
@@ -2488,17 +2739,38 @@ input[type="range"] {
   appearance: none !important;
   height: 6px !important;
   border-radius: 99px !important;
-  background: linear-gradient(to right, #f0b830 var(--pct, 50%), #e0d0b0 var(--pct, 50%)) !important;
   outline: none !important;
   flex: 1 !important;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: linear-gradient(to right, #f0b830 var(--pct, 50%), #e0d0b0 var(--pct, 50%));
+  border-radius: 99px;
+  border: none;
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: linear-gradient(to right, #f0b830 var(--pct, 50%), #e0d0b0 var(--pct, 50%));
+  border-radius: 99px;
+  border: none;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none !important;
   width: 18px !important;
   height: 18px !important;
   border-radius: 50% !important;
-  background: #fff !important;
-  border: 2px solid #d4aa44 !important;
+  background: var(--text-on-sky) !important;
+  border: 2px solid var(--gold-muted) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
+  cursor: pointer !important;
+  margin-top: -6px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: var(--text-on-sky) !important;
+  border: 2px solid var(--gold-muted) !important;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
   cursor: pointer !important;
 }
@@ -2509,7 +2781,7 @@ select.setting-select {
   border-radius: 10px !important;
   padding: 7px 28px 7px 10px !important;
   font: 500 13px var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(150,120,50,0.14) !important;
@@ -2551,7 +2823,7 @@ select.setting-select {
   border-radius: 20px !important;
   border: 1px solid #d4c090 !important;
   background: linear-gradient(135deg, #fffef8, #fff4e0) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   text-decoration: none !important;
   box-shadow: 0 2px 0 rgba(150,120,50,0.14) !important;
   transition: background .12s, border-color .12s !important;
@@ -2574,7 +2846,7 @@ select.setting-select {
   border-radius: 20px !important;
   border: 1px solid #d4c090 !important;
   background: linear-gradient(135deg, #fffef8, #fff4e0) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   box-shadow: 0 2px 0 rgba(150,120,50,0.12) !important;
   cursor: pointer !important;
   transition: background .1s, border-color .1s, box-shadow .1s !important;
@@ -2597,12 +2869,12 @@ select.setting-select {
   border-radius: 6px !important;
   border: 1px solid rgba(200,160,50,0.3) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.5), rgba(255,215,80,0.3)) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 .deal,
 .deal-tag {
   background: linear-gradient(135deg, #ff6b35, #e84020) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   border: 1px solid #c03010 !important;
   border-radius: 6px !important;
   font: 700 9px/1.4 var(--body) !important;
@@ -2626,12 +2898,12 @@ select.setting-select {
 .r-legendary { background: linear-gradient(135deg, #fff8e0, #ffecaa) !important; color: #804000 !important; border: 1px solid #e0b840 !important; box-shadow: 0 0 6px rgba(220,160,20,0.3) !important; }
 .r-mythic  { background: linear-gradient(135deg, #ffe8f8, #ffd4f0) !important; color: #800060 !important; border: 1px solid #e090c0 !important; box-shadow: 0 0 8px rgba(220,60,160,0.25) !important; }
 .r-starter { background: #f4efe8 !important; color: #6a5a40 !important; border: 1px solid #d0c4a8 !important; }
-.r-prize   { background: linear-gradient(135deg, #fff4cc, #ffe078) !important; color: #5a3000 !important; border: 1.5px solid #d4a020 !important; }
+.r-prize   { background: linear-gradient(135deg, #fff4cc, #ffe078) !important; color: var(--bark-hot) !important; border: 1.5px solid #d4a020 !important; }
 
 /* ── Progress cards: gold, red, vault variants ───────────────────────────────── */
 .pc--gold {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border-color: #d4aa44 !important;
+  border-color: var(--gold-muted) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
     0 4px 0 rgba(160,120,20,0.22),
@@ -2654,19 +2926,19 @@ select.setting-select {
   border-radius: 20px !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.35) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
   margin-bottom: 8px !important;
 }
 .pc-label {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .12em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin-bottom: 4px !important;
 }
 .pc-header {
   font: 700 18px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-bottom: 6px !important;
 }
 .pc-price {
@@ -2695,7 +2967,7 @@ select.setting-select {
 }
 .boost-once {
   font: 600 11px/1.4 var(--body) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   background: linear-gradient(135deg, #fff4d0, #ffe8a0) !important;
   border: 1px solid #d4a040 !important;
   border-radius: 8px !important;
@@ -2720,11 +2992,11 @@ select.setting-select {
 }
 .coll-head b {
   font: 700 14px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .coll-count {
   font: 600 11px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: rgba(200,160,50,0.12) !important;
   border-radius: 20px !important;
   padding: 2px 8px !important;
@@ -2739,30 +3011,37 @@ select.setting-select {
   border-radius: 14px !important;
   padding: 10px 8px !important;
   text-align: center !important;
-  cursor: pointer !important;
+  cursor: default;
   transition: box-shadow .12s, transform .1s !important;
   min-height: 90px !important;
 }
-.skin-card:hover {
+/* Only cards that are genuinely selectable carry the pointer affordance and the
+   hover/active lift. The shop emits `data-action` on owned, non-equipped cards
+   and omits it everywhere else. An unowned, unaffordable or prize-only card
+   must not look live: a card that invites a press and then refuses it is a dead
+   end the player can only discover by trying, which is exactly the stranded-CTA
+   problem this build keeps having to undo elsewhere. */
+.skin-card[data-action] { cursor: pointer !important; }
+.skin-card[data-action]:hover {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 3px 0 rgba(150,120,50,0.22),
     0 6px 14px rgba(80,60,20,0.1) !important;
   transform: translateY(-1px) !important;
 }
-.skin-card:active {
+.skin-card[data-action]:active {
   transform: translateY(0) !important;
   box-shadow: inset 0 2px 4px rgba(100,70,20,0.12) !important;
 }
 .sk-name {
   font: 700 10px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-top: 6px !important;
   display: block !important;
 }
 .sk-perk {
   font: 400 9px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   display: block !important;
   margin-top: 2px !important;
 }
@@ -2778,7 +3057,7 @@ select.setting-select {
   padding: 1px 5px !important;
   border-radius: 4px !important;
   background: rgba(200,160,50,0.12) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Upsell / VIP card ───────────────────────────────────────────────────────── */
@@ -2811,7 +3090,7 @@ select.setting-select {
   padding: 10px 12px !important;
   border-radius: 14px !important;
   background: linear-gradient(145deg, #fffbec, #fff3c4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
     0 3px 0 rgba(160,120,20,0.18) !important;
@@ -2835,7 +3114,7 @@ select.setting-select {
 .board-refresh,
 button[data-action="board-refresh"],
 .board-footer button {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
@@ -2844,7 +3123,7 @@ button[data-action="board-refresh"],
   border-radius: 12px !important;
   padding: 10px 20px !important;
   font: 600 13px var(--body) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   width: 100% !important;
 }
 .board-footer button:active {
@@ -2858,7 +3137,7 @@ button[data-action="board-refresh"],
 .field-label {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .14em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin-bottom: 6px !important;
   display: block !important;
@@ -2952,7 +3231,7 @@ button[data-action="board-refresh"],
 /* ── Match count in shop filter ──────────────────────────────────────────────── */
 .shop-match-count {
   font: 400 11px var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   margin: 6px 0 2px !important;
 }
 
@@ -2984,7 +3263,7 @@ button[data-action="board-refresh"],
   padding: 4px 12px !important;
   border-radius: 20px !important;
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3113,7 +3392,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,220,100,0.5),
     0 3px 0 #b54c0e,
     0 5px 12px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(120,40,0,0.4) !important;
   letter-spacing: .02em !important;
   transition: box-shadow .12s, transform .1s !important;
@@ -3140,7 +3419,7 @@ button.upsell:active,
   border: 1px solid #aa1800 !important;
   border-radius: 20px !important;
   padding: 4px 12px !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .08em !important;
   text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
@@ -3191,7 +3470,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,160,130,0.4),
     0 4px 0 #881000,
     0 7px 18px rgba(180,30,10,0.3) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(80,0,0,0.4) !important;
 }
 
@@ -3212,7 +3491,7 @@ button.upsell:active,
     inset 0 1px 0 rgba(255,230,120,0.45),
     0 4px 0 #b54c0e,
     0 7px 18px rgba(180,70,10,0.28) !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   text-shadow: 0 1px 2px rgba(120,40,0,0.4) !important;
 }
 .primary-btn.gold:active {
@@ -3231,18 +3510,37 @@ button.upsell:active,
 .overlay .screen-head > .board-badge,
 .overlay .screen-head > span > .board-badge {
   margin-right: 2px !important;
-  flex-shrink: 0 !important;
+  /* `flex-shrink: 0` here did nothing: the trailing slot is a GRID item, and
+     `flex` is inert outside a flex container. The grid equivalent of "this track
+     does not give way" is to let the `auto` track size to max-content and align
+     the item to the end of it — which is what `justify-self` actually does. */
+  justify-self: end !important;
 }
 /* Ensure h2 truncates before badge does */
 .overlay .screen-head h2 {
   min-width: 0 !important;
-  flex: 1 1 0 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
+  /* `flex: 1 1 0 !important` sat here for as long as this rule did. It is inert
+     on a grid item, so it contributed nothing while implying a box model the
+     element does not have. The grid equivalent is an explicit cell plus
+     `min-width: 0` above, which is what actually lets the title shrink before
+     the badge is squeezed. */
+  grid-column: 2;
+  grid-row: 1;
+  /* Wraps, on purpose. Forcing one nowrap line left ~13 characters at 320px,
+     so a localised title truncated on sight and the bare "‹" gave no label to
+     fall back on. */
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 /* screen-head itself: pad right so content never clips card corner */
 .overlay .paper-card .screen-head {
+  /* PINNED. This is the only way out of a menu screen and it was the first
+     child of the scroll box, so a player who scrolled the Shop to the bottom
+     had no visible exit at all: no hardware Back on a phone, no Escape. */
+  position: sticky;
+  top: -10px;
+  z-index: 6;
+  background: #fff7e9;
   padding-right: 4px !important;
   overflow: visible !important;
 }
@@ -3288,7 +3586,7 @@ button.upsell:active,
 /* (already renamed in source; if old bundle shows it, style it well) */
 .overlay [data-action="open-portal-leaderboard"] {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3312,7 +3610,7 @@ button.upsell:active,
   border-radius: 10px !important;
   padding: 9px 12px !important;
   font: 600 14px var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   box-shadow:
     inset 0 1px 3px rgba(100,70,20,0.07),
     0 1px 0 rgba(255,255,255,0.9) !important;
@@ -3328,7 +3626,7 @@ button.upsell:active,
 /* ── Prize / tournament card ─────────────────────────────────────────────────── */
 .prize-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.9),
@@ -3340,12 +3638,12 @@ button.upsell:active,
 }
 .prize-card h3 {
   font: 700 15px/1.3 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   margin-bottom: 6px !important;
 }
 .prize-card p {
   font-size: 12px !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 
 /* ── Board list rows: refined ────────────────────────────────────────────────── */
@@ -3373,14 +3671,14 @@ button.upsell:active,
    back to the bare ui.css defaults. Renamed to the real classes. */
 .board-row .bp {
   font: 700 12px/1 var(--display) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   min-width: 22px !important;
   text-align: right !important;
 }
 .board-row .bn {
   flex: 1 !important;
   font: 600 13px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -3397,13 +3695,13 @@ button.upsell:active,
   border-radius: 12px !important;
   padding: 10px 12px !important;
   font-size: 12px !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
   margin: 6px 0 !important;
   text-align: center !important;
 }
 .board-rank b {
   font-size: 16px !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 
 /* ── Seg tabs: ensure active pill is always warm amber ───────────────────────── */
@@ -3442,7 +3740,7 @@ button.upsell:active,
 .board-rank ~ .section-title {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   margin: 16px 0 8px !important;
   padding-bottom: 6px !important;
@@ -3460,7 +3758,7 @@ button.upsell:active,
   border-radius: 20px !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.35) !important;
-  color: #7a5c30 !important;
+  color: var(--caramel) !important;
 }
 
 /* ── Home pulse row: ensure cells never bleed on narrow screens ──────────────── */
@@ -3491,7 +3789,7 @@ button.upsell:active,
 /* ── Squad: club card, member row ────────────────────────────────────────────── */
 .club-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3511,11 +3809,11 @@ button.upsell:active,
 .member-row .member-name {
   flex: 1 !important;
   font: 600 13px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .member-row .member-score {
   font: 700 12px/1 var(--display) !important;
-  color: #6b4c2a !important;
+  color: var(--toffee) !important;
 }
 
 /* ── Account screen: transfer, sync rows ────────────────────────────────────── */
@@ -3550,11 +3848,11 @@ button.upsell:active,
 .trophy .trophy-icon { font-size: 28px !important; line-height: 1; }
 .trophy .trophy-name {
   font: 700 10px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .trophy .trophy-desc {
   font: 400 9px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
 }
 
 /* ── Scores screen: your-scores table ────────────────────────────────────────── */
@@ -3569,15 +3867,15 @@ button.upsell:active,
 .score-row .score-mode {
   flex: 1 !important;
   font: 600 12px/1.4 var(--body) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
 }
 .score-row .score-val {
   font: 700 14px/1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .score-row .score-date {
   font: 400 10px/1.4 var(--body) !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   min-width: 60px !important;
   text-align: right !important;
 }
@@ -3596,7 +3894,7 @@ button.upsell:active,
 .ad-label {
   font: 700 9px/1.5 var(--body) !important;
   letter-spacing: .16em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   text-transform: uppercase !important;
   text-align: center !important;
   margin-bottom: 8px !important;
@@ -3678,7 +3976,7 @@ button.upsell:active,
 }
 .pod-name {
   font: 700 11px/1.3 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
@@ -3717,7 +4015,7 @@ button.upsell:active,
 .prize-tier b {
   display: block !important;
   font: 600 10px/1.4 var(--body) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
 }
 .prize-tier.gold {
   background: linear-gradient(145deg, #fffde0, #fff4aa) !important;
@@ -3764,7 +4062,7 @@ button.upsell:active,
 /* ── Home record section (personal best stat bar) ────────────────────────────── */
 .home-record {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3777,6 +4075,14 @@ button.upsell:active,
 /* ── Stat value / coin display ───────────────────────────────────────────────── */
 .stat-value {
   font: 700 22px/1.1 var(--display) !important;
+  /* The `font` shorthand above is !important, which makes every longhand it
+     resets !important too — including font-variant-numeric, which it resets to
+     `normal`. That silently defeated the tabular-nums on `.stat-value` and on
+     `.hud-header .stat-value`, so distance and coins — the two readouts that
+     change every single frame — were the only live numbers in the HUD still
+     set in proportional figures, and they shifted sideways on every digit
+     change. Restated after the shorthand, and !important to match it. */
+  font-variant-numeric: tabular-nums !important;
   color: var(--text-on-sky) !important;
   text-shadow: 0 2px 0 var(--halo-on-sky), 0 8px 18px rgba(20, 20, 40, 0.78) !important;
 }
@@ -3797,6 +4103,12 @@ button.upsell:active,
     0 1px 0 var(--halo-on-sky),
     0 1px 2px rgba(24, 16, 40, 0.78) !important;
   background: none !important;
+}
+.stat-value.coin .coin-glyph {
+  color: var(--amber);
+}
+.gs u .coin-glyph {
+  color: var(--coin-gold);
 }
 .stat-label {
   font: 700 10px/1.4 var(--body) !important;
@@ -3832,13 +4144,13 @@ hr.divider {
 
 /* ── "Save" / "Random" inline buttons next to name input ────────────────────── */
 .pilot-name-row .mini-btn:not(.gold) {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
   padding: 8px 12px !important;
   border-radius: 10px !important;
@@ -3846,13 +4158,13 @@ hr.divider {
 
 /* ── Mini-btn default (non-gold variant) ─────────────────────────────────────── */
 .mini-btn:not(.gold) {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(160,130,80,0.16) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
 }
 .mini-btn:not(.gold):active {
@@ -3863,7 +4175,7 @@ hr.divider {
 /* ── Coin pill (wallet display in header) ────────────────────────────────────── */
 .pill.coin {
   background: linear-gradient(135deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   color: #5a3800 !important;
   font-weight: 700 !important;
   font-size: 13px !important;
@@ -3882,13 +4194,13 @@ hr.divider {
   font-weight: 600 !important;
   border-radius: 14px !important;
   margin-bottom: 8px !important;
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.95),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
 }
 .soft-btn.wide:active {
   box-shadow: inset 0 2px 4px rgba(100,70,20,0.14) !important;
@@ -3898,7 +4210,7 @@ hr.divider {
 /* Portal leaderboard soft-btn: special gold treatment */
 .overlay [data-action="open-portal-leaderboard"].soft-btn.wide {
   background: linear-gradient(145deg, #fff9e0, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -3925,7 +4237,7 @@ hr.divider {
 .result-kicker {
   font: 700 9px/1.4 var(--body) !important;
   letter-spacing: .18em !important;
-  color: #9a7b4e !important;
+  color: var(--sand) !important;
   background: linear-gradient(135deg, rgba(255,236,160,0.7), rgba(255,218,100,0.5)) !important;
   border: 1px solid rgba(200,160,50,0.3) !important;
   border-radius: 20px !important;
@@ -3938,7 +4250,7 @@ hr.divider {
 .result-distance,
 .result-score {
   font: 700 clamp(36px, 10vw, 52px)/1 var(--display) !important;
-  color: #2c1f14 !important;
+  color: var(--espresso) !important;
   letter-spacing: -.04em !important;
   line-height: 1 !important;
 }
@@ -3946,7 +4258,7 @@ hr.divider {
 /* ── Coin counter in HUD (in-flight) ─────────────────────────────────────────── */
 .hud-coins {
   background: linear-gradient(135deg, #fff9dc, #ffecaa) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-radius: 20px !important;
   padding: 4px 12px !important;
   font: 700 14px/1.3 var(--display) !important;
@@ -3977,7 +4289,7 @@ hr.divider {
 /* ── Campaign / story card ───────────────────────────────────────────────────── */
 .campaign-card {
   background: linear-gradient(145deg, #fff9e8, #ffebb4) !important;
-  border: 1.5px solid #d4aa44 !important;
+  border: 1.5px solid var(--gold-muted) !important;
   border-top-color: #fffbcc !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,220,0.85),
@@ -4001,19 +4313,19 @@ hr.divider {
   box-shadow:
     inset 0 1px 0 rgba(255,230,120,0.45),
     0 3px 0 #b54c0e !important;
-  color: #fff !important;
+  color: var(--text-on-sky) !important;
   font-weight: 700 !important;
   border-radius: 12px !important;
   padding: 11px !important;
 }
 .cancel-btn {
-  background: linear-gradient(165deg, #ffffff, #f8f1e4) !important;
+  background: linear-gradient(165deg, var(--pure-white), #f8f1e4) !important;
   border: 1px solid #cdbfa5 !important;
   border-bottom-color: #b8a68a !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.9),
     0 2px 0 rgba(160,130,80,0.18) !important;
-  color: #4a3620 !important;
+  color: var(--bark-deep) !important;
   font-weight: 600 !important;
   border-radius: 12px !important;
   padding: 11px !important;
@@ -4030,3 +4342,11 @@ hr.divider {
   .menu-hero .hero h1 { font-size: 30px; }
   .menu-hero .hero { min-height: 84px; }
 }
+
+/* ── Audit-flagged missing rules ──────────────────────────────────────── */
+/* Catalog divider in shop: extra top margin separates daily from browse. */
+.shop-catalog-divider { margin-top: 18px; }
+
+/* Meta-progress strip on game-over: lighter background to distinguish
+   from the primary result-summary below it. */
+.over-stats.meta-progress-strip div { background: rgba(255,255,255,0.35); }

@@ -9,16 +9,18 @@ import {
   VIP_DAILY_GIFT,
   VIP_DAYS,
 } from "./constants";
+import { gauntletCleared } from "./Challenges";
 import { dateSeed } from "./math";
 import { durableSetItem } from "./resilience/durableSet";
 import { openPayload, sealPayload } from "./resilience/crc";
 import { TRACK_NAMES } from "./Music";
 import { COIN_MULTIPLIER_UPGRADES } from "./Economy";
+import { SELL_AD_REMOVAL } from "./edition";
 import { defaultRival, rankSeasonId, ratingDelta, RIVAL_BASE_RATING, seasonReward, softResetRating, streakBonus, type RivalMatch, type RivalState } from "./pvp";
 import { seasonId } from "./season";
 import { emptyTournamentState, type TournamentState } from "./Tournaments";
 import { emptySocialState, type SocialState } from "./SocialSystem";
-import { storage } from "./Storage";
+import { physicalKey, storage } from "./Storage";
 
 export type HighScore = {
   date: string;
@@ -40,13 +42,35 @@ export type Settings = {
   sfxVolume: number;
   /** Which music track to play: "shuffle" (all ten) or a 0-based track index. */
   musicTrack: number | "shuffle";
+  /**
+   * "songbook" (default) plays the hand-authored tracks in Songbook.ts —
+   * what players actually asked to keep. "procedural" switches to the
+   * generated adaptive score in Music.ts. The two are never audible at
+   * once; see GameAudio.setMusicStyle.
+   */
+  musicStyle: "procedural" | "songbook";
   haptics: boolean;
   reduceMotion: boolean;
   /** Colorblind assist: shifts warning reds/greens to blue/orange + adds glyphs. */
   colorAssist: boolean;
+  /**
+   * Motion-sickness accessibility: disables camera dolly-zoom and banked
+   * tilt outright, and halves the max screen-shake from impacts/launches.
+   */
+  softCamera: boolean;
   /** Large-text mode: bumps every UI font a step for readability. */
   bigText: boolean;
+  /**
+   * Motor accessibility: the core dive mechanic normally requires holding a
+   * key/pointer/button down the whole way down a slope. Some players cannot
+   * comfortably sustain a hold — this flips it to tap-to-toggle: one tap
+   * starts the dive, the next tap ends it. Off by default so existing muscle
+   * memory (hold-to-dive) is unchanged unless a player opts in.
+   */
+  tapToggleDive: boolean;
   quality: Quality;
+  /** Show a live FPS counter in the flight HUD (perf transparency, off by default). */
+  showFps: boolean;
   /** Distance unit preference: "km" (default) or "mi". */
   distUnit: "km" | "mi";
   /**
@@ -61,12 +85,18 @@ export type Settings = {
    * over a results screen or mid-flight), and says why when it happens.
    */
   autoShop: boolean;
+  /**
+   * The home-screen "START HERE" onboarding route (three-step first-flight
+   * plan) can be skipped once the player has seen it — it is only ever shown
+   * again if this is explicitly reset, never re-forced by runsPlayed alone.
+   */
+  dismissedOnboarding: boolean;
 };
 
 export type LifetimeStats = {
   distance: number;
   coins: number;
-  zeniths: number;
+  apexMoments: number;
   ghostBeats: number;
   sunflowers: number;
 };
@@ -98,6 +128,13 @@ export type SaveState = {
   ads: { day: string; count: number; lastRun: number };
   ownedSkins: string[];
   activeSkin: string;
+  /** Boost id -> how many are OWNED and sitting in storage. Buying adds here;
+   *  the loadout screen moves copies from here into `armedBoosts`; flying
+   *  spends whatever was armed. Stock persists across flights, so a booster
+   *  bought for the wrong moment is not lost. */
+  boostStock: Record<string, number>;
+  /** Boost ids staged for the next flight. May repeat — two Shields is a
+   *  legal loadout, and the count is the point. */
   armedBoosts: string[];
   /** Permanent gameplay upgrades purchased with coins. */
   ownedUpgrades: string[];
@@ -130,10 +167,17 @@ export type SaveState = {
   onboardingSeen: string[];
   /** Flags for contextual onboarding — when player actually opened these */
   seenShop: boolean;
+  /** First visit to the pre-flight Loadout. Separate from `seenShop` because
+   *  the two screens do different jobs: Loadout is where a pilot stages the
+   *  bird/trail/boosters they are about to fly, Shop is where they spend. */
+  seenLoadout: boolean;
   seenPvp: boolean;
   seenPve: boolean;
   seenLeaderboards: boolean;
   seenChallenges: boolean;
+  /** First visit to Settings. Same intent as the flags above, which were
+   *  persisted but never written — see the walkthrough. */
+  seenSettings: boolean;
   /** rolling flow-calibration estimate */
   skill: number;
   skillSamples: number;
@@ -158,6 +202,16 @@ export type SaveState = {
   rankSeason: { id: string; peak: number };
   /** Daily challenge / weekly gauntlet completion state. */
   challenges: ChallengeState;
+  /**
+   * Daily-streak retention counters (Feature: Daily Streak System).
+   * `currentStreak` mirrors `streak.days` under the literal name the
+   * retention spec calls for — `touchStreak()` is the only writer of either,
+   * so the two can never drift apart. `streakDaysAchieved` records which
+   * streak milestones (7/14/30 consecutive days) have already paid their
+   * one-time bonus, so returning to the same milestone never double-pays.
+   */
+  currentStreak: number;
+  streakDaysAchieved: number[];
   /** 28-day login calendar, separate from the streak. */
   calendar: { cycleDay: number; lastClaim: string };
   /** Runs flown per mode, feeding mode mastery levels. */
@@ -198,7 +252,48 @@ export type ChallengeState = {
   gauntletWeek: string;
   gauntletDone: number[];
   gauntletsCleared: number;
+  /**
+   * Consecutive calendar days in a row whose daily challenge was NOT
+   * completed by day's end (Feature: Challenge Difficulty Auto-Tuning).
+   * Reset to 0 the moment a daily is completed; read by `dailyChallenge()`
+   * (see Challenges.ts `scaleTargetForFailures`) to ease tomorrow's target
+   * once this reaches 2, so a target that has outpaced this player twice
+   * gets easier instead of teaching them to quit.
+   */
+  dailyChallengeFailures: number;
 };
+
+/**
+ * The OS motion preference, used only to seed a player who has never opened
+ * Settings.
+ *
+ * The CSS half of reduced-motion already reads `prefers-reduced-motion` on its
+ * own, which is why this looked handled. The game's half cannot: the same
+ * setting gates screen shake, hit-stop, the 0.45 slow-motion, camera punch,
+ * dolly zoom and `flash()` in `Game`, and none of that is reachable from a
+ * stylesheet — CSS cannot stop a particle emitter or a camera punch. So a
+ * player who set the OS flag got the full treatment until they happened to find
+ * the in-game toggle. Seeding the default respects it once instead of asking
+ * twice.
+ *
+ * Deliberately initial-only: once a value is in the save, the player's own
+ * choice in Settings wins, including if they turn motion back on.
+ */
+export function prefersReducedMotion(): boolean {
+  // Read defensively. This module is imported by tests and by tooling with no
+  // `window` at all, and `matchMedia` itself can throw in hardened or
+  // privacy-shielded browsers — where it throws, it throws on a media query
+  // about accessibility, which would take the entire save with it on the one
+  // path that exists to help people. A failure to detect the preference is
+  // "no preference stated", never a crash.
+  try {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+  } catch {
+    return false;
+  }
+}
 
 const DEFAULT_SETTINGS: Settings = {
   mute: false,
@@ -207,13 +302,18 @@ const DEFAULT_SETTINGS: Settings = {
   musicVolume: 0.8,
   sfxVolume: 0.9,
   musicTrack: "shuffle",
+  musicStyle: "songbook",
   haptics: true,
-  reduceMotion: false,
+  reduceMotion: prefersReducedMotion(),
   colorAssist: false,
+  softCamera: false,
   bigText: false,
+  tapToggleDive: false,
   quality: "auto",
+  showFps: false,
   distUnit: "km",
   autoShop: true,
+  dismissedOnboarding: false,
 };
 
 function makeDeviceId(): string {
@@ -247,15 +347,18 @@ function defaults(): SaveState {
     ownedSkins: ["sunbird"],
     activeSkin: "sunbird",
     armedBoosts: [],
+    boostStock: {},
     ownedUpgrades: [],
     settings: { ...DEFAULT_SETTINGS },
     quests: { date: "", claimed: [] },
     streak: { last: "", days: 0, claimedDate: "" },
+    currentStreak: 0,
+    streakDaysAchieved: [],
     claimedCollections: [],
     redeemedCodes: [],
     firstPlayed: "",
     runsPlayed: 0,
-    lifetime: { distance: 0, coins: 0, zeniths: 0, ghostBeats: 0, sunflowers: 0 },
+    lifetime: { distance: 0, coins: 0, apexMoments: 0, ghostBeats: 0, sunflowers: 0 },
     achievements: [],
     season: { id: seasonId(), xp: 0, claimedFree: [], claimedPremium: [] },
     deviceId,
@@ -267,10 +370,12 @@ function defaults(): SaveState {
     firstFlightDone: false,
     onboardingSeen: [],
     seenShop: false,
+    seenLoadout: false,
     seenPvp: false,
     seenPve: false,
     seenLeaderboards: false,
     seenChallenges: false,
+    seenSettings: false,
     skill: 0.25,
     skillSamples: 0,
     bestAltitude: 0,
@@ -284,7 +389,7 @@ function defaults(): SaveState {
     rival: defaultRival(),
     duel: { wins: 0, losses: 0, streak: 0, bestStreak: 0 },
     rankSeason: { id: rankSeasonId(), peak: RIVAL_BASE_RATING },
-    challenges: { dailyDate: "", dailyDone: false, dailiesDone: 0, gauntletWeek: "", gauntletDone: [], gauntletsCleared: 0 },
+    challenges: { dailyDate: "", dailyDone: false, dailiesDone: 0, gauntletWeek: "", gauntletDone: [], gauntletsCleared: 0, dailyChallengeFailures: 0 },
     calendar: { cycleDay: 0, lastClaim: "" },
     mastery: {},
     campaignClaimed: [],
@@ -309,6 +414,18 @@ function strArr(v: unknown): string[] {
   return Array.isArray(v) ? v.map(String) : [];
 }
 
+/** id -> whole positive count. Floors, drops NaN/negative/zero, and refuses
+ *  a non-object so a hostile blob cannot smuggle in `__proto__` members. */
+function countRec(v: unknown): Record<string, number> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n > 0) out[k] = n;
+  }
+  return out;
+}
+
 function numArr(v: unknown): number[] {
   return Array.isArray(v) ? v.map(Number).filter((n) => Number.isFinite(n)) : [];
 }
@@ -317,15 +434,19 @@ function parseSocial(v: unknown): SocialState {
   const d = emptySocialState();
   if (!v || typeof v !== "object") return d;
   const p = v as Partial<SocialState>;
+  // Same shape-filter pattern as parseRival: a corrupt/edited blob with
+  // [null] entries must not sail verbatim into Social/HUD.
+  const objArr = <T>(a: unknown): T[] =>
+    (Array.isArray(a) ? a : []).filter((e): e is T => !!e && typeof e === "object") as T[];
   return {
-    friends: Array.isArray(p.friends) ? (p.friends as SocialState["friends"]) : d.friends,
+    friends: objArr(p.friends),
     pendingRequests: strArr(p.pendingRequests),
     incomingRequests: strArr(p.incomingRequests),
     blocked: strArr(p.blocked),
-    club: p.club ?? null,
-    dmThreads: Array.isArray(p.dmThreads) ? (p.dmThreads as SocialState["dmThreads"]) : d.dmThreads,
-    challenges: Array.isArray(p.challenges) ? (p.challenges as SocialState["challenges"]) : d.challenges,
-    savedReplays: Array.isArray(p.savedReplays) ? (p.savedReplays as SocialState["savedReplays"]) : d.savedReplays,
+    club: p.club && typeof p.club === "object" ? (p.club as SocialState["club"]) : null,
+    dmThreads: objArr(p.dmThreads),
+    challenges: objArr(p.challenges),
+    savedReplays: objArr(p.savedReplays),
     socialQuestsClaimed: strArr(p.socialQuestsClaimed),
   };
 }
@@ -359,6 +480,18 @@ function parseRival(v: unknown): RivalState {
   };
 }
 
+/**
+ * Daily-streak milestone rewards (Feature: Daily Streak System), paid
+ * exactly once per milestone via `state.streakDaysAchieved`. The 30-day
+ * milestone also grants a cosmetic trail through the same `ownTrail()` path
+ * a tournament prize uses, so it shows up identically in the trail picker.
+ */
+const STREAK_MILESTONE_REWARDS: Readonly<Record<number, { coins: number; trail?: string }>> = {
+  7: { coins: 100 },
+  14: { coins: 200 },
+  30: { coins: 500, trail: "trail_streak" },
+};
+
 export class SaveData {
   state: SaveState;
   /** True when the on-disk save was unreadable this session and we booted
@@ -371,14 +504,66 @@ export class SaveData {
   onEviction: ((evicted: readonly string[]) => void) | null = null;
   /** Optional platform SDK adapter for cloud save syncing (e.g. CrazyGames data.setItem). */
   platformAdapter: { saveData?: (key: string, data: string) => Promise<void> } | null = null;
+  /** Invoked whenever another tab's write to the save key is picked up (see
+   *  attachStorageListener). Lets the game surface "your save changed in
+   *  another tab" instead of silently swapping state out from under the UI. */
+  onExternalChange: ((state: SaveState) => void) | null = null;
   private lastPersistErrorAt = 0;
   /** Timed coin multiplier (the `luckycoin` boost) — session-only on purpose:
    *  a consumable bought for one flight must not survive into the next. */
   private coinBonus = 1;
   private coinBonusUntil = 0;
+  /** When the current run started (0 = no run window open). Session-only, like
+   *  coinBonus: a run's coin weighting is not something a save can carry. */
+  private runStartedAt = 0;
+  /** Every timed bonus armed during the current run, as absolute windows, so a
+   *  run that paid out can be weighted by how long each bonus was actually
+   *  live rather than by whatever happened to be live at the end. */
+  private runBonusWindows: { from: number; to: number; mult: number }[] = [];
+  private externalChangeHandler: ((e: StorageEvent) => void) | null = null;
+  /** Set by `applyStreakMilestone()`, read (and cleared) by
+   *  `justAchievedStreakMilestone()`. Session-only — never persisted. */
+  private pendingStreakMilestone: { days: number; coins: number; trail?: string } | null = null;
 
   constructor() {
     this.state = this.load();
+    this.attachStorageListener();
+  }
+
+  /**
+   * Multi-tab awareness. The browser fires a native `storage` event on every
+   * OTHER same-origin tab/window when localStorage changes — never on the tab
+   * that made the write. Without this, two open tabs each hold their own
+   * in-memory `state`, and tab A can keep playing on a stale snapshot and then
+   * `persist()` it, silently clobbering whatever tab B (or a cloud-save sync
+   * running in another tab) wrote to SAVE_KEY in the meantime — a classic
+   * multi-tab save-stomp. Reloading `state` the moment another tab's write is
+   * observed keeps this tab's next persist() built on the latest data instead
+   * of overwriting it.
+   */
+  private attachStorageListener(): void {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const key = physicalKey(SAVE_KEY);
+    const legacyKey = physicalKey(SAVE_KEY_V1);
+    const handler = (e: StorageEvent): void => {
+      // `key === null` means the other tab called storage.clear() — always
+      // worth reloading. Otherwise only react to our own save key(s); every
+      // other key on this origin (leaderboard cache, ghosts, journal, …) is
+      // not this listener's concern.
+      if (e.key !== null && e.key !== key && e.key !== legacyKey) return;
+      this.state = this.load();
+      this.onExternalChange?.(this.state);
+    };
+    this.externalChangeHandler = handler;
+    window.addEventListener("storage", handler);
+  }
+
+  /** Detaches the multi-tab storage listener (tests / explicit teardown). */
+  detachStorageListener(): void {
+    if (this.externalChangeHandler && typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("storage", this.externalChangeHandler);
+    }
+    this.externalChangeHandler = null;
   }
 
   private load(): SaveState {
@@ -426,7 +611,7 @@ export class SaveData {
               }))
               .slice(0, 8)
           : [],
-        gold: Boolean(p.gold),
+        gold: SELL_AD_REMOVAL ? Boolean(p.gold) : false,
         vip: Boolean(p.vip),
         vipUntil: num(p.vipUntil),
         vipLastClaim: typeof p.vipLastClaim === "string" ? p.vipLastClaim : "",
@@ -437,6 +622,11 @@ export class SaveData {
         ownedSkins: owned,
         activeSkin: typeof p.activeSkin === "string" ? p.activeSkin : "sunbird",
         armedBoosts: strArr(p.armedBoosts),
+        // Migration: a pre-stock save had no `boostStock`, so every armed
+        // boost was owned and unrecorded. Seed stock from the armed list
+        // rather than dropping them on the floor — otherwise loading an old
+        // save and then arming more would oversell what the player owns.
+        boostStock: countRec(p.boostStock),
         ownedUpgrades: strArr(p.ownedUpgrades),
         settings: {
           mute: Boolean(p.settings?.mute),
@@ -456,15 +646,20 @@ export class SaveData {
               : typeof p.settings?.musicTrack === "number"
                 ? Math.max(0, Math.min(TRACK_NAMES.length - 1, Math.floor(p.settings.musicTrack)))
                 : "shuffle",
+          musicStyle: p.settings?.musicStyle === "procedural" ? "procedural" : "songbook",
           haptics: p.settings?.haptics === undefined ? true : Boolean(p.settings.haptics),
           reduceMotion: Boolean(p.settings?.reduceMotion),
           colorAssist: Boolean(p.settings?.colorAssist),
+          softCamera: Boolean(p.settings?.softCamera),
           bigText: Boolean(p.settings?.bigText),
+          tapToggleDive: Boolean(p.settings?.tapToggleDive),
           quality: quality === "high" || quality === "low" ? quality : "auto",
+          showFps: Boolean(p.settings?.showFps),
           distUnit: p.settings?.distUnit === "mi" ? "mi" : "km",
           // Undefined (a save from before this existed) means on, matching
           // DEFAULT_SETTINGS — an explicit `false` is respected.
           autoShop: p.settings?.autoShop === undefined ? true : Boolean(p.settings.autoShop),
+          dismissedOnboarding: Boolean(p.settings?.dismissedOnboarding),
         },
         quests:
           p.quests && typeof p.quests.date === "string"
@@ -474,13 +669,18 @@ export class SaveData {
           p.streak && typeof p.streak.last === "string"
             ? { last: p.streak.last, days: num(p.streak.days), claimedDate: String(p.streak.claimedDate ?? "") }
             : d.streak,
+        currentStreak: num(p.currentStreak),
+        streakDaysAchieved: numArr(p.streakDaysAchieved),
         redeemedCodes: strArr(p.redeemedCodes),
         firstPlayed: typeof p.firstPlayed === "string" ? p.firstPlayed : "",
         runsPlayed: num(p.runsPlayed),
         lifetime: {
           distance: num(p.lifetime?.distance),
           coins: num(p.lifetime?.coins),
-          zeniths: num(p.lifetime?.zeniths),
+          // Migration: saves written before the zenith→apex rename stored the
+          // counter under `zeniths`. Typed as a narrow structural shape rather
+          // than `any` so the one legacy key stays visible and reviewable.
+          apexMoments: num(p.lifetime?.apexMoments ?? (p.lifetime as { zeniths?: unknown })?.zeniths),
           ghostBeats: num(p.lifetime?.ghostBeats),
           sunflowers: num(p.lifetime?.sunflowers),
         },
@@ -503,16 +703,13 @@ export class SaveData {
         tutorialRuns: num(p.tutorialRuns),
         firstFlightDone: Boolean(p.firstFlightDone),
         onboardingSeen: strArr(p.onboardingSeen),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenShop: Boolean((p as any).seenShop),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenPvp: Boolean((p as any).seenPvp),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenPve: Boolean((p as any).seenPve),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenLeaderboards: Boolean((p as any).seenLeaderboards),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        seenChallenges: Boolean((p as any).seenChallenges),
+        seenShop: Boolean(p.seenShop),
+        seenLoadout: Boolean(p.seenLoadout),
+        seenPvp: Boolean(p.seenPvp),
+        seenPve: Boolean(p.seenPve),
+        seenSettings: Boolean(p.seenSettings),
+        seenLeaderboards: Boolean(p.seenLeaderboards),
+        seenChallenges: Boolean(p.seenChallenges),
         skill: p.skill === undefined ? 0.25 : num(p.skill),
         skillSamples: num(p.skillSamples),
         bestAltitude: num(p.bestAltitude),
@@ -552,6 +749,7 @@ export class SaveData {
                 gauntletWeek: String(p.challenges.gauntletWeek ?? ""),
                 gauntletDone: numArr(p.challenges.gauntletDone),
                 gauntletsCleared: num(p.challenges.gauntletsCleared),
+                dailyChallengeFailures: num(p.challenges.dailyChallengeFailures),
               }
             : d.challenges,
         calendar:
@@ -599,6 +797,15 @@ export class SaveData {
         rankPrizeSeason: String(p.rankPrizeSeason ?? ""),
         wingmanBundle: Boolean(p.wingmanBundle),
       };
+      // Migration: pre-stock saves recorded nothing but `armedBoosts`, so a
+      // boost that was armed is a boost the player owns. Seed stock to cover
+      // the armed copies, and never below what is already recorded. Without
+      // this, loading an old save would let the player arm more copies than
+      // they ever bought.
+      for (const id of new Set(parsedState.armedBoosts)) {
+        const held = parsedState.armedBoosts.filter((b) => b === id).length;
+        if ((parsedState.boostStock[id] ?? 0) < held) parsedState.boostStock[id] = held;
+      }
       return parsedState;
     } catch {
       // Corruption recovery: never destroy a player's data. If we actually read
@@ -654,15 +861,23 @@ export class SaveData {
     const prestigeBonus = Math.round(coins * ((s.prestige?.multiplier ?? 1.0) - 1));
     const totalRunCoins = coins + prestigeBonus;
 
-    s.totalCoins += totalRunCoins;
-    s.wallet += totalRunCoins;
+    // Route run-end coins through addCoins() like every other coin award in
+    // the game, so the goldenfeather (permanent) and luckycoin (timed)
+    // multipliers actually apply here — this used to add straight to
+    // wallet/totalCoins, silently bypassing both.
+    //
+    // A run's coins arrive as ONE number, so the timed multiplier cannot be
+    // sampled per coin at the payout: it is averaged over the run instead (see
+    // runCoinMultiplier), or a bonus armed mid-run would be applied to the
+    // whole run or to none of it.
+    const awarded = this.awardCoins(totalRunCoins, this.runCoinMultiplier());
     s.runsPlayed += 1;
     s.tutorialRuns += 1;
     s.lifetime.distance += distance;
-    s.lifetime.coins += totalRunCoins;
+    s.lifetime.coins += awarded;
 
     // Accumulate +20% bonus coins into Piggy Bank
-    const bonusPiggy = Math.max(1, Math.round(totalRunCoins * 0.2));
+    const bonusPiggy = Math.max(1, Math.round(awarded * 0.2));
     if (!s.piggyBank) s.piggyBank = { coins: 0, maxCoins: 1000 };
     s.piggyBank.coins = Math.min(s.piggyBank.maxCoins, s.piggyBank.coins + bonusPiggy);
 
@@ -670,7 +885,7 @@ export class SaveData {
     if (distance > s.bestDistance) s.bestDistance = distance;
     if (island > s.farthestIsland) s.farthestIsland = island;
     if (biomeId && !s.biomesSeen.includes(biomeId)) s.biomesSeen.push(biomeId);
-    s.highScores.push({ date, distance, coins: totalRunCoins, score, vip: s.vip, island });
+    s.highScores.push({ date, distance, coins: awarded, score, vip: s.vip, island });
     s.highScores.sort((a, b) => b.score - a.score);
     s.highScores = s.highScores.slice(0, 8);
     this.persist();
@@ -681,10 +896,13 @@ export class SaveData {
     if (!s.piggyBank || s.piggyBank.coins <= 0) return 0;
     const amount = s.piggyBank.coins;
     s.piggyBank.coins = 0;
-    s.wallet += amount;
-    s.totalCoins += amount;
+    // Through addCoins() like every other award, so a bought multiplier pays
+    // here too. Returns the amount actually credited, because every caller
+    // shows it to the player as "+N coins" — reporting the pre-multiplier
+    // figure would be a lie the wallet could contradict.
+    const awarded = this.addCoins(amount);
     this.persist();
-    return amount;
+    return awarded;
   }
 
   performPrestige(): boolean {
@@ -717,8 +935,8 @@ export class SaveData {
     this.persist();
   }
 
-  addLifetimeZeniths(n: number): void {
-    this.state.lifetime.zeniths += n;
+  addLifetimeApexMoments(n: number): void {
+    this.state.lifetime.apexMoments += n;
     this.persist();
   }
 
@@ -776,12 +994,9 @@ export class SaveData {
     r.matches.push({ place: p, field: f, mode, date, won });
     if (r.matches.length > 8) r.matches.splice(0, r.matches.length - 8);
     const bonus = won ? streakBonus(r.streak) : 0;
-    if (bonus > 0) {
-      this.state.wallet += bonus;
-      this.state.totalCoins += bonus;
-    }
+    const awarded = bonus > 0 ? this.addCoins(bonus) : 0;
     this.persist();
-    return { delta, bonus, streak: r.streak };
+    return { delta, bonus: awarded, streak: r.streak };
   }
 
   /**
@@ -796,10 +1011,11 @@ export class SaveData {
     this.state.rival.rating = softResetRating(this.state.rival.rating);
     this.state.rival.streak = 0;
     this.state.rankSeason = { id, peak: this.state.rival.rating };
-    this.state.wallet += reward.coins;
-    this.state.totalCoins += reward.coins;
+    // Through addCoins(): the peak-division reward is a coin award like any
+    // other, and the toast quotes whatever this returns.
+    const awarded = this.addCoins(reward.coins);
     this.persist();
-    return { coins: reward.coins, division: reward.division.name };
+    return { coins: awarded, division: reward.division.name };
   }
 
   /** Head-to-head duel result. Rating swing is a flat ±16 vs the duelist. */
@@ -829,6 +1045,10 @@ export class SaveData {
     c.dailyDate = date;
     c.dailyDone = true;
     c.dailiesDone += 1;
+    // A clear breaks the miss streak immediately — the auto-tune (see
+    // scaleTargetForFailures in Challenges.ts) exists to help a player who is
+    // failing, not to keep discounting once they've shown they don't need it.
+    c.dailyChallengeFailures = 0;
     this.persist();
     return true;
   }
@@ -836,6 +1056,20 @@ export class SaveData {
   isDailyDone(date: string): boolean {
     const c = this.state.challenges;
     return c.dailyDate === date && c.dailyDone;
+  }
+
+  /**
+   * Called once per calendar-day rollover (boot and midnight-while-open,
+   * never more than once for the same "yesterday") with whether yesterday's
+   * daily challenge was completed. Feeds the difficulty auto-tune: two misses
+   * in a row is what `scaleTargetForFailures` treats as "this target has
+   * outpaced this player," not one unlucky day.
+   */
+  noteDailyChallengeRollover(dailyWasDoneYesterday: boolean): void {
+    const c = this.state.challenges;
+    if (!Number.isFinite(c.dailyChallengeFailures)) c.dailyChallengeFailures = 0;
+    c.dailyChallengeFailures = dailyWasDoneYesterday ? 0 : c.dailyChallengeFailures + 1;
+    this.persist();
   }
 
   /** Marks a gauntlet stage done. @returns "stage" | "clear" | null. */
@@ -847,7 +1081,11 @@ export class SaveData {
     }
     if (c.gauntletDone.includes(index)) return null;
     c.gauntletDone.push(index);
-    const cleared = c.gauntletDone.length >= 3;
+    // "Every stage of this week's gauntlet is done", not "the array has three
+    // entries" — see `gauntletCleared` in Challenges.ts for the rule and for
+    // the save-parse case that made the difference visible. Same function the
+    // HUD card uses, so the trophy and the payout can never disagree.
+    const cleared = gauntletCleared(week, c.gauntletDone);
     if (cleared) c.gauntletsCleared += 1;
     this.persist();
     return cleared ? "clear" : "stage";
@@ -939,13 +1177,13 @@ export class SaveData {
 
   /** Onboarding: mark a contextual screen as seen (shop, pvp, etc). */
   markSeen(area: "shop" | "pvp" | "pve" | "leaderboards" | "challenges"): void {
-    const key = `seen${area.charAt(0).toUpperCase()}${area.slice(1)}` as keyof SaveState;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!(this.state as any)[key]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.state as any)[key] = true;
-      this.persist();
-    }
+    type SeenKey = keyof Pick<SaveState, "seenShop" | "seenPvp" | "seenPve" | "seenLeaderboards" | "seenChallenges">;
+    const seenKeys: Record<typeof area, SeenKey> = {
+      shop: "seenShop", pvp: "seenPvp", pve: "seenPve",
+      leaderboards: "seenLeaderboards", challenges: "seenChallenges",
+    };
+    const key = seenKeys[area];
+    if (!this.state[key]) { this.state[key] = true; this.persist(); }
   }
 
   addGhostBeat(): void {
@@ -961,9 +1199,30 @@ export class SaveData {
     return true;
   }
 
-  /** Price of the next bought nest level: 300, 450, 675… (×1.5 per level). */
+  /**
+   * Price of the next bought nest level.
+   *
+   * A flat ×1.5 per level (300, 450, 675…) put ~33,900 coins between a
+   * player and their first full prestige (all 10 bought levels) — an
+   * exponential wall that turned the natural day-30 breakout point into a
+   * pay-or-grind cliff. Growth is now tiered: the first three purchases
+   * (the ones a player hits early and needs to feel cheap) grow at ×1.2,
+   * and every purchase after that grows at ×1.3 off the level-3 price —
+   * still far gentler than the original ×1.5 for every level, but keeping
+   * a real coin sink for players who push past the early levels. Result:
+   * 300, 360, 432, 518, 675, 876… for a full-prestige total near 10k
+   * instead of 33.9k, so prestige 1 lands in about two weeks of casual
+   * play and prestige 2-3 are reachable by day 45-60 instead of stalling
+   * at the day-30 wall.
+   */
   nestUpgradePrice(): number {
-    return Math.round(300 * Math.pow(1.5, this.state.nestBought));
+    const n = this.state.nestBought;
+    const EARLY_MULT = 1.2;
+    const LATE_MULT = 1.3;
+    const TIER_BREAK = 3;
+    if (n < TIER_BREAK) return Math.round(300 * Math.pow(EARLY_MULT, n));
+    const tierBreakPrice = 300 * Math.pow(EARLY_MULT, TIER_BREAK);
+    return Math.round(tierBreakPrice * Math.pow(LATE_MULT, n - TIER_BREAK));
   }
 
   /** The coin sink: convert coins into a permanent score multiplier level. */
@@ -998,18 +1257,6 @@ export class SaveData {
   }
 
   /**
-   * Award coins. Every coin in the game arrives here, which is what makes it
-   * the right place for multipliers: a bonus applied at one of the ~20 award
-   * sites would be missed by the other nineteen.
-   *
-   * Two independent multipliers stack multiplicatively:
-   *   • permanent — owning `goldenfeather` (see COIN_MULTIPLIER_UPGRADES)
-   *   • timed — `luckycoin`, armed for a run by `setCoinBonus()`
-   * The awarded amount is rounded UP so a 1-coin pickup is never silently
-   * rounded back down to 1 by a 1.1× bonus (a bonus that does nothing on small
-   * awards reads as a broken purchase).
-   */
-  /**
    * Stamps the first-session day the first time it is asked, then leaves it
    * alone forever. @returns true when this call is the one that stamped it, so
    * the caller can tell a brand-new player from a returning one without
@@ -1022,28 +1269,128 @@ export class SaveData {
     return true;
   }
 
-  addCoins(amount: number): void {
-    const awarded = Math.max(0, Math.ceil(amount * this.coinMultiplier()));
+  /**
+   * Award coins. Every coin in the game arrives here, which is what makes it
+   * the right place for multipliers: a bonus applied at one of the ~20 award
+   * sites would be missed by the other nineteen.
+   *
+   * Two independent multipliers stack multiplicatively:
+   *   • permanent — owning `goldenfeather` (see COIN_MULTIPLIER_UPGRADES)
+   *   • timed — `luckycoin`, armed for a run by `setCoinBonus()`
+   * The awarded amount is rounded UP so a 1-coin pickup is never silently
+   * rounded back down to 1 by a 1.1× bonus (a bonus that does nothing on small
+   * awards reads as a broken purchase).
+   */
+
+  addCoins(amount: number): number {
+    return this.awardCoins(amount, this.coinMultiplier());
+  }
+
+  /** The one place the wallet moves. `mult` is passed in rather than read here
+   *  so a caller that knows better than "right now" — the run-end payout, which
+   *  weights a timed bonus over the whole run — can say so. */
+  private awardCoins(amount: number, mult: number): number {
+    const awarded = Math.max(0, Math.ceil(amount * mult));
     this.state.wallet += awarded;
     this.state.totalCoins += awarded;
     this.persist();
+    return awarded;
+  }
+
+  /**
+   * Open the window a run's coins are timed-weighted over. Called by the run
+   * funnel (Game.startRun) before the first coin can be picked up.
+   *
+   * A run's coins are accumulated in Game and paid in ONE addCoins() call at
+   * the end, which used to mean the multiplier applied to the whole run was
+   * whatever was live at that instant: a luckycoin armed for 60s in the middle
+   * of a 90s run paid nothing, and one armed at second 85 paid for all 90s.
+   */
+  beginRun(): void {
+    this.runStartedAt = Date.now();
+    this.runBonusWindows = [];
   }
 
   /** Arm a timed coin multiplier (the `luckycoin` boost). Re-arming extends. */
   setCoinBonus(multiplier: number, seconds: number): void {
-    this.coinBonus = Math.max(1, multiplier);
-    this.coinBonusUntil = Date.now() + Math.max(0, seconds) * 1000;
+    const mult = Math.max(1, multiplier);
+    const now = Date.now();
+    this.coinBonus = mult;
+    this.coinBonusUntil = now + Math.max(0, seconds) * 1000;
+    // Remember the window, not just the current state, so a run that was
+    // already in progress can be paid for the part of it this bonus covered.
+    if (this.runStartedAt > 0) {
+      this.runBonusWindows.push({ from: now, to: this.coinBonusUntil, mult });
+    }
   }
 
-  /** Combined multiplier in effect right now (>= 1). */
-  coinMultiplier(): number {
+  /** The permanent half of the multiplier: what the player bought. */
+  private permanentCoinMultiplier(): number {
     let mult = 1;
     for (const [id, value] of Object.entries(COIN_MULTIPLIER_UPGRADES)) {
       if (this.state.ownedUpgrades.includes(id)) mult *= value;
     }
-    if (this.coinBonus > 1 && Date.now() < this.coinBonusUntil) mult *= this.coinBonus;
-    else this.coinBonus = 1;
     return mult;
+  }
+
+  /** The timed half, as it stands right now. */
+  private timedCoinMultiplier(now: number): number {
+    if (this.coinBonus > 1 && now < this.coinBonusUntil) return this.coinBonus;
+    this.coinBonus = 1;
+    return 1;
+  }
+
+  /**
+   * The timed multiplier averaged over the run that just ended: a bonus pays
+   * for the time it was actually live, so a 60s luckycoin in a 90s run pays
+   * for 60s of it and one armed at second 85 pays for five.
+   *
+   * Swept over the window edges rather than sampled, because two overlapping
+   * windows must count once (the stronger bonus applies), not twice. Falls
+   * back to the instantaneous value when no run window is open, so a caller
+   * that never opened one keeps exactly the old answer.
+   */
+  private runTimedMultiplier(now: number): number {
+    const startedAt = this.runStartedAt;
+    if (startedAt <= 0 || now <= startedAt) return this.timedCoinMultiplier(now);
+    const windows = this.runBonusWindows.filter((w) => w.to > startedAt && w.from < now);
+    if (windows.length === 0) return this.timedCoinMultiplier(now);
+    const edges = new Set<number>([startedAt, now]);
+    for (const w of windows) {
+      if (w.from > startedAt && w.from < now) edges.add(w.from);
+      if (w.to > startedAt && w.to < now) edges.add(w.to);
+    }
+    const points = [...edges].sort((a, b) => a - b);
+    let credit = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i]!;
+      const to = points[i + 1]!;
+      let live = 1;
+      for (const w of windows) if (w.from <= from && w.to >= to) live = Math.max(live, w.mult);
+      credit += (live - 1) * (to - from);
+    }
+    return 1 + credit / (now - startedAt);
+  }
+
+  /**
+   * The multiplier for a run's payout: the permanent one (it cannot change
+   * mid-run — the shop is unreachable in flight) times the timed one averaged
+   * over the run. Closes the window afterwards, so a second payout in the same
+   * run cannot be weighted by a window that has already been spent.
+   */
+  private runCoinMultiplier(): number {
+    const permanent = this.permanentCoinMultiplier();
+    const now = Date.now();
+    if (this.runStartedAt <= 0) return permanent * this.timedCoinMultiplier(now);
+    const timed = this.runTimedMultiplier(now);
+    this.runStartedAt = 0;
+    this.runBonusWindows = [];
+    return permanent * timed;
+  }
+
+  /** Combined multiplier in effect right now (>= 1). */
+  coinMultiplier(): number {
+    return this.permanentCoinMultiplier() * this.timedCoinMultiplier(Date.now());
   }
 
   ownSkin(id: string): void {
@@ -1057,9 +1404,70 @@ export class SaveData {
     this.persist();
   }
 
-  armBoost(id: string): void {
-    if (!this.state.armedBoosts.includes(id)) this.state.armedBoosts.push(id);
+  /** How many of a boost the player owns in storage. */
+  boostStocked(id: string): number {
+    return Math.max(0, Math.floor(this.state.boostStock[id] ?? 0));
+  }
+
+  /** How many of a boost are staged for the next flight. */
+  boostArmed(id: string): number {
+    let n = 0;
+    for (const b of this.state.armedBoosts) if (b === id) n++;
+    return n;
+  }
+
+  /** Copies of `id` that are owned but not staged. */
+  boostStaged(id: string): number {
+    return Math.max(0, this.boostStocked(id) - this.boostArmed(id));
+  }
+
+  /** Buy one copy into storage. Permanent boosts are not stock — they are
+   *  unlocked outright — so this refuses them rather than banking a thing
+   *  that can never be spent. */
+  stockBoost(id: string): boolean {
+    if (this.boostStocked(id) < 0) return false;
+    this.state.boostStock[id] = this.boostStocked(id) + 1;
     this.persist();
+    return true;
+  }
+
+  /** Award a free copy: it goes into storage AND straight into the loadout.
+   *  This is the wheel, the starter pack and the tournament prize path — wins
+   *  the player never paid for. They must stock first, because `armBoost`
+   *  deliberately refuses to arm more than is owned; a grant that only armed
+   *  would silently award nothing. */
+  grantBoost(id: string, n = 1): void {
+    const count = Math.max(0, Math.floor(n));
+    if (count <= 0) return;
+    this.state.boostStock[id] = this.boostStocked(id) + count;
+    this.armBoost(id, count);
+  }
+
+  /** Move up to `n` copies from storage into the next-flight loadout. Never
+   *  arms more than are owned, so the loadout cannot promise boosters the
+   *  player has not bought. Returns how many actually moved. */
+  armBoost(id: string, n = 1): number {
+    const available = this.boostStaged(id);
+    const take = Math.min(Math.max(0, Math.floor(n)), available);
+    if (take <= 0) return 0;
+    this.state.armedBoosts.push(...Array<string>(take).fill(id));
+    this.persist();
+    return take;
+  }
+
+  /** Move staged copies back into storage — the "I armed too many" undo. */
+  unarmBoost(id: string, n = 1): number {
+    const have = this.boostArmed(id);
+    const drop = Math.min(Math.max(0, Math.floor(n)), have);
+    if (drop <= 0) return 0;
+    for (let i = 0, left = drop; left > 0; i++) {
+      const at = this.state.armedBoosts.indexOf(id, i);
+      if (at === -1) break;
+      this.state.armedBoosts.splice(at, 1);
+      left--;
+    }
+    this.persist();
+    return drop;
   }
 
   hasUpgrade(id: string): boolean {
@@ -1073,9 +1481,18 @@ export class SaveData {
     return true;
   }
 
+  /** Spend the loadout at the start of a flight: returns the staged boost ids
+   *  and debits the same number of copies from storage, so flying with two
+   *  Shields leaves the player with zero, not with two free ones. */
   consumeArmedBoosts(): string[] {
     const list = [...this.state.armedBoosts];
     this.state.armedBoosts = [];
+    for (const id of new Set(list)) {
+      const used = list.filter((b) => b === id).length;
+      const left = this.boostStocked(id) - used;
+      if (left > 0) this.state.boostStock[id] = left;
+      else delete this.state.boostStock[id];
+    }
     this.persist();
     return list;
   }
@@ -1117,8 +1534,14 @@ export class SaveData {
   claimVipDaily(today: string): number {
     if (!this.isVipActive() || this.state.vipLastClaim === today) return 0;
     this.state.vipLastClaim = today;
-    this.addCoins(VIP_DAILY_GIFT);
-    return VIP_DAILY_GIFT;
+    // The return is the amount the wallet was actually credited, not the
+    // nominal gift: addCoins() applies the coin multiplier, so an owner of
+    // `goldenfeather` ("+10% coins forever") received more than VIP_DAILY_GIFT
+    // and the toast was quoting less than they got. The player is told one
+    // number and handed another, and this project's brand is honesty. Every
+    // sibling award here already returns what addCoins returned, for the same
+    // reason.
+    return this.addCoins(VIP_DAILY_GIFT);
   }
 
   /* ---------- advertising frequency caps (enforced, not decorative) ---------- */
@@ -1173,17 +1596,63 @@ export class SaveData {
     else if (s.last !== today) s.days = 1;
     s.last = today;
     s.claimedDate = today;
+    // `currentStreak` mirrors `streak.days` under the literal name the
+    // retention spec calls for — this is the ONLY place either is written,
+    // so the two can never drift apart.
+    this.state.currentStreak = s.days;
     const reward = 20 * Math.min(7, Math.max(1, s.days));
-    this.state.wallet += reward;
-    this.state.totalCoins += reward;
-    // Comeback bonus: only when returning after missing days (not day 1)
+    // Both the daily streak and the comeback bonus are coin awards, so both go
+    // through addCoins() — a "+10% coins forever" upgrade that skipped the
+    // login streak was the same bug as the piggy bank, not a lesser one. The
+    // return is the amount actually credited, since callers toast it.
+    const awarded = this.addCoins(reward);
+    // Comeback bonus: only when returning after missing days (not day 1).
+    // Pinned behavior (coin-multiplier-paths.test.ts): the return value is
+    // the streak-day rate only — what the "Day N streak" toast quotes — not
+    // the comeback top-up, which is credited to the wallet silently.
     if (isComeback) {
       const comebackBonus = 50;
-      this.state.wallet += comebackBonus;
-      this.state.totalCoins += comebackBonus;
+      this.addCoins(comebackBonus);
     }
+    // Milestone bonus (7/14/30 days): same silent-credit treatment as the
+    // comeback bonus above — Game.ts toasts it separately via
+    // `justAchievedStreakMilestone()` rather than folding it into this
+    // return, so the streak toast's number never has to mean two things.
+    this.applyStreakMilestone(s.days);
     this.persist();
-    return reward;
+    return awarded;
+  }
+
+  /**
+   * Grants the 7/14/30-day streak-milestone bonus exactly once per milestone.
+   * @returns coins actually credited (0 when this day is not a milestone, or
+   * the milestone was already paid on an earlier climb to it).
+   */
+  private applyStreakMilestone(days: number): number {
+    const milestone = STREAK_MILESTONE_REWARDS[days];
+    if (!milestone) return 0;
+    if (!Array.isArray(this.state.streakDaysAchieved)) this.state.streakDaysAchieved = [];
+    if (this.state.streakDaysAchieved.includes(days)) return 0;
+    this.state.streakDaysAchieved.push(days);
+    const credited = this.addCoins(milestone.coins);
+    if (milestone.trail) this.ownTrail(milestone.trail);
+    // Remembered for the caller to toast on its own beat (see
+    // justAchievedStreakMilestone) rather than folded into touchStreak's
+    // return value, which coin-multiplier-paths.test.ts pins to the
+    // streak-day rate alone.
+    this.pendingStreakMilestone = { days, coins: credited, trail: milestone.trail };
+    return credited;
+  }
+
+  /**
+   * The streak milestone (7/14/30 days) `touchStreak()` just paid, if any —
+   * read-once, so a caller that toasts it can't re-announce the same
+   * milestone on the next unrelated save() read.
+   */
+  justAchievedStreakMilestone(): { days: number; coins: number; trail?: string } | null {
+    const m = this.pendingStreakMilestone;
+    this.pendingStreakMilestone = null;
+    return m;
   }
 
   questsClaimed(date: string): string[] {
@@ -1205,19 +1674,69 @@ export class SaveData {
   }
 
   importCode(code: string): boolean {
+    let parsed: Record<string, unknown>;
     try {
       const json = decodeURIComponent(escape(atob(code.trim())));
-      const parsed = JSON.parse(json) as Partial<SaveState>;
-      if (typeof parsed !== "object" || parsed === null || !("deviceId" in parsed)) return false;
-      // Whitelist only known fields to prevent injection of arbitrary keys.
-      const allowed: Record<string, unknown> = {};
-      for (const k of Object.keys(defaults())) {
-        if (k in parsed) (allowed as Record<string, unknown>)[k] = (parsed as Record<string, unknown>)[k];
-      }
-      storage.setItem(SAVE_KEY, JSON.stringify(allowed));
+      const candidate = JSON.parse(json) as unknown;
+      if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return false;
+      parsed = candidate as Record<string, unknown>;
+    } catch {
+      return false;
+    }
+
+    // Validate BEFORE touching storage. A save code is player-suppliable data
+    // (typed in, pasted from a screenshot, or handed over by another player)
+    // and must never be trusted to clobber a good local save just because it
+    // decoded and parsed. Reject anything whose identity/shape is wrong up
+    // front; load()'s per-field coercion still runs after the write below,
+    // but that must never be the ONLY thing standing between a hostile blob
+    // and the on-disk save.
+    if (typeof parsed.deviceId !== "string" || !parsed.deviceId) return false;
+    // Currency/record fields must never go negative: a pasted code with
+    // wallet: -500 would soft-lock every purchase, and negative bests poison
+    // near-best math. Reject up front; the whitelist below never sees them.
+    const nonNegativeOrAbsent = (v: unknown): boolean => v === undefined || (typeof v === "number" && Number.isFinite(v) && v >= 0);
+    const arrayOrAbsent = (v: unknown): boolean => v === undefined || Array.isArray(v);
+    if (
+      !nonNegativeOrAbsent(parsed.bestScore) ||
+      !nonNegativeOrAbsent(parsed.bestDistance) ||
+      !nonNegativeOrAbsent(parsed.totalCoins) ||
+      !nonNegativeOrAbsent(parsed.wallet) ||
+      !arrayOrAbsent(parsed.highScores) ||
+      !arrayOrAbsent(parsed.ownedSkins) ||
+      !arrayOrAbsent(parsed.completedMissions) ||
+      !arrayOrAbsent(parsed.redeemedCodes)
+    ) {
+      return false;
+    }
+
+    // Whitelist only known fields to prevent injection of arbitrary keys.
+    const allowed: Record<string, unknown> = {};
+    for (const k of Object.keys(defaults())) {
+      if (k in parsed) allowed[k] = parsed[k];
+    }
+
+    // Back up the current save before overwriting it, so a write (or the
+    // reload right after it) that goes wrong can be rolled back instead of
+    // destroying the player's existing progress.
+    const backup = storage.getItem(SAVE_KEY);
+    try {
+      // Re-seal before writing: without this, an imported save lands as bare
+      // (unsealed) JSON, which openPayload() treats as a legacy pass-through
+      // with NO checksum — silently defeating the CRC integrity check for
+      // every save going forward until the next persist() happens to reseal
+      // it. Sealing here closes that window immediately.
+      storage.setItem(SAVE_KEY, sealPayload(JSON.stringify(allowed)));
       this.state = this.load();
       return true;
     } catch {
+      try {
+        if (backup !== null) storage.setItem(SAVE_KEY, backup);
+        else storage.removeItem(SAVE_KEY);
+      } catch {
+        /* ignore — nothing more we can do */
+      }
+      this.state = this.load();
       return false;
     }
   }

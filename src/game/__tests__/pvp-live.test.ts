@@ -16,9 +16,10 @@
  *   VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp pnpm test:pvp
  *
  * Without an absolute ws:// URL the suite SKIPS with a reason, so a plain
- * `pnpm test` (no server) is never a false failure. CI runs it in a dedicated
- * job that starts the server first — see .github/workflows/ci.yml,
- * job "PvP (two live clients, real protocol)".
+ * `pnpm test` (no server) is never a false failure. **This suite no longer runs
+ * automatically.** The CI job that started a server for it was deleted with the
+ * rest of the workflows, and `pnpm gate:local` does not include it — `test:pvp`
+ * is opt-in, not part of the gate. Run the two commands above deliberately.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RealtimeClient } from "../Realtime";
@@ -221,5 +222,10 @@ live("live PvP (two real clients, real server)", () => {
 
 if (!LIVE) {
   // A skip that says why, so "0 tests ran" is never mistaken for a pass.
-  it.skip(`live PvP suite skipped — VITE_MULTIPLAYER_URL must be an absolute ws:// URL (got "${LIVE_URL}"). Run: VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp pnpm test:pvp`, () => {});
+  it.skip(
+    `live PvP suite skipped — VITE_MULTIPLAYER_URL must be an absolute ws:// URL (got "${LIVE_URL}"). `
+    + `NOTE: this repository no longer contains the room server (server/src/index.ts is absent — the Rust `
+    + `backend is the parent monorepo's), so the documented command cannot run here. See this file's header.`,
+    () => {},
+  );
 }

@@ -27,6 +27,16 @@ export class Input {
   /** Player 2: Enter / right-half touch / second gamepad. */
   p2Key = false;
   p2Touch = false;
+  /**
+   * Motor accessibility: when true, player-1's dive input (pointer, keyboard,
+   * or gamepad) flips a persistent on/off state instead of requiring the
+   * input to stay held the whole way down. See `setToggleDive`.
+   */
+  private toggleMode = false;
+  /** Toggle-mode dive state for player 1 — only meaningful when `toggleMode`. */
+  private toggledActive = false;
+  /** Previous frame's raw gamepad-1 press, for edge-detecting a toggle flip. */
+  private prevPadP1Raw = false;
   private space = false;
   private readonly keys = new Set<string>();
   private readonly boundBlur = () => this.resetHeld();
@@ -94,7 +104,9 @@ export class Input {
   }
 
   get diving(): boolean {
-    return this.enabled && (this.held || this.space || this.padP1);
+    if (!this.enabled) return false;
+    if (this.toggleMode) return this.toggledActive;
+    return this.held || this.space || this.padP1;
   }
 
   /** Player 2's dive input. */
@@ -107,12 +119,26 @@ export class Input {
     if (!enabled) this.resetHeld();
   }
 
+  /**
+   * Motor accessibility: switch player 1 between hold-to-dive (default) and
+   * tap-to-toggle-dive. Always resets to "not diving" on a switch so a player
+   * can't get stuck mid-air holding a state left over from the other mode.
+   */
+  setToggleDive(enabled: boolean): void {
+    if (this.toggleMode === enabled) return;
+    this.toggleMode = enabled;
+    this.toggledActive = false;
+    this.held = false;
+    this.space = false;
+  }
+
   /** Poll gamepads once per frame: pad 0 drives P1, pad 1 drives P2. */
   pollGamepads(): void {
     const pads = navigator.getGamepads?.();
     if (!pads) {
       this.padP1 = false;
       this.padP2 = false;
+      this.prevPadP1Raw = false;
       return;
     }
     const pressed = (i: number): boolean => {
@@ -121,9 +147,17 @@ export class Input {
       for (const b of p.buttons) if (b?.pressed) return true;
       return Math.abs(p.axes[1] ?? 0) > 0.6;
     };
-    this.padP1 = pressed(0);
+    const rawP1 = pressed(0);
     this.padP2 = pressed(1);
-    if (this.padP1 || this.padP2) this.lastDevice = "gamepad";
+    if (this.toggleMode) {
+      // Edge-detect: flip once per fresh press, never on the held frames.
+      if (rawP1 && !this.prevPadP1Raw) this.toggledActive = !this.toggledActive;
+      this.padP1 = false;
+    } else {
+      this.padP1 = rawP1;
+    }
+    this.prevPadP1Raw = rawP1;
+    if (rawP1 || this.padP2) this.lastDevice = "gamepad";
   }
 
   consumePause(): boolean {
@@ -247,8 +281,29 @@ export class Input {
   }
 
   private onPointerDown(e: PointerEvent): void {
-    if (!this.enabled) return;
-    if (this.isInteractive(e.target)) return;
+      if (!this.enabled) return;
+      if (this.isInteractive(e.target)) {
+        // A *pointer* press on a flight-HUD control (mute, pause, emotes,
+        // fullscreen) must not leave that control holding DOM focus. Desktop
+        // browsers focus a button on mousedown and nothing in this game ever
+        // blurred it, so the focus ring outlived the press — and the guard in
+        // onKeyDown ("Enter/Space must activate a focused control") then
+        // swallowed every dive key afterwards. The reported symptom was the
+        // player tapping Mute, returning to the sky, holding Space, and
+        // nothing happening.
+        //
+        // Scoped to the play HUD deliberately:
+        //  • Overlays keep their focus, because OverlayNavigation moves focus
+        //    between menu controls and relies on Space/Enter to operate them.
+        //  • A keyboard player who Tabs to a HUD control keeps focus, so
+        //    Space/Enter still operates it — this only clears focus that a
+        //    pointer press created, which no assistive tech depends on.
+        const target = e.target;
+        if (target instanceof Element && target.closest(".play-hud")) {
+          (document.activeElement as HTMLElement | null)?.blur();
+        }
+        return;
+      }
     // A menu covering the flight surface owns the finger: no dive, no armed
     // double-tap boost, no gameplay ripple splashed over the menu — and no
     // preventDefault, which would also swallow the tap that dismisses it.
@@ -279,6 +334,7 @@ export class Input {
     const who = this.whichPlayer(e);
     this.touches.set(e.pointerId, who);
     if (who === 2) this.p2Touch = true;
+    else if (this.toggleMode) this.toggledActive = !this.toggledActive;
     else this.held = true;
 
     this.spawnTouchRipple(e.clientX, e.clientY, who);
@@ -317,10 +373,13 @@ export class Input {
     this.touches.delete(e.pointerId);
     if (who === 2) {
       this.p2Touch = [...this.touches.values()].includes(2);
-    } else {
+    } else if (!this.toggleMode) {
+      // In toggle mode player 1's dive state is flipped only on the down
+      // edge (above) and must survive the finger lifting — recomputing
+      // `held` from remaining touches here would otherwise clear it.
       this.held = [...this.touches.values()].includes(1);
     }
-    if (this.splitMode === "off") this.held = this.touches.size > 0;
+    if (this.splitMode === "off" && !this.toggleMode) this.held = this.touches.size > 0;
   }
 
   private spawnTouchRipple(x: number, y: number, player: 1 | 2 = 1): void {
@@ -349,6 +408,7 @@ export class Input {
     this.onPointerEnd();
     this.keys.clear();
     this.space = this.p2Key = this.padP1 = this.padP2 = false;
+    this.toggledActive = false;
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -361,8 +421,15 @@ export class Input {
       e.preventDefault();
       this.markFirst();
       this.lastDevice = "keyboard";
+      // Edge-detect on the first dive key going down: holding e.g. both Space
+      // and an arrow key must flip the toggle once, not once per key.
+      const wasAnyDiveKeyDown = DIVE_CODES.some((code) => this.keys.has(code));
       this.keys.add(e.code);
-      this.space = true;
+      if (this.toggleMode) {
+        if (!wasAnyDiveKeyDown) this.toggledActive = !this.toggledActive;
+      } else {
+        this.space = true;
+      }
     } else if (P2_CODE_SET.has(e.code)) {
       e.preventDefault();
       this.markFirst();
@@ -387,7 +454,9 @@ export class Input {
     // Releasing one alias must not release the player's other held key.
     if (this.keys.has(e.code)) e.preventDefault();
     this.keys.delete(e.code);
-    this.space = DIVE_CODES.some(code => this.keys.has(code));
+    // Toggle mode flips only on the down edge (onKeyDown) — releasing a key
+    // must not also end the dive, which is the whole point of the mode.
+    if (!this.toggleMode) this.space = DIVE_CODES.some(code => this.keys.has(code));
     this.p2Key = P2_CODES.some(code => this.keys.has(code));
   }
 }

@@ -23,9 +23,9 @@
  * callback argument. The SDK's typings let `onStart` receive `{ rewarded }`, but
  * trusting that would hand out rewards for ads the player skipped.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PokiAdapter } from "../poki";
+import { PokiAdapter, markPokiBooted } from "../poki";
 import type { PlatformEvents } from "../platform";
 
 type Log = string[];
@@ -49,6 +49,14 @@ function mount(sdk: Record<string, unknown>, events: PlatformEvents): PokiAdapte
 afterEach(() => {
   delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
   vi.unstubAllGlobals();
+});
+
+// The breaks below are about the break CONTRACT (balance, settlement, reward
+// truth), so they run against a booted SDK. Whether the adapter refuses to ask
+// for an ad before init resolves is a separate, deliberately separate file
+// (`poki-boot-order.test.ts`) because that flag only ever moves one way.
+beforeEach(() => {
+  markPokiBooted();
 });
 
 describe("commercialBreak — the interstitial contract", () => {

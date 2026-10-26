@@ -38,7 +38,7 @@ export class MenuContinuity {
   }
   private readonly views = new Map<string, ViewMemory>();
 
-  render(card: HTMLElement, screen: string, html: string, className = card.className): void {
+  render(card: HTMLElement, screen: string, html: string, className = card.className, anchor?: string): void {
     if (screen === this.screen && this.composing) { this.pending = { card, screen, html, className }; return; }
     if (screen !== this.screen) { this.pending = null; this.composing = false; }
     if (screen === this.screen && html === this.html) return;
@@ -77,10 +77,51 @@ export class MenuContinuity {
     if (active || !same) {
       (target && !target.matches(":disabled") && !hiddenByDisclosure(target) ? target : heading)?.focus({ preventScroll: true });
     }
-    card.scrollTop = restore?.scroll ?? 0;
+    this.settle(card, restore?.scroll ?? 0, anchor);
     for (const el of card.querySelectorAll<HTMLElement>("[data-scroll-memory]")) {
       const saved = restore?.nested.get(el.dataset.scrollMemory!);
       el.scrollTop = el.hasAttribute("data-stick-bottom") && (!saved || saved.bottom) ? el.scrollHeight : saved?.top ?? 0;
     }
+  }
+
+  /** Land the remembered view on a card that has just been rewritten.
+   *
+   * The offset is written twice on purpose. `HUD.update()` renders the card
+   * BEFORE it unhides the overlay, and a `display:none` scroller silently drops
+   * scrollTop writes: the value never lands, and the browser re-applies the
+   * offset the card held when it was last hidden — i.e. however far the player
+   * had scrolled the sub-screen they browsed during the flight. Coming back
+   * from a flight used to drop them into the home menu parked mid-page, with
+   * "Fly now" far above the fold and no visible way to start a run. The
+   * microtask runs once `update()` has toggled the class back, so that is the
+   * write that actually counts.
+   *
+   * `anchor` is the screen's primary action. Scroll memory is a convenience;
+   * being able to start a run is not, so a card restored past its own CTA
+   * scrolls back just far enough to show it.
+   */
+  private settle(card: HTMLElement, wanted: number, anchor?: string): void {
+    card.scrollTop = wanted;
+    const reassert = (): void => {
+      if (!card.isConnected) return;
+      // A `display:none` scroller silently discards scrollTop writes, and the
+      // browser reapplies whatever offset it held once the card is shown again.
+      // The HUD renders the card BEFORE it unhides it, so a microtask alone
+      // still lands while hidden and the write is dropped — which is how the
+      // home menu could open pinned to its own bottom with the launch CTA 707px
+      // above the viewport, unreachable on a first run. Re-assert on the next
+      // frame, which is after the class toggle has taken effect.
+      card.scrollTop = wanted;
+      if (!anchor) return;
+      const cardTop = card.getBoundingClientRect().top;
+      const anchorTop = card.querySelector<HTMLElement>(anchor)?.getBoundingClientRect().top;
+      if (anchorTop === undefined || anchorTop >= cardTop) return;
+      // Scroll memory is a convenience; being able to start a run is not. If
+      // the restore would strand the screen's primary action above the fold,
+      // the top is the only acceptable landing.
+      card.scrollTop = Math.max(0, wanted - (cardTop - anchorTop));
+    };
+    queueMicrotask(reassert);
+    requestAnimationFrame(reassert);
   }
 }

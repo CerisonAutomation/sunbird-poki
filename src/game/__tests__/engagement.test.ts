@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FlowTuner, SessionGoals, evaluateNearMiss, IDENTITY_TUNE, paceSkillFor, tuneDifficulty, type DifficultySignals } from "../Engagement";
 import { SaveData } from "../SaveData";
 
@@ -16,7 +16,7 @@ describe("FlowTuner", () => {
     const t = new FlowTuner();
     t.load(save);
     expect(t.skill).toBe(1);
-    expect(t.difficulty()).toBeCloseTo(1.16, 2);
+    expect(t.difficulty()).toBeCloseTo(1.35, 2);
   });
 
   it("starts at the default and persists after a run", () => {
@@ -26,8 +26,8 @@ describe("FlowTuner", () => {
     t.noteRun(2000, 5, 10, save);
     expect(save.state.skill).toBe(t.skill);
     expect(save.state.skillSamples).toBe(1);
-    expect(t.difficulty()).toBeGreaterThanOrEqual(0.86);
-    expect(t.difficulty()).toBeLessThanOrEqual(1.16);
+    expect(t.difficulty()).toBeGreaterThanOrEqual(0.7);
+    expect(t.difficulty()).toBeLessThanOrEqual(1.35);
   });
 
   it("labels skill bands monotonically", () => {
@@ -60,17 +60,43 @@ describe("SessionGoals", () => {
     }
   });
 
-  it("refills a completed goal immediately (list never empties)", () => {
+  it("leaves a completed goal done for the rest of the session (Session Complete)", () => {
     const tuner = new FlowTuner();
     tuner.skill = 0.5;
     const g = new SessionGoals(tuner);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     g.reset("seed");
     const first = g.goals[0]!;
     const finished = g.update({ [first.kind]: first.target + 100 } as never);
     expect(finished).toHaveLength(1);
     expect(g.goals).toHaveLength(3);
-    // The completed goal was swapped out for a fresh, uncompleted one.
+    // The finished goal stays finished instead of being swapped out —
+    // instant refill was the Zeigarnik trap: the list could never close.
+    expect(g.goals.filter((x) => x.done)).toHaveLength(1);
+
+    // A short gap between flights is not a new session: still done.
+    now.mockReturnValue(1_000_000 + 10_000);
+    g.update({ [first.kind]: first.target + 100 } as never);
+    expect(g.goals.filter((x) => x.done)).toHaveLength(1);
+
+    now.mockRestore();
+  });
+
+  it("refills the whole list once a new run starts after a genuine 60s+ pause", () => {
+    const tuner = new FlowTuner();
+    tuner.skill = 0.5;
+    const g = new SessionGoals(tuner);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    g.reset("seed");
+    const first = g.goals[0]!;
+    g.update({ [first.kind]: first.target + 100 } as never);
+    expect(g.goals.filter((x) => x.done)).toHaveLength(1);
+
+    now.mockReturnValue(1_000_000 + 65_000);
+    g.update({} as never);
     expect(g.goals.every((x) => !x.done)).toBe(true);
+
+    now.mockRestore();
   });
 
   it("closest() returns a nearly-done goal and null when none is close", () => {
@@ -132,15 +158,19 @@ describe("SessionGoals first-session mode", () => {
     for (const goal of build(true).goals) expect(goal.reward).toBeGreaterThanOrEqual(40);
   });
 
-  it("keeps refilling at starter difficulty for the whole first session", () => {
+  it("keeps refilling at starter difficulty across new runs", () => {
     const g = build(true);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    // Each iteration simulates coming back for a new run after a genuine
+    // pause (60s+) — the only point the (Session Complete) list refills.
     for (let i = 0; i < 6; i += 1) {
-      const first = g.goals[0]!;
-      g.update({ [first.kind]: first.target + 1 } as never);
+      now.mockReturnValue(1_000_000 + i * 65_000);
+      g.update({} as never);
     }
     expect(g.goals).toHaveLength(3);
     expect(g.goals.every((x) => !x.done)).toBe(true);
     expect(g.goals.every((x) => x.reward >= 40)).toBe(true);
+    now.mockRestore();
   });
 
   it("asks strictly more of a player with history, goal for goal", () => {
@@ -178,7 +208,11 @@ describe("tuneDifficulty", () => {
   it("eases the first three flights so the hook is a joke, not a bounce", () => {
     const tune = tuneDifficulty(base({ runsPlayed: 0, skill: 0.1 }), false);
     expect(tune.reason).toBe("ease");
-    expect(tune.daylightMult).toBeLessThan(1);
+    // This asserted `toBeLessThan(1)`, which pinned a sign error: EASE was
+    // handing the players having the worst time LESS daylight, in a game whose
+    // only fail state is the daylight clock. A struggling player who cannot
+    // read the terrain is the one who can least afford to also be short on sun.
+    expect(tune.daylightMult).toBeGreaterThan(1);
     expect(tune.packCatchupMult).toBeGreaterThan(1);
     expect(tune.ridgeForgiveness).toBeGreaterThan(0);
   });

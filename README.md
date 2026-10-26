@@ -2,7 +2,22 @@
 
 > A one-button, side-scrolling arcade glider. Hold to dive, release to soar, chase the daylight across procedurally generated islands.
 
-[![CI](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml/badge.svg)](https://github.com/CerisonAutomation/sunbird/actions/workflows/ci.yml)
+> **No GitHub Actions.** The workflow was removed: the account is billing-blocked
+> and every job sat red without ever starting, which is worse than no gate —
+> it looks like a signal and is not one. The checks it ran are not gone, they
+> are local and stricter: `pnpm gate:local` runs the same eight steps and a
+> `pre-push` hook enforces it. CI cannot be trusted to have run; the local gate
+> is the gate.
+
+> **This is the Poki fork; full infrastructure in parent monorepo.** This
+> checkout ships the client and the Vercel leaderboard functions (`api/`)
+> only. The self-hosted `rust/` room server, the Cloudflare `backend/`
+> workers and the `server/social/` PGlite layer described below live in the
+> parent monorepo, not here, and the Rust-specific sections of this file do
+> not apply to this checkout. `pnpm verify` is the whole gate — there is no
+> server half to run. (The one surviving `server/` file,
+> `src/anticheat/limits.ts`, is read from disk by the client test
+> `src/game/__tests__/anticheat.test.ts` to keep the shared limits in step.)
 
 ## What it is
 
@@ -25,7 +40,7 @@ Sunbird is a complete HTML5 arcade game: 8 flight modes, 40-pilot races, daily/w
 | Physics | Fixed-step deterministic client sim (`Bird.step()`, bit-exact tested) |
 | Audio | Zero-asset procedural WebAudio synth (SFX + adaptive score, portal-safe) |
 | Payments | Coin economy in every build — the client loads no payment processor (`@stripe/stripe-js` is not a dependency; `Payments.ts` returns `null` from every processor entry point). `backend/` ships an optional server-authoritative Stripe webhook so a deployment that sells SKUs can grant them ([DEPLOY.md §5](./DEPLOY.md)) |
-| Multiplayer | Self-hosted Rust room server ([rust/](./rust/)) — lobby, seats, synchronized starts, server-authoritative finish order and a movement envelope that rejects impossible client positions |
+| Multiplayer | Self-hosted Rust room server — lobby, seats, synchronized starts, server-authoritative finish order and a movement envelope that rejects impossible client positions. Lives in the parent monorepo, not this checkout; the Poki build uses Netlib P2P rooms |
 | Leaderboard | Vercel Functions ([api/](./api/)) + Upstash Redis, on-device fallback ([LEADERBOARD_API.md](./LEADERBOARD_API.md)) |
 | Ghosts | Async PvP via ghost publish/chase ([src/game/GhostNet.ts](./src/game/GhostNet.ts)) |
 | Caching | Content-hashed Vite assets + immutable HTTP caching; legacy service worker safely retired |
@@ -37,10 +52,13 @@ Sunbird is a complete HTML5 arcade game: 8 flight modes, 40-pilot races, daily/w
 corepack enable
 pnpm install --frozen-lockfile
 pnpm dev            # game on :5173
-cargo run --release -p sunbird-server   # optional: multiplayer rooms on :8080
 ```
 
-Open `http://localhost:5173`. The dev server proxies `/mp` to the Rust room server.
+Open `http://localhost:5173`. **Multiplayer needs no server**: this edition
+races over Poki Netlib (WebRTC P2P), so live rooms work in dev against the
+same signalling the shipped build uses — open the Race Lobby and host a room.
+(There is no Rust server in this fork and none is needed; the self-hosted
+authoritative server lives in the parent monorepo.)
 
 ## Environment variables
 
@@ -59,18 +77,17 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 |---|---|
 | `npm run dev` | Start Vite dev server |
 | `npm run build` | Production bundle (chunked; Vercel/PWA) |
-| `npm run build:vercel` | Same as `build` (explicit CDN target) |
-| `npm run build:itch` | Single-file bundle → `dist-itch/` |
-| `npm run build:poki` / `build:crazy` / `build:generic` | Portal zips (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
-| `npm run build:portals` | All three portal zips |
+| `npm run build` | The single-file bundle → `dist/` (this is also what Vercel deploys) |
+| `npm run build:poki` | The Poki submission: `sunbird-poki.zip` + the generated `poki-upload/` folder (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
 | `npm run test:mp` | Multiplayer protocol smoke against a running server |
 | `npm run isolation:check` | Source-level split: the Rust stack stays platform-agnostic, the Poki edition stays Netlib P2P + AUDS, and neither leaks into the other |
 | `npm run typecheck` | TypeScript type-check without emit |
 | `npm test` | Run the full Vitest suite |
-| `npm run pvp:check` | **Online stack, proven end to end**: boots the real room server on a scratch port and runs the protocol smoke, the live two-client PvP suite, the pilot-directory contract and the public room list against it |
+| `npm run pvp:check` | **Online stack, proven end to end** in the parent monorepo: boots the real room server on a scratch port and runs the protocol smoke, the live two-client PvP suite, the pilot-directory contract and the public room list against it. Needs `server/src/index.ts`, which is not in this checkout — run it there |
 | `npm run audit:ui` | Static UX/UI audit: dead buttons, null element refs, unlabelled controls, inline layout that media queries cannot override, unstyled classes and missing narrow-screen rules |
-| `npm run test:pvp` / `test:lookup` | The same live suites against an already-running server (`VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp`) |
-| `npm run test:server` | Social-backend suite (routes, storage, rooms) |
+| `npm run i18n:audit` | Translation-debt ratchet — fails only when untranslated strings grow |
+| `npm run docs:audit` | Docs link + orphan audit — fails on a broken link, an orphan doc, or a snapshot with no status |
+| `npm run test:pvp` / `test:lookup` | The same live suites against an already-running server (`VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp`) — parent monorepo only |
 | `npm run verify` | typecheck + test + build |
 | `npm run poki:audit` | Run every extracted Poki rule check, rewrite `docs/poki/COMPLIANCE.md` (add `-- --run` to execute the build/zip/thumbnail gates too) |
 | `npm run poki:preflight` | The full pre-submission pass: build portals → gates → thumbnail check → audit |
@@ -82,6 +99,7 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 | `npm run botsim` | Headless load test: N real WebSocket pilots on the wire protocol |
 | `npm run botsim:40` | 40-pilot load + anti-cheat + resume run (the CI gate) |
 | `npm run physcheck` | Physics determinism harness |
+| `npm run bench:physics` | Hot-path benchmark (`scripts/bench-physics.ts`): ns/step solo and 40-bird, height-cache hit/miss, terrain probes — the numbers behind the `physics-perf` gate |
 | `npm run gen-icons` | Regenerate PWA icons |
 
 ## Testing
@@ -91,8 +109,8 @@ For the flight/performance changes and measurement limits, see [Flight & perform
 - **Unit** — `npm test`: pure-function coverage across PvP rating, challenges, mastery, economy, ghost codecs, protocol parsing, and bit-exact `Bird.step()` determinism on seeded terrain.
 - **Stability** — the suite is loop-safe: 100 consecutive runs green with zero flakes (each run is independent; no shared state, no wall-clock dependence — season/week tests are timezone-independent).
 - **Multiplayer smoke** — `npm run test:mp` joins two real WebSocket clients to the same room through the dev proxy and asserts roster visibility plus live state frames (`peers-visible=true`, 5+ frames in 4 s).
-- **Load** — `npm run botsim:40`: 40 real WebSocket pilots on the shipped protocol. Gated in `.github/workflows/botsim.yml`; the Rust job requires cheat containment (`--require-anticheat`), so a regression that lets a teleport through fails the build. The same harness runs against the Node reference server (`server/sunbird-server.mjs`), where both implementations must agree: a dropped pilot has to come back to the *same room* it was racing in, and finish places must stay unique per race.
-- **Rust** — `cargo fmt --check`, `cargo clippy`, `cargo test` in [rust/](./rust/).
+- **Load** — `npm run botsim:40`: 40 real WebSocket pilots on the shipped protocol. Gated in the parent monorepo's `botsim.yml`; the Rust job requires cheat containment (`--require-anticheat`), so a regression that lets a teleport through fails the build. The same harness runs against the Node reference server (`server/sunbird-server.mjs`), where both implementations must agree: a dropped pilot has to come back to the *same room* it was racing in, and finish places must stay unique per race. Neither server is in this checkout.
+- **Rust** — `cargo fmt --check`, `cargo clippy`, `cargo test` in the parent monorepo's `rust/` workspace. Not in this checkout, so it is not in this repo's CI.
 
 ## Builds & portals
 
@@ -115,7 +133,7 @@ Every portal zip is self-contained (`index.html` + `icons/` + `fonts/`), uses on
 | Any build without WebRTC / a backend | Local AI flock (the UI says so) | none |
 
 The split is enforced, not assumed: `pnpm isolation:check` fails if the Rust stack names
-a platform integration, if `@poki/netlib` is imported outside `src/game/PokiNetlib.ts`, or
+a platform integration, if `@poki/netlib` is imported outside `src/sdk/PokiNetlib.ts`, or
 if the self-hosted client reaches the Poki transport at runtime; the portal markers
 (`verify:portals`, `audit:zips`, `verify:upload`) do the same for the shipped bundles — no
 `auds.poki.io` outside Poki, and no `/mp/v1/`, `sunbird-social` or `ws://` anywhere in a
@@ -130,7 +148,7 @@ rust/           Cargo workspace: sunbird-protocol + sunbird-server (Axum WS)
 api/            Vercel leaderboard functions (+ _lib)
 backend/        Optional Cloudflare Workers: ghosts, telemetry, Stripe webhook entitlements (server-side only)
 server/social/  Optional PGlite social layer (friends, squads, feed)
-scripts/        verify-prod, mp-smoke, physcheck, portal packaging, icon gen
+scripts/        verify-prod, mp-smoke, physcheck, bench-physics, portal packaging, icon gen
 public/         PWA manifest, service worker, icons, self-hosted fonts
 ```
 
@@ -158,8 +176,8 @@ fails the build on a broken link, an orphan doc, or a snapshot without a status.
 
 - **Frontend** — Vercel: `vercel deploy --prod` (config in `vercel.json`). See [DEPLOY.md](./DEPLOY.md).
 - **Leaderboard** — Vercel Functions in `api/`, persisted in Upstash Redis (required for production; in-memory fallback for previews).
-- **Multiplayer** — Self-hosted Rust: `docker compose up -d --build` (Rust server + TS social backend, see [DEPLOY.md](./DEPLOY.md)) or `cargo build --release -p sunbird-server`. In-memory rooms cost nothing while empty. See [rust/README.md](./rust/README.md).
-- **Portals** — `npm run build:portals` produces submission-ready zips for Poki, CrazyGames, and 10+ generic HTML5 portals.
+- **Multiplayer** — Self-hosted Rust, in the parent monorepo: `docker compose up -d --build` (Rust server + TS social backend, see [DEPLOY.md](./DEPLOY.md)) or `cargo build --release -p sunbird-server`. Neither the `rust/` workspace nor `server/sunbird-server.mjs` is in this checkout, so the load and Rust gates above run there, not here.
+- **Portals** — this checkout is the **Poki-only** fork, so `npm run build:poki` is the one portal build: it produces `sunbird-poki.zip` and the `poki-upload/` folder the Poki Inspector takes. There is no `build:portals`/`build:crazy`/`build:generic` here; see the note at the top of this file.
 
 ## Game systems
 

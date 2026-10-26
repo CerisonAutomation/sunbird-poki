@@ -9,6 +9,9 @@ import type { Bird } from "./Bird";
 export const CLIP_SHOTS = ["chase", "hero", "finish", "crash", "overtake"] as const;
 export type ClipShot = (typeof CLIP_SHOTS)[number];
 
+/** Ceiling on impact shake under Soft Camera — see `CameraRig.setSoftCamera`. */
+const SOFT_SHAKE_CAP = 0.55;
+
 export type ClipPose = {
   offsetX: number;
   offsetY: number;
@@ -76,6 +79,19 @@ export function mixClipPose(from: ClipPose, to: ClipPose, t: number): ClipPose {
  */
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
+  /**
+   * Smoothed velocity, feeding every lead / roll / dolly target in update().
+   *
+   * The framing filters are damped, and a damped filter fed a RAW velocity
+   * still carries that velocity's steps — it lowers the amplitude, it does not
+   * remove the discontinuity. The launch mutates bird.vx/vy in place after the
+   * physics step, so a perfect launch stepped vy by ~18 u/s in one 8.3 ms tick
+   * and lurched the camera on the best moment of a run.
+   */
+  private smoothVx = 0;
+  private smoothVy = 0;
+  /** Seconds since the last `playing` frame — drives the coast-stiffness ease. */
+  private sincePlaying = 0;
   private lookX = 50;
   private lookY = 20;
   private camX = 40;
@@ -88,6 +104,8 @@ export class CameraRig {
   private intro = 1;
   private punchZ = 0;
   private reduceMotion = false;
+  /** The milder accessibility tier — see `setSoftCamera`. */
+  private softCamera = false;
   private baseFov = 50;
   /**
    * Distance actually used for this frame's framing. The bird reads it for its
@@ -106,6 +124,14 @@ export class CameraRig {
   private clipShot: ClipShot | null = null;
   private clipSpeed = 0;
   private clipAlt = 0;
+  /**
+   * Floating-origin recenter point (see TerrainSystem.recenter()). camX/
+   * camY/camZ/lookX/lookY stay true world coordinates throughout this
+   * class — only the final GPU-facing camera transform in apply() shifts,
+   * so worldX/worldY/worldZ below keep returning values other systems
+   * (occlusion, name tags) can compare against absolute world x.
+   */
+  private originX = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1400);
@@ -126,9 +152,28 @@ export class CameraRig {
     if (v) this.shake = 0;
   }
 
+  /**
+   * The milder accessibility tier, deliberately separate from Reduce Motion.
+   *
+   * Reduce Motion strips the camera back to almost nothing. Soft Camera keeps
+   * the game fully playable and keeps its follow framing, and removes only the
+   * three things known to provoke motion sickness: the dolly-zoom (a background
+   * that warps while the subject holds still), the banked roll, and un-capped
+   * impact shake. Speed framing, the chase cam and the frame rate all stay —
+   * removing those is what makes a game unplayable rather than uncomfortable.
+   */
+  setSoftCamera(v: boolean): void {
+    this.softCamera = v;
+    if (!v) return;
+    // Switching it on mid-flight has to take effect now, not fade out over the
+    // next second while the player watches the world they were avoiding.
+    this.dolly = this.dollyVel = this.orbit = this.orbitTarget = this.rollTilt = 0;
+    this.shake = Math.min(this.shake, SOFT_SHAKE_CAP);
+  }
+
   bump(amount: number): void {
     if (this.reduceMotion) return;
-    this.shake = Math.min(2.2, this.shake + amount);
+    this.shake = Math.min(this.softCamera ? SOFT_SHAKE_CAP : 2.2, this.shake + amount);
   }
 
   punch(amount: number): void {
@@ -141,13 +186,13 @@ export class CameraRig {
    * a perfect launch — the single most cinematic beat in the game.
    */
   dollyZoom(strength: number): void {
-    if (this.reduceMotion) return;
+    if (this.reduceMotion || this.softCamera) return;
     this.dollyVel += strength;
   }
 
   /** A brief banked camera roll used when a big launch fires. */
   tilt(amount: number): void {
-    if (this.reduceMotion) return;
+    if (this.reduceMotion || this.softCamera) return;
     this.orbitTarget = clamp(amount, -0.32, 0.32);
   }
 
@@ -164,6 +209,7 @@ export class CameraRig {
   }
 
   snapTo(bird: Bird): void {
+    this.sincePlaying = 0;
     this.lookX = bird.x + 10;
     this.lookY = bird.y + 5;
     this.camX = bird.x - 2;
@@ -183,10 +229,57 @@ export class CameraRig {
    * fraction, so it can never hide behind the centered menu card whatever
    * the speed or altitude. Gameplay framing untouched.
    */
-  update(dt: number, bird: Bird, playing: boolean, groundY = 0, attract = false, fever = false): void {
-    const speed = bird.speed();
-    const sNorm = clamp(speed / MAX_SPEED, 0, 1.2);
-    const alt = bird.altitude;
+  update(
+    dt: number,
+    bird: Bird,
+    playing: boolean,
+    groundY = 0,
+    attract = false,
+    fever = false,
+    /**
+     * The position the bird is DRAWN at, when render interpolation is active.
+     *
+     * The mesh is drawn at `lerp(prev, now, acc/PHYS_DT)` while `bird.x/y` sit
+     * on the 120 Hz simulation staircase. Following the raw sim here put the
+     * camera up to one full physics step behind the sprite it is framing —
+     * 1.07 units at the fever speed cap, ~19 px at 720p — sawtoothing at the
+     * physics rate. The camera's own lag filter hides the ripple in the camera
+     * but cannot do anything for the mesh, which carries the full offset, so
+     * the bird visibly slid around inside its own screen anchor and the world
+     * it was flying over disagreed with the controls.
+     *
+     * Omitted by the versus path, which keeps its own interpolated camera.
+     */
+    viewX?: number,
+    viewY?: number,
+  ): void {
+    // The camera follows the sprite, not the simulation.
+    const bx = viewX ?? bird.x;
+    const by = viewY ?? bird.y;
+
+    // Smoothed velocity, used for every lead / roll / dolly term.
+    //
+    // The framing targets below are damped filters, and a damped filter fed a
+    // RAW velocity still carries that velocity's steps — it reduces the
+    // amplitude, it does not remove the discontinuity. The worst offender is
+    // the launch: `LaunchSystem.evaluate` mutates `bird.vx/vy` in place
+    // (boost multiplier plus a vertical kick) and runs AFTER the physics step
+    // for that frame, so a perfect launch moves vy by ~18 u/s and sNorm past
+    // 1.0 in a single 8.3 ms step. Raw, that stepped vLead into camY's target,
+    // zoom by ~3 units, and the roll target — a visible lurch on the single
+    // best moment of a run.
+    //
+    // One pre-filter here fixes all of them at once, and costs two lerps.
+    // 25 ms time constant — fast enough to feel snappy on a launch, slow enough
+    // to prevent the single-frame velocity spike from lurching the camera.
+    const kVel = 1 - Math.exp(-dt / 0.025);
+    this.smoothVx += (bird.vx - this.smoothVx) * kVel;
+    this.smoothVy += (bird.vy - this.smoothVy) * kVel;
+    const svx = this.smoothVx;
+    const svy = this.smoothVy;
+    const sSpeed = Math.hypot(svx, svy);
+    const sNorm = clamp(sSpeed / MAX_SPEED, 0, 1.2);
+    const alt = by - groundY;
 
     // How far out we frame: speed pulls back a little, altitude a lot.
     const altPull =
@@ -205,9 +298,9 @@ export class CameraRig {
     // distance. Pull back gently on narrow aspects so the bird and the next
     // landing both stay readable instead of crowding the edges.
     const portraitPull = clamp((0.9 - this.camera.aspect) * 18, 0, 10);
-    const flightHeight = Math.max(0, bird.y - groundY);
+    const flightHeight = Math.max(0, by - groundY);
     const groundFrame = attract ? 0 : smoothstep(15, 55, flightHeight);
-    const horizontalFit = clamp(bird.vx * 0.8, 28, 72) / (2 * Math.tan(this.baseFov * Math.PI / 360) * this.camera.aspect * 0.6);
+    const horizontalFit = clamp(svx * 0.8, 28, 72) / (2 * Math.tan(this.baseFov * Math.PI / 360) * this.camera.aspect * 0.6);
     const fitZoom = (flightHeight + 16) / (2 * Math.tan(this.baseFov * Math.PI / 360) * 0.70);
     const zoom = Math.max(attract ? 0 : Math.max(fitZoom, horizontalFit) * groundFrame + portraitPull, CAMERA_BASE_Z + sNorm * 14 + altPull + portraitPull - this.punchZ + this.dolly * 5 + (attract ? 12 : 0));
     // Published for the bird's readability compensation (see Bird.syncVisual).
@@ -219,7 +312,7 @@ export class CameraRig {
     // puts the bird at ~28% screen width on any viewport (fixed offsets
     // drift behind the card as speed/altitude change the zoom).
     const visibleHalfWidth = Math.tan((this.fov * Math.PI) / 360) * zoom * this.camera.aspect;
-    const gameplayAhead = 9.5 + speed * CAMERA_LOOKAHEAD + altPull * 0.12;
+    const gameplayAhead = 9.5 + sSpeed * CAMERA_LOOKAHEAD + altPull * 0.12;
     // Portrait screens expose far less horizontal world than desktop. A fixed
     // look-ahead was wider than the entire phone camera, sending the bird off
     // the left edge. Keep it in the readable left third at every aspect ratio.
@@ -228,7 +321,7 @@ export class CameraRig {
     // the rounded viewport/cutout). A tighter lead keeps the bird readable
     // while still leaving enough terrain visible ahead for timing landings.
     const ahead = attract ? 0.72 * visibleHalfWidth : Math.min(gameplayAhead, 0.32 * visibleHalfWidth);
-    const targetLookX = bird.x + ahead;
+    const targetLookX = bx + ahead;
     // When very high, bias the look point downward so the landscape stays in frame
     // and the player can time their descent to the next landing.
     const downBias =
@@ -236,38 +329,63 @@ export class CameraRig {
       smoothstep(ALT_HIGH, ALT_STRATO, alt) * 24;
     // Slightly lower look point + higher camera = a gentle top-down tilt: the
     // bird frames against the ground (readable landings) instead of the sky.
-    const targetLookY = lerp(bird.y + 3.2 - downBias, (bird.y + groundY) * 0.5, groundFrame);
+    const targetLookY = lerp(by + 3.2 - downBias, (by + groundY) * 0.5, groundFrame);
 
     // Rising fast? Lead the climb. Falling from height? Lead the descent.
-    const vLead = clamp(bird.vy * 0.12, -14, 18) * smoothstep(6, 40, alt) * (1 - groundFrame);
+    const vLead = clamp(svy * 0.12, -14, 18) * smoothstep(6, 40, alt) * (1 - groundFrame);
 
     // Attract tracks snappily: at demo speed the lazy menu damping lags the
     // look point ~25 units behind, which eats the margin and slides the bird
     // back under the card. Gameplay damping untouched.
-    const k = 1 - Math.pow(playing || attract ? 0.006 : 0.05, dt);
-    const kSlow = 1 - Math.pow(playing ? 0.02 : 0.05, dt);
+    //
+    // The retention step from 0.006 (playing) to 0.05 (everything else) is a
+    // 63% change in stiffness, and it used to fire the instant a run ended —
+    // the exact frame the player is watching the bird coast to a stop, so the
+    // camera visibly loosened mid-coast. Attract mode wants the loose value, so
+    // it keeps it; a live run that has simply ended eases into it over
+    // COAST_SETTLE_SECONDS instead of stepping.
+    const COAST_SETTLE_SECONDS = 0.5;
+    const coast = !playing && !attract ? Math.min(1, this.sincePlaying / COAST_SETTLE_SECONDS) : 0;
+    // 0.006 → 0.05, interpolated, not stepped.
+    const holdRet = 0.006 + (0.05 - 0.006) * coast;
+    const k = 1 - Math.pow(attract ? 0.006 : holdRet, dt);
+    const kSlow = 1 - Math.pow(attract ? 0.05 : 0.02 + (0.05 - 0.02) * coast, dt);
+    this.sincePlaying = playing ? 0 : this.sincePlaying + dt;
     this.lookX = lerp(this.lookX, targetLookX, k);
     this.lookY = lerp(this.lookY, targetLookY + vLead * 0.35, kSlow);
 
     // Keep the ground on screen when we are miles up, but never below it.
     // Camera rides a little higher so the bird frames against the terrain
     // rather than tree canopies at low altitude.
-    const wantY = lerp(bird.y + 8.5 + altPull * 0.16, targetLookY + 8.5, groundFrame) + vLead;
+    const wantY = lerp(by + 8.5 + altPull * 0.16, targetLookY + 8.5, groundFrame) + vLead;
     const floorY = groundY + 6.5;
 
     // Attract bypasses the intro sweep (it never decays in the menu, so it
     // would sit as a permanent offset and push the bird back under the
     // card). Run-start sweeps in gameplay are untouched.
     const introK = attract ? 0 : this.intro;
-    this.camX = lerp(this.camX, bird.x - 1.5 + introK * 6, k);
+    this.camX = lerp(this.camX, bx - 1.5 + introK * 6, k);
     this.camY = lerp(this.camY, Math.max(floorY, wantY) + introK * 4, kSlow);
-    this.camZ = lerp(this.camZ, zoom + introK * 10, Math.min(1, kSlow * (zoom > this.camZ ? 2.8 : 1.4)));
+    // Dolly speed is a separate filter from the pan, so it gets its own
+    // retention rather than a multiplier on kSlow.
+    //
+    // `kSlow * 2.8` did NOT mean "2.8× faster": kSlow is already a per-frame
+    // factor of the form `1 - r^dt`, and scaling it linearly both mis-specifies
+    // the time constant (measured ~7.6× stiffer than intended at 60 fps) and,
+    // worse, saturates. `Math.min(1, kSlow * 2.8)` reaches 1 once dt ≥ 113 ms
+    // — inside the 250 ms the frame-time clamp explicitly allows for slow
+    // phones — and the camera's Z then SNAPS to target in one frame while its
+    // X and Y are still smoothly damping, so the world jumps toward the player
+    // on exactly the devices least able to hide it. A retention root cannot
+    // saturate, so this is safe at any dt.
+    const kDollyOut = 1 - Math.pow(0.02, dt / (zoom > this.camZ ? 2.8 : 1.4));
+    this.camZ = lerp(this.camZ, zoom + introK * 10, kDollyOut);
 
     // Banked roll settles back to level so the horizon never stays crooked.
     this.orbitTarget = lerp(this.orbitTarget, 0, 1 - Math.pow(0.08, dt));
     this.orbit = lerp(this.orbit, this.orbitTarget, 1 - Math.pow(0.02, dt));
     // Airborne pitch reads as the bird "hanging" at apex.
-    this.rollTilt = lerp(this.rollTilt, this.reduceMotion ? 0 : clamp(-bird.vy * 0.004, -0.09, 0.09) * (1 - groundFrame), 1 - Math.pow(0.05, dt));
+    this.rollTilt = lerp(this.rollTilt, this.reduceMotion || this.softCamera ? 0 : clamp(-svy * 0.004, -0.09, 0.09) * (1 - groundFrame), 1 - Math.pow(0.05, dt));
 
     // Dynamic FOV: widens with speed, kicks +8 in fever (spec: FOV+8 fever),
     // and counter-narrows during a dolly-zoom so the subject holds size
@@ -311,16 +429,28 @@ export class CameraRig {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Floating-origin recenter — see TerrainSystem.recenter(). */
+  recenter(newOriginX: number): void {
+    this.originX = newOriginX;
+  }
+
+  /** True (unshifted) world-space camera position — for game logic that
+   *  compares against absolute world x (occlusion, name tags). Never use
+   *  camera.position for that: it is render-local (see apply()). */
+  get worldX(): number {
+    return this.camX;
+  }
+
   private apply(): void {
     const overlay: ClipPose = this.clipShot && this.clipMix > 0
       ? mixClipPose(CHASE_POSE, clipPose(this.clipShot, this.clipSpeed, this.clipAlt), this.clipMix)
       : CHASE_POSE;
     this.camera.position.set(
-      this.camX + this.shakeX + overlay.offsetX,
+      this.camX - this.originX + this.shakeX + overlay.offsetX,
       this.camY + this.shakeY + overlay.offsetY,
       this.camZ + overlay.offsetZ,
     );
-    this.camera.lookAt(this.lookX, this.lookY, 0);
+    this.camera.lookAt(this.lookX - this.originX, this.lookY, 0);
     this.camera.rotation.z = this.shakeX * 0.01 + this.orbit + overlay.roll;
     this.camera.rotation.x += this.rollTilt;
     if (overlay.fovDelta !== 0 && Math.abs(this.clipMix) > 0) {

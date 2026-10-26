@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameplayEventSink } from "../GameplayEvents";
-import { PokiAdapter } from "../../sdk/poki";
+import { PokiAdapter, markPokiBooted } from "../../sdk/poki";
 
 /**
  * Poki analytics coverage — the event surface that feeds Poki's dashboard.
@@ -18,6 +18,13 @@ import { PokiAdapter } from "../../sdk/poki";
 
 afterEach(() => {
   delete (window as unknown as { PokiSDK?: unknown }).PokiSDK;
+});
+
+// The doubles below stand in for a fully booted SDK; boot ordering itself is
+// pinned separately in src/sdk/__tests__/poki-boot-order.test.ts, where the
+// flag has to still be false.
+beforeEach(() => {
+  markPokiBooted();
 });
 
 type Calls = string[];

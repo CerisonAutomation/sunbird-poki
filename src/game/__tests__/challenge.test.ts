@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChallengeUrl, packChallengeToken, unpackChallengeToken } from "../Challenge";
+import { buildChallengeUrl, packChallengeToken, unpackChallengeToken } from "../DeepLinks";
 
 /**
  * The rival-link payload is `seed.distance.encodedName` inside

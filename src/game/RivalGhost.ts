@@ -25,6 +25,7 @@
  */
 import { clamp, SeededRandom } from "./math";
 import { GHOST_MAX_SAMPLES, GHOST_SAMPLE_DT } from "./constants";
+import { paceSkillFor } from "./Engagement";
 import type { GhostRecord } from "./Ghost";
 
 /** The slice of `TerrainSystem` this needs (kept structural so it stays testable). */
@@ -77,7 +78,15 @@ const MAX_TIME = 240;
  * this time.
  */
 export function synthesizePaceGhost(opts: PaceGhostOptions): PaceGhost {
-  const skill = clamp(opts.skill ?? 0.55, 0, 1);
+  // The caller's `skill` is the *pilot's* skill, not the ghost's. `paceSkillFor`
+  // is the tested "pace slightly above the player, never a humiliation" curve
+  // (Engagement.ts): it lifts a struggling pilot's ghost off the floor and caps
+  // a strong pilot's at 0.88. Clamping the raw value into 0..1 instead — which
+  // is what this used to do — let a skill-1.0 pilot chase a max-cruise,
+  // max-dive line no one can catch, and let a non-numeric skill (NaN) poison
+  // `cruise` so the loop guard failed on the first tick and the pilot got a
+  // one-sample "rival" that never moved.
+  const skill = paceSkillFor(opts.skill ?? 0.55);
   const rng = new SeededRandom(`${opts.seed}:pace`);
   const target = Math.max(120, opts.distance);
 
@@ -170,7 +179,7 @@ export function paceName(distance: number): string {
  * that is the feeling that makes somebody tap Fly Again.
  */
 export function paceTargetDistance(personalBest: number, rng: () => number = Math.random): number {
-  if (personalBest <= 0) return 320 + Math.round(rng() * 120);
+  if (personalBest <= 0) return 180 + Math.round(rng() * 80);
   // 102%..112% of best: beatable with one clean run, never a walkover.
   const stretch = 1.02 + rng() * 0.1;
   return Math.round(personalBest * stretch);

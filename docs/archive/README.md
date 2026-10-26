@@ -10,7 +10,8 @@ evidence lives in [`../audits/`](../audits/).
 | Doc | Why it is here | Replaced by |
 | --- | --- | --- |
 | [`POKI_DOCS.md`](./POKI_DOCS.md) | Flat extract of the Poki developer guide (saved 2026-09-22), no rule IDs, nothing machine-checkable | [`../poki/`](../poki/) — the same corpus as 131 numbered rules + `requirements.json`, audited by `pnpm poki:audit` |
-| [`RUST_MIGRATION_PLAN.md`](./RUST_MIGRATION_PLAN.md) | Written before the Rust workspace existed; its central premise ("no Rust backend exists") is now false | [`../../rust/README.md`](../../rust/README.md) + [`../../LEADERBOARD_API.md`](../../LEADERBOARD_API.md); the split is pinned by `pnpm isolation:check` |
+| [`TODO_ROUND3.md`](./TODO_ROUND3.md) | The 5-expert defect-fix round — every task checked, closed with `ALL_TASKS_COMPLETE` | [`../HANDOFF.md`](../HANDOFF.md) for current state |
+| [`RUST_MIGRATION_PLAN.md`](./RUST_MIGRATION_PLAN.md) | Written before the Rust workspace existed; its central premise ("no Rust backend exists") is now false | the parent monorepo's `rust/` workspace + [`../../LEADERBOARD_API.md`](../../LEADERBOARD_API.md); the split is pinned by `pnpm isolation:check` |
 | [`REPO_TRUTH_AUDIT.md`](./REPO_TRUTH_AUDIT.md) | Repository state as of M2 integration, with counts from that tree (212 tests; the suite is now ~1,400) | [`../../ROADMAP.md`](../../ROADMAP.md) + `pnpm gate` |
 | [`GAME_AUDIT_2026-09.md`](./GAME_AUDIT_2026-09.md) | Competitive gap analysis vs top mobile/web titles plus its implementation log (2026-09-11) | [`../BENCHMARKS.md`](../BENCHMARKS.md) |
 | [`ARCHITECTURE_REVIEW-tmultiworlds-2026-09.md`](./ARCHITECTURE_REVIEW-tmultiworlds-2026-09.md) | Review of an external Bevy/replicon proposal; the proposal was not adopted | [`../BENCHMARKS.md`](../BENCHMARKS.md) §3–4 for the multiplayer architecture that shipped |

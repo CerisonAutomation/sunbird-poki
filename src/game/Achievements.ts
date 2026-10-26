@@ -20,7 +20,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "flights_25", title: "Frequent Flyer", desc: "Complete 25 flights", rarity: "silver", target: 25, metric: (s) => s.state.runsPlayed },
   { id: "dist_25k", title: "Horizon Chaser", desc: "Fly 25,000 m lifetime", rarity: "silver", target: 25000, metric: (s) => s.state.lifetime.distance },
   { id: "coins_1500", title: "Treasure Nest", desc: "Earn 1,500 coins lifetime", rarity: "silver", target: 1500, metric: (s) => s.state.lifetime.coins },
-  { id: "zenith_20", title: "High Flyer", desc: "Hit 20 zenith moments lifetime", rarity: "silver", target: 20, metric: (s) => s.state.lifetime.zeniths },
+  { id: "zenith_20", title: "High Flyer", desc: "Hit 20 apex moments lifetime", rarity: "silver", target: 20, metric: (s) => s.state.lifetime.apexMoments },
   { id: "flights_100", title: "Sky Veteran", desc: "Complete 100 flights", rarity: "gold", target: 100, metric: (s) => s.state.runsPlayed },
   { id: "dist_100k", title: "World Wanderer", desc: "Fly 100,000 m lifetime", rarity: "gold", target: 100000, metric: (s) => s.state.lifetime.distance },
   { id: "coins_5000", title: "Golden Nest", desc: "Earn 5,000 coins lifetime", rarity: "gold", target: 5000, metric: (s) => s.state.lifetime.coins },
@@ -28,8 +28,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "biomes_all", title: "Cartographer", desc: "Visit every island biome", rarity: "silver", target: BIOMES.length, metric: (s) => s.state.biomesSeen.length },
   { id: "island_10", title: "Beyond the Map", desc: "Reach island 10 in one flight", rarity: "gold", target: 10, metric: (s) => s.state.farthestIsland + 1 },
   { id: "ghost_10", title: "Self Rival", desc: "Beat your own ghost 10 times", rarity: "platinum", target: 10, metric: (s) => s.state.lifetime.ghostBeats },
-  { id: "zenith_75", title: "Stratosphere", desc: "Hit 75 zenith moments lifetime", rarity: "platinum", target: 75, metric: (s) => s.state.lifetime.zeniths },
-  { id: "prestige", title: "Sunbird Prestige", desc: "Own Gold and VIP", rarity: "platinum", target: 1, metric: (s) => (s.state.gold && s.state.vip ? 1 : 0) },
+  { id: "zenith_75", title: "Stratosphere", desc: "Hit 75 apex moments lifetime", rarity: "platinum", target: 75, metric: (s) => s.state.lifetime.apexMoments },
+  // Was "Own Gold and VIP" - a platinum trophy PERMANENTLY locked on the
+  // shipping build, where VIP has no purchase. It now asks for the half a
+  // player can actually earn, so the tier is reachable and still rare.
+  { id: "prestige", title: "Sunbird Prestige", desc: "Own Sunbird Gold", rarity: "platinum", target: 1, metric: (s) => (s.state.gold ? 1 : 0) },
   { id: "duel_1", title: "First Blood", desc: "Win a ranked duel", rarity: "bronze", target: 1, metric: (s) => s.state.duel.wins },
   { id: "duel_10", title: "Duelist", desc: "Win 10 ranked duels", rarity: "silver", target: 10, metric: (s) => s.state.duel.wins },
   { id: "duel_50", title: "Blademaster of the Sky", desc: "Win 50 ranked duels", rarity: "gold", target: 50, metric: (s) => s.state.duel.wins },
@@ -54,7 +57,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "skins_12", title: "Fashion Icon", desc: "Own 12 bird skins", rarity: "gold", target: 12, metric: (s) => s.state.ownedSkins.length },
   { id: "island_20", title: "Deep Explorer", desc: "Reach island 20", rarity: "platinum", target: 20, metric: (s) => s.state.farthestIsland + 1 },
   { id: "ghost_25", title: "Ghost Hunter", desc: "Beat your ghost 25 times", rarity: "platinum", target: 25, metric: (s) => s.state.lifetime.ghostBeats },
-  { id: "races_50", title: "Racing Legend", desc: "Complete 50 races", rarity: "gold", target: 50, metric: (s) => s.state.runsPlayed },
+  { id: "races_50", title: "Racing Legend", desc: "Complete 50 races", rarity: "gold", target: 50, metric: (s) => s.state.racesRun },
   { id: "flights_200", title: "Sky Master", desc: "Complete 200 flights", rarity: "platinum", target: 200, metric: (s) => s.state.runsPlayed },
   { id: "sunflower_10", title: "Bloom Bouncer", desc: "Bounce off 10 sunflowers", rarity: "bronze", target: 10, metric: (s) => s.state.lifetime.sunflowers },
   { id: "sunflower_50", title: "Sun Worshipper", desc: "Bounce off 50 sunflowers", rarity: "silver", target: 50, metric: (s) => s.state.lifetime.sunflowers },
@@ -98,5 +101,25 @@ export class Achievements {
     let n = 0;
     for (const def of ACHIEVEMENTS) if (unlocked.has(def.id) || def.metric(this.save) >= def.target) n++;
     return { unlocked: n, total: ACHIEVEMENTS.length };
+  }
+
+  /**
+   * The not-yet-unlocked trophy closest to completion (by progress ratio) —
+   * surfaced during flight as "X/Y toward [trophy]" so players see
+   * achievement progress without leaving the run to open the Trophy Case.
+   * Null once every trophy is unlocked.
+   */
+  nearest(): AchievementView | null {
+    let best: AchievementView | null = null;
+    let bestRatio = -1;
+    for (const v of this.view()) {
+      if (v.unlocked) continue;
+      const ratio = v.def.target > 0 ? v.progress / v.def.target : 0;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = v;
+      }
+    }
+    return best;
   }
 }

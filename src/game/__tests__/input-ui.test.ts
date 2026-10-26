@@ -59,6 +59,55 @@ it.each(["start", "retry"])("does not capture the pointer for %s buttons", actio
   expect(mark).not.toHaveBeenCalled();
 });
 
+// A pointer press on a flight-HUD control must not leave that control holding
+// DOM focus. Desktop browsers focus a button on mousedown and nothing in the
+// game blurred it, so `onKeyDown`'s "a focused control owns Space/Enter" guard
+// swallowed every dive key afterwards — tap Mute, return to the sky, hold
+// Space, nothing happened.
+describe("pointer presses do not strand focus on a flight-HUD control", () => {
+  function playHudButton(host: HTMLElement): HTMLButtonElement {
+    const hud = document.createElement("div");
+    hud.className = "play-hud";
+    const button = document.createElement("button");
+    button.dataset.action = "set-mute";
+    hud.append(button);
+    host.append(hud);
+    return button;
+  }
+
+  it("blurs the HUD control the pointer landed on", () => {
+      const { host } = fixture();
+      const button = playHudButton(host);
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+      expect(document.activeElement).not.toBe(button);
+    });
+
+  it("leaves overlay controls alone — OverlayNavigation owns focus there", () => {
+    const { host } = fixture();
+    const overlay = document.createElement("div");
+    overlay.className = "overlay menu";
+    const button = document.createElement("button");
+    overlay.append(button);
+    host.append(overlay);
+    button.focus();
+    button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    // Menus must keep focus, or keyboard menuing breaks: Space/Enter is how
+    // the focused control gets activated.
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("lets the dive key work again after a HUD control is pressed", () => {
+    const { host, input } = fixture();
+    const button = playHudButton(host);
+    button.focus();
+    button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+    expect(key(host, "Space").defaultPrevented).toBe(true);
+    expect(input.diving).toBe(true);
+  });
+});
+
 it("supports independent A/L keys, held aliases, and blur recovery", () => {
   const { host, input } = fixture();
   key(host, "KeyA"); key(host, "KeyL");

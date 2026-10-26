@@ -35,6 +35,32 @@ import { OfflineOutbox } from "./resilience/OfflineOutbox";
 // Root-namespace routes (`/board`, `/score`) — apiBase.ts owns the derivation
 // so the two callers cannot drift apart again.
 const API = backendBase("");
+/**
+ * NOT A SECURITY BOUNDARY — read this before trusting the signature.
+ *
+ * `VITE_LEADERBOARD_SALT` is a Vite env var, which means Vite **inlines its
+ * value into the client bundle at build time**. It is inside `dist/` and
+ * inside `sunbird-poki.zip` in plain text. Anyone can unzip the game, read
+ * this salt, and mint a valid HMAC for any distance or score they like, so
+ * the signature the server checks proves only that the submitter also has the
+ * game file. It is tamper-*evidence* against an accidentally or casually
+ * edited client — not an anti-cheat control.
+ *
+ * The symmetric design is the problem, not the key's length: a client-side
+ * signer has to hold the secret, and a secret the client holds is a public
+ * secret. Do not read a passing signature on a score as evidence the run
+ * happened.
+ *
+ * What actually makes a submitted score trustworthy is the server re-deriving
+ * it from something the client cannot fabricate. The fixed-step sim is
+ * already a pure function of (seed, per-tick inputs) — `physics.test.ts`
+ * re-flies seeded terrain bit-exactly with no renderer — so replay validation
+ * on the server is the real fix, and it is tracked as such in ROADMAP.md. It
+ * is not done, and a 40-pilot mass race cannot be replayed cheaply at all
+ * because `dragMult` folds in the live field via `massRace.draftFor`, so a
+ * replayable tape needs a server-side field sim before it can be enforced
+ * there.
+ */
 const SALT = import.meta.env.VITE_LEADERBOARD_SALT ?? "";
 const AUDS: PokiAuds | null =
   (import.meta.env.VITE_PORTAL_TARGET as string | undefined) === "poki"
@@ -56,6 +82,18 @@ const NAME_KEY = "sunbird.pilotname";
 
 export type BoardScope = "global" | "daily" | "week" | "friends";
 export type BoardMetric = "distance" | "altitude" | "perfects" | "coins" | "score";
+
+/**
+ * Every `BoardMetric`, in board order — the single canonical list.
+ *
+ * Three places needed this and each used to keep its own copy:
+ * `localBestByDevice()` (all five), the board screen's metric tabs (all
+ * five), and `submit()`'s publish loop (FOUR — `score` was missing, so the
+ * Score tab rendered a surface nothing ever wrote to). A restated list is
+ * how that happened, so this is now derived from the union and the union is
+ * the only thing to edit.
+ */
+export const BOARD_METRICS: readonly BoardMetric[] = ["distance", "altitude", "perfects", "coins", "score"];
 
 export type BoardEntry = {
   id: string;
@@ -173,12 +211,30 @@ function metricOf(row: { distance: number; altitude: number; perfects: number; c
 
 const valueForMetric = metricOf;
 
+/**
+ * The metrics this run is worth publishing: every `BoardMetric` the run beat
+ * the device's PREVIOUS personal best on.
+ *
+ * `previousBest` must be sampled before the row is persisted. Handed a map
+ * that already contains the row being judged, every metric compares equal or
+ * worse and this returns `[]` — which is exactly how the Poki edition's
+ * global board ended up empty on every metric. The sampling site in `submit()`
+ * is the thing that has to stay correct, so it is a one-liner call and this
+ * is where the rule lives.
+ */
+export function metricsToPublish(
+  row: Parameters<typeof valueForMetric>[0],
+  previousBest: ReadonlyMap<BoardMetric, number>,
+): BoardMetric[] {
+  return BOARD_METRICS.filter((m) => valueForMetric(row, m) > (previousBest.get(m) ?? 0));
+}
+
 /** The device's current personal-best for each metric (from the local store),
  *  used to avoid spamming AUDS with runs that didn't beat anything. */
 function localBestByDevice(): Map<BoardMetric, number> {
   const out = new Map<BoardMetric, number>();
   for (const r of readLocal()) {
-    for (const m of ["distance", "altitude", "perfects", "coins", "score"] as BoardMetric[]) {
+    for (const m of BOARD_METRICS) {
       const v = valueForMetric(r, m);
       if (v > (out.get(m) ?? 0)) out.set(m, v);
     }
@@ -188,12 +244,46 @@ function localBestByDevice(): Map<BoardMetric, number> {
 
 /* ----------------------------------------------------------- local store */
 
+/**
+ * Coerce one persisted row into a `StoredRow`, or reject it.
+ *
+ * localStorage is player-writable, and a bare `parsed as StoredRow[]` trusts it.
+ * `[{"name":123}]` then reaches `escapeHtml`, which calls `.replace` on a
+ * number and throws inside the HUD template build; `[null]` throws in
+ * `metricOf` on the run-submit path. Both are self-inflicted (a tampered row
+ * cannot be uploaded on the Poki build, where the HTTP sink is disabled), but a
+ * corrupted cache should degrade to an empty board, not a broken screen.
+ *
+ * Every other persistence boundary here re-validates on read — `SaveData.load`
+ * is CRC-sealed and coerces, `pilots.ts` and `Squad.ts` shape-guard. This was
+ * the one store that got a type assertion where its neighbours got a guard.
+ */
+function coerceStoredRow(value: unknown): StoredRow | null {
+  if (!value || typeof value !== "object") return null;
+  const r = value as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    deviceId: String(r.deviceId ?? ""),
+    name: String(r.name ?? "Pilot").slice(0, 24),
+    skin: String(r.skin ?? "sunbird").slice(0, 32),
+    seed: String(r.seed ?? "").slice(0, 40),
+    mode: String(r.mode ?? "").slice(0, 24),
+    distance: Math.max(0, num(r.distance)),
+    altitude: Math.max(0, num(r.altitude)),
+    perfects: Math.max(0, Math.floor(num(r.perfects))),
+    coins: Math.max(0, Math.floor(num(r.coins))),
+    score: Math.max(0, num(r.score)),
+    durationMs: Math.max(0, Math.floor(num(r.durationMs))),
+    date: String(r.date ?? ""),
+  };
+}
+
 function readLocal(): StoredRow[] {
   try {
     const raw = storage.getItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    return parsed as StoredRow[];
+    return parsed.map(coerceStoredRow).filter((r): r is StoredRow => r !== null);
   } catch {
     return [];
   }
@@ -253,6 +343,13 @@ export class Leaderboard {
   private cache = new Map<string, BoardPage>();
   private inflight = new Map<string, Promise<BoardPage>>();
   private lastError = "";
+  /** Whether the most recent `fetch()` left a backend error behind.
+   *  `page.stale` cannot answer this on a portal build: it is gated on the
+   *  self-hosted `API` being configured, and this fork ships Poki-only, so
+   *  `stale` is permanently false even when every AUDS call was rejected. */
+  get failed(): boolean {
+    return this.lastError.length > 0;
+  }
   /** Score uploads that failed while offline queue here (deduped per
    * run/metric, capped, 7-day TTL) and drain on the next online moment. */
   private readonly outbox = new OfflineOutbox({ storeKey: "sunbird.outbox.score.v1" });
@@ -317,6 +414,14 @@ export class Leaderboard {
       if (AUDS && scope === "global") {
         try {
           const res = await AUDS.fetchTop({ metric, deviceId: this.deviceId, limit: 50 });
+          // `fetchTop` reports every failure as `null` — a rejected status, a
+          // dead network, a session the platform will not authenticate — and
+          // never throws, so nothing downstream could tell "no answer" from
+          // "answered with nothing". That is how a rejected call went
+          // unrecorded and the caller kept re-asking: five rejected requests
+          // in ten seconds while the local board rendered perfectly well
+          // beside them. Record it here, where the expectation is known.
+          if (!res && !this.lastError) this.lastError = "leaderboard unavailable";
           if (res) {
             this.lastError = "";
             const entries: BoardEntry[] = res.entries.map((it) => ({
@@ -380,6 +485,18 @@ export class Leaderboard {
     const verdict = verifyRunSubmission(sub);
     if (!verdict.valid) return;
     const row: StoredRow = { ...sub, date: dateSeed() };
+
+    // Read the device's personal bests BEFORE this run is persisted.
+    //
+    // This ordering is load-bearing. `localBestByDevice()` scans the local
+    // store, so reading it after `writeLocal(rows)` means `bestLocal` already
+    // contains the very row being judged: `prev >= valueForMetric(row, m) === v`,
+    // which makes `if (v <= prev) continue` true for EVERY metric. The AUDS
+    // publish loop below was therefore a guaranteed no-op — the Poki edition's
+    // global board stayed empty on all five metrics, not merely on whichever
+    // ones the publish list happened to name. Read first, write second.
+    const bestLocal = localBestByDevice();
+
     const rows = readLocal().filter((r) => r.deviceId !== sub.deviceId || r.date !== row.date);
     rows.push(row);
     rows.sort((a, b) => b.distance - a.distance);
@@ -389,8 +506,7 @@ export class Leaderboard {
     // Only submit when this run beat the device's existing best for the
     // metric — otherwise we'd spam AUDS / the HTTP backend with a flood of
     // mediocre runs and pollute the public board.
-    const metrics: BoardMetric[] = ["distance", "altitude", "perfects", "coins"];
-    const bestLocal = localBestByDevice();
+    const metrics = metricsToPublish(row, bestLocal);
 
     if (API) {
       void signScore(row.deviceId, row.distance, row.score)

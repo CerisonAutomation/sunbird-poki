@@ -1,8 +1,8 @@
 import type { SkinView } from "./Economy";
 
 export type ShopFilter = "all" | "owned" | "affordable" | "nature" | "cosmic" | "elements" | "legendary";
-export type ShopBrowse = { query: string; filter: ShopFilter; preview: string };
-export const newShopBrowse = (): ShopBrowse => ({ query: "", filter: "all", preview: "" });
+export type ShopBrowse = { query: string; filter: ShopFilter };
+export const newShopBrowse = (): ShopBrowse => ({ query: "", filter: "all" });
 
 /** Search is literal, bounded and local. Never execute user input as a regex. */
 export function browseSkins(skins: readonly SkinView[], browse: ShopBrowse): SkinView[] {

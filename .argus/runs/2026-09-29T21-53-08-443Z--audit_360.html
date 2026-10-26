@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARGUS — sunbird-poki — audit_360</title>
+<style>
+:root{--bg:#ffffff;--surface:#f8fafc;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#6366f1}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0f19;--surface:#151b2b;--border:#252d40;--text:#e8edf7;--muted:#8b97ad;--accent:#818cf8}}
+:root[data-theme="dark"]{--bg:#0b0f19;--surface:#151b2b;--border:#252d40;--text:#e8edf7;--muted:#8b97ad;--accent:#818cf8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 20px;max-width:1180px;margin:0 auto}
+header{border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:28px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:-.02em}
+.eye{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 50% 50%,var(--accent) 0 34%,transparent 36%),conic-gradient(from 0deg,var(--accent),#a78bfa,var(--accent));display:inline-block}
+.meta{color:var(--muted);font-size:13px;margin-top:8px;display:flex;flex-wrap:wrap;gap:14px}
+.meta code{background:var(--surface);padding:2px 7px;border-radius:5px;border:1px solid var(--border);font-size:12px}
+.hero{display:flex;align-items:center;gap:28px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:26px;margin-bottom:24px;flex-wrap:wrap}
+.grade{width:104px;height:104px;border-radius:22px;display:grid;place-items:center;font-size:46px;font-weight:800;color:#fff;flex-shrink:0}
+.hero-body{flex:1;min-width:220px}
+.verdict{font-size:26px;font-weight:750;letter-spacing:-.02em}
+.hero-sub{color:var(--muted);margin-top:5px}
+.trend{display:inline-block;margin-top:10px;padding:4px 12px;border-radius:999px;background:var(--bg);border:1px solid var(--border);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:18px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.count{background:var(--accent);color:#fff;border-radius:999px;padding:1px 9px;font-size:11px;letter-spacing:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px}
+.stat-val{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.stat-lab{color:var(--muted);font-size:12px;margin-top:3px}
+.dim{margin-bottom:15px}
+.dim-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.dim-name{font-weight:600;font-size:14px}
+.dim-score{font-weight:700;font-variant-numeric:tabular-nums}
+.track{height:7px;background:var(--bg);border-radius:99px;overflow:hidden;border:1px solid var(--border)}
+.fill{height:100%;border-radius:99px;transition:width .4s}
+.dim-reason{color:var(--muted);font-size:12px;margin-top:4px}
+ol,ul{padding-left:20px}
+li{margin-bottom:7px}
+.blockers{border-left:3px solid #ef4444}
+.blockers li{color:#ef4444;font-weight:500}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+th{text-align:left;padding:9px 11px;border-bottom:2px solid var(--border);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+td{padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid;text-transform:uppercase;letter-spacing:.04em}
+.more{color:var(--muted);font-size:12px;margin-top:10px}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:36px;padding-top:18px;border-top:1px solid var(--border)}
+a{color:var(--accent)}
+</style></head><body>
+<header>
+  <div class="brand"><span class="eye"></span> ARGUS</div>
+  <div class="meta">
+    <span>📦 <strong>sunbird-poki</strong></span>
+    <span>🔧 <code>audit_360</code></span>
+    <span>🕐 Tue, 29 Sep 2026 21:53:08 GMT</span>
+    
+    <span>⚡ 48563ms</span>
+    <span>v1.1.0</span>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="grade" style="background:#ef4444">F</div>
+  <div class="hero-body">
+    <div class="verdict" style="color:#ef4444">HOLD</div>
+    <div class="hero-sub">Score <strong>42</strong> — Critical — do not ship</div>
+    <div class="trend">📈 stable (0)</div>
+  </div>
+</div>
+
+<section class="card blockers"><h2>🚫 Blocking issues</h2><ul><li>43 secrets in working tree</li></ul></section>
+
+<section class="card"><h2>✅ Recommended actions</h2><ol><li>Rotate and remove 43 exposed secrets</li><li>Delete 154 orphan files (~25081 dead lines)</li><li>Write tests for storageHealth and 4 other high-risk exports</li><li>Refactor for() — cyclomatic 97</li></ol></section>
+
+<section class="card"><h2>📊 Dimensions</h2><div class="dim">
+    <div class="dim-head"><span class="dim-name">Security</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">No critical security issues</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Test Coverage</span><span class="dim-score" style="color:#22c55e">100</span></div>
+    <div class="track"><div class="fill" style="width:100%;background:#22c55e"></div></div>
+    <div class="dim-reason">230 test files / 269 source files (86%)</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Code Quality</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">41 quality findings</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Reliability</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">23 memory issues, 7 swallowed errors</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Type Safety</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">TypeScript strictness and any usage</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Architecture</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">26 oversized files</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">CI/CD</span><span class="dim-score" style="color:#22c55e">90</span></div>
+    <div class="track"><div class="fill" style="width:90%;background:#22c55e"></div></div>
+    <div class="dim-reason">GitHub Actions configured</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Documentation</span><span class="dim-score" style="color:#22c55e">85</span></div>
+    <div class="track"><div class="fill" style="width:85%;background:#22c55e"></div></div>
+    <div class="dim-reason">README present</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Memory</span><span class="dim-score" style="color:#ef4444">0</span></div>
+    <div class="track"><div class="fill" style="width:2%;background:#ef4444"></div></div>
+    <div class="dim-reason">23 potential memory leaks</div>
+  </div><div class="dim">
+    <div class="dim-head"><span class="dim-name">Debt</span><span class="dim-score" style="color:#22c55e">100</span></div>
+    <div class="track"><div class="fill" style="width:100%;background:#22c55e"></div></div>
+    <div class="dim-reason">0 TODO/FIXME comments</div>
+  </div></section>
+
+<section class="card">
+      <h2>Security</h2>
+      <div class="stats"><div class="stat "><div class="stat-val">19</div><div class="stat-lab">codeFindings</div></div><div class="stat "><div class="stat-val">43</div><div class="stat-lab">secrets</div></div><div class="stat "><div class="stat-val">0</div><div class="stat-lab">cves</div></div><div class="stat "><div class="stat-val">0</div><div class="stat-lab">criticalCves</div></div><div class="stat "><div class="stat-val">7</div><div class="stat-lab">infraMisconfigs</div></div></div>
+    </section>
+<section class="card">
+      <h2>Quality</h2>
+      <div class="stats"><div class="stat "><div class="stat-val">98</div><div class="stat-lab">astAntiPatterns</div></div><div class="stat "><div class="stat-val">5.6</div><div class="stat-lab">avgComplexity</div></div><div class="stat "><div class="stat-val">30</div><div class="stat-lab">untestableFunctions</div></div><div class="stat "><div class="stat-val">97</div><div class="stat-lab">totalFindings</div></div><div class="stat "><div class="stat-val">61</div><div class="stat-lab">confidence</div></div></div>
+    </section>
+<section class="card">
+      <h2>Dead Code</h2>
+      <div class="stats"><div class="stat "><div class="stat-val">154</div><div class="stat-lab">orphanFiles</div></div><div class="stat "><div class="stat-val">14</div><div class="stat-lab">unusedExports</div></div><div class="stat "><div class="stat-val">0</div><div class="stat-lab">unusedDependencies</div></div><div class="stat "><div class="stat-val">25,081</div><div class="stat-lab">estimatedDeadLines</div></div></div>
+    </section>
+<section class="card">
+      <h2>Testing</h2>
+      <div class="stats"><div class="stat "><div class="stat-val">85.5%</div><div class="stat-lab">ratio</div></div><div class="stat "><div class="stat-val">261</div><div class="stat-lab">untestedExports</div></div><div class="stat "><div class="stat-val">78%</div><div class="stat-lab">exportCoverage</div></div></div>
+    </section>
+<section class="card">
+      <h2>Churn Hotspots <span class="count">5</span></h2>
+      <div class="scroll"><table>
+        <thead><tr><th>file</th><th>commits</th><th>risk</th></tr></thead>
+        <tbody><tr><td>src/game/HUD.ts</td><td>43</td><td><span class="pill" style="background:#ef444422;color:#ef4444;border-color:#ef444455">critical</span></td></tr><tr><td>src/game/Game.ts</td><td>31</td><td><span class="pill" style="background:#ef444422;color:#ef4444;border-color:#ef444455">critical</span></td></tr><tr><td>src/game/ui.css</td><td>14</td><td><span class="pill" style="background:#f9731622;color:#f97316;border-color:#f9731655">high</span></td></tr><tr><td>TODO.md</td><td>13</td><td><span class="pill" style="background:#f9731622;color:#f97316;border-color:#f9731655">high</span></td></tr><tr><td>package.json</td><td>11</td><td><span class="pill" style="background:#f9731622;color:#f97316;border-color:#f9731655">high</span></td></tr></tbody>
+      </table></div>
+      
+    </section>
+<section class="card">
+      <h2>Dimensions <span class="count">10</span></h2>
+      <div class="scroll"><table>
+        <thead><tr><th>name</th><th>score</th><th>reason</th></tr></thead>
+        <tbody><tr><td>Security</td><td>0</td><td>No critical security issues</td></tr><tr><td>Test Coverage</td><td>100</td><td>230 test files / 269 source files (86%)</td></tr><tr><td>Code Quality</td><td>0</td><td>41 quality findings</td></tr><tr><td>Reliability</td><td>0</td><td>23 memory issues, 7 swallowed errors</td></tr><tr><td>Type Safety</td><td>0</td><td>TypeScript strictness and any usage</td></tr><tr><td>Architecture</td><td>0</td><td>26 oversized files</td></tr><tr><td>CI/CD</td><td>90</td><td>GitHub Actions configured</td></tr><tr><td>Documentation</td><td>85</td><td>README present</td></tr><tr><td>Memory</td><td>0</td><td>23 potential memory leaks</td></tr><tr><td>Debt</td><td>100</td><td>0 TODO/FIXME comments</td></tr></tbody>
+      </table></div>
+      
+    </section>
+
+<footer>Generated by <a href="https://github.com/CerisonAutomation/argus-mcp">ARGUS</a> v1.1.0 · 2026-09-29T21:53:08.443Z</footer>
+</body></html>

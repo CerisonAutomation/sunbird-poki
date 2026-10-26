@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { HUD_SOURCE as HUD } from "./hudSource";
 
 /**
  * Escaping contract for user-controlled text.
@@ -22,8 +21,6 @@ import { join } from "node:path";
  * Each check is non-vacuous: it confirms the escaped form exists as well as
  * bounding the bare form, so it cannot pass by the field being deleted.
  */
-const HUD = readFileSync(join(process.cwd(), "src", "game", "HUD.ts"), "utf8");
-
 describe("HUD escaping contract", () => {
   it("escapeHtml covers the full attribute-and-text character set", () => {
     const src = HUD.slice(HUD.indexOf("function escapeHtml"));

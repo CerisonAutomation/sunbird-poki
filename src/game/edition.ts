@@ -12,7 +12,7 @@ export const LEADERBOARD_CLOUD_LABEL = "Poki";
 export const POKI_EDITION = true;
 
 export const POKI_MULTIPLAYER = true;
-export const SIMULATED_BREAKS = false;
+export const SIMULATED_BREAKS = import.meta.env.VITE_SIM_BREAKS === true;
 
 export const SQUAD_CHAT = false;
 

@@ -1,5 +1,14 @@
 # Production Readiness Plan — Multi-App Audit & Monitoring
 
+> **This is the Poki fork; full infrastructure in parent monorepo.** The gap
+> register below was written against the parent monorepo, which includes the
+> `rust/` room server and the `server/` social backend (REST router, DB
+> store, Dockerfile). Neither exists in this checkout — only the client and
+> the `api/` Vercel leaderboard functions do. Rows citing `rust/...` or
+> `server/src/...` describe infrastructure outside this repo; the "Apps
+> Under Management" table likewise spans the parent org's other projects,
+> not just this one.
+
 ## Sunbird Service Gap Register (verified against code, 2026-09-16)
 
 Every production-MVP blocker was re-verified against the actual code on this date. ✅ = implemented **with tests** in-repo; 🟡 = handled at deploy level (docs/proxy); ⬜ = deferred by decision.
@@ -15,7 +24,8 @@ Every production-MVP blocker was re-verified against the actual code on this dat
 | WS/HTTP origin enforcement (explicit allowlist in prod; `*` in dev) | ✅ | `rust/.../ws.rs origin_allowed`, `main.rs cors_layer` |
 | Request-body caps + 3 s request timeout + payload size validation | ✅ | `main.rs` layers, `sunbird-protocol` parse caps |
 | **Storage health gate** — corrupt state file refuses boot (no silent empty DB); failing disk degrades loudly (no timer crash, honest `/health`, 503 `storageDegraded`, recovery re-green) | ✅ | `server/src/store/db.ts` (`storageStatus()`, contained `flush()`), `http/api.ts` + `http/legacy.ts` health routes — 7 tests in `server/tests/db.test.ts` |
-| Social backend inside the gates (typecheck + tests + CI) | ✅ | `pnpm typecheck:server` / `pnpm test:server` (`vitest.server.config.ts`), wired into `pnpm verify` and `.github/workflows/ci.yml` |
+| Social backend inside the gates (typecheck + tests + CI) | ⬜ | **N/A in this checkout** — the backend is in the parent monorepo. The scripts that claimed otherwise (`typecheck:server`, `test:server`, `verify:server`, `verify:full`) pointed at a `server/tsconfig.json` and a server test tree that do not exist here, and both exited 1; they have been deleted rather than left dangling. `verify-isolation.mjs` and the `isolation:check` gate handle the same split correctly — a missing `rust/` root is a fact about the checkout, not a failure |
+| Client gates wired and passing | ✅ | `pnpm verify` (typecheck + 2,878 tests + build), `lint`, `audit:ui`, `i18n:audit`, `docs:audit`, `verify:prod` — all green on `main`. See the note above this table: the rows citing `rust/…` or `server/src/…` describe infrastructure outside this repo |
 | Edge leaderboard fail-closed in production (503 without KV + signing; /api/health reflects readiness) | ✅ | `api/health.ts`, `api/board.ts`, `api/score.ts` |
 | TLS termination | 🟡 | Terminate at the proxy (see `DEPLOY.md`); both Dockerfiles ship HTTP-only binaries behind it. No app-side `http://` assumptions. |
 | Containerization | ✅ | Root `Dockerfile` (rust server), `server/Dockerfile` (social), `rust/deploy/gcloud/` |

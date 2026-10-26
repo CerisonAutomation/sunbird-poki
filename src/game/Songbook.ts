@@ -61,8 +61,6 @@ export type Song = {
   /** Stable id, also the "now playing" label. */
   readonly title: string;
   readonly role: SongRole;
-  /** Original character-score cue: preferred for ordinary flight rotation. */
-  readonly sunbirdScore: boolean;
   /** Islands this song suits while flying. */
   readonly biomes: readonly BiomeId[];
   readonly bpm: number;
@@ -109,11 +107,7 @@ export type Song = {
 type Voices = Partial<Record<Voice, true>>;
 
 /** A song as authored: note names, like the sketch it came from. */
-<<<<<<< HEAD
-type Spec = Omit<Song, "bars" | "lead" | "use" | "squareBass" | "sunbirdScore"> & {
-=======
 type Spec = Omit<Song, "bars" | "lead" | "alt" | "use" | "squareBass"> & {
->>>>>>> 5e01e2f9779b5eb484f75a8b8a940454f2480c2e
   readonly bars: readonly (readonly string[])[];
   readonly lead: readonly (string | 0)[];
   /** The answering bar. Optional: a song without one sings `lead` throughout. */
@@ -123,7 +117,6 @@ type Spec = Omit<Song, "bars" | "lead" | "alt" | "use" | "squareBass"> & {
    *  (`/funk|disco|rock|beep/`), so it is carried per song rather than guessed
    *  from the role — which had "Fusion Walk" playing the one bass it is not. */
   readonly squareBass?: boolean;
-  readonly sunbirdScore?: boolean;
 };
 
 const NOTE_INDEX: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -171,43 +164,12 @@ const SPECS: readonly Spec[] = [
 
   /* -------------------------------------------------------------- flight -- */
   {
-    title: "Star Bumper", role: "play", biomes: ["green", "tropical"], bpm: 84, steps: 16, swing: 0.18, delay: 0.28, wet: 0.18,
+    title: "Star Bumper", role: "play", biomes: ["green", "tropical", "canyon"], bpm: 88, steps: 16, swing: 0.18, delay: 0.28, wet: 0.18,
     bars: [["C3", "C4", "E4", "G4", "B4"], ["E3", "E3", "G#3", "B3", "D4"], ["F3", "F3", "A3", "C4", "E4"], ["F3", "F3", "Ab3", "C4", "Eb4"]],
     lead: ["G4", 0, "E4", "G4", "A4", 0, "G4", "E4", "C5", 0, "G4", "A4", "G4", "F4", "E4", "C4"],
     alt: ["C5", 0, "A4", "G4", 0, "F4", "A4", 0, "B4", 0, "C5", 0, "A4", "G4", "E4", 0],
     drums: "x...x...x...x...|..s...s...s...s.|.h.h.h.h.h.h.h.h",
-    use: { bass: true, rhodes: true, uke: true, chime: true, pad: true, voice: true },
-  },
-  // Four original flight cues shaped around the user's favourite OST moods:
-  // nocturnal swing, drumless ember lift, cloud-scale momentum and glyph-like
-  // puzzle rhythm. They are fresh arrangements, not copies of those pieces.
-  {
-    title: "Moonlit Canopy", role: "play", biomes: ["night"], bpm: 80, steps: 16, swing: 0.08, delay: 0.34, wet: 0.22,
-    bars: [["G2", "G3", "Bb3", "D4", "F4"], ["Eb3", "Eb4", "G4", "Bb4"], ["F2", "F3", "A3", "C4", "Eb4"], ["Bb2", "Bb3", "D4", "F4", "A4"]],
-    lead: ["D5", 0, "Bb4", "G4", 0, "A4", "Bb4", 0, "D5", "F5", 0, "Eb5", "D5", "Bb4", "A4", 0],
-    drums: "x.......x.......|....s.......s...|..h.h...h...h...",
-    use: { bass: true, rhodes: true, chime: true, pad: true, voice: true },
-  },
-  {
-    title: "Ember Lift", role: "play", biomes: ["volcano"], bpm: 58, steps: 16, swing: 0, delay: 0.46, wet: 0.3,
-    bars: [["F2", "F3", "A3", "C4", "E4"], ["C3", "C4", "E4", "G4"], ["A2", "A3", "C4", "E4"], ["G2", "G3", "B3", "D4", "F4"]],
-    lead: ["C5", 0, 0, "A4", 0, "G4", 0, 0, "E4", 0, "G4", 0, "A4", 0, "C5", 0],
-    drums: "................|................|................",
-    use: { bass: true, rhodes: true, chime: true, pad: true, voice: true },
-  },
-  {
-    title: "Cloud Colossus", role: "play", biomes: ["aurora"], bpm: 96, steps: 16, swing: 0.03, delay: 0.24, wet: 0.16,
-    bars: [["D2", "D3", "F#3", "A3", "C4"], ["B2", "B3", "D4", "F#4"], ["G2", "G3", "B3", "D4", "F4"], ["A2", "A3", "C#4", "E4", "G4"]],
-    lead: ["A4", 0, "D5", "F#5", "A5", 0, "F#5", "D5", "B4", 0, "D5", "E5", "F#5", 0, "A4", 0],
-    drums: "x...x...x...x...|....s.......s...|h.h.h.h.h.h.h.h.",
-    use: { bass: true, rhodes: true, chime: true, pad: true, voice: true },
-  },
-  {
-    title: "Mosaic Riddle", role: "play", biomes: ["canyon"], bpm: 70, steps: 16, swing: 0.14, delay: 0.3, wet: 0.18,
-    bars: [["D2", "D3", "F3", "A3", "C4"], ["Bb2", "Bb3", "D4", "F4"], ["F2", "F3", "Ab3", "C4", "Eb4"], ["C3", "C4", "E4", "G4", "Bb4"]],
-    lead: ["F4", 0, "A4", 0, "C5", "A4", 0, "F4", "Eb4", 0, "G4", "Bb4", 0, "A4", "F4", 0],
-    drums: "x.....x...x.....|......s.......s.|.h..h.h..h.h..h.",
-    use: { bass: true, rhodes: true, uke: true, chime: true, voice: true },
+    use: { bass: true, rhodes: true, uke: true, chip: true, voice: true },
   },
   {
     title: "Bright Star", role: "play", biomes: ["green", "sunset", "tropical"], bpm: 89, steps: 16, swing: 0.06, delay: 0.26, wet: 0.14,
@@ -544,7 +506,6 @@ const ALL_VOICES: readonly Voice[] = ["bass", "rhodes", "uke", "chip", "chime", 
 /** Note names → MIDI once, at load, so playback works in numbers. */
 export const SONGBOOK: readonly Song[] = SPECS.map((spec) => ({
   ...spec,
-  sunbirdScore: spec.sunbirdScore === true,
   squareBass: spec.squareBass === true,
   bars: spec.bars.map((chord) => chord.map(parseNote)),
   lead: spec.lead.map((note) => (note === 0 ? 0 : parseNote(note))),

@@ -192,7 +192,11 @@ export class SongbookPlayer {
     // An island with no song of its own would be the one silent world on the
     // map, so fall back to the whole flight book rather than to nothing.
     const here = this.biome ? songsForBiome(this.biome) : [];
-    return here.length > 0 ? here : songsFor("play");
+    // Flight needs a coherent score rather than a shuffled genre playlist.
+    // The original character-score cues are present in every biome; ambience
+    // and the visual world still turn over, while the musical identity holds.
+    const score = here.filter((song) => song.sunbirdScore);
+    return score.length > 0 ? score : here.length > 0 ? here : songsFor("play");
   }
 
   /**

@@ -3026,8 +3026,12 @@ export class Game {
       this.massRace.clear();
       this.raceField = 0;
     }
-    // Give race modes something to actually aim at.
-    if (this.mode.finish > 0) this.finishGate.place(this.startX + this.mode.finish, this.terrain);
+    // Finite modes get an authored end drop and a sculptural destination gate.
+    if (this.mode.finish > 0) {
+      const finishX = this.startX + this.mode.finish;
+      this.terrain.setFinale(finishX);
+      this.finishGate.place(finishX, this.terrain);
+    }
     else this.finishGate.hide();
 
     // Race boosts are retained for a later solo flight, never spent invisibly.

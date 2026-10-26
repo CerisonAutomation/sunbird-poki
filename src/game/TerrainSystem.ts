@@ -5,7 +5,6 @@ import {
   CHUNK_RES,
   CHUNK_SIZE,
   DROP_START,
-  DROP_BLEND_START,
   GAP_START,
   ISLAND_PERIOD,
   OCEAN_FLOOR,
@@ -31,6 +30,28 @@ const CREST_CONFIRM = 14;
 
 /** One smooth cosine arch of terrain with an authored intent. */
 type Segment = { start: number; len: number; height: number; base: number; baseNext: number };
+type DropProfile = { blendStart: number; start: number; rampStart: number; shoulder: number; bowl: number };
+
+/**
+ * Every world ends in its own readable high shoulder → end-transfer drop →
+ * launch lip. The values are intentionally authored rather than random:
+ * players learn each world's rhythm, then recognise its final transfer.
+ */
+const WORLD_DROPS: readonly DropProfile[] = [
+  { blendStart: 620, start: DROP_START, rampStart: RAMP_START, shoulder: 34, bowl: 2.0 },
+  { blendStart: 585, start: DROP_START, rampStart: RAMP_START, shoulder: 42, bowl: 0.8 },
+  { blendStart: 600, start: DROP_START, rampStart: RAMP_START, shoulder: 46, bowl: -0.8 },
+  { blendStart: 610, start: DROP_START, rampStart: RAMP_START, shoulder: 52, bowl: -2.2 },
+  { blendStart: 560, start: DROP_START, rampStart: RAMP_START, shoulder: 60, bowl: -3.5 },
+  { blendStart: 630, start: DROP_START, rampStart: RAMP_START, shoulder: 48, bowl: -1.2 },
+  { blendStart: 575, start: DROP_START, rampStart: RAMP_START, shoulder: 64, bowl: -4.0 },
+  { blendStart: 625, start: DROP_START, rampStart: RAMP_START, shoulder: 58, bowl: -3.0 },
+  { blendStart: 545, start: DROP_START, rampStart: RAMP_START, shoulder: 72, bowl: -6.0 },
+];
+
+function dropProfileFor(island: number): DropProfile {
+  return WORLD_DROPS[Math.max(0, island) % WORLD_DROPS.length]!;
+}
 
 /** A sunflower bounce pad anchored to the hills. x/y are world coords. */
 type BouncePad = { x: number; y: number };
@@ -94,6 +115,8 @@ export class TerrainSystem {
   private crestScannedTo = -Infinity;
   /** Deterministic sunflower bounce pads, cached per island (like segments). */
   private readonly padCache = new Map<number, BouncePad[]>();
+  /** Optional finite-run finale. Endless modes leave this disabled. */
+  private finaleX = -1;
 
   constructor(seedStr: string, qualityTier: "lite" | "mid" | "high" = "high") {
     this.seedStr = seedStr;
@@ -157,13 +180,11 @@ export class TerrainSystem {
     const gapEnd = gapEndFor(island);
     const hills = this.hills(x, island);
 
+    const profile = dropProfileFor(island);
     const lip = rampPeakFor(island) + 14;
-    // One authored transfer per island: high shoulder -> huge clean descent
-    // -> wide bowl -> launch lip. No noise bumps to steal downhill momentum.
-    // Deeper valley = more vertical drop = more speed arriving at the launch ramp.
-    // Shoulder raised slightly so the initial descent cliff feels dramatic.
-    const shoulder = lip + 38 + hash01(island, this.seedN) * 8;
-    const valley = 1.2; // skim just above water — the bird nearly touches the ocean
+    // The general island stays even. Only the end-transfer is a full dive and
+    // recovery ramp, because that is the stored energy required to cross water.
+    const shoulder = lip + profile.shoulder + hash01(island, this.seedN) * 6;
     if (lx >= GAP_START && lx < gapEnd) {
       // Start at the actual ramp height, NOT the unrelated procedural hills.
       // The old branch had a vertical discontinuity precisely at take-off.
@@ -173,12 +194,13 @@ export class TerrainSystem {
     if (lx >= gapEnd) return 16;
 
     let h = hills;
-    if (lx >= DROP_START && lx < RAMP_START) {
-      h = lerp(shoulder, valley, smoothstep(DROP_START, RAMP_START, lx));
-    } else if (lx >= RAMP_START && lx < GAP_START) {
-      h = lerp(valley, lip, smoothstep(RAMP_START, GAP_START, lx));
-    } else if (lx >= DROP_BLEND_START) {
-      h = lerp(hills, shoulder, smoothstep(DROP_BLEND_START, DROP_START, lx));
+    const valley = profile.bowl;
+    if (lx >= profile.start && lx < profile.rampStart) {
+      h = lerp(shoulder, valley, smoothstep(profile.start, profile.rampStart, lx));
+    } else if (lx >= profile.rampStart && lx < GAP_START) {
+      h = lerp(valley, lip, smoothstep(profile.rampStart, GAP_START, lx));
+    } else if (lx >= profile.blendStart) {
+      h = lerp(hills, shoulder, smoothstep(profile.blendStart, profile.start, lx));
     }
 
     // Flat, continuous shore across the wrap, then ease into the next hills.
@@ -188,6 +210,19 @@ export class TerrainSystem {
       const w = 1 - smoothstep(160, 270, x);
       const tutorial = 16 + 15 * Math.cos((x - 48) * 0.027);
       h = lerp(h, Math.max(4.5, tutorial), w);
+    }
+
+    // Finite maps use the same end-transfer energy shape at their finish.
+    if (this.finaleX > 0) {
+      const fx = this.finaleX;
+      const start = fx - 285;
+      if (x >= start && x <= fx + 34) {
+        const entry = this.hills(start, island) + 26;
+        if (x < fx - 230) h = lerp(h, entry, smoothstep(start, fx - 230, x));
+        else if (x < fx - 108) h = lerp(entry, -10, smoothstep(fx - 230, fx - 108, x));
+        else if (x < fx) h = lerp(-10, 16, smoothstep(fx - 108, fx, x));
+        else h = 16;
+      }
     }
     return h;
   }
@@ -248,6 +283,14 @@ export class TerrainSystem {
 
   islandIndex(x: number): number {
     return Math.max(0, Math.floor(x / ISLAND_PERIOD));
+  }
+
+  /** Author a readable final descent for finite maps. */
+  setFinale(x: number): void {
+    this.finaleX = x > 0 ? x : -1;
+    this.hKey.fill(0x7fffffff);
+    this.crestScannedTo = -Infinity;
+    this.crests.length = 0;
   }
 
   localX(x: number): number {
@@ -505,7 +548,7 @@ export class TerrainSystem {
     const rng = new SeededRandom(`${this.seedStr}:sunflower:${island}`);
     const out: BouncePad[] = [];
     const base = island * ISLAND_PERIOD;
-    const landLimit = DROP_BLEND_START - 34; // keep clear of the launch ramp
+    const landLimit = dropProfileFor(island).blendStart - 28; // keep the drop readable
     let lx = 120 + rng.range(0, 60);
     while (lx < landLimit) {
       const wx = base + lx;
@@ -535,14 +578,31 @@ export class TerrainSystem {
       base = nextBase;
     };
 
-    // Island 0 opens gently: three teaching rollers with a clean rhythm.
-    if (island === 0) {
-      push(96, 15, 11);
-      push(80, 19, 12);
-      push(84, 23, 12);
+    // World-specific opening phrases. All nine keep the same *even rolling
+    // shelf* silhouette, but differ in spacing and cadence before their final
+    // transfer; no world hides a giant mid-island bowl.
+    const phrases: readonly (readonly [number, number, number])[] = [
+      [[92, 11, 0], [84, 14, 1], [96, 16, 0]],                    // Green: gentle teaching shelf
+      [[136, 13, 1], [74, 18, -1], [102, 13, 1]],                 // Tropical: broad surf pulses
+      [[68, 15, -1], [62, 18, 1], [76, 15, -1], [82, 18, 1]],    // Reef: even double-wave
+      [[122, 19, -1], [66, 21, 1], [88, 14, 0]],                  // Sunset: shelf + kicker
+      [[172, 17, 1], [144, 22, -1]],                               // Dunes: two enormous smooth rolls
+      [[58, 14, -1], [60, 17, 1], [58, 18, -1], [82, 18, 1]],    // Night: coastal chop, no trough
+      [[104, 22, 0], [66, 19, 1], [94, 16, -1]],                  // Aurora: ice shelf rhythm
+      [[62, 18, -1], [66, 22, 1], [72, 24, -1], [78, 17, 1]],    // Cinder: steady forge steps
+      [[164, 21, -1], [104, 25, 1], [78, 18, 0]],                 // Canyon: long transfer shelf
+    ];
+    const phrase = phrases[island % phrases.length]!;
+    for (const [len, height, drift] of phrase) {
+      const scaled = len * speedScale;
+      if (cursor + scaled > RAMP_START - 92) break;
+      push(scaled, height, clamp(base + drift, 7, 22));
     }
 
-    const budget = RAMP_START - cursor - 40;
+    // Island 0 opens gently: three teaching rollers with a clean rhythm.
+    if (island === 0 && cursor < 250) push(72, 14, 12);
+
+    const budget = dropProfileFor(island).blendStart - cursor - 22;
     let used = 0;
     let sincePerfect = 0;
     while (used < budget) {
@@ -551,15 +611,15 @@ export class TerrainSystem {
       let len: number;
       let height: number;
 
-      // Every 2 segments, lay a "perfect ramp sequence": deep valley -> kicker -> landing -> launch.
-      // V2: more frequent (was 3, now 2) and tighter, so you chain launches instead of gliding.
+      // Every 2 segments, lay a "perfect ramp sequence": small dip -> kicker
+      // -> landing -> launch. The base stays level instead of forming a bowl.
       if (sincePerfect >= 2 && remaining > 320 && roll > 0.35) {
         sincePerfect = 0;
         const s = speedScale;
-        push(72 * s, 22, base - 2); // deep carving valley — hold to carve
-        push(52 * s, 24, base + 1); // kicker with crisp lip — release!
-        push(62 * s, 17, base); // landing roller — quick touch
-        push(84 * s, 28, base); // big launch ramp — again!
+        push(78 * s, 15, base - 0.6); // shallow carve — hold to build speed
+        push(56 * s, 20, base + 0.8); // kicker with crisp lip — release!
+        push(70 * s, 14, base); // landing roller — quick touch
+        push(92 * s, 22, base + 0.4); // big launch ramp — again!
         used += (72 + 52 + 62 + 84) * s;
         continue;
       }
@@ -578,8 +638,8 @@ export class TerrainSystem {
         height = rng.range(32, 40);
       }
       if (len > remaining) len = Math.max(62, remaining);
-      const drift = rng.range(-2.5, 2.5);
-      push(len, height, clamp(base + drift, 7, 20));
+      const drift = rng.range(-1.1, 1.1);
+      push(len, Math.min(height, 25), clamp(base + drift, 9, 16));
       used += len;
       sincePerfect += 1;
     }
@@ -654,11 +714,52 @@ export class TerrainSystem {
         cRidge.lerp(snow, s * 0.6);
       }
 
-      // Harmonious terrain strata bands: rhythmic pastel layers that give handcrafted paper-cutout depth
-      const strata = Math.sin(y * 0.45 + x * 0.05) * 0.5 + 0.5;
-      const waveBand = Math.sin(x * 0.09) * 0.5 + 0.5;
-      cTop.lerp(cRidge, strata * 0.18 + waveBand * 0.1);
-      cMid.lerp(cDeep, strata * 0.28);
+      // Each island has its own *surface grammar*, rather than one generic
+      // stripe texture recoloured nine times. These are vertex colours on the
+      // existing BufferGeometry — no extra meshes or draw calls — but make the
+      // world read as Gaudí-inspired trencadís, catenary plaster, dune bands,
+      // moon-glaze or volcanic glass at side-view speed.
+      const phase = x * 0.05 + y * 0.45;
+      const stripe = Math.sin(phase) * 0.5 + 0.5;
+      const tile = (Math.sin(Math.floor(x * 0.34) * 2.17 + Math.floor(y * 0.26) * 3.71) + 1) * 0.5;
+      let topPattern = stripe * 0.18;
+      let wallPattern = stripe * 0.28;
+      switch (b.id) {
+        case "green": // soft ceramic meadow bands — the readable tutorial world
+          topPattern += (Math.sin(x * 0.09) * 0.5 + 0.5) * 0.1;
+          break;
+        case "tropical": // bright broken-tile lagoon facets
+          topPattern += tile * 0.2;
+          wallPattern += tile * 0.12;
+          break;
+        case "reef": // close-set coral mosaic — deliberately busier
+          topPattern += (tile * 0.6 + Math.sin(x * 0.19 - y * 0.22) * 0.2 + 0.2) * 0.22;
+          break;
+        case "sunset": // long hand-painted catenary ribbons
+          topPattern += (Math.sin(x * 0.032 + y * 0.16) * 0.5 + 0.5) * 0.23;
+          break;
+        case "desert": // sparse wind-carved bands preserve the huge dune read
+          topPattern = (Math.sin(x * 0.028 + y * 0.34) * 0.5 + 0.5) * 0.14;
+          wallPattern = topPattern * 1.4;
+          break;
+        case "night": // restrained moon-glaze; glow props remain the focal point
+          topPattern = stripe * 0.09 + tile * 0.06;
+          wallPattern = stripe * 0.16;
+          break;
+        case "aurora": // icy diagonal facets
+          topPattern += (Math.sin(x * 0.12 - y * 0.18) * 0.5 + 0.5) * 0.18;
+          break;
+        case "volcano": // obsidian layers, nearly black between ember seams
+          topPattern = (Math.sin(x * 0.075 + y * 0.7) * 0.5 + 0.5) * 0.12;
+          wallPattern = topPattern * 1.7;
+          break;
+        case "canyon": // large ceramic tesserae, readable across long transfers
+          topPattern += tile * 0.28;
+          wallPattern += tile * 0.16;
+          break;
+      }
+      cTop.lerp(cRidge, Math.min(0.44, topPattern));
+      cMid.lerp(cDeep, Math.min(0.5, wallPattern));
 
       // subtle per-vertex variation for a hand-painted feel
       const v = (hash01(Math.floor(x * 0.5), this.seedN + 77) - 0.5) * 0.05;
@@ -760,23 +861,25 @@ export class TerrainSystem {
     // Landmarks — rare one-off monuments (~1 chunk in 8) that make every
     // stretch of the world feel hand-placed instead of tiled. Built from the
     // same cheap primitives + shared Lambert materials as the normal props.
+    // Gaudí-inspired landmarks: organic spires with irregular ceramic colour
+    // blocks and a warm crown. They stay cheap because every part is instanced.
     this.decoParts.set("ancient", [
-      { geo: new THREE.CylinderGeometry(0.55, 0.9, 4.4, 7), mat: lam(0x5a3e2a), y: 2.2, s: 1 },
-      { geo: new THREE.IcosahedronGeometry(2.6, 0), mat: lam(0x2f7d4b), y: 5.6, s: 1 },
-      { geo: new THREE.IcosahedronGeometry(1.7, 0), mat: lam(0x3f9a5c), y: 7.0, s: 1 },
-      { geo: new THREE.IcosahedronGeometry(0.8, 0), mat: lam(0xffd76a), y: 8.1, s: 1 }, // sunlit crown
-      { geo: new THREE.SphereGeometry(0.22, 6, 5), mat: lam(0xff6a8a), y: 4.6, s: 1 }, // hanging bloom
+      { geo: new THREE.CylinderGeometry(0.55, 1.25, 5.2, 9), mat: lam(0xf0d19b), y: 2.6, s: 1 },
+      { geo: new THREE.TorusGeometry(1.45, 0.32, 6, 9, Math.PI), mat: lam(0x2c9b9a), y: 5.1, s: 1 },
+      { geo: new THREE.ConeGeometry(1.2, 3.6, 8), mat: lam(0xe27b63), y: 7.3, s: 1 },
+      { geo: new THREE.IcosahedronGeometry(0.8, 0), mat: lam(0xffd76a), y: 9.3, s: 1 },
+      { geo: new THREE.SphereGeometry(0.26, 6, 5), mat: lam(0x7862b4), y: 4.8, s: 1 },
     ]);
     this.decoParts.set("stones", [
-      { geo: new THREE.BoxGeometry(0.7, 2.6, 0.5), mat: lam(0x8a8078), y: 1.3, s: 1 },
-      { geo: new THREE.BoxGeometry(0.6, 2.1, 0.45), mat: lam(0x9a9088), y: 1.05, s: 1 },
-      { geo: new THREE.BoxGeometry(0.5, 1.7, 0.4), mat: lam(0x7a7068), y: 0.85, s: 1 },
-      { geo: new THREE.SphereGeometry(0.2, 6, 5), mat: lam(0x9ad8ff), y: 2.9, s: 1 }, // wisp light
+      { geo: new THREE.ConeGeometry(0.55, 3.4, 7), mat: lam(0x2c9b9a), y: 1.7, s: 1 },
+      { geo: new THREE.ConeGeometry(0.42, 2.8, 7), mat: lam(0xe27b63), y: 1.4, s: 1 },
+      { geo: new THREE.ConeGeometry(0.34, 2.2, 7), mat: lam(0x7862b4), y: 1.1, s: 1 },
+      { geo: new THREE.SphereGeometry(0.2, 6, 5), mat: lam(0xffd76a), y: 3.4, s: 1 },
     ]);
     this.decoParts.set("arch", [
-      { geo: new THREE.TorusGeometry(2.2, 0.34, 6, 10, Math.PI), mat: lam(0xc8a26a), y: 0.4, s: 1 },
-      { geo: new THREE.BoxGeometry(0.7, 0.5, 0.7), mat: lam(0xb08a52), y: 0.25, s: 1 },
-      { geo: new THREE.SphereGeometry(0.18, 6, 5), mat: lam(0xffb020), y: 2.9, s: 1 }, // keystone glint
+      { geo: new THREE.TorusGeometry(2.4, 0.38, 7, 12, Math.PI), mat: lam(0xf0d19b), y: 0.6, s: 1 },
+      { geo: new THREE.ConeGeometry(0.8, 2.6, 7), mat: lam(0x2c9b9a), y: 1.3, s: 1 },
+      { geo: new THREE.SphereGeometry(0.22, 6, 5), mat: lam(0xffb020), y: 3.2, s: 1 },
     ]);
     this.decoParts.get("stones")![3]!.mat.emissive.setHex(0x224466);
     this.decoParts.get("arch")![2]!.mat.emissive.setHex(0x663300);
@@ -853,11 +956,15 @@ export class TerrainSystem {
       propGroups.push({ props: placements, parts: propParts, faded: new Set<number>() });
     }
 
-    // Landmarks: roughly one chunk in eight gets a single monument, chosen by
-    // hash so the same seed always rebuilds the same world.
-    if (hash01(id, this.seedN + 601) < 0.125) {
-      const kinds: LandmarkKind[] = ["ancient", "stones", "arch"];
-      const kind = kinds[Math.floor(hash01(id, this.seedN + 602) * kinds.length) % kinds.length]!;
+    // Gaudí silhouettes are a core world read, not a rare easter egg. Each
+    // biome keeps a recognisable monument family while the hash varies its
+    // placement and rotation, so the nine worlds feel authored at a glance.
+    if (hash01(id, this.seedN + 601) < 0.28) {
+      const kindsByBiome: Record<string, LandmarkKind> = {
+        green: "arch", tropical: "arch", reef: "stones", sunset: "arch",
+        desert: "stones", night: "ancient", aurora: "arch", volcano: "stones", canyon: "ancient",
+      };
+      const kind = kindsByBiome[biome.id] ?? "arch";
       const lmParts = this.decoParts.get(kind);
       const lx0 = x0 + (0.3 + hash01(id, this.seedN + 603) * 0.4) * CHUNK_SIZE;
       const llx = this.localX(lx0);

@@ -30,7 +30,8 @@ import { runPhase as computeRunPhase, arrangement, arrangementGlide, ARR, type R
 
 type Voicing = number[];
 
-const BEAT_BPM = 132;
+// Slower breathing pulse: acoustic voices and the hill rhythm stay readable.
+const BEAT_BPM = 118;
 /**
  * How many times a section's 8-bar progression plays before the next section.
  *
@@ -595,11 +596,11 @@ export const BIOME_MIX: Record<BiomeMusicStyle, { bpm: number; fever: number; cu
   // Dreamy, open, magical — slower base tempos let the ocarina breathe.
   // Fever still surges hard; the contrast is what makes it feel like a
   // transformation instead of just a tempo bump.
-  bright:  { bpm: 130, fever: 158, cutoff: 5500,  uke: 0.88, glock: 0.60, bass: 0.92, perc: 0.96, whistle: 1.00, transpose: 0  },
-  warm:    { bpm: 124, fever: 150, cutoff: 4500,  uke: 1.04, glock: 0.52, bass: 1.00, perc: 0.92, whistle: 0.90, transpose: -2 },
-  airy:    { bpm: 132, fever: 160, cutoff: 6000,  uke: 0.72, glock: 0.62, bass: 0.80, perc: 1.06, whistle: 1.08, transpose: 2  },
-  wide:    { bpm: 126, fever: 154, cutoff: 5000,  uke: 0.78, glock: 0.54, bass: 1.10, perc: 0.94, whistle: 1.06, transpose: -3 },
-  night:   { bpm: 118, fever: 144, cutoff: 4000,  uke: 0.56, glock: 0.44, bass: 0.74, perc: 0.80, whistle: 0.88, transpose: -3 },
+  bright:  { bpm: 118, fever: 146, cutoff: 5200,  uke: 1.05, glock: 0.76, bass: 0.78, perc: 0.62, whistle: 1.02, transpose: 0  },
+  warm:    { bpm: 114, fever: 142, cutoff: 4300,  uke: 1.18, glock: 0.68, bass: 0.82, perc: 0.58, whistle: 0.96, transpose: -2 },
+  airy:    { bpm: 120, fever: 148, cutoff: 5600,  uke: 0.92, glock: 0.76, bass: 0.68, perc: 0.58, whistle: 1.14, transpose: 2  },
+  wide:    { bpm: 116, fever: 144, cutoff: 4700,  uke: 0.98, glock: 0.70, bass: 0.86, perc: 0.60, whistle: 1.10, transpose: -3 },
+  night:   { bpm: 104, fever: 132, cutoff: 3700,  uke: 0.78, glock: 0.62, bass: 0.62, perc: 0.42, whistle: 0.98, transpose: -3 },
   crystal: { bpm: 130, fever: 158, cutoff: 6000,  uke: 0.66, glock: 0.58, bass: 0.84, perc: 0.98, whistle: 1.18, transpose: 3  },
   reef:    { bpm: 132, fever: 160, cutoff: 6500,  uke: 0.70, glock: 0.58, bass: 0.78, perc: 0.88, whistle: 1.10, transpose: 3  },
   ember:   { bpm: 122, fever: 148, cutoff: 4000,  uke: 0.62, glock: 0.62, bass: 1.20, perc: 1.08, whistle: 0.88, transpose: -4 },
@@ -945,15 +946,13 @@ export class Music {
   private trackWeight(index: number): number {
     const track = TRACKS[index]!;
     const mood = track.mood;
-    // Arcade chiptune bangers are the default front line: weighted above the
-    // island-folk tracks so shuffle mode opens on them, but below a perfect
-    // biome match so the authored island tracks still surface.
+    // Island-folk is the identity; chip tracks remain rare fever colour.
     if (track.chip) {
-      if (mood === this.biome) return 3.2;
-      if (this.night > 0.6 && mood === "night") return 3.0; // Pixel Coast at night
-      return 2.6;
+      if (mood === this.biome) return 0.75;
+      if (this.night > 0.6 && mood === "night") return 0.9;
+      return 0.55;
     }
-    if (mood === this.biome) return 3; // authored for this island
+    if (mood === this.biome) return 4.2; // authored for this island
     if (this.night > 0.6) {
       if (mood === "night") return 2.5; // nightfall pulls toward the moon tracks
       if (mood === "bright" || mood === "airy") return 0.35; // and away from sun

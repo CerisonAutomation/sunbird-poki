@@ -18,6 +18,9 @@ export class FinishGate {
   private readonly bannerMat: THREE.MeshBasicMaterial;
   private readonly beamMat: THREE.MeshBasicMaterial;
   private readonly pylonMat: THREE.MeshLambertMaterial;
+  private readonly gaudi: THREE.Group;
+  private readonly gaudiMats: THREE.MeshLambertMaterial[] = [];
+  private readonly spireMat: THREE.MeshLambertMaterial;
   private readonly tex: THREE.CanvasTexture;
   private x = 0;
   private passed = false;
@@ -45,6 +48,28 @@ export class FinishGate {
     this.pylonL.castShadow = true;
     this.pylonR.castShadow = true;
 
+    // Original organic mosaic finale: asymmetrical ceramic arches and spires
+    // inspired by Gaudí's biomorphic language, not a replica of any building.
+    this.gaudi = new THREE.Group();
+    const colors = [0x1d9b9a, 0xe7b34f, 0xd96e62, 0x7053a6];
+    const archGeo = new THREE.TorusGeometry(12.5, 1.05, 7, 28, Math.PI);
+    colors.forEach((color, i) => {
+      const mat = new THREE.MeshLambertMaterial({ color, flatShading: true });
+      this.gaudiMats.push(mat);
+      const arch = new THREE.Mesh(archGeo, mat);
+      arch.rotation.z = Math.PI;
+      arch.position.set(0, 14 + i * 0.45, (i - 1.5) * 0.55);
+      arch.scale.set(1 - i * 0.04, 1 - i * 0.03, 1);
+      this.gaudi.add(arch);
+    });
+    const spireGeo = new THREE.ConeGeometry(1.5, 7, 7);
+    this.spireMat = new THREE.MeshLambertMaterial({ color: 0xffd66d, flatShading: true });
+    for (const z of [-9, 9]) {
+      const spire = new THREE.Mesh(spireGeo, this.spireMat);
+      spire.position.set(0, 28, z);
+      this.gaudi.add(spire);
+    }
+
     this.banner = new THREE.Mesh(new THREE.PlaneGeometry(18.6, 5.2), this.bannerMat);
     this.banner.rotation.y = Math.PI / 2;
     this.banner.position.y = 15;
@@ -52,7 +77,7 @@ export class FinishGate {
     this.beam = new THREE.Mesh(new THREE.CylinderGeometry(9.4, 9.4, 150, 18, 1, true), this.beamMat);
     this.beam.position.y = 60;
 
-    this.group.add(this.pylonL, this.pylonR, this.banner, this.beam);
+    this.group.add(this.pylonL, this.pylonR, this.banner, this.beam, this.gaudi);
     this.group.visible = false;
   }
 
@@ -102,6 +127,11 @@ export class FinishGate {
     this.pylonL.geometry.dispose();
     this.banner.geometry.dispose();
     this.beam.geometry.dispose();
+    for (const child of this.gaudi.children) {
+      if (child instanceof THREE.Mesh) child.geometry.dispose();
+    }
+    this.gaudiMats.forEach((mat) => mat.dispose());
+    this.spireMat.dispose();
     this.pylonMat.dispose();
     this.bannerMat.dispose();
     this.beamMat.dispose();

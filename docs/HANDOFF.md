@@ -56,7 +56,7 @@ keys**, 100% pack coverage, drift-checked by `src/i18n/__tests__/locales.test.ts
 Measured from disk by `pnpm docs:audit`; if a number here is wrong the gate
 fails and tells you the measured value. Keep this block in step with the
 prose figures above and with docs/README.md.
-tests: 2914
+tests: 2915
 testFiles: 235
 barrelKeys: 619
 locales: 36

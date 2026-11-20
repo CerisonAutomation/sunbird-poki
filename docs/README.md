@@ -87,7 +87,7 @@ markdown — so this stays true instead of being true once.
 These numbers are measured from disk by `pnpm docs:audit` and must match it.
 Adding a test file, a translation key or an audit means updating this block —
 that is the point. Do not hand-edit the prose figures above without this.
-tests: 2914
+tests: 2915
 testFiles: 235
 barrelKeys: 619
 locales: 36

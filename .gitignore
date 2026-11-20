@@ -40,13 +40,12 @@ rust/target/
 
 # Graph-it
 .graph-it/
-.vercel
 
 # Playwright MCP debug snapshots
 .playwright-mcp/
 server/social/sunbird-social-data/
 
-# portal build artifacts
+# Portal build artifacts
 dist-poki/
 dist-crazy/
 sunbird-poki.zip
@@ -70,10 +69,8 @@ dist-multiplayer/
 sunbird-social-data/
 
 # Poki build output + QA harness
-dist-poki/
 dist-dev/
 poki-upload/
-sunbird-poki.zip
 scripts-tmp/
 *.tsbuildinfo
 
@@ -81,9 +78,6 @@ scripts-tmp/
 # state. Never version it: it duplicates src/ wholesale and churns on every
 # agent run.
 .kilo/
-<<<<<<< HEAD
-.dyad/
-=======
 
 # The agent office (hive/) lives INSIDE this repo but is not part of the game.
 # Never version it: it holds every agent's memory.md, inboxes, session state and
@@ -103,4 +97,60 @@ worktrees/
 
 # QA screenshot captures
 shots/
->>>>>>> 5e01e2f9779b5eb484f75a8b8a940454f2480c2e
+
+# Agent/editor tooling state (accidentally committed in prior revisions)
+.adal/
+.agents/
+.aider-desk/
+.argus/
+.augment/
+.autofable/
+.autohand/
+.bob/
+.claude/
+.codeartsdoer/
+.codebuddy/
+.codemaker/
+.codestudio/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.devin/
+.forge/
+.goose/
+.hermes/
+.iflow/
+.inferencesh/
+.jazz/
+.junie/
+.kiro/
+.kode/
+.lingma/
+.mcpjam/
+.minimax/
+.moxby/
+.mux/
+.neovate/
+.ona/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.reasonix/
+.roo/
+.rovodev/
+.tabnine/
+.terramind/
+.tinycloud/
+.trae/
+.vibe/
+.windsurf/
+.zcode/
+.zencoder/
+
+# Local agent skill mirrors and lock files
+data/
+skills/
+skills-lock.json

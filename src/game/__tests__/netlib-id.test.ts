@@ -6,8 +6,13 @@
  * Poki-issued id through `VITE_POKI_NETLIB_GAME_ID` and a bad value must be
  * discarded at build time — never shipped, never silently used.
  */
-import { describe, expect, it } from "vitest";
-import { DEV_NETLIB_ID, isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode, POKI_NETLIB_GAME_ID } from "../../sdk/PokiMpUtils";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEV_NETLIB_ID, isNetlibGameId, isPokiMultiplayerAvailable, makePokiRoomCode } from "../../sdk/PokiMpUtils";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
 
 describe("netlib: game id", () => {
   it("accepts canonical UUIDs (any case) and nothing else", () => {
@@ -20,7 +25,7 @@ describe("netlib: game id", () => {
     expect(isNetlibGameId(undefined)).toBe(false);
   });
 
-  it("falls back to the shared DEV id in a build that supplies none", () => {
+  it("falls back to the shared DEV id in a build that supplies none", async () => {
     // This contract CHANGED. It used to be "empty outside Poki builds — the
     // constant is compiled out entirely", on the reasoning that Netlib is a Poki
     // runtime. The developer guide says otherwise:
@@ -36,17 +41,25 @@ describe("netlib: game id", () => {
     // places it is cheapest to debug — and every multiplayer report could only
     // ever be reproduced on a portal build.
     //
-    // vitest runs with no VITE_POKI_NETLIB_GAME_ID, i.e. an unconfigured build.
+    // Isolate from developer .env/.env.local: an unconfigured build supplies no id.
+    vi.resetModules();
+    vi.stubEnv("VITE_POKI_NETLIB_GAME_ID", "");
+    const { POKI_NETLIB_GAME_ID } = await import("../../sdk/PokiMpUtils");
+
     expect(POKI_NETLIB_GAME_ID).toBe(DEV_NETLIB_ID);
     // ...and it is a real UUID, so Netlib will not reject it outright. Every
     // developer lands in the same lobbies rather than each in a private one.
     expect(isNetlibGameId(POKI_NETLIB_GAME_ID)).toBe(true);
   });
 
-  it("never ships a malformed id, on any build", () => {
+  it("never ships a malformed id, on any build", async () => {
     // The half of the old contract that was right, and the one that matters for
     // submission: Netlib rejects a bad game id in production, so a bad value is
     // discarded at build time rather than shipped.
+    vi.resetModules();
+    vi.stubEnv("VITE_POKI_NETLIB_GAME_ID", "");
+    const { POKI_NETLIB_GAME_ID } = await import("../../sdk/PokiMpUtils");
+
     expect(isNetlibGameId("")).toBe(false);
     expect(isNetlibGameId(undefined)).toBe(false);
     expect(isNetlibGameId("not-a-uuid")).toBe(false);

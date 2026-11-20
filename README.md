@@ -1,23 +1,72 @@
-# 🐦 Sunbird
+# Sunbird
 
 > A one-button, side-scrolling arcade glider. Hold to dive, release to soar, chase the daylight across procedurally generated islands.
 
-> **No GitHub Actions.** The workflow was removed: the account is billing-blocked
-> and every job sat red without ever starting, which is worse than no gate —
-> it looks like a signal and is not one. The checks it ran are not gone, they
-> are local and stricter: `pnpm gate:local` runs the same eight steps and a
-> `pre-push` hook enforces it. CI cannot be trusted to have run; the local gate
-> is the gate.
+**This is the Poki fork.** This checkout ships the client and the Vercel leaderboard functions (`api/`) only. The self-hosted `rust/` room server, Cloudflare `backend/` workers, and `server/social/` PGlite layer referenced in older docs live in the parent monorepo, not here. Poki multiplayer in this fork uses Netlib P2P (with AUDS for player data where configured) — no Rust server is required.
 
-> **This is the Poki fork; full infrastructure in parent monorepo.** This
-> checkout ships the client and the Vercel leaderboard functions (`api/`)
-> only. The self-hosted `rust/` room server, the Cloudflare `backend/`
-> workers and the `server/social/` PGlite layer described below live in the
-> parent monorepo, not here, and the Rust-specific sections of this file do
-> not apply to this checkout. `pnpm verify` is the whole gate — there is no
-> server half to run. (The one surviving `server/` file,
-> `src/anticheat/limits.ts`, is read from disk by the client test
-> `src/game/__tests__/anticheat.test.ts` to keep the shared limits in step.)
+> **No GitHub Actions.** CI workflows were removed (billing-blocked runs produced red noise). Local gates are the source of truth: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm audit:ui`, `pnpm docs:audit`, `pnpm verify:prod`, and the Poki verification chain below.
+
+---
+
+## Consolidated production & deployment (Poki CLI)
+
+### Concrete goal
+Deliver a **clean, polished, production-ready** repository and complete deployment through the **Poki CLI**.
+
+### Acceptance criteria
+- [x] **Clean code / polished repo:** debug leftovers removed (tracked junk, mixed lockfiles, agent/editor state untracked), merge conflicts resolved, no placeholder/TODO regressions introduced.
+- [x] **No debug leftovers:** `inputprobe.tmp.mjs`, `audit-shots/`, `package-lock.json`, and `.github/context-mode/` session artifacts removed from tracking; local build artifacts remain gitignored.
+- [x] **Lint / typecheck / tests pass:** `pnpm lint`, `pnpm typecheck` (or `tsc --noEmit`), `pnpm test`.
+- [x] **Docs gate pass:** `pnpm docs:audit` (canonical claims and link/orphan/status checks).
+- [x] **Prod-ready configuration:** `.env.example` uses placeholders only (no real secrets/IDs), Poki game IDs are sourced from `package.json` `build:poki` (single source of truth), `vercel.json` uses valid build/install commands, and portal isolation/marker gates remain intact.
+- [x] **Builds pass:** `pnpm build` and `pnpm build:poki` produce valid artifacts (`dist/`, `dist-poki/`, `poki-upload/`, `sunbird-poki.zip`).
+- [x] **Successful CLI deployment:** deploy via Poki CLI (`poki upload`) after verification.
+
+### Deployment (Poki)
+Prereqs: Node 22+ recommended, `pnpm` (see `packageManager`), Poki CLI installed and authenticated.
+
+```bash
+# 1) Install (clean, reproducible)
+corepack enable
+pnpm install --frozen-lockfile
+
+# 2) Verify locally
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm docs:audit
+pnpm audit:ui
+
+# 3) Build & verify the Poki artifact
+pnpm build:poki          # generates dist-poki/, poki-upload/, sunbird-poki.zip
+pnpm verify:upload       # validates poki-upload/ shape
+pnpm verify:portals      # portal/compliance gates
+pnpm isolation:check
+
+# 4) Deploy via Poki CLI
+poki whoami              # confirm authenticated session
+poki upload --name "$(git rev-parse --short HEAD)" --notes "$(git log -1 --pretty=%B)"
+# or: pnpm poki:upload
+```
+
+**Output:** `poki-upload/` (folder the Poki Inspector accepts) and `sunbird-poki.zip`.
+
+### Rollback steps
+1. **Identify last good build:** keep the previous `poki-upload/` folder and/or `sunbird-poki.zip` (or the git commit/tag that produced it).
+2. **Rebuild from last good commit:** `git checkout <good-commit-or-tag> && pnpm install --frozen-lockfile && pnpm build:poki`.
+3. **Redeploy:** run `poki upload --name "<good-ref>" --notes "Rollback to <good-ref>"`.
+4. **Verify:** open the Poki Inspector preview for the uploaded version and confirm boot, gameplay start/stop, and ad/event sequences as applicable.
+5. **If CLI upload is unavailable:** upload the `poki-upload/` folder manually via the Poki Inspector/Developer dashboard (folder upload, not a GitHub zip wrapper).
+
+### Edge cases & operational notes
+- **Missing environment variables:** all `VITE_*` runtime vars are optional for offline/local play. Poki builds set IDs/URLs in `package.json` `build:poki`; keep `.env.example` as placeholders only. If a required portal/dashboard ID changes, update `build:poki` (single source of truth), rebuild, and re-verify (`pnpm isolation:check`, `pnpm verify:portals`).
+- **Secrets handling:** never commit real secrets, tokens, or private IDs in `.env*` tracked files. `.env`/`.env.local` are gitignored; only placeholders belong in `.env.example`. Poki/Vercel/Upstash credentials must be supplied via CLI auth or platform secret stores, not source control.
+- **CLI permissions / auth:** `poki whoami` must succeed before upload; if unauthenticated, run the Poki CLI login flow for your account and retry. In CI/non-interactive environments, ensure the CLI is pre-authenticated with approved credentials. If `vercel` CLI is present but not used for this deployment, ignore Vercel auth; Poki is the deployment target.
+- **Build/upload failures:** run `pnpm verify:upload` and `pnpm verify:portals` to catch shape/compliance issues before upload. If upload fails due to network/permissions, retry after auth/network checks; artifact remains in `poki-upload/`/`sunbird-poki.zip`.
+- **Rollback safety:** prefer deploying from a clean commit; keep artifacts for the last known-good release. Do not rewrite history for rollback—deploy the prior known-good build.
+- **Portal compliance constraints:** Poki builds must not include external payment processors, external links except approved platform APIs, or non-Poki portal markers; enforced by `verify:portals`, `audit:zips`, `isolation:check`, and `verify:upload`.
+
+---
 
 ## What it is
 
@@ -39,8 +88,8 @@ Sunbird is a complete HTML5 arcade game: 8 flight modes, 40-pilot races, daily/w
 | Bundler / style | Vite 7 + Tailwind CSS v4 |
 | Physics | Fixed-step deterministic client sim (`Bird.step()`, bit-exact tested) |
 | Audio | Zero-asset procedural WebAudio synth (SFX + adaptive score, portal-safe) |
-| Payments | Coin economy in every build — the client loads no payment processor (`@stripe/stripe-js` is not a dependency; `Payments.ts` returns `null` from every processor entry point). `backend/` ships an optional server-authoritative Stripe webhook so a deployment that sells SKUs can grant them ([DEPLOY.md §5](./DEPLOY.md)) |
-| Multiplayer | Self-hosted Rust room server — lobby, seats, synchronized starts, server-authoritative finish order and a movement envelope that rejects impossible client positions. Lives in the parent monorepo, not this checkout; the Poki build uses Netlib P2P rooms |
+| Payments | Coin economy in every build — the client loads no payment processor (`@stripe/stripe-js` is not a dependency; `Payments.ts` returns `null` from every processor entry point). `backend/` ships an optional server-authoritative Stripe webhook in the parent monorepo ([DEPLOY.md §5](./DEPLOY.md)) |
+| Multiplayer | Poki build: Netlib P2P rooms (WebRTC datachannels). Self-hosted authoritative server lives in the parent monorepo, not this checkout |
 | Leaderboard | Vercel Functions ([api/](./api/)) + Upstash Redis, on-device fallback ([LEADERBOARD_API.md](./LEADERBOARD_API.md)) |
 | Ghosts | Async PvP via ghost publish/chase ([src/game/GhostNet.ts](./src/game/GhostNet.ts)) |
 | Caching | Content-hashed Vite assets + immutable HTTP caching; legacy service worker safely retired |
@@ -54,11 +103,7 @@ pnpm install --frozen-lockfile
 pnpm dev            # game on :5173
 ```
 
-Open `http://localhost:5173`. **Multiplayer needs no server**: this edition
-races over Poki Netlib (WebRTC P2P), so live rooms work in dev against the
-same signalling the shipped build uses — open the Race Lobby and host a room.
-(There is no Rust server in this fork and none is needed; the self-hosted
-authoritative server lives in the parent monorepo.)
+Open `http://localhost:5173`. **Multiplayer needs no server** in this Poki fork: races use Poki Netlib (WebRTC P2P).
 
 ## Environment variables
 
@@ -66,7 +111,7 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 
 | Variable | Description |
 |---|---|
-| `VITE_STRIPE_PUBLISHABLE_KEY`, `VITE_STRIPE_GOLD_LINK`, `VITE_STRIPE_VIP_LINK`, `VITE_STRIPE_STARTER_LINK` | **Reserved and unused by the client.** Every build script blanks them and no code reads a processor origin; `scripts/verify-portal.mjs` fails a zip that contains `js.stripe.com`, `api.stripe.com`, `hooks.stripe.com`, `upstash` or a `pk_live_`/`pk_test_` key. Selling SKUs is a server-side path only ([DEPLOY.md §5](./DEPLOY.md)) |
+| `VITE_STRIPE_PUBLISHABLE_KEY`, `VITE_STRIPE_GOLD_LINK`, `VITE_STRIPE_VIP_LINK`, `VITE_STRIPE_STARTER_LINK` | **Reserved and unused by the client.** Portal/client builds must not ship processor origins. Selling SKUs is a server-side path only ([DEPLOY.md §5](./DEPLOY.md)) |
 | `VITE_PORTAL_TARGET` | `none` (default) \| `poki` \| `crazy` \| `generic` |
 | `VITE_LEADERBOARD_URL` | HTTP base URL for the online leaderboard |
 | `VITE_MULTIPLAYER_URL` | WebSocket URL for realtime multiplayer rooms |
@@ -75,131 +120,68 @@ Copy `.env.example` → `.env.local`. All variables are optional — the game ru
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start Vite dev server |
-| `npm run build` | Production bundle (chunked; Vercel/PWA) |
-| `npm run build` | The single-file bundle → `dist/` (this is also what Vercel deploys) |
-| `npm run build:poki` | The Poki submission: `sunbird-poki.zip` + the generated `poki-upload/` folder (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
-| `npm run test:mp` | Multiplayer protocol smoke against a running server |
-| `npm run isolation:check` | Source-level split: the Rust stack stays platform-agnostic, the Poki edition stays Netlib P2P + AUDS, and neither leaks into the other |
-| `npm run typecheck` | TypeScript type-check without emit |
-| `npm test` | Run the full Vitest suite |
-| `npm run pvp:check` | **Online stack, proven end to end** in the parent monorepo: boots the real room server on a scratch port and runs the protocol smoke, the live two-client PvP suite, the pilot-directory contract and the public room list against it. Needs `server/src/index.ts`, which is not in this checkout — run it there |
-| `npm run audit:ui` | Static UX/UI audit: dead buttons, null element refs, unlabelled controls, inline layout that media queries cannot override, unstyled classes and missing narrow-screen rules |
-| `npm run i18n:audit` | Translation-debt ratchet — fails only when untranslated strings grow |
-| `npm run docs:audit` | Docs link + orphan audit — fails on a broken link, an orphan doc, or a snapshot with no status |
-| `npm run test:pvp` / `test:lookup` | The same live suites against an already-running server (`VITE_MULTIPLAYER_URL=ws://127.0.0.1:8790/mp`) — parent monorepo only |
-| `npm run verify` | typecheck + test + build |
-| `npm run poki:audit` | Run every extracted Poki rule check, rewrite `docs/poki/COMPLIANCE.md` (add `-- --run` to execute the build/zip/thumbnail gates too) |
-| `npm run poki:preflight` | The full pre-submission pass: build portals → gates → thumbnail check → audit |
-| `npm run verify:thumbnail` | Thumbnail gate (square, ≥628px, full-bleed, contrast, playground-colour distance, weight) |
-| `npm run render:thumbnail` | Regenerate the submission thumbnails from `assets/submission/art/` |
-| `npm run lint` | ESLint over src, scripts (`--max-warnings 0`) |
-| `npm run test:e2e` | Production-browser smoke tests using desktop/phone Page Objects (`pnpm exec playwright install chromium` once) |
-| `npm run test:mp` | Two-client multiplayer smoke test — needs `npm run dev` **and** the room server running |
-| `npm run botsim` | Headless load test: N real WebSocket pilots on the wire protocol |
-| `npm run botsim:40` | 40-pilot load + anti-cheat + resume run (the CI gate) |
-| `npm run physcheck` | Physics determinism harness |
-| `npm run bench:physics` | Hot-path benchmark (`scripts/bench-physics.ts`): ns/step solo and 40-bird, height-cache hit/miss, terrain probes — the numbers behind the `physics-perf` gate |
-| `npm run gen-icons` | Regenerate PWA icons |
+| `pnpm dev` | Start Vite dev server |
+| `pnpm build` | Production bundle → `dist/` |
+| `pnpm build:poki` | Poki submission: `sunbird-poki.zip` + `poki-upload/` (see [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md)) |
+| `pnpm typecheck` | TypeScript type-check without emit |
+| `pnpm test` | Run the full Vitest suite |
+| `pnpm lint` | ESLint over src, scripts, api (`--max-warnings 0`) |
+| `pnpm audit:ui` | Static UX/UI audit |
+| `pnpm i18n:audit` | Translation-debt ratchet |
+| `pnpm docs:audit` | Docs link/orphan/status/claims gate |
+| `pnpm verify` | typecheck + test + build |
+| `pnpm verify:prod` | Production readiness checks |
+| `pnpm poki:preflight` | Full pre-submission pass |
+| `pnpm poki:audit` | Extracted Poki rule audit (regenerates compliance report with flags as applicable) |
+| `pnpm verify:upload` | Validate `poki-upload/` folder shape |
+| `pnpm verify:portals` | Portal compliance gate |
+| `pnpm isolation:check` | Enforce Poki/Rust/Netlib source split |
+| `pnpm poki:upload` | Build Poki artifact and upload via Poki CLI |
 
-## Testing
+## Testing & verification
 
-For the flight/performance changes and measurement limits, see [Flight & performance audit](docs/audits/FLIGHT_PERFORMANCE_AUDIT.md).
-
-- **Unit** — `npm test`: pure-function coverage across PvP rating, challenges, mastery, economy, ghost codecs, protocol parsing, and bit-exact `Bird.step()` determinism on seeded terrain.
-- **Stability** — the suite is loop-safe: 100 consecutive runs green with zero flakes (each run is independent; no shared state, no wall-clock dependence — season/week tests are timezone-independent).
-- **Multiplayer smoke** — `npm run test:mp` joins two real WebSocket clients to the same room through the dev proxy and asserts roster visibility plus live state frames (`peers-visible=true`, 5+ frames in 4 s).
-- **Load** — `npm run botsim:40`: 40 real WebSocket pilots on the shipped protocol. Gated in the parent monorepo's `botsim.yml`; the Rust job requires cheat containment (`--require-anticheat`), so a regression that lets a teleport through fails the build. The same harness runs against the Node reference server (`server/sunbird-server.mjs`), where both implementations must agree: a dropped pilot has to come back to the *same room* it was racing in, and finish places must stay unique per race. Neither server is in this checkout.
-- **Rust** — `cargo fmt --check`, `cargo clippy`, `cargo test` in the parent monorepo's `rust/` workspace. Not in this checkout, so it is not in this repo's CI.
+- **Unit:** `pnpm test` (Vitest). Deterministic physics checks (e.g. `Bird.step()` on seeded terrain) are part of the suite.
+- **Static gates:** `pnpm lint`, `pnpm typecheck`, `pnpm audit:ui`, `pnpm i18n:audit`, `pnpm docs:audit`, `pnpm circular:check`.
+- **Prod/build gates:** `pnpm verify:prod`, `pnpm build`, `pnpm build:poki`, `pnpm verify:portals`, `pnpm verify:csp`, `pnpm audit:zips`, `pnpm verify:upload`, `pnpm verify:thumbnail`, `pnpm isolation:check`.
+- **Poki deploy readiness:** `pnpm build:poki && pnpm verify:upload && pnpm verify:portals && pnpm isolation:check` then `poki whoami` and `poki upload ...`.
 
 ## Builds & portals
 
 | Target | Upload to | Ads | Payments |
 |---|---|---|---|
 | `dist/` (default) | Vercel / self-host | None (own interstitial) | Coins only — no processor wired |
-| `sunbird-poki.zip` | Poki Inspector | Poki commercial + rewarded | Stripped |
-| `sunbird-crazy.zip` | CrazyGames portal | CrazyGames midgame + rewarded (+ banner slot) | Stripped |
-| `sunbird-generic.zip` | GameDistribution, Yandex, itch.io, Newgrounds, GameMonetize, Lagged, Coolmath, Kongregate, Armor, GamePix, Famobi, SoftGames | None (host injects) | Stripped |
-| `dist-itch/` | Direct-host / itch.io raw HTML | None | As configured |
+| `sunbird-poki.zip` / `poki-upload/` | Poki Inspector | Poki commercial + rewarded | Stripped |
+| Other portal zips (`crazy`, `generic`) | Parent monorepo / other checkouts | Per target | Stripped |
 
-Every portal zip is self-contained (`index.html` + `icons/` + `fonts/`), uses only relative paths, boots from any CDN subpath, mutes on tab-hide/ads, fires `gameplayStart/Stop` + loading signals, and degrades to local ghosts/boards with no backend. Full compliance matrix and QA checklist: [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md).
-
-### Multiplayer: two transports, one interface
-
-| Build | Transport | Backend |
-|---|---|---|
-| Poki | **Netlib P2P** (`@poki/netlib` over WebRTC datachannels, code-split + dynamically imported) | none of ours — signalling is Poki's; player data uses **AUDS** (boards, ghost shares, run share codes, the pilot directory behind Pilot Lookup) |
-| Direct / CrazyGames / generic | Self-hosted **authoritative WebSocket room server** (`VITE_MULTIPLAYER_URL` → TS `server/` or the Rust `rust/` workspace) | ours |
-| Any build without WebRTC / a backend | Local AI flock (the UI says so) | none |
-
-The split is enforced, not assumed: `pnpm isolation:check` fails if the Rust stack names
-a platform integration, if `@poki/netlib` is imported outside `src/sdk/PokiNetlib.ts`, or
-if the self-hosted client reaches the Poki transport at runtime; the portal markers
-(`verify:portals`, `audit:zips`, `verify:upload`) do the same for the shipped bundles — no
-`auds.poki.io` outside Poki, and no `/mp/v1/`, `sunbird-social` or `ws://` anywhere in a
-portal edition. `pnpm pvp:check` then proves the self-hosted path works end to end with two
-real clients against a real server.
+This fork is **Poki-only**. See [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md) and [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md).
 
 ## Project structure
 
 ```
 src/            React shell (App, main) + game/ (engine, HUD, systems)
-rust/           Cargo workspace: sunbird-protocol + sunbird-server (Axum WS)
 api/            Vercel leaderboard functions (+ _lib)
-backend/        Optional Cloudflare Workers: ghosts, telemetry, Stripe webhook entitlements (server-side only)
-server/social/  Optional PGlite social layer (friends, squads, feed)
-scripts/        verify-prod, mp-smoke, physcheck, bench-physics, portal packaging, icon gen
-public/         PWA manifest, service worker, icons, self-hosted fonts
+scripts/        build/verify/audit/portal tooling
+public/         icons, fonts, static assets
+docs/           canonical, generated, and snapshot documentation
 ```
 
-## Docs index
+## Documentation (consolidated index)
 
-**Start at [`docs/README.md`](./docs/README.md)** — the canonical map: one doc per
-topic, generated artefacts marked, snapshots dated and statused. `pnpm docs:audit`
-fails the build on a broken link, an orphan doc, or a snapshot without a status.
-
-- [docs/README.md](./docs/README.md) — "I want to…" navigation, canonical vs generated vs snapshot
-- [docs/HANDOFF.md](./docs/HANDOFF.md) — current state, standing decisions, traps, next queue
-- [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) — Sunbird vs the best games in the class, mechanic by mechanic
-- [ROADMAP.md](./ROADMAP.md) — what works, what's wired-but-undeployed, what's aspirational (the anti-overclaim file)
-- [docs/poki/](./docs/poki/) — **the Poki developer guide, extracted into 131 numbered rules** plus the machine-readable `requirements.json`. `pnpm poki:audit` executes them and regenerates [COMPLIANCE.md](./docs/poki/COMPLIANCE.md); [REBUILD_REPORT.md](./docs/poki/REBUILD_REPORT.md) records what the extraction changed and the evidence for each change; [CSP_REQUEST.md](./docs/poki/CSP_REQUEST.md) is the paste-ready CSP submission
-- [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md) — the four build targets + monetization matrix
-- [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md) — the human walkthrough of a portal submission
-- [LEADERBOARD_API.md](./LEADERBOARD_API.md) — leaderboard + realtime wire contract
-- [SOCIAL_API.md](./SOCIAL_API.md) — social layer API
-- [DEPLOY.md](./DEPLOY.md) — hosting, env, Stripe webhook setup
-- [LEGAL_SECURITY.md](./LEGAL_SECURITY.md) — legal + security evidence register
-- [docs/audits/](./docs/audits/) — dated evidence snapshots, each with a status line
-- [docs/archive/](./docs/archive/) — superseded docs (history, not guidance)
-
-## Deployment
-
-- **Frontend** — Vercel: `vercel deploy --prod` (config in `vercel.json`). See [DEPLOY.md](./DEPLOY.md).
-- **Leaderboard** — Vercel Functions in `api/`, persisted in Upstash Redis (required for production; in-memory fallback for previews).
-- **Multiplayer** — Self-hosted Rust, in the parent monorepo: `docker compose up -d --build` (Rust server + TS social backend, see [DEPLOY.md](./DEPLOY.md)) or `cargo build --release -p sunbird-server`. Neither the `rust/` workspace nor `server/sunbird-server.mjs` is in this checkout, so the load and Rust gates above run there, not here.
-- **Portals** — this checkout is the **Poki-only** fork, so `npm run build:poki` is the one portal build: it produces `sunbird-poki.zip` and the `poki-upload/` folder the Poki Inspector takes. There is no `build:portals`/`build:crazy`/`build:generic` here; see the note at the top of this file.
-
-## Game systems
-
-1 Player (daytrip / zenith / distance / coin rush / perfect / endless) · PvP (40-pilot mass race with live pilots + time-shifted leaderboard ghosts, ranked duels, Stormfront Royale) · PvE (daily challenge, weekly gauntlet, storm weather) · Tournaments (weekly cups) · Rival challenge links (`#rival=` URLs — zero-server async duels) · Room invites (`#room=` URLs — private race rooms) · Share cards (flight image + referral + beat-me link in one tap) · Mastery, missions, collections, season pass, nest economy.
+**Primary:** this `README.md` (operations, deployment, acceptance, rollback).  
+**Canonical/supporting:**
+- [ROADMAP.md](./ROADMAP.md) — real vs wired-but-undeployed vs aspirational
+- [docs/HANDOFF.md](./docs/HANDOFF.md) — current state, standing decisions, traps
+- [docs/README.md](./docs/README.md) — doc map
+- [DEPLOY.md](./DEPLOY.md) — hosting/env details
+- [PORTAL_PUBLISHING.md](./PORTAL_PUBLISHING.md) — portal build/compliance matrix
+- [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md) — Poki submission walkthrough
+- [LEADERBOARD_API.md](./LEADERBOARD_API.md) — leaderboard/realtime contract
+- [SOCIAL_API.md](./SOCIAL_API.md) — social API (parent/optional context)
+- [LEGAL_SECURITY.md](./LEGAL_SECURITY.md) — legal/security register
+- [PRODUCTION_READINESS_PLAN.md](./PRODUCTION_READINESS_PLAN.md) — ops gap register
+- [docs/poki/](./docs/poki/) — extracted Poki rules, compliance artifacts, upload guidance
+- [docs/audits/](./docs/audits/) and [docs/archive/](./docs/archive/) — snapshots/history
 
 ## License
 
 [MIT](./LICENSE)
-
-### Current UX and multiplayer consolidation
-
-The home dropdown has been replaced with visible play/navigation choices.
-**Same-screen 1v1** is on Home (P1: A/Space, P2: L/Enter; touch your own half).
-**Play online** opens Create/Join room; practice settings are on a separate page.
-
-`pnpm test:e2e:multiplayer` runs two real browser clients against isolated room
-and Squad services. First install the social service dependency with
-`npm ci --prefix server/social --ignore-scripts`. For local Squad preview, run
-`node server/social/social-server.mjs` on port 8788 alongside Vite. The dev proxy
-uses `/social`; deployed builds need `VITE_SOCIAL_URL` and a reachable service.
-
-See [the consolidation audit](docs/audits/CONSOLIDATION_AUDIT.md) for findings, tests,
-canonical modules and **mandatory Squad credential migration/deployment limits**.
-The reference Node race server is for preview/protocol testing, not a replacement
-for the production Rust service.

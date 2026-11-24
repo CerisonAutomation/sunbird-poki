@@ -4,7 +4,6 @@ import {
   adBreakCanEnd,
   goldContinueAllowed,
 } from "../adGate";
-import { AD_SAFETY_SECONDS } from "../constants";
 
 /**
  * The standing contract: a player must not be able to skip a sponsored break.
@@ -107,17 +106,12 @@ describe("a placeholder break plays to the end", () => {
 
 describe("a portal break has no player-initiated exit", () => {
   // The former "return to flight" escape hatch was a clickable way to end a
-  // live portal ad early. It is now automatic: the fixedUpdate safety valve
-  // recovers a break whose SDK promise never settles, and the `ad-stuck`
+  // live portal ad early. The SDK promise owns completion, and the `ad-stuck`
   // action is an explicit no-op in the handler. Nothing the player can press
   // ever ends the break.
   it("swallows ad-stuck on both break kinds, so a stray dispatch cannot skip", () => {
     expect(adBreakAllowsAction("ad-stuck", PORTAL)).toBe(false);
     expect(adBreakAllowsAction("ad-stuck", PLACEHOLDER)).toBe(false);
-  });
-
-  it("still has a bounded recovery window, so a dead SDK cannot trap the game", () => {
-    expect(AD_SAFETY_SECONDS).toBeGreaterThan(0);
   });
 });
 
@@ -161,12 +155,11 @@ describe("the rendered break panel offers nothing that ends the break", () => {
     adReason: "continue" as const,
     gold: false,
     portalName: "poki" as const,
-    adSafetySeconds: AD_SAFETY_SECONDS,
   };
 
   it("renders no ad-skip button on a placeholder break — it is a status chip", async () => {
     const { renderAd } = await import("../hud/run");
-    const html = renderAd({ ...base, adSkippable: true, adTimer: 7, adElapsed: 0 });
+    const html = renderAd({ ...base, adSkippable: true, adTimer: 7 });
     expect(html).not.toMatch(/<button[^>]*data-action="ad-skip"/);
     expect(html).toContain('class="ad-countdown"');
     expect(html).toContain('role="status"');
@@ -175,20 +168,16 @@ describe("the rendered break panel offers nothing that ends the break", () => {
     expect(html).toMatch(/plays in full · continues in/i);
   });
 
-  it("renders the portal escape hatch disabled for the whole safety window", async () => {
+  it("renders no portal escape hatch", async () => {
     const { renderAd } = await import("../hud/run");
-    for (const elapsed of [0, 0.016, 1, 30, AD_SAFETY_SECONDS - 0.5, AD_SAFETY_SECONDS]) {
-      const html = renderAd({ ...base, adSkippable: false, adTimer: 0, adElapsed: elapsed });
-      // No button and no "Return to flight" affordance at any point in the
-      // break's life — the only exits are the SDK promise and the safety valve.
-      expect(html, `elapsed=${elapsed}`).not.toMatch(/<button[^>]*data-action="ad-stuck"/);
-      expect(html).not.toContain("Return to flight");
-    }
+    const html = renderAd({ ...base, adSkippable: false, adTimer: 0 });
+    expect(html).not.toMatch(/<button[^>]*data-action="ad-stuck"/);
+    expect(html).not.toContain("Return to flight");
   });
 
   it("still draws a clock on the placeholder countdown it owns", async () => {
     const { renderAd } = await import("../hud/run");
-    const placeholder = renderAd({ ...base, adSkippable: true, adTimer: 7, adElapsed: 0 });
+    const placeholder = renderAd({ ...base, adSkippable: true, adTimer: 7 });
     expect(placeholder).toContain("timer-glyph");
     expect(placeholder).toContain("<svg");
     // A bare hourglass emoji is exactly the glyph class that was caught
@@ -198,7 +187,7 @@ describe("the rendered break panel offers nothing that ends the break", () => {
 
   it("never draws a negative countdown", async () => {
     const { renderAd } = await import("../hud/run");
-    const html = renderAd({ ...base, adSkippable: true, adTimer: -3, adElapsed: 0 });
+    const html = renderAd({ ...base, adSkippable: true, adTimer: -3 });
     expect(html).toContain("<b>0</b>");
     expect(html).not.toMatch(/<b>-\d/);
   });

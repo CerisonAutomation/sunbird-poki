@@ -60,6 +60,8 @@ export interface MessageBandInput {
    * every number above is still derived from the real layout.
    */
   forceTopLayout?: boolean;
+  /** Coaching suppresses chain pills and can sit closer to the header. */
+  clearancePx?: number;
 }
 
 export interface MessageBand {
@@ -97,7 +99,7 @@ export function footerBottomReservation({ anchoredTop, footerPx }: Pick<MessageB
 }
 
 export function messageBand(input: MessageBandInput): MessageBand {
-  const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx, forceTopLayout } = input;
+  const { hudPx, headerPx, anchoredTop, footerPx, quipY, slopeY, handPx, naturalBandPx, forceTopLayout, clearancePx = MESSAGES_CHAIN_CLEAR_PX } = input;
   // Nothing may start above the header, and in portrait nothing may start above
   // the TOP-anchored footer either — the same obstruction, stacked under the
   // header instead of against the viewport bottom.
@@ -153,7 +155,7 @@ export function messageBand(input: MessageBandInput): MessageBand {
   const bottomAnchoredMaxPx = Math.min(naturalBandPx, headroom);
   const top = bottomAnchored
     ? Math.max(ceiling, laneFloor - LANE_GAP_PX - bottomAnchoredMaxPx)
-    : Math.max(ceiling, Math.min(Math.max(ceiling, headerPx + MESSAGES_CHAIN_CLEAR_PX), room));
+    : Math.max(ceiling, Math.min(Math.max(ceiling, headerPx + clearancePx), room));
   const maxPx = bottomAnchored
     ? bottomAnchoredMaxPx
     : Math.max(0, Math.min(naturalBandPx, Math.max(0, Math.min(laneFloor, Math.max(top, obstruction)) - top - LANE_GAP_PX)));

@@ -73,8 +73,8 @@ describe("the strip shows the run's goals, not just the nearest one", () => {
 
     // Max 2 rows now: closest goal + career (beat absent), not 3+career=4.
     // Too many goals was clutter — 1 primary chase is readable at 60fps on a phone.
-    expect(r).toHaveLength(2);
-    expect(r.filter((x) => x.career)).toHaveLength(1);
+    expect(r).toHaveLength(1);
+    expect(r.filter((x) => x.career)).toHaveLength(0);
     // Ranked by fill, so 810/900 (90 %) leads — only the closest is shown.
     expect(r.filter((x) => !x.career).map((x) => x.label)).toEqual(["Fly 900 m in one run"]);
   });
@@ -104,7 +104,7 @@ describe("the strip shows the run's goals, not just the nearest one", () => {
     // Closest goal first: 810/900 = 90% close, career second.
     expect(r[0]!.width).toContain("90.0%");
     expect(r[0]!.close).toBe(true); // >= 70 % earns the "almost!" cue
-    expect(r[1]!.career).toBe(true);
+    expect(r).toHaveLength(1);
   });
 
   it("puts the concrete gap under every bar, with what it pays", async () => {
@@ -188,7 +188,7 @@ describe("the strip shows the run's goals, not just the nearest one", () => {
     // A version change re-renders the root, so the strip is a new element.
     const strip = document.querySelector<HTMLElement>('[data-ref="goalStrip"]')!;
     const r = rows(strip);
-    expect(r).toHaveLength(2); // the goal + the career rung, not a second copy
+    expect(r).toHaveLength(1); // only the leading goal, updated in place
     expect(r[0]!.count).toBe("500/900 · +52");
   });
 
@@ -264,7 +264,7 @@ describe("no viewport is allowed to delete the progress readout", () => {
    * name so the allowlist cannot quietly grow — and the next case checks the
    * readout that replaces it actually exists.
    */
-  const ALLOWED_HIDDEN = [".play-hud.versus .goal-strip"];
+  const ALLOWED_HIDDEN = [".play-hud.versus .goal-strip", '.hud-root[data-flying="true"][data-coaching="true"] .flight-footer .goal-strip'];
 
   it("never sets the goal strip to display: none outside a versus race", () => {
     // This is the regression that hid in-flight progression from every screen

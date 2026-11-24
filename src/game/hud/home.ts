@@ -19,10 +19,28 @@ import { distanceText } from "./parts";
 import { escapeHtml } from "./kit";
 import type { HudSnapshot } from "./types";
 
+// Catalog entries are created before asynchronous locale packs arrive. Resolve
+// labels on render, not at module evaluation, so late Poki language detection
+// and a Settings change update the navigation too.
+function destinationCopy(item: MenuDestination): { title: string; detail: string } {
+  // These tiles split the older combined PvP destination. Use the existing
+  // screen-specific translations rather than promising both types of opponent.
+  if (item.key === "raceLobby") return {
+    title: "PvP",
+    detail: t("hud.renderLive.SOnlinePilots", undefined, item.detail),
+  };
+  if (item.key === "aiPvp") return {
+    title: t("hud.screen.aiPvp.title", undefined, item.title),
+    detail: t("hud.aiRivalSection.RAIFlockOffline", undefined, item.detail),
+  };
+  return { title: t(`menu.dest.${item.key}.title`, undefined, item.title), detail: t(`menu.dest.${item.key}.detail`, undefined, item.detail) };
+}
+
 function menuLinks(items: MenuDestination[]): string {
-  return items.map(item =>
-    `<button class="destination" data-ui data-action="${item.action}" data-icon="${item.icon}"><span class="destination-art">${menuIcon(item.icon)}</span><span class="destination-copy"><b>${item.title}</b><span>${item.detail}</span></span><span class="destination-arrow" aria-hidden="true">${arrowUpRightSvg()}</span></button>`,
-  ).join("");
+  return items.map(item => {
+    const copy = destinationCopy(item);
+    return `<button class="destination" data-ui data-action="${item.action}" data-icon="${item.icon}"><span class="destination-art">${menuIcon(item.icon)}</span><span class="destination-copy"><b>${escapeHtml(copy.title)}</b><span>${escapeHtml(copy.detail)}</span></span><span class="destination-arrow" aria-hidden="true">${arrowUpRightSvg()}</span></button>`;
+  }).join("");
 }
 
 /**
@@ -53,8 +71,8 @@ function homeBoardStrip(s: HudSnapshot): string {
   return `
     <button class="home-board" data-ui data-action="open-board" aria-label="${t("hud.renderOnboardingRoute.OLeaderboards", undefined, "Open the leaderboards")}">
       <span class="hb-head">
-        <span class="hb-title">${menuIconSm("trophy")} Top pilots</span>
-        <span class="hb-go">All boards ›</span>
+        <span class="hb-title">${menuIconSm("trophy")} ${t("hud.screen.leaderboard.title", undefined, "Leaderboards")}</span>
+        <span class="hb-go">›</span>
       </span>
       ${rows.length
         ? rows
@@ -84,7 +102,7 @@ function renderDailyRitualBanner(s: HudSnapshot): string {
   return `<div class="pc pc--gold pc-row daily-ritual-banner">
     <button class="pc-open" data-ui data-action="open-challenges">
     <span class="pc-icon">${menuIconSm("sun")}</span>
-    <div class="pc-body"><b>${t("hud.renderDailyRitualBanner.DChallengeReady", undefined, "Daily Challenge ready!")}</b><span>+${s.daily.reward} coins waiting — open ›</span></div>
+    <div class="pc-body"><b>${t("hud.renderDailyRitualBanner.DChallengeReady", undefined, "Daily Challenge ready!")}</b><span>+● ${formatNumberLocalized(s.daily.reward)} ›</span></div>
     </button>
     <button class="mini-btn ghost daily-ritual-close" data-ui data-action="dismiss-daily-banner" aria-label="${t("hud.aria.dismiss", undefined, "Dismiss")}">${closeSvg()}</button>
   </div>`;
@@ -196,7 +214,7 @@ function renderOnboardingRoute(s: HudSnapshot): string {
     ? t("onboarding.allDone", undefined, "You know the ropes")
     : t("onboarding.startSubtitle", undefined, "five things worth knowing");
   return `<section class="onboarding-route" aria-label="${escapeHtml(t("onboarding.routeLabel", undefined, "Your first flight plan"))}">
-      <div class="onboarding-route-head"><span>✦ ${allDone ? escapeHtml(t("onboarding.routeDone", undefined, "FLIGHT PLAN")) : escapeHtml(t("onboarding.startHere", undefined, "START HERE"))}</span><small>${escapeHtml(head)}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">${closeSvg()}</button></div>
+      <div class="onboarding-route-head"><span>${menuIconSm("star")} ${allDone ? escapeHtml(t("onboarding.routeDone", undefined, "FLIGHT PLAN")) : escapeHtml(t("onboarding.startHere", undefined, "START HERE"))}</span><small>${escapeHtml(head)}</small><button class="mini-btn ghost onboarding-dismiss" data-ui data-action="dismiss-onboarding" aria-label="${escapeHtml(t("onboarding.skip", undefined, "Skip"))}">${closeSvg()}</button></div>
       <ol class="onboarding-route-steps">
         ${steps.map((step, i) => `<li><button class="onboarding-route-step${step.done ? " done" : ""}${i === nextIndex ? " active" : ""}" data-ui data-action="${step.action}"${step.done ? " disabled" : ""}><b>${step.done ? escapeHtml(t("onboarding.stepDoneMark", undefined, "✓")) : step.n}</b><span><strong>${escapeHtml(step.title)}</strong><small>${escapeHtml(step.sub)}</small></span><i>${escapeHtml(step.go)}</i></button></li>`).join("")}
       </ol>
@@ -221,8 +239,10 @@ function renderOnboardingRoute(s: HudSnapshot): string {
  */
 function renderQuickRail(): string {
   return `<nav class="home-quick-rail" aria-label="${escapeHtml(t("hud.quickRail.label", undefined, "Quick actions"))}">${QUICK_ACTIONS.map(
-    (item) =>
-      `<button class="quick-action quick-rail-btn" data-ui data-action="${item.action}" data-icon="${item.icon}" aria-label="${escapeHtml(item.title)} — ${escapeHtml(item.detail)}"><span class="quick-rail-art" aria-hidden="true">${menuIcon(item.icon)}</span><span class="quick-rail-copy"><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.detail)}</small></span></button>`,
+    (item) => {
+      const copy = destinationCopy(item);
+      return `<button class="quick-action quick-rail-btn" data-ui data-action="${item.action}" data-icon="${item.icon}" aria-label="${escapeHtml(copy.title)} — ${escapeHtml(copy.detail)}"><span class="quick-rail-art" aria-hidden="true">${menuIcon(item.icon)}</span><span class="quick-rail-copy"><b>${escapeHtml(copy.title)}</b><small>${escapeHtml(copy.detail)}</small></span></button>`;
+    },
   ).join("")}</nav>`;
 }
 
@@ -254,7 +274,7 @@ export function renderMain(s: HudSnapshot): string {
       <div class="hero-sun-wrap">${sunSVG({ size: 64, className: "hero-sun" })}</div>
       ${sunbirdSVG({ className: "hero-bird", width: 92, title: "Sunbird", animateWings: true })}
       <div class="hero-title">
-        <span class="hero-kicker">chase the daylight</span>
+        <span class="hero-kicker">${t("onboarding.skyIsYours", undefined, "THE SKY IS YOURS")}</span>
         <h1>SUNBIRD</h1>
         <p class="hero-sub">${t("hud.heroSub", undefined, "Hold to dive. Release to soar.")}<br>${t("hud.heroSub2", undefined, "Master the glide across endless islands.")}</p>
         ${s.streakDays >= 2 ? `<div class="hero-meta"><span class="pill streak-pill">${menuIconSm("sun")} ${s.streakDays}-day streak${s.streakDays >= 7 ? " · on fire!" : " · fly to extend"}</span></div>` : ""}
@@ -281,26 +301,26 @@ export function renderMain(s: HudSnapshot): string {
     <div class="home-section-title"><span>${t("hud.renderMain.PNow", undefined, "Play now")}</span><small>${t("hud.renderMain.FRACEEXPLORE", undefined, "FLY · RACE · EXPLORE")}</small></div>
     <nav class="destination-grid play-destinations home-hub-grid" aria-label="${t("hud.aria.play", undefined, "Play")}">${menuLinks(playDestinations)}</nav>
     ${homeBoardStrip(s)}
-    <div class="home-section-title"><span>Progress</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
+    <div class="home-section-title"><span>${t("hud.aria.progress", undefined, "Progress")}</span><small>${t("hud.renderMain.GRANKREWARDS", undefined, "GOALS · RANK · REWARDS")}</small></div>
     <nav class="destination-grid progress-destinations home-hub-grid" aria-label="${t("hud.aria.progress", undefined, "Progress")}">${menuLinks(progressDestinations)}</nav>
     <div class="home-record home-status-bar" role="status">
       <button class="sb-stat sb-coins" data-ui data-action="open-paywall" aria-label="${t("hud.menu.coinBalance", undefined, "coins")}: ${formatNumberLocalized(s.wallet)}">
         <span class="sb-icon" aria-hidden="true">${menuIconSm("coin")}</span>
         <b>${formatNumberLocalized(s.wallet)}</b>
-        <small>coins</small>
+        <small>${t("hud.menu.coinBalance", undefined, "coins")}</small>
       </button>
       <span class="sb-divider" aria-hidden="true"></span>
       <button class="sb-stat sb-pass" data-ui data-action="open-pass" aria-label="${t("hud.menu.nestPass", undefined, "Nest Pass")} level ${s.season.tier}">
         <span class="sb-icon" aria-hidden="true">${menuIconSm("crown")}</span>
         <b>Lv.${s.season.tier}</b>
-        <small>nest pass</small>
+        <small>${t("hud.menu.nestPass", undefined, "Nest Pass")}</small>
         <span class="sb-prog" style="--pct:${Math.round(s.season.tier / Math.max(1, s.season.maxTier) * 100)}%" aria-hidden="true"></span>
       </button>
       <span class="sb-divider" aria-hidden="true"></span>
       <button class="sb-stat sb-best" data-ui data-action="open-progress" aria-label="${t("hud.menu.personalBest", undefined, "Personal best")}: ${distanceText(s.bestDistance)}">
         <span class="sb-icon" aria-hidden="true">${menuIconSm("medal")}</span>
         <b>${distanceText(s.bestDistance)}</b>
-        <small>best flight</small>
+        <small>${t("hud.menu.personalBest", undefined, "Personal best")}</small>
       </button>
     </div>
   `;

@@ -1,4 +1,5 @@
-import { DAILY_STIPEND, SHOP_AD_SESSION_CAP } from "../constants";
+import { importantMessages as messages } from "../ImportantMessages";
+import { DAILY_STIPEND } from "../constants";
 import { SELL_AD_REMOVAL } from "../edition";
 import { iconGlyph } from "../MenuIcons";
 import type { GameAudio } from "../Audio";
@@ -33,7 +34,6 @@ export interface ShopActionContext {
   readonly bird: Bird;
   readonly telemetry: Telemetry;
   readonly platform: PlatformAdapter | null;
-  readonly shopAdClaimed: number;
   readonly checkoutBusy: boolean;
   adsLive(): boolean;
   multiplyCoinsFromShopAd(): Promise<void>;
@@ -73,21 +73,17 @@ export function shopAction(ctx: ShopActionContext, action: string, id: string): 
           ctx.save.state.seenShop = true;
           ctx.save.persist();
           ctx.telemetry.track("onboarding_shop_opened", { runs: ctx.save.state.runsPlayed });
-          ctx.hud.toast("Shop: birds change your stats, boosts give you powers, trails look great — boosts from 40 coins, birds from 150", "gold", "shop");
+          ctx.hud.toast(messages.firstShop(), "gold", "shop");
           ctx.platform?.measure("milestone", "first-shop", "reached");
         }
         ctx.platform?.measure("button", "shop", "interact");
         ctx.setScreen("shop");
         return true;
       case "shop-free-coins": {
-        // Rewarded ad from the shop: capped per session to prevent ad farming.
+        // Poki controls ad availability and pacing.
         // The card is hidden without a live ad surface (HUD: `adAvailable`), so
         // this is the second half of the same gate.
         if (!ctx.adsLive()) return true;
-        if (ctx.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
-          ctx.hud.toast("Free coin rewards capped for this hour", "info");
-          return true;
-        };
         void ctx.multiplyCoinsFromShopAd();
         return true;
       }

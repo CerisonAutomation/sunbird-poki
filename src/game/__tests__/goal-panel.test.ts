@@ -112,11 +112,11 @@ describe("there is one goal panel, not two", () => {
     // passed while the mutation that broke it was applied. The cap is a design
     // decision (a phone footer holds three rows), so the test states the number
     // rather than mirroring the code.
-    expect(rows, "the merged panel grew past three rows").toBeLessThanOrEqual(3);
+    expect(rows, "the merged panel must contain at most one row").toBeLessThanOrEqual(1);
     expect(rows, "the cap was satisfied by showing nothing at all").toBeGreaterThan(0);
 
     // And the code must still be driven by the named constant, not a bare 3.
-    expect(hudSource(), "the cap is inlined instead of named").toContain("GOAL_STRIP_MAX_ROWS = 3");
+    expect(hudSource(), "the cap is inlined instead of named").toContain("GOAL_STRIP_MAX_ROWS = 1");
   });
 });
 

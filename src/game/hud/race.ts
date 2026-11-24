@@ -413,7 +413,7 @@ export function renderSquad(s: Pick<HudSnapshot, "bestDistance" | "friendChallen
   // is an explicit, confirmed re-enrollment into a fresh profile.
   const recovery = sq.credentialError && !sq.isAutonomous
     ? `<section class="squad-recovery" role="region" aria-label="${t("hud.renderRank.SProfileRecovery", undefined, "Squad profile recovery")}">
-        ${sectionTitle(null, "Squad profile recovery", "key missing")}
+        ${sectionTitle(null, t("hud.renderRank.SProfileRecovery", undefined, "Squad profile recovery"), "key missing")}
         <p>${escapeHtml(sq.error || "This browser cannot unlock the saved Squad profile.")} Your flight progress, coins and birds are untouched — only the Squad identity is locked.</p>
         <label class="recovery-consent"><input type="checkbox" data-ui /> I understand this creates a separate Squad profile.</label>
         <div class="room-actions-bar">
@@ -468,7 +468,7 @@ export function renderModes(s: Pick<HudSnapshot, "modeId" | "modes">): string {
             <span class="mode-icon">${menuIconSm(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
-            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">✓</span>` : ""}
+            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">${menuIconSm("check")}</span>` : ""}
           </button>`,
         )
         .join("")}
@@ -481,7 +481,7 @@ export function renderModes(s: Pick<HudSnapshot, "modeId" | "modes">): string {
             <span class="mode-icon">${menuIconSm(m.icon)}</span>
             <span class="mode-body"><b>${m.name}</b><em>${m.blurb}</em></span>
             <span class="mode-meta">${m.finish ? `${m.finish / 1000} km` : m.clock ? `${m.clock}s` : "∞"}</span>
-            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">✓</span>` : ""}
+            ${m.id === s.modeId ? `<span class="mode-check" aria-hidden="true">${menuIconSm("check")}</span>` : ""}
           </button>`,
         )
         .join("")}

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { shopAction, type ShopActionContext } from "../actions/shop";
-import { SHOP_AD_SESSION_CAP } from "../constants";
 import { SaveData } from "../SaveData";
 import type { GameAudio } from "../Audio";
 import type { Bird } from "../Bird";
@@ -41,7 +40,6 @@ function context(save: SaveData, rec: Recorded, over: Partial<ShopActionContext>
     bird: { x: 0, y: 0 } as unknown as Bird,
     telemetry: { track: (event: string) => rec.tracked.push(event) } as unknown as Telemetry,
     platform: null,
-    shopAdClaimed: 0,
     checkoutBusy: false,
     adsLive: () => true,
     multiplyCoinsFromShopAd: async () => {
@@ -127,21 +125,11 @@ describe("shop action table", () => {
     expect(rec.calls).not.toContain("shopAd");
   });
 
-  it("caps rewarded free coins per session and explains the cap", () => {
-    const save = new SaveData();
+  it("routes repeated player-initiated rewards to the platform without an internal cap", () => {
     const rec = recorder();
-    const ctx = context(save, rec, { shopAdClaimed: SHOP_AD_SESSION_CAP });
-    expect(shopAction(ctx, "shop-free-coins", "")).toBe(true);
-    expect(rec.calls).not.toContain("shopAd");
-    expect(rec.toasts.join(" ")).toMatch(/capped/i);
-  });
-
-  it("still pays out a rewarded ad one claim below the cap", () => {
-    const save = new SaveData();
-    const rec = recorder();
-    const ctx = context(save, rec, { shopAdClaimed: SHOP_AD_SESSION_CAP - 1 });
-    expect(shopAction(ctx, "shop-free-coins", "")).toBe(true);
-    expect(rec.calls).toContain("shopAd");
+    const ctx = context(new SaveData(), rec);
+    for (let i = 0; i < 6; i++) shopAction(ctx, "shop-free-coins", "");
+    expect(rec.calls.filter(call => call === "shopAd")).toHaveLength(6);
   });
 
   it("telescopes the first-visit onboarding exactly once", () => {

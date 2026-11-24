@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Bird } from "../Bird";
 import { TerrainSystem } from "../TerrainSystem";
 import { PHYS_DT } from "../constants";
 import { decideHold } from "../pilot";
-import { islandTemplate } from "../Biomes";
 
 /**
  * Attract-mode pilot invariants: the menu backdrop flies the real sim, so
@@ -53,14 +52,11 @@ describe("attract pilot decisions", () => {
 describe("attract pilot over water", () => {
   it("soars instead of diving into a drink it cannot clear", () => {
     const terrain = new TerrainSystem("2026-09-14");
-    // Mid-ocean, low and slow: diving splashes inside the horizon while
-    // soaring stays dry past it — ranked clean > dry miss > splash.
-    //
-    // The three positions are derived from the island layout rather than typed
-    // in. They used to be fixed world-x values, which quietly stopped being
-    // over water the moment the island template changed length — the test kept
-    // passing its "mid-ocean" premise while flying over the drop.
-    const gap = islandTemplate(0).gapStart;
+    // Simulate open water explicitly; world transitions no longer contain a
+    // periodic ocean gap, but the pilot must still handle submerged terrain.
+    vi.spyOn(terrain, "heightAt").mockReturnValue(-30);
+    vi.spyOn(terrain, "isOcean").mockReturnValue(true);
+    const gap = 1600;
     for (const p of [
       { x: gap + 30, y: 6, vx: 25, vy: -4 },
       { x: gap + 25, y: 8, vx: 30, vy: -5 },

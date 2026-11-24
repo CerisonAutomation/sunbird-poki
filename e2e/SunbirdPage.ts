@@ -303,6 +303,8 @@ export class SunbirdPage {
         slopeY: raw.slopeY ?? raw.hudBottom - raw.hudTop,
         handPx: raw.handPx,
         naturalBandPx: raw.naturalBandPx,
+        forceTopLayout: true,
+        clearancePx: await this.page.locator("#layout-fixture").getAttribute("data-coaching") === "true" ? 10 : undefined,
       };
       const band = messageBand(input);
       const current = JSON.stringify([input, band]);

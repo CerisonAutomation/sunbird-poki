@@ -37,6 +37,10 @@ export class Input {
   private toggledActive = false;
   /** Previous frame's raw gamepad-1 press, for edge-detecting a toggle flip. */
   private prevPadP1Raw = false;
+  /** A controller held through an interruption must be released before it can
+   * drive either bird again, including tap-to-toggle mode. */
+  private padP1NeedsRelease = false;
+  private padP2NeedsRelease = false;
   private space = false;
   private readonly keys = new Set<string>();
   private readonly boundBlur = () => this.resetHeld();
@@ -116,7 +120,11 @@ export class Input {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    if (!enabled) this.resetHeld();
+    if (!enabled) {
+      this.resetHeld();
+      this.padP1NeedsRelease = this.padP2NeedsRelease = true;
+      this.pausePressed = this.restartPressed = this.mutePressed = this.fullscreenPressed = this.boostPressed = false;
+    }
   }
 
   /**
@@ -139,6 +147,7 @@ export class Input {
       this.padP1 = false;
       this.padP2 = false;
       this.prevPadP1Raw = false;
+      if (this.enabled) this.padP1NeedsRelease = this.padP2NeedsRelease = false;
       return;
     }
     const pressed = (i: number): boolean => {
@@ -147,8 +156,16 @@ export class Input {
       for (const b of p.buttons) if (b?.pressed) return true;
       return Math.abs(p.axes[1] ?? 0) > 0.6;
     };
-    const rawP1 = pressed(0);
-    this.padP2 = pressed(1);
+    const physicalP1 = pressed(0);
+    const physicalP2 = pressed(1);
+    if (!this.enabled) {
+      this.padP1 = this.padP2 = false;
+      return;
+    }
+    if (!physicalP1) this.padP1NeedsRelease = false;
+    if (!physicalP2) this.padP2NeedsRelease = false;
+    const rawP1 = physicalP1 && !this.padP1NeedsRelease;
+    this.padP2 = physicalP2 && !this.padP2NeedsRelease;
     if (this.toggleMode) {
       // Edge-detect: flip once per fresh press, never on the held frames.
       if (rawP1 && !this.prevPadP1Raw) this.toggledActive = !this.toggledActive;

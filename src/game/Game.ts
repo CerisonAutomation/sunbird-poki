@@ -1,3 +1,4 @@
+import { importantMessages as messages } from "./ImportantMessages";
 import { buildStamp } from "./version";
 import { skinShape } from "./Sunbird";
 import { biomeClimb } from "./FlightProgression";
@@ -82,8 +83,6 @@ import {
   COIN_VALUE,
   CONTINUE_COST,
   CONTINUE_DAYLIGHT,
-  AD_SAFETY_SECONDS,
-  COMMERCIAL_BREAK_MIN_GAP_MS,
   CONTINUE_TIMEOUT,
   ISLAND_REFILL_CEILING,
   DAYLIGHT_MAX,
@@ -113,7 +112,6 @@ ZENITH_DURATION,
 ZENITH_SLOWMO,
 ZENITH_THERMAL_VY,
 SHOP_AD_COINS,
-SHOP_AD_SESSION_CAP,
   FLARE_BRAKE,
   START_ALTITUDE,
   START_SPEED,
@@ -365,6 +363,8 @@ export class Game {
   private runTime = 0;
   private disposed = false;
   private hidden = false;
+  /** Independent interruptions can overlap (e.g. an ad blurs a hidden tab). */
+  private readonly backgroundReasons = new Set<"blur" | "hidden" | "portal" | "context">();
   /** The browser dropped the WebGL context (GPU reset, driver crash, a long
    *  background stint). We stop drawing and wait for webglcontextrestored
    *  instead of burning frames against a dead context. */
@@ -463,12 +463,8 @@ export class Game {
    * re-renders every frame, so without this flag the bonus was re-claimable
    * forever (each claim tripled runCoins and re-armed the card). */
   private multiplierClaimed = false;
-  /** Rewarded-ad coin claims earned via the shop this hour (see adHourKey). */
-  private shopAdClaimed = 0;
   /** In-flight guard for the shop rewarded break (see multiplyCoinsFromShopAd). */
   private shopAdBusy = false;
-  /** Hour-buckets the shopAdClaimed counter; resets when the wall-clock hour rolls. */
-  private adHourKey = Math.floor(Date.now() / 3_600_000);
   private runClouds = 0;
   private zeniths = 0;
   private pickups = 0;
@@ -492,24 +488,11 @@ export class Game {
   private multiplierRewardBusy = false;
   private continueTimer = 0;
   private adTimer = 0;
-  /**
-   * Wall-clock spent in the "ad" state, and the state we were in before it.
-   *
-   * State "ad" is exit-blocked on purpose (see handleAction): a portal break is
-   * ended by the platform's promise and by nothing else. That is correct for
-   * unskippability, but it means a platform ad that never resolves would trap
-   * the player permanently — every control is inert and there is no other way
-   * out. This pair is the safety valve: after AD_SAFETY_SECONDS the break is
-   * abandoned and the previous state restored, WITHOUT granting anything. The
-   * player still cannot skip an ad; they simply cannot be imprisoned by one.
-   */
-  private adWallClock = 0;
-  /** When a commercial break was last REQUESTED (not necessarily served).
-   *  Gate for the run-start break; see `maybeBreakOnRunStart`. */
-  private lastCommercialBreakAt = 0;
-  /** Guards against two overlapping break requests. */
+  /** Guards against overlapping break requests and stale completions. */
   private portalBreakPending = false;
-  private preAdState: GameState | null = null;
+  private portalBreakSerial = 0;
+  /** The SDK's onStart callback owns the simulation until its promise settles. */
+  private portalAdActive = false;
   private adReason: AdReason = "interstitial";
   private skipInterstitialOnce = false;
   private runRecorded = false;
@@ -644,8 +627,6 @@ export class Game {
   private stormfront = false;
   /** Stormfront phase (1-3): the storm escalates as the field advances. */
   private stormPhase = 1;
-  /** First thermal of the run gets a toast; the HUD chip covers the rest. */
-  private thermalToasted = false;
   /** Flight recap: downsampled [x, y] profile of the finished run. */
   private flightPath: [number, number][] = [];
   /** Weekly-event physics mods, cached at run start (hot path: every frame + every coin). */
@@ -803,7 +784,9 @@ export class Game {
     // Warm the startup locale pack (English is resident; everyone else
     // fetches one small file). Runs while the HUD/menu build — the module
     // already lives in this chunk, so this costs nothing on the entry path.
-    void whenLocaleReady();
+    void whenLocaleReady().then(() => {
+      if (!this.disposed) this.bump();
+    });
     this.telemetry.bindDevice(this.save.state.deviceId);
     // The crash reporter's network copy goes through the same privacy
     // pipeline as every other event; the journal from the previous session
@@ -938,8 +921,7 @@ export class Game {
     this.onContextLost = (e: Event) => {
       e.preventDefault();
       this.contextLost = true;
-      if (this.state === "playing") this.setState("paused");
-      this.audio.setHiddenMuted(true);
+      this.suspendForBackground("context");
       this.watchdog.suspend(); // rAF stops with the context — not a stall
       this.hud.toast(t("hud.gpu.contextLost", undefined, "Graphics context lost — restoring…"));
       this.telemetry.track("webgl_context_lost", {});
@@ -955,7 +937,7 @@ export class Game {
       this.contextLost = false;
       this.watchdog.resume();
       this.renderWidth = 0; // force a fresh buffer after GPU/context restoration
-      this.audio.setHiddenMuted(false);
+      this.resumeFromBackground("context");
       // Rebuild the drawing buffer at the current size and drop the stale clock.
       this.dprCooldown = 0;
       this.last = performance.now();
@@ -1056,18 +1038,14 @@ export class Game {
     } catch { /* non-browser env */ }
 
     this.onFocus = () => {
-      if (!this.hidden) {
-        this.audio.setHiddenMuted(false);
-        void this.audio.resumeExisting();
-      }
+      this.resumeFromBackground("blur");
       if (this.checkoutWaiting && this.screen === "checkout") {
         this.telemetry.track("checkout_return_focus", { sku: this.checkoutSku });
         this.hud.toast(t("hud.toast.checkoutReturn", undefined, "Welcome back — confirm below if you finished paying"), "info");
       }
     };
     this.onBlur = () => {
-      this.audio.setHiddenMuted(true);
-      void this.audio.suspend();
+      this.suspendForBackground("blur");
     };
     this.onOrientationChange = () => {
       try { window.scrollTo(0, 0); } catch { /* ignore */ }
@@ -1137,10 +1115,10 @@ export class Game {
           });
         }
         // Portal QA requirement (and basic courtesy): a hidden tab is silent.
-        this.suspendForBackground();
+        this.suspendForBackground("hidden");
       } else {
         this.hidden = false;
-        this.resumeFromBackground();
+        this.resumeFromBackground("hidden");
       }
     };
     document.addEventListener("visibilitychange", this.onVis);
@@ -1184,9 +1162,9 @@ export class Game {
     window.setTimeout(() => {
       if (this.disposed) return;
       if (this.save.recoveredFromCorruption) this.hud.toast(t("hud.toast.saveRecovered", undefined, "Save couldn't be read — kept a backup, starting fresh"), "warn");
-      if (streakReward > 0) this.hud.toast(t("hud.toast.streakDay", { n: this.save.state.streak.days, reward: streakReward }, `Day ${this.save.state.streak.days} streak · +${streakReward} coins`), "gold");
-      if (streakMilestone) this.hud.toast(t("hud.toast.streakMilestone", { days: streakMilestone.days, coins: streakMilestone.coins, trail: streakMilestone.trail ? " + a new trail" : "" }, `${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`), "gold", "fire");
-      if (vipGift > 0) this.hud.toast(t("hud.toast.vipGift", { coins: vipGift }, `VIP daily gift · +${vipGift} coins`), "vip");
+      if (streakReward > 0) this.hud.toast(messages.streakDay(this.save.state.streak.days, streakReward), "gold");
+      if (streakMilestone) this.hud.toast(messages.streakMilestone(streakMilestone.days, streakMilestone.coins, Boolean(streakMilestone.trail)), "gold", "fire");
+      if (vipGift > 0) this.hud.toast(messages.vipDaily(vipGift), "vip");
     }, 700);
     this.telemetry.track("session_start", {
       gold: this.save.state.gold,
@@ -1220,10 +1198,10 @@ export class Game {
       onPause: () => {
         // Portal-side pause (in addition to visibilitychange): freeze the
         // same way a hidden tab does — paused state + silenced audio.
-        this.suspendForBackground();
+        this.suspendForBackground("portal");
       },
       onResume: () => {
-        this.resumeFromBackground();
+        this.resumeFromBackground("portal");
       },
     }).then((adapter) => {
       if (this.disposed) return;
@@ -1243,8 +1221,8 @@ export class Game {
       // overwrites this later). `getUser()` is read-only, so this can never
       // pop an account prompt on load — the prompt is user-initiated only.
       void this.adoptPortalIdentity();
-      // Localization: adopt the portal's language for the first paint, before
-      // the player has chosen one themselves (guide: serve the player's own
+      // Localization: adopt the portal language as soon as the SDK is ready,
+      // unless the player has chosen one themselves (guide: serve the player's own
       // language automatically rather than making them hunt for a setting).
       void adoptPortalLocale(adapter.getLanguage()).then((changed) => {
         if (changed && !this.disposed) this.bump();
@@ -1293,7 +1271,7 @@ export class Game {
       }
       this.bump();
     });
-    if (seasonEnd) this.hud.toast(t("hud.toast.seasonEnd", { division: seasonEnd.division, coins: seasonEnd.coins }, `Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`), "gold", "swords");
+    if (seasonEnd) this.hud.toast(messages.seasonEnd(seasonEnd.division, seasonEnd.coins), "gold", "swords");
     // Warm the embedded main-menu leaderboard on boot so it isn't empty on
     // the first frame. EA-05: this is background work — it is queued as idle
     // work so the first interactive frame (and the boot bar's last stage) does
@@ -1361,18 +1339,18 @@ export class Game {
       });
   }
 
-  /** Backgrounding, by either route. A hidden tab (visibilitychange) and a
-   *  portal-side pause were two hand-written copies of the same three
-   *  statements, so the two ways of getting muted could drift apart — and a
-   *  drift here is a player who cannot unpause. */
-  private suspendForBackground(): void {
+  /** Pause and silence independently overlapping background interruptions. */
+  private suspendForBackground(reason: "blur" | "hidden" | "portal" | "context"): void {
+    this.backgroundReasons.add(reason);
     if (this.state === "playing") this.setState("paused");
     this.audio.setHiddenMuted(true);
     void this.audio.suspend();
   }
 
-  /** The mirror of suspendForBackground, likewise shared by both routes. */
-  private resumeFromBackground(): void {
+  /** The player must resume manually; clearing one reason must not unmute another. */
+  private resumeFromBackground(reason: "blur" | "hidden" | "portal" | "context"): void {
+    this.backgroundReasons.delete(reason);
+    if (this.backgroundReasons.size > 0) return;
     this.last = performance.now();
     this.acc = 0;
     this.audio.setHiddenMuted(false);
@@ -1459,7 +1437,15 @@ export class Game {
     // BACKWARDS, which printed a "4" in a three-second countdown.
     const raw = Math.max(0, Math.min(0.25, (now - this.last) / 1000));
     this.last = now;
+    // A portal opportunity freezes all game updates (including background
+    // network/day events) until the SDK settles, not just the flight physics.
+    // `last` was updated above, so resuming never catches up the ad's duration.
     if (this.hidden || this.contextLost) return;
+    if (this.portalAdActive) {
+      // Paint the transition once, without running simulation or background work.
+      if (this.state === "ad" && this.lastHudVersion !== this.uiVersion) this.pushHud();
+      return;
+    }
 
     this.handleHotkeys();
     this.pumpNetwork(raw);
@@ -1606,24 +1592,8 @@ export class Game {
           this.endAd();
           break;
         }
-        // Safety valve: the ad state is exit-blocked by design, so a platform
-        // ad whose promise never settles must not be allowed to trap the game.
-        // Generous on purpose — every real break resolves long before this, so
-        // a player-initiated skip is still impossible and this only fires when
-        // the SDK has genuinely failed. The previous state is restored and
-        // nothing is granted.
-        this.adWallClock += raw;
-        if (this.adWallClock > AD_SAFETY_SECONDS) {
-          this.telemetry.track("ad_abandoned", { reason: this.adReason, portal: this.platform?.name ?? "none" });
-          this.endPortalAd();
-          const restore = this.preAdState ?? "gameover";
-          // An interstitial fires from inside finishRun (previous state
-          // "playing", bird asleep, run recorded): restoring "playing" would
-          // strand a sleeping bird with no run and no offer. Pause breaks
-          // restore "paused" untouched.
-          const safe = restore === "playing" ? "gameover" : restore;
-          this.setState(safe === "ad" ? "gameover" : safe);
-        }
+        // Portal breaks end only when their SDK promise settles. A game-side
+        // timeout could resume gameplay while a long ad is still playing.
         break;
       case "gameover":
         this.acc += raw;
@@ -1779,9 +1749,6 @@ export class Game {
     this.boostTimer = Math.max(0, this.boostTimer - dt);
     this.manualBoostCooldown = Math.max(0, this.manualBoostCooldown - dt);
     this.runTime += dt;
-    // Hour roll resets the shop ad reward counter (cap per wall-clock hour).
-    const nowHour = Math.floor(Date.now() / 3_600_000);
-    if (nowHour !== this.adHourKey) { this.adHourKey = nowHour; this.shopAdClaimed = 0; }
     this.xpFlush -= dt;
     if (this.xpFlush <= 0) {
       this.xpFlush = 2;
@@ -1919,7 +1886,7 @@ export class Game {
           this.ghostPassed = true;
           this.save.addGhostBeat();
           const newTrophies = this.achievements.checkNew();
-          for (const trophy of newTrophies) this.hud.toast(t("hud.toast.trophy", { title: trophy.title }, `Trophy: ${trophy.title}`), "gold");
+          for (const trophy of newTrophies) this.hud.toast(messages.trophy(trophy.title), "gold");
           if (newTrophies.length > 0) this.audio.trophy();
           this.hud.toast(t("toast.ghost.recorded", undefined, "Passed your ghost!"), "quest", "ghost");
           this.audio.ding();
@@ -1937,12 +1904,6 @@ export class Game {
     this.weather.update(dt, this.elapsed, this.bird, this.terrain, diving, {
       onThermalEnter: () => {
         this.audio.thermal();
-        // Once per run: after the first call-out the ♨ HUD chip carries the
-        // message — toasting every thermal doubled the same text on screen.
-        if (!this.thermalToasted && this.hintTimer < 40) {
-          this.thermalToasted = true;
-          this.hud.toast(t("hud.toast.thermal", undefined, "Thermal — release to ride it"), "power");
-        }
       },
       onGustStart: () => {
         this.audio.gust();
@@ -3580,60 +3541,30 @@ export class Game {
 
   /* ------------------------------------------------------------- run flow */
 
-  /**
-   * Today's daily challenge, scaled by this player's own miss streak
-   * (Feature: Challenge Difficulty Auto-Tuning). Every reader of "today's
-   * daily" — the launch, the toast, the finish-line verdict, the journey
-   * card — goes through this one function, so the target a player is shown
-   * is always the exact target their run is checked against.
-   */
-  /**
-   * Offer a commercial break when a run starts, if the portal can serve one.
-   *
-   * Fire-and-forget on purpose: the run begins immediately and the ad, if it
-   * comes, arrives over the top. Awaiting here would make every launch after
-   * the first feel like a loading screen.
-   *
-   * The pacing guard is not a politeness gesture. The shipped core's ad timing
-   * is `timeBetweenAds: 120000` and `startAdsAfter: 120000` with
-   * `preroll: false`, so a request inside those windows is refused and resolves
-   * empty. Asking anyway would cost the player a beat of their run for nothing;
-   * asking inside the real window is an opportunity the portal can actually
-   * honour.
-   *
-   * The FIRST run of a session is skipped, because the core's `startAdsAfter`
-   * refuses any break before gameplayStart has been running. `lastCommercial-
-   * BreakAt` starts at 0, and `Date.now()` is an epoch value, so a plain
-   * `now - last < GAP` test would NOT skip it — it has to be an explicit check.
-   */
-  private maybeBreakOnRunStart(): void {
-    const platform = this.platform;
-    if (!this.adsLive() || !platform || platform.name === "none") return;
+  /** Run an intent only after the platform's commercial opportunity settles.
+   * First flight remains immediate; live races use their shared server start
+   * instead of inserting an ad after the other pilots are already committed. */
+  private startAfterCommercial(start: () => void): void {
     if (this.portalBreakPending) return;
-    const now = Date.now();
-    // Explicit first-run skip (see above). Also the "no break while another is
-    // in flight" gate for the pause path, which shares this flag.
-    if (this.lastCommercialBreakAt === 0) {
-      this.lastCommercialBreakAt = now;
-      return;
-    }
-    if (now - this.lastCommercialBreakAt < COMMERCIAL_BREAK_MIN_GAP_MS) return;
+    const platform = this.platform;
+    if (!this.adsLive() || !platform || platform.name === "none") { start(); return; }
+    // No pre-roll: the first flight starts immediately. After that, tell Poki
+    // about each natural restart opportunity and let the SDK decide frequency.
+    if (this.sessionRuns === 0) { start(); return; }
 
     this.portalBreakPending = true;
-    this.lastCommercialBreakAt = now;
+    const serial = ++this.portalBreakSerial;
+    this.adReason = "interstitial";
+    this.setState("ad");
+    this.beginPortalAd();
     this.telemetry.track("portal_break_request", { portal: platform.name, placement: "run_start" });
-    // No `endPortalAd()` here on purpose. This call never begins a break — no
-    // `beginPortalAd`, no `setState("ad")` — so closing an ad that never opened
-    // would unmute and re-enable input underneath whatever real ad is up
-    // (a shop or continue rewarded break), which is exactly the unbalanced
-    // onAdOpened/onAdClosed pairing `poki-breaks.test.ts` exists to prevent.
-    // The adapter's own balanced onAdClosed covers a break that did open.
-    void platform
-      .commercialBreak()
-      .catch(() => undefined)
-      .finally(() => {
-        this.portalBreakPending = false;
-      });
+    void platform.commercialBreak().catch(() => undefined).finally(() => {
+      if (serial !== this.portalBreakSerial) return;
+      this.portalBreakPending = false;
+      if (this.disposed || this.state !== "ad") return;
+      this.endPortalAd();
+      start();
+    });
   }
 
   private todaysDaily(): DailyChallenge {
@@ -3641,23 +3572,22 @@ export class Game {
   }
 
   private startRun(opts?: RunOptions): void {
-    // Poki, "PokiSDK: HTML5" step 4 recommends a commercialBreak() before every
-    // gameplayStart() when the player has shown intent to keep playing. That
-    // call now lives in `maybeBreakOnRunStart()`.
-    //
-    // It used to be claimed to be here and was not: the only commercialBreak()
-    // in the game sat in `resumeFromPause`, so a player who never paused and
-    // simply relaunched from the menu was never offered a break at all — the
-    // exact gap the old comment claimed had been closed.
-    this.maybeBreakOnRunStart();
+    // A server-started room has a shared wall-clock countdown. An ad here would
+    // put this player out of sync with everyone else; show opportunities at a
+    // natural break before matchmaking instead, never on the room's start tick.
+    const liveRoom = isRaceMode(this.modeId) && !this.localRace && Boolean(this.roomCode) && Boolean(this.net?.connected);
+    if (liveRoom) this.startRunNow(opts);
+    else this.startAfterCommercial(() => this.startRunNow(opts));
+  }
+
+  private startRunNow(opts?: RunOptions): void {
     this.sessionRuns += 1;
     this.markFunnel("first_flight");
     if (this.funnel.reached("first_death")) this.markFunnel("first_retry");
     if (this.sessionRuns >= 2) this.markFunnel("second_run");
     if (this.sessionRuns === 2 && !this.save.state.seenShop) {
-      // The cheapest bird is 225 coins; a player on their second run has a
-      // double-digit wallet. Point at the first thing they CAN buy.
-      this.hud.toast("Next step: the Hangar — boosts start at 40, birds at 225", "gold", "coin");
+      // Keep the first shop cue useful even as catalog prices change.
+      this.hud.toast(messages.shopTip(), "gold", "coin");
     }
     this.exitVersus();
     this.mode = modeById(this.modeId);
@@ -3733,7 +3663,6 @@ export class Game {
     this.nextMilestone = 500;
     this.rivalBeatenToast = false;
     this.stormPhase = 1;
-    this.thermalToasted = false;
     // Stormfront survives only through launchMatch(); any other entry resets.
     if (!opts?.storm) this.stormfront = false;
     this.challengeOutcome = "";
@@ -4073,12 +4002,8 @@ export class Game {
   }
 
   private doContinue(source: string): void {
-    // Resuming a lost run is the strongest "show intent to continue" signal in
-    // the game, and it went straight back to `playing` with no break offered —
-    // same omission as `startVersus`. The rewarded break that preceded it (for
-    // the gold path) is a DIFFERENT ad; this is the commercial opportunity the
-    // guide asks to be signalled here.
-    this.maybeBreakOnRunStart();
+    // A rewarded continuation has already completed its ad; coin and free
+    // continues also resume directly so a failed ad can never consume payment.
     this.continuesUsed += 1;
     this.bird.asleep = false;
     this.daylight = CONTINUE_DAYLIGHT;
@@ -4457,7 +4382,7 @@ export class Game {
       this.hud.toast(`Quest complete · +${total} coins`, "quest");
     }
     if (this.newlyCompleted.length) this.hud.toast("Nest upgraded!", "island");
-    for (const t of newTrophies) this.hud.toast(`Trophy: ${t.title}`, "gold");
+    for (const t of newTrophies) this.hud.toast(messages.trophy(t.title), "gold");
     if (newTrophies.length > 0) this.audio.trophy();
 
     // THE WIRE. Everything above noticed a ladder move; `runProgressEvents`
@@ -4533,13 +4458,13 @@ export class Game {
     const gift = this.save.claimVipDaily(today);
     // Monthly ranked season rollover: soft reset + peak-division reward.
     const seasonEnd = this.save.ensureRankSeason();
-    if (seasonEnd) this.hud.toast(`Ranked season over · ${seasonEnd.division} reward +${seasonEnd.coins} coins`, "gold", "swords");
+    if (seasonEnd) this.hud.toast(messages.seasonEnd(seasonEnd.division, seasonEnd.coins), "gold", "swords");
     // Only swap hills while resting in the menu — a midnight rollover mid-run
     // must never yank the terrain out from under a live flight.
     if (this.state === "menu" && this.seedMode === "today") this.rebuildWorld(today);
-    if (reward > 0) this.hud.toast(`Day ${this.save.state.streak.days} streak · +${reward} coins`, "gold");
-    if (streakMilestone) this.hud.toast(`${streakMilestone.days}-day streak · +${streakMilestone.coins} coins${streakMilestone.trail ? " + a new trail" : ""}!`, "gold", "fire");
-    if (gift > 0) this.hud.toast(`VIP daily gift · +${gift} coins`, "vip");
+    if (reward > 0) this.hud.toast(messages.streakDay(this.save.state.streak.days, reward), "gold");
+    if (streakMilestone) this.hud.toast(messages.streakMilestone(streakMilestone.days, streakMilestone.coins, Boolean(streakMilestone.trail)), "gold", "fire");
+    if (gift > 0) this.hud.toast(messages.vipDaily(gift), "vip");
     this.hud.toast("New hills today", "island");
     this.telemetry.track("day_rollover", { date: today });
     this.bump();
@@ -4770,6 +4695,7 @@ export class Game {
     //
     // The rule itself lives in ./adGate, where a unit test enumerates every
     // action in the shipping markup against both break kinds.
+    if (this.portalAdActive || !this.input.enabled) return;
     if (this.state === "ad" && !adBreakAllowsAction(action, this.portalEnabled())) {
       return;
     }
@@ -4847,6 +4773,7 @@ export class Game {
         if (this.state === "gameover" && !this.multiplierClaimed && this.runCoins > 0) {
           const platform = this.platform;
           if (this.portalEnabled() && platform && platform.name !== "none") {
+            if (!this.adsLive()) { this.hud.toast(messages.rewardUnconfirmed(), "warn"); break; }
             platform.measure("button", "results-coin-multiplier", "interact");
             this.setState("ad");
             this.telemetry.track("portal_break_request", { portal: platform.name, placement: "results-multiplier" });
@@ -4854,9 +4781,9 @@ export class Game {
           } else {
             const bonus = this.runCoins * 2;
             this.multiplierClaimed = true;
-            this.save.addCoins(bonus);
+            const credited = this.save.addCoins(bonus);
             this.audio.chapterFanfare();
-            this.hud.toast(`3× flight bonus — +● ${bonus} coins`, "gold");
+            this.hud.toast(messages.flightBonus(credited), "gold");
           }
         }
         this.bump();
@@ -5344,7 +5271,6 @@ export class Game {
       bird: this.bird,
       telemetry: this.telemetry,
       platform: this.platform,
-      shopAdClaimed: this.shopAdClaimed,
       checkoutBusy: this.checkoutBusy,
       adsLive: () => this.adsLive(),
       multiplyCoinsFromShopAd: () => this.multiplyCoinsFromShopAd(),
@@ -6117,7 +6043,7 @@ export class Game {
           if (this.portalEnabled() && !this.adsLive()) {
             // Unreachable while `canAd` gates the offer, and deliberately not
             // silent: a tap that does nothing is the worst outcome available.
-            this.hud.toast("Ads aren't available right now — second wind costs coins", "info");
+            this.hud.toast(messages.adUnavailable(), "info");
           } else if (this.portalEnabled()) {
             // Poki game-events: the player chose the rewarded option. The label
             // matches the `visible` event for the same offer kind (REQ-14).
@@ -6146,9 +6072,8 @@ export class Game {
       case "ad-stuck":
         // Retained as an explicit no-op, not deleted — the same pattern as
         // `ad-skip`. A portal break now has NO player-initiated exit: the SDK
-        // completion callback ends it, and the fixedUpdate safety valve (see
-        // `adWallClock` / `AD_SAFETY_SECONDS`) recovers a break whose SDK
-        // promise never settles. Neither path is a button, so a single tap can
+        // completion promise ends it. There is no game-side timeout that can
+        // resume underneath a live ad. A single tap can
         // never end a live ad early. The button this used to drive was a
         // click-through skip; it is gone from the view. Swallowing the action
         // here means a stray dispatch — a cached view, a deep link, a console
@@ -7115,11 +7040,13 @@ export class Game {
     // do not interrupt gameplay (a coin break from the shop) must not be
     // wrapped in stop/start pairs at all. The sink dedupes the rare
     // late-adapter case without ever producing the duplicate.
+    this.portalAdActive = true;
     this.input.setEnabled(false);
     this.audio.setAdMuted(true);
   }
 
   private endPortalAd(): void {
+    this.portalAdActive = false;
     this.audio.setAdMuted(false);
     this.input.setEnabled(true);
   }
@@ -7841,30 +7768,21 @@ export class Game {
     // Collapse any pause sub-screen (shop/settings/...) before returning to flight.
     this.closePauseScreen();
     const platform = this.platform;
-    // The same pacing gate as the run-start break, and for the same reason: a
-    // request the core refuses resolves empty, so entering the "ad" state for
-    // one paints a sponsored-break card the portal cannot deliver and then
-    // collapses it a frame later. Ask only when the core can actually serve.
-    if (
-      this.adsLive() &&
-      platform &&
-      platform.name !== "none" &&
-      !this.portalBreakPending &&
-      Date.now() - this.lastCommercialBreakAt >= COMMERCIAL_BREAK_MIN_GAP_MS
-    ) {
+    // Poki owns pacing: signal each player-initiated resume rather than
+    // maintaining a game-side ad timer.
+    if (this.adsLive() && platform && platform.name !== "none" && !this.portalBreakPending) {
       this.portalBreakPending = true;
-      this.lastCommercialBreakAt = Date.now();
+      const serial = ++this.portalBreakSerial;
       this.setState("ad");
+      this.beginPortalAd();
       this.telemetry.track("portal_break_request", { portal: platform.name, placement: "resume" });
       try {
         await platform.commercialBreak();
       } catch { /* a refused break must never wedge the resume */ }
-      // Clear the shared in-flight flag on EVERY exit, including the disposed
-      // one. It is one-way otherwise: `maybeBreakOnRunStart` bails on it, and
-      // nothing else resets it, so a single pause would silently disable the
-      // run-start break for the rest of the session.
+      // A stale completion must not clear a newer request.
+      if (serial !== this.portalBreakSerial) return;
       this.portalBreakPending = false;
-      if (this.disposed) return;
+      if (this.disposed || (this.state as GameState) !== "ad") return;
       this.endPortalAd();
     }
     if (this.state === "paused" || this.state === "ad") this.setState("playing");
@@ -7882,40 +7800,35 @@ export class Game {
     if (!this.adsLive() || !platform || platform.name === "none") return;
     if (this.multiplierRewardBusy || this.multiplierClaimed) return;
     this.multiplierRewardBusy = true;
+    const serial = ++this.portalBreakSerial;
+    this.beginPortalAd();
     try {
-      const earned = await platform.rewardedBreak();
-      if (this.disposed) return;
+      let earned = false;
+      try { earned = await platform.rewardedBreak(); }
+      catch { /* A failed opportunity must not grant a reward. */ }
+      if (this.disposed || serial !== this.portalBreakSerial || this.state !== "ad") return;
       this.endPortalAd();
-    if (earned) {
-      const bonus = this.runCoins * 2;
-      this.multiplierClaimed = true;
-      // Report what was CREDITED, not what was requested. `addCoins` applies
-      // the permanent goldenfeather multiplier, so the old toast promised more
-      // than the player received — the same bug its three sibling awards were
-      // already fixed for.
-      const credited = this.save.addCoins(bonus);
-      this.audio.chapterFanfare();
-      this.hud.toast(`3× flight bonus — +● ${credited} coins`, "gold");
-      platform.measure("reward", "results-coin-multiplier", "granted");
-    } else {
-      this.hud.toast("No reward this time — the 3× bonus is still on the card", "warn");
-    }
-    if (this.state === "ad") this.setState("gameover");
-    this.bump();
+      if (earned) {
+        const bonus = this.runCoins * 2;
+        this.multiplierClaimed = true;
+        const credited = this.save.addCoins(bonus);
+        this.audio.chapterFanfare();
+        this.hud.toast(messages.flightBonus(credited), "gold");
+        platform.measure("reward", "results-coin-multiplier", "granted");
+      } else {
+        this.hud.toast(messages.rewardUnconfirmed(), "warn");
+      }
+      this.setState("gameover");
+      this.bump();
     } finally {
       this.multiplierRewardBusy = false;
     }
   }
 
-  /** Shop free-coins rewarded break: capped per hour, modest payout so the
-   *  high-price mythic tier (2500-10000) stays aspirational. */
+  /** Shop free-coins rewarded break: the platform controls ad availability. */
   private async multiplyCoinsFromShopAd(): Promise<void> {
     const platform = this.platform;
     if (!this.adsLive() || !platform || platform.name === "none") return;
-    if (this.shopAdClaimed >= SHOP_AD_SESSION_CAP) {
-      this.hud.toast("Free coin rewards capped for this hour", "info");
-      return;
-    }
     // In-flight guard, like the other two rewarded placements. The shop button
     // dispatches this with `void`, unawaited, so repeated taps used to stack
     // concurrent rewardedBreak() calls — and unlike the results and continue
@@ -7924,28 +7837,24 @@ export class Game {
     if (this.shopAdBusy) return;
     this.shopAdBusy = true;
     this.telemetry.track("portal_break_request", { portal: platform.name, placement: "shop-free-coins" });
-    // Shop free-coin break does not bookend gameplay (no gameplayStop/start),
-    // so mute + disable input directly around the break instead of begin/endPortalAd
-    // (which would risk a duplicate gameplayStop from the sink).
-    this.audio.setAdMuted(true);
-    this.input.setEnabled(false);
+    // Shop breaks do not bookend gameplay; beginPortalAd only mutes and
+    // disables input, it does not emit gameplay events.
+    this.beginPortalAd();
     let earned = false;
     try {
       earned = await platform.rewardedBreak();
     } catch { /* a refused break grants nothing and must not strand the mute */ }
     if (this.disposed) return;
     this.shopAdBusy = false;
-    this.audio.setAdMuted(false);
-    this.input.setEnabled(true);
+    this.endPortalAd();
     if (earned) {
-      this.shopAdClaimed++;
       const payout = Math.min(SHOP_AD_COINS, 60);
-      this.save.addCoins(payout);
+      const credited = this.save.addCoins(payout);
       this.audio.chapterFanfare();
-      this.hud.toast(`Here's a little flying fuel — +● ${payout} coins`, "gold", "coin");
+      this.hud.toast(messages.shopCoins(credited), "gold", "coin");
       this.bump();
     } else {
-      this.hud.toast("No reward this time — try again next hour", "info");
+      this.hud.toast(messages.rewardUnconfirmed(), "info");
     }
   }
 
@@ -7956,24 +7865,23 @@ export class Game {
     this.continueRewardBusy = true;
     try {
       this.setState("ad");
+      const serial = ++this.portalBreakSerial;
+      this.beginPortalAd();
       this.telemetry.track("portal_break_request", { portal: platform.name, placement: "continue" });
-      const earned = await platform.rewardedBreak();
+      let earned = false;
+      try { earned = await platform.rewardedBreak(); }
+      catch { /* An unavailable break grants nothing. */ }
       if (this.disposed) return;
-      // The safety valve may have restored pre-break state while the SDK
-      // promise was still pending: a late grant must not resurrect a break
-      // the player already left.
-      if (this.state !== "ad") return;
+      // Do not grant a late result after a different transition or request.
+      if (serial !== this.portalBreakSerial || this.state !== "ad") return;
       this.endPortalAd();
       if (earned) {
         if (this.continuesUsed < this.maxContinues()) this.doContinue("portal_rewarded");
         else this.setState("continue");
       } else {
-        // The break did not pay: the player closed the portal's ad early (the
-        // SDK resolves earned=false), or the SDK had nothing to serve. Either
-        // way the rule is the ad plays to the end or there is no second wind —
-        // say the rule, so "skip" never looks like it might have worked.
+        // An unavailable or incomplete break never grants a continuation.
         this.setState("continue");
-        this.hud.toast("The ad has to play to the end — try again, or use coins", "warn");
+        this.hud.toast(messages.continueUnconfirmed(), "warn");
       }
     } finally {
       this.continueRewardBusy = false;
@@ -7981,16 +7889,11 @@ export class Game {
   }
 
   private setState(s: GameState): void {
+    // An ad or another asynchronous continuation can finish while the page is
+    // still backgrounded. Never send gameplayStart or run unseen in that case.
+    if (s === "playing" && this.backgroundReasons.size > 0) s = "paused";
     const previous = this.state;
     this.state = s;
-    // Arm and disarm the break safety valve (see adWallClock).
-    if (s === "ad") {
-      this.preAdState = previous;
-      this.adWallClock = 0;
-    } else if (previous === "ad") {
-      this.preAdState = null;
-      this.adWallClock = 0;
-    }
     // Leaving pause entirely collapses any open pause sub-screen state so the
     // next pause opens cleanly on the base card.
     if (s !== "paused") this.pauseScreenOrigin = null;
@@ -8442,8 +8345,6 @@ export class Game {
     adSkippable: !this.portalEnabled(),
     // Wall-clock age of the live break, so the escape hatch can render an
     // honest countdown instead of an enabled button that skips a real ad.
-    adElapsed: this.adWallClock,
-    adSafetySeconds: AD_SAFETY_SECONDS,
     adTotal: this.ads.duration,
     adReason: this.adReason,
     seedLabel: this.seedLabel(),
@@ -8795,12 +8696,10 @@ export class Game {
   /* ------------------------------------------------------- versus (2P) */
 
   private startVersus(): void {
-    // A versus is a run start like any other, and `maybeBreakOnRunStart` used
-    // to have exactly one caller — inside `startRun()`, which a versus and a
-    // replay both bypass. So this path reached `gameplayStart()` with no
-    // commercial break ever being offered, which is the one thing the HTML5
-    // guide asks for on every "player showed intent to continue" moment.
-    this.maybeBreakOnRunStart();
+    this.startAfterCommercial(() => this.startVersusNow());
+  }
+
+  private startVersusNow(): void {
     this.disconnectRace();
     this.roomCode = "";
     this.versus = true;

@@ -389,8 +389,16 @@ export function skinShape(skin: { id: string; collection?: string }): BirdShape 
 }
 
 
-/** Tight viewBox with a little room for the wing sweep. */
+/** The original hero frame; wider silhouettes need room for their tails and wings. */
 export const SUNBIRD_VIEWBOX = "-6 -2 76 68";
+const SHAPE_VIEWBOXES: Readonly<Record<BirdShape, readonly [number, number, number, number]>> = {
+  songbird: [-6, -2, 76, 68],
+  raptor: [-14, -4, 84, 70],
+  owl: [-6, -2, 76, 68],
+  wader: [-6, -2, 76, 68],
+  ember: [-11, -2, 81, 68],
+  comet: [-32, -2, 102, 68],
+};
 
 const DEG = 180 / Math.PI;
 
@@ -560,10 +568,11 @@ export function sunbirdSVG(opts: SunbirdSvgOptions = {}): string {
   const title = opts.title ? `<title>${escapeText(opts.title)}</title>` : "";
   const role = opts.title ? 'role="img"' : 'aria-hidden="true"';
   const cls = opts.className ? ` class="${escapeText(opts.className)}"` : "";
-  const height = Math.round((width * 68) / 76);
+  const frame = SHAPE_VIEWBOXES[shape] ?? SHAPE_VIEWBOXES.songbird;
+  const height = Math.round((width * frame[3]) / frame[2]);
 
   return (
-    `<svg${cls} ${role} viewBox="${SUNBIRD_VIEWBOX}" width="${width}" height="${height}" ` +
+    `<svg${cls} ${role} viewBox="${frame.join(" ")}" width="${width}" height="${height}" ` +
     `xmlns="http://www.w3.org/2000/svg" focusable="false">${title}${parts}</svg>`
   );
 }

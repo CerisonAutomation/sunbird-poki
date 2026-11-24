@@ -4,6 +4,8 @@ import { SunbirdPage } from "./SunbirdPage";
 for (const viewport of [{ width: 1280, height: 800 }, { width: 360, height: 740 }, { width: 320, height: 568 }, { width: 844, height: 390 }, { width: 568, height: 320 }]) {
   test(`HUD lanes do not overlap at ${viewport.width}×${viewport.height}`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
+    await page.route("https://game-cdn.poki.com/**", route => route.fulfill({ status: 200, contentType: "application/javascript", body: "window.PokiSDK={init:()=>Promise.resolve(),gameLoadingStart(){},gameLoadingFinished(){},gameplayStart(){},gameplayStop(){}};" }));
+    await page.route("https://auds.poki.io/**", route => route.fulfill({ status: 200, contentType: "application/json", body: '{"total":0,"items":[]}' }));
     const app = new SunbirdPage(page);
     await app.open();
     await app.ready();

@@ -35,12 +35,19 @@ export function matchLocale(tag: string | null | undefined): SupportedLocale | n
   // English. An earlier revision short-circuited `no`/`nb`/`nn` to `null`,
   // which made Norwegian permanently unmatchable even though it ships.
   const base = normalized.split("-")[0];
-  const sameLanguage = SUPPORTED_LOCALES.find((l) => l.code.toLowerCase().split("-")[0] === base);
+  // Browsers commonly report the two written Norwegian standards rather than
+  // the shared `no` pack. Legacy ISO aliases are still emitted by some UAs.
+  const canonicalBase = ({ nb: "no", nn: "no", iw: "he", in: "id" } as Record<string, string>)[base!] ?? base;
+  const sameLanguage = SUPPORTED_LOCALES.find((l) => l.code.toLowerCase().split("-")[0] === canonicalBase);
   if (sameLanguage) return sameLanguage.code;
   return null;
 }
 
 let currentLocale: SupportedLocale = "en";
+// Locale packs load asynchronously. A slower automatic selection must never
+// overwrite a manual choice, nor may an older click beat a newer click.
+let localeRequest = 0;
+let manualLocaleChosen = false;
 
 function initLocale(): SupportedLocale {
   try {
@@ -88,36 +95,47 @@ export function getLocale(): SupportedLocale {
  * so the caller can re-render.
  */
 export async function adoptPortalLocale(language: string | null): Promise<boolean> {
+  // No SDK language means browser detection remains the best available signal.
   if (!language) return false;
+  if (manualLocaleChosen) return false;
   try {
-    if (storage.getItem(LOCALE_STORAGE_KEY)) return false;
+    const saved = storage.getItem(LOCALE_STORAGE_KEY);
+    if (saved && SUPPORTED_LOCALES.some((l) => l.code === saved)) return false;
   } catch {
-    /* private mode: fall through and adopt */
+    /* storage unavailable: still respect manualLocaleChosen in this session */
   }
-  const match = matchLocale(language);
-  if (!match || match === currentLocale) return false;
-  await setLocale(match);
+  // Poki's localization guide recommends English for an unsupported code.
+  const match = matchLocale(language) ?? "en";
+  // Even a no-op selection supersedes an older pending automatic request.
+  const request = ++localeRequest;
+  if (match === currentLocale) return false;
+  await loadPack(match);
+  if (request !== localeRequest || manualLocaleChosen) return false;
+  applyLocale(match);
+  // Detection is not a player preference: don't persist it as one. Otherwise a
+  // change of Poki language can never be detected in a later session.
   return true;
 }
 
-/**
- * Switch locale. Loads the target pack FIRST, then flips the active locale —
- * callers re-render after the returned promise resolves, so UI never paints
- * half-switched text. On pack failure the switch still proceeds (English
- * text renders; direction and persistence stay correct).
- */
+/** Switch language explicitly. Most recent selection wins even on slow I/O. */
 export async function setLocale(locale: SupportedLocale): Promise<void> {
   if (!SUPPORTED_LOCALES.some((l) => l.code === locale)) return;
-  await loadPack(locale);
-  currentLocale = locale;
+  manualLocaleChosen = true;
+  const request = ++localeRequest;
   try {
     storage.setItem(LOCALE_STORAGE_KEY, locale);
   } catch {
-    /* private mode */
+    /* private mode: the in-memory choice still wins for this session */
   }
+  await loadPack(locale);
+  if (request !== localeRequest) return;
+  applyLocale(locale);
+}
+
+function applyLocale(locale: SupportedLocale): void {
+  currentLocale = locale;
   updateDocumentDirection();
-  // Notify even when the pack was already resident (cached switch): React
-  // bindings key on this version, and imperative UIs re-render on it.
+  // Notify even when the pack was already resident (cached switch).
   packVersion += 1;
   for (const fn of packListeners) fn();
 }

@@ -126,7 +126,7 @@ describe("no coin award credits one number and reports another", () => {
   });
 });
 
-describe("no caller treats the claim's return as the authoritative credit", () => {
+describe("no caller spends or re-credits the claimed VIP gift", () => {
   const game = readFileSync(join(process.cwd(), "src", "game", "Game.ts"), "utf8");
   const lines = game.split("\n");
 
@@ -163,7 +163,8 @@ describe("no caller treats the claim's return as the authoritative credit", () =
         // that and then blank the literals out: the words inside a toast
         // string ("VIP daily gift") are prose, not uses of the variable.
         const interpolates = raw.includes("${");
-        const code = raw.replace(/`[^`]*`/g, "``").replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''");
+        const code = raw.replace(/`[^`]*`/g, "``").replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''")
+          .replace(new RegExp(`messages\\.vipDaily\\(${bound}\\)`, "g"), "messages.vipDaily()");
         if (!new RegExp(`\\b${bound}\\b`).test(code)) continue; // prose only
         // Either the line that binds it, or a `> 0` presence check.
         // Arithmetic, or an assignment into save state, would mean something

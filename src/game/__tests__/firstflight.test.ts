@@ -63,3 +63,20 @@ describe("FirstFlight coach", () => {
     expect(c.view().justCompleted).toBe(true);
   });
 });
+
+it("uses plain, font-independent coaching text for both control schemes", () => {
+  const c = new FirstFlight(false);
+  expect(c.view().text).not.toMatch(/[↑↓]/);
+  expect(c.view(true).text).not.toMatch(/[↑↓]/);
+  feed(c, 60, { diving: true, grounded: true, slope: -0.2, justLaunched: false, airborne: false, islandIndex: 0 });
+  expect(c.view().text).not.toMatch(/[↑↓]/);
+  expect(c.view(true).text).not.toMatch(/[↑↓]/);
+});
+
+it("does not ask for another control input once already airborne", () => {
+  const c = new FirstFlight(false);
+  feed(c, 60, { diving: true, grounded: true, slope: -0.2, justLaunched: false, airborne: false, islandIndex: 0 });
+  c.update(DT, { diving: false, grounded: false, slope: 0.2, justLaunched: true, airborne: true, islandIndex: 0 });
+  expect(c.view().text).not.toMatch(/release|tap/i);
+  expect(c.view(true).text).not.toMatch(/release|tap/i);
+});

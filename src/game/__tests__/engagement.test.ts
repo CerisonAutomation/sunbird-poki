@@ -237,3 +237,18 @@ describe("tuneDifficulty", () => {
     expect(paceSkillFor(0.5)).toBeGreaterThan(0.5);
   });
 });
+
+it("uses singular wording for one-item starter goals", () => {
+  const found = new Set<string>();
+  const tuner = new FlowTuner();
+  for (let seed = 0; seed < 100; seed++) {
+    const goals = new SessionGoals(tuner);
+    goals.reset(String(seed), { starter: true });
+    for (const goal of goals.goals) {
+      if (goal.target !== 1) continue;
+      found.add(goal.kind);
+      expect(goal.label).not.toMatch(/1 (?:perfect launches|sky gems|sunflowers)/);
+    }
+  }
+  expect([...found].sort()).toEqual(["gems", "perfects", "sunflowers"]);
+});

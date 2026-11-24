@@ -1,13 +1,13 @@
 {
-  "generated": "2026-10-08",
+  "generated": "2026-11-24",
   "note": "Player-facing strings still rendered as English literals. Ratchet: this file may only go down. Translate a batch (barrel key + 36 locales in src/i18n/translations.barrel.json, then node scripts/gen-i18n-packs.mjs), wire the t() call, re-bless.",
   "categories": {
-    "toast": 239,
+    "toast": 223,
     "screenTitle": 0,
-    "sectionTitle": 30,
+    "sectionTitle": 28,
     "ariaLabel": 0,
     "buttonLabel": 18,
     "iconButtonLabel": 15
   },
-  "total": 302
+  "total": 284
 }

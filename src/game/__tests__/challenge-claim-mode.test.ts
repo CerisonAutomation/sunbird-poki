@@ -179,7 +179,7 @@ describe("the two gates are wired into the game, not just into the helpers", () 
 
   it("re-applies the challenge mode at the single launch funnel every run passes through", () => {
     const game = src();
-    const from = game.indexOf("private startRun(");
+    const from = game.indexOf("private startRunNow(");
     expect(from).toBeGreaterThan(-1);
     // Up to the next method declaration — the slice starts with "private ", so
     // the search has to begin past it.

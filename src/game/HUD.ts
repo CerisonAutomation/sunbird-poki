@@ -95,9 +95,8 @@ const IN_FLIGHT_MISSION_MIN_PCT = 0.5;
  *  banked rows by the end of a run. The `goalPop` toast carries the celebration
  *  past this point, so nothing is lost by letting the row go. */
 const QUEST_DONE_LINGER_MS = 4_500;
-/** Ceiling on rows in the one goal panel. Three fits a phone footer; more than
- *  that is the "wall of permanent bars" the threshold above exists to prevent. */
-const GOAL_STRIP_MAX_ROWS = 3;
+/** One optional objective at a time: flight and the next hill come first. */
+const GOAL_STRIP_MAX_ROWS = 1;
 /** Longest single-run distance, used to decide whether a mid-run goal is
  *  actually actionable. Measured from the shipped build: a good run reaches
  *  ~2.8 km. A goal further out than this cannot be moved in one run, so showing
@@ -410,7 +409,7 @@ export class HUD {
           </div>
           <div class="sun-meter" title="Daylight">
             <div class="sun-track">
-              <div class="sun-fill" data-ref="sunFill"></div>
+              <div class="sun-fill" data-ref="sunFill" role="meter" aria-label="${t("hud.stat.daylight", undefined, "Daylight")}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></div>
               <div class="sun-knob" data-ref="sunKnob">${menuIcon("daily")}</div>
             </div>
             <div class="sun-caption">${menuIconSm("sun")}<span>${t("hud.stat.daylight", undefined, "daylight")}</span></div>
@@ -725,8 +724,7 @@ export class HUD {
     // so anchoredTop is false — the footer reservation from the bottom is correct.
     // But coaching text and the toast lane still belong near the header, not pushed
     // down to the quip lane as landscape bottom-anchored layout would do.
-    const isPortrait = window.matchMedia("(max-aspect-ratio: 3/4)").matches;
-    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx, isPortrait);
+    this.publishMessageBand(hudRect, headerPx, anchoredTop, footerPx, true);
     const signature = [
       headerPx,
       footerPx,
@@ -814,6 +812,7 @@ export class HUD {
       anchoredTop,
       footerPx,
       forceTopLayout,
+      clearancePx: this.root.dataset.coaching === "true" ? 10 : undefined,
       quipY: this.quipLayer.getBoundingClientRect().top - hudRect.top,
       slopeY: getComputedStyle(slopeChain).display === "none"
         ? hudPx
@@ -1220,6 +1219,10 @@ export class HUD {
     const goHold = this.goUntil > Date.now() ? 1 : 0;
     const feedback = feedbackSlot({ ...s, goHold });
     if (this.root.dataset.feedback !== feedback) this.root.dataset.feedback = feedback;
+    const coaching = String(s.state === "playing" && s.coachStep >= 0 && Boolean(s.hint));
+    if (this.root.dataset.coaching !== coaching) this.root.dataset.coaching = coaching;
+    const guidance = String(feedback === "hint" && Boolean(s.hint));
+    if (this.root.dataset.guidance !== guidance) this.root.dataset.guidance = guidance;
     // Menu overlay: (a) main menu/attract, (b) post-crash postcards, or
     // (c) paused-run sub-screens (shop/settings/... overlaid on a frozen flight).
     const menuVisible = s.state === "menu" || (s.state === "gameover" && s.screen !== "main")
@@ -1349,10 +1352,13 @@ export class HUD {
         this.ghostChip.classList.toggle("behind", !ahead);
       }
 
-      const day = Math.min(1, s.daylight / s.daylightMax);
+      const day = s.daylightMax > 0 && Number.isFinite(s.daylight) && Number.isFinite(s.daylightMax)
+        ? Math.max(0, Math.min(1, s.daylight / s.daylightMax)) : 0;
       this.setStyle(this.sunFill, "sunFill", "width", `${Math.max(2, day * 100)}%`);
       this.setStyle(this.sunKnob, "sunKnob", "left", `${day * 100}%`);
       this.sunFill.classList.toggle("low", day < 0.28);
+      const daylightPercent = String(Math.round(day * 100));
+      if (this.sunFill.getAttribute("aria-valuenow") !== daylightPercent) this.sunFill.setAttribute("aria-valuenow", daylightPercent);
 
       // Visible whenever the meter has something to say. It was shown only
       // while fever was LIT, but off-fever it carries the chain->fever
@@ -1393,8 +1399,8 @@ export class HUD {
       if (s.magnetTimer > 0 && !s.powers.some((p) => p.kind === "magnet"))
         chips.push(`<span class="pchip magnet">${menuIconSm("magnet")} ${Math.ceil(s.magnetTimer)}s</span>`);
       if (s.shield > 0) chips.push(`<span class="pchip shield">${menuIconSm("shield")} ×${s.shield}</span>`);
-      if (s.gust > 0.3) chips.push(`<span class="pchip gust">${menuIconSm("wind")} headwind — dive!</span>`);
-      if (s.inThermal) chips.push(`<span class="pchip thermal">${menuIconSm("thermal")} thermal — release!</span>`);
+      if (!s.hint && s.gust > 0.3) chips.push(`<span class="pchip gust">${menuIconSm("wind")} headwind — dive!</span>`);
+      if (!s.hint && s.inThermal) chips.push(`<span class="pchip thermal">${menuIconSm("thermal")} ${escapeHtml(s.settings.tapToggleDive ? t("onboarding.tapSoar", undefined, "Soar — stay airborne!") : t("hud.toast.thermal", undefined, "Thermal — release to ride it"))}</span>`);
       const html = chips.join("");
 
       if (s.combo !== this.lastCombo) {
@@ -1433,6 +1439,7 @@ export class HUD {
       // glyph on the first frame.
       this.setText(this.altRead.querySelector("span") ?? this.altRead, "altReadNum", `${Math.round(s.altitude)} m`);
       this.altGauge.dataset.zone = String(s.altZone);
+      this.altGauge.classList.toggle("hidden", s.altitude < 5);
 
       const chainKey = `${s.chainLabel}|${s.chainTier}`;
       if (chainKey !== this.lastChainKey && this.chainReadout) {
@@ -2852,7 +2859,7 @@ function renderNameEntry(s: HudSnapshot): string {
       </label>
 
       <button class="primary-btn name-entry-cta" data-ui data-action="confirm-pilot-name">
-        Let's Fly ›
+        ${t("onboarding.flyNow", undefined, "Fly now")} ›
       </button>
     </div>
 

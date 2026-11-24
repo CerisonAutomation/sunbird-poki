@@ -2,7 +2,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { Server } from "node:http";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../src/i18n/locales";
 import {
-  FREEZE, startArtifactServer, stopArtifactServer,
+  FREEZE, startArtifactServer, stopArtifactServer, visualDefects,
 } from "./visual-helpers";
 
 /**
@@ -137,98 +137,6 @@ async function backToMenu(page: Page): Promise<void> {
     await screenControl(page, "back").first().click({ timeout: 5_000 });
     await expect(page.locator(HOME_RAIL)).toBeVisible({ timeout: 5_000 });
   }, { message: "the back button never returned to the home menu" }).toPass();
-}
-
-/**
- * Walk the visible DOM inside the menu card and report what a player would
- * actually see go wrong.
- *
- * A local copy of visual-helpers' `visualDefects`, with one rule changed, and
- * the change is the whole point of this file's existence:
- *
- *   **An inline `<svg>` root is skipped by the "clips its own text" rule.**
- *
- * `el.textContent` on an `<svg>` is its `<title>` — the bird's accessible name,
- * "Jet", not text anybody reads — while a Range over the element measures the
- * *artwork*. So the rule fired on 20 of the Shop's birds with
- * `clipped svg[...]: "Jet" content 101px in an 89px box`, on every screen
- * check and every one of the 22 locales, and none of it was a text defect.
- * That is the same false positive the helper already excludes for decorative
- * `::before`/`::after` glows; the Shop's illustrations are simply more of them.
- *
- * It was masking the rule's real purpose, which still works unchanged: a label
- * longer than its box is still caught, in every language, because the label is
- * a real element with real text.
- *
- * Worth reporting to whoever owns the art rather than hiding here: those 20
- * birds are authored 10 user units wider than their own `viewBox`
- * (`getBBox()` 86×31 in a 76×68 box), and an SVG root clips overflow, so a wing
- * tip really is cropped. That is an illustration bug, not a text bug, and it is
- * in Sunbird.ts rather than in this suite.
- *
- * Deliberately narrow, as upstream: panels scroll, so "below the fold" is not a
- * defect, and `clientWidth` excludes borders, so a bordered button always
- * measures a few px wider than its content box. Only two things count —
- *   1. a box that CLIPS its own TEXT (overflow hidden/clip, text wider),
- *   2. a leaf text node that escapes the panel sideways.
- */
-async function visualDefects(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const defects: string[] = [];
-    const card = document.querySelector<HTMLElement>('[data-ref="menuCard"]');
-    if (!card) return ["menuCard not found"];
-    const cardRect = card.getBoundingClientRect();
-
-    /** True when an ancestor scrolls sideways, so "further right" is reachable. */
-    const inHorizontalScroller = (node: Element) => {
-      for (let p = node.parentElement; p && p !== card; p = p.parentElement) {
-        const s = getComputedStyle(p);
-        if (s.overflowX === "auto" || s.overflowX === "scroll") return true;
-      }
-      return false;
-    };
-    /** Union box of the real content (text + element children, no pseudo-elements). */
-    const contentBox = (el: Element) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      return range.getBoundingClientRect();
-    };
-
-    for (const el of Array.from(card.querySelectorAll<HTMLElement>("*"))) {
-      const style = getComputedStyle(el);
-      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
-      // Skip visually-hidden helpers (.sr-only and friends): 1px boxes with
-      // overflow hidden are their whole point, not a clipping bug.
-      if (style.clip !== "auto" || style.clipPath !== "none") continue;
-      const text = (el.textContent ?? "").trim();
-      if (!text) continue;
-      const label = `${el.tagName.toLowerCase()}[${el.dataset.ref ?? el.dataset.action ?? el.className}]`;
-
-      // 1. A box that clips its own TEXT. Measured with a Range so decorative
-      //    ::before/::after glows — which legitimately overflow a box with
-      //    overflow:hidden — do not count. Inline SVG is the same case: an
-      //    <svg>'s textContent is its accessible <title> and its content box
-      //    is the drawing, so this rule cannot mean "text" there.
-      const clips = style.overflowX === "hidden" || style.overflowX === "clip";
-      if (clips && el.tagName.toLowerCase() !== "svg") {
-        const box = el.getBoundingClientRect();
-        const content = contentBox(el);
-        if (content.width && (content.right > box.right + 2 || content.left < box.left - 2)) {
-          defects.push(`clipped ${label}: "${text.slice(0, 30)}" content ${Math.round(content.width)}px in a ${Math.round(box.width)}px box`);
-        }
-      }
-
-      // 2. A leaf text node that escapes the panel sideways (not reachable by
-      //    scrolling either).
-      if (el.children.length === 0 && !inHorizontalScroller(el)) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width && rect.height && (rect.right > cardRect.right + 4 || rect.left < cardRect.left - 4)) {
-          defects.push(`escapes panel ${label}: "${text.slice(0, 30)}" at x=${Math.round(rect.left)}`);
-        }
-      }
-    }
-    return defects;
-  });
 }
 
 /** Everything the card is currently showing, as one string. */

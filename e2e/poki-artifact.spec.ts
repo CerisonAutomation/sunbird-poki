@@ -108,6 +108,7 @@ window.PokiSDK = (function () {
     showLeaderboard: function (id) { window.__pokiCalls.push({ name: "showLeaderboard", at: Date.now(), id: id === undefined ? "undefined" : String(id) }); },
     captureError: record("captureError"),
     getDeviceInfo: function () { record("getDeviceInfo")(); return { category: "desktop" }; },
+    getLanguage: function () { return window.__testLanguage || "en"; },
     openExternalLink: record("openExternalLink"),
     playtestSetCanvas: function (canvas) {
       window.__pokiCalls.push({ name: "playtestSetCanvas", at: Date.now(), canvas: Boolean(canvas && canvas.getContext) });
@@ -411,3 +412,211 @@ test("opening the Race Lobby races over Poki Netlib, not a dead relay", async ({
   expect(realErrors, "the game itself must not throw while the transport degrades").toEqual([]);
 });
 
+
+test("a commercial break finishes before a new flight and blocks game controls", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await page.evaluate(() => {
+    const w = window as unknown as { PokiSDK: { commercialBreak: (onStart: () => void) => Promise<void> }; __finishBreak?: () => void; __breakOpened?: boolean; __pokiCalls: { name: string; at: number }[] };
+    w.PokiSDK.commercialBreak = onStart => {
+      w.__pokiCalls.push({ name: "commercialBreak", at: Date.now() });
+      return new Promise<void>(resolve => {
+        w.__finishBreak = resolve;
+        setTimeout(() => { onStart(); w.__breakOpened = true; }, 500);
+      });
+    };
+  });
+  await app.fly();
+  await app.pause();
+  await page.locator('[data-ref="pause"] [data-action="restart-flight"]').click();
+  await expect(page.locator('[data-ref="ad"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __breakOpened?: boolean }).__breakOpened))).toBe(true);
+  const names = () => callsOf(page).then(calls => calls.map(c => c.name));
+  const before = await names();
+  expect(before.slice(-2)).toEqual(["gameplayStop", "commercialBreak"]);
+  // HUD events cannot escape the ad, even if a stale or hidden control dispatches.
+  await page.locator('[data-action="pause"]').evaluate((button: HTMLElement) => button.click());
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(1200);
+  await expect(page.locator('[data-ref="ad"]')).toBeVisible();
+  expect(await names()).toEqual(before);
+  await page.evaluate(() => (window as unknown as { __finishBreak: () => void }).__finishBreak());
+  await expect(page.locator('[data-action="pause"]')).toBeVisible();
+  await expect.poll(names).toEqual([...before, "gameplayStart"]);
+  await app.pause();
+  expect(app.errors).toEqual([]);
+});
+
+test("a pause resume signals Poki immediately and handles an unfilled break", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.fly();
+  await app.pause();
+  await page.evaluate(() => {
+    const w = window as unknown as { PokiSDK: { commercialBreak: () => Promise<void> }; __pokiCalls: { name: string; at: number }[] };
+    // An unfilled opportunity need not call the ad-start callback.
+    w.PokiSDK.commercialBreak = () => { w.__pokiCalls.push({ name: "commercialBreak", at: Date.now() }); return Promise.resolve(); };
+  });
+  await page.locator('[data-ref="pause"] [data-action="resume"]').click();
+  await expect(page.locator('[data-action="pause"]')).toBeVisible();
+  await expect.poll(() => callsOf(page).then(calls => calls.map(c => c.name).slice(-3)))
+    .toEqual(["gameplayStop", "commercialBreak", "gameplayStart"]);
+  // A no-fill result restores controls as well as gameplay.
+  await app.pause();
+  expect(app.errors).toEqual([]);
+});
+
+test("the flight clock is legible and exposed as a bounded meter", async ({ page }, info) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.fly();
+  const meter = page.getByRole("meter", { name: "Daylight" });
+  await expect(meter).toBeVisible();
+  await expect(meter).toHaveAttribute("aria-valuemin", "0");
+  await expect(meter).toHaveAttribute("aria-valuemax", "100");
+  const colors = await meter.evaluate(el => ({
+    fill: getComputedStyle(el).backgroundImage,
+    track: getComputedStyle(el.parentElement!).backgroundColor,
+  }));
+  expect(colors.fill).toContain("gradient");
+  expect(colors.track).not.toBe("rgba(0, 0, 0, 0)");
+  await expect(page.locator('[data-ref="hint"]')).not.toContainText(/[↑↓]/);
+  await app.awaitSettledLanes();
+  await app.expectNoOverlaps([".hud-header", ".flight-messages", ".flight-footer"], ".hud-root");
+  await page.screenshot({ path: info.outputPath("flight-clock.png") });
+  expect(app.errors).toEqual([]);
+});
+
+test("shop rewards only credit successful ads and defer frequency to Poki", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.openMenu("open-shop", "Shop");
+  await expect(page.locator(".shop-intro-card")).not.toContainText("From 150");
+  const wallet = () => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem("sunbird.save.v2")!);
+    return (saved.v === 1 && typeof saved.data === "string" ? JSON.parse(saved.data) : saved).wallet as number;
+  });
+  const ad = page.locator('[data-action="shop-free-coins"]');
+  await expect(ad).toBeVisible();
+  const before = await wallet();
+  await page.evaluate(() => {
+    const w = window as unknown as { PokiSDK: { rewardedBreak: (start: () => void) => Promise<boolean> }; __reward: boolean; __rewardCalls: number };
+    w.__reward = false;
+    w.__rewardCalls = 0;
+    w.PokiSDK.rewardedBreak = start => { w.__rewardCalls++; start(); return Promise.resolve(w.__reward); };
+  });
+  await ad.click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __rewardCalls: number }).__rewardCalls)).toBe(1);
+  await expect(page.locator('[data-ref="toasts"]')).toContainText("No reward granted", { timeout: 20_000 });
+  expect(await wallet()).toBe(before);
+  await page.evaluate(() => { (window as unknown as { __reward: boolean }).__reward = true; });
+  // More than the old five-per-hour cap, without advancing the wall clock.
+  for (let i = 1; i <= 6; i++) {
+    await ad.click();
+    await expect.poll(wallet).toBe(before + i * 60);
+  }
+  expect(await page.evaluate(() => (window as unknown as { __rewardCalls: number }).__rewardCalls)).toBe(7);
+  expect(app.errors).toEqual([]);
+});
+
+
+test("a pending shop reward blocks navigation before the SDK starts an ad", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.openMenu("open-shop", "Shop");
+  await page.evaluate(() => {
+    const w = window as unknown as { PokiSDK: { rewardedBreak: () => Promise<boolean> }; __finishReward?: (value: boolean) => void };
+    // Simulate a slow SDK that never calls the optional start callback.
+    w.PokiSDK.rewardedBreak = () => new Promise(resolve => { w.__finishReward = resolve; });
+  });
+  await page.locator('[data-action="shop-free-coins"]').click();
+  await expect.poll(() => page.evaluate(() => typeof (window as unknown as { __finishReward?: unknown }).__finishReward)).toBe("function");
+  await page.locator('[data-ref="menuCard"] [data-action="back"]').dispatchEvent("click");
+  await expect(page.locator('[data-action="shop-free-coins"]')).toBeVisible();
+  await page.evaluate(() => (window as unknown as { __finishReward: (v: boolean) => void }).__finishReward(false));
+  await expect(page.locator('[data-ref="toasts"]')).toContainText("No reward granted");
+  await page.locator('[data-ref="menuCard"] [data-action="back"]').click();
+  await expect(page.locator('.home-launch')).toBeVisible();
+  expect(app.errors).toEqual([]);
+});
+
+test("Poki language is detected, but a player's manual choice wins after reload", async ({ page }) => {
+  await page.addInitScript(() => { (window as unknown as { __testLanguage: string }).__testLanguage = "es"; });
+  const app = await openArtifact(page);
+  await expect(page.locator("html")).toHaveAttribute("lang", "es", { timeout: 45_000 });
+  await expect(page.locator('[data-action="pvp-practice"].home-launch')).toHaveAttribute("aria-label", "Vuela ahora");
+  await expect(page.locator('.quick-rail-btn[data-action="open-shop"] b')).toHaveText("Tienda");
+  await expect(page.locator('.quick-rail-btn[data-action="open-practice"] b')).toHaveText("PvP contra IA");
+  await expect(page.locator('.play-destinations [data-action="open-loadout"] b')).toHaveText("Equipo");
+  expect(await page.evaluate(() => localStorage.getItem("sunbird.i18n.locale"))).toBeNull();
+  await app.menuAction("open-settings").click();
+  await page.locator("#language-select").selectOption("fr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await page.locator('[data-ref="menuCard"] [data-action="back"]').click();
+  await expect(page.locator('.quick-rail-btn[data-action="open-shop"] b')).toHaveText("Boutique");
+  await expect(page.locator('.quick-rail-btn[data-action="open-practice"] b')).toHaveText("PvP contre IA");
+  await page.reload({ waitUntil: "commit" });
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.locator('[data-action="pvp-practice"].home-launch')).toHaveAttribute("aria-label", "Voler");
+  await expect(page.locator('.quick-rail-btn[data-action="open-shop"] b')).toHaveText("Boutique");
+  expect(app.errors).toEqual([]);
+});
+
+test("blur pauses flight and an ad cannot restart it while unfocused", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.fly();
+  await expect.poll(() => callsOf(page).then(calls => calls.filter(c => c.name === "gameplayStart").length)).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(page.locator('[data-ref="pause"] [data-action="resume"]')).toBeVisible();
+  await expect.poll(() => callsOf(page).then(calls => calls.filter(c => c.name === "gameplayStop").length)).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator('[data-ref="pause"] [data-action="resume"]')).toBeVisible();
+  expect((await callsOf(page)).filter(c => c.name === "gameplayStart")).toHaveLength(1);
+
+  await page.evaluate(() => {
+    const w = window as unknown as { PokiSDK: { commercialBreak: (onStart: () => void) => Promise<void> }; __finishBreak?: () => void };
+    w.PokiSDK.commercialBreak = onStart => new Promise<void>(resolve => { onStart(); w.__finishBreak = resolve; });
+  });
+  await page.locator('[data-ref="pause"] [data-action="resume"]').click();
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __finishBreak?: () => void }).__finishBreak))).toBe(true);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    (window as unknown as { __finishBreak: () => void }).__finishBreak();
+  });
+  await expect(page.locator('[data-ref="pause"] [data-action="resume"]')).toBeVisible();
+  expect((await callsOf(page)).filter(c => c.name === "gameplayStart")).toHaveLength(1);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    (window as unknown as { PokiSDK: { commercialBreak: () => Promise<void> } }).PokiSDK.commercialBreak = () => Promise.resolve();
+  });
+  await page.locator('[data-ref="pause"] [data-action="resume"]').click();
+  await expect(page.locator('[data-action="pause"]')).toBeVisible();
+  await expect.poll(() => callsOf(page).then(calls => calls.filter(c => c.name === "gameplayStart").length)).toBe(2);
+  expect(app.errors).toEqual([]);
+});
+
+test("WebGL context loss pauses the flight and recovers without resuming it", async ({ page }) => {
+  const app = await openArtifact(page);
+  await app.ready();
+  await app.fly();
+  const supported = await page.locator("canvas").first().evaluate((canvas: HTMLCanvasElement) => {
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    const extension = gl?.getExtension("WEBGL_lose_context");
+    if (!extension) return false;
+    const w = window as unknown as { __loseContext?: WEBGL_lose_context; __contextRestored?: boolean };
+    w.__loseContext = extension;
+    canvas.addEventListener("webglcontextrestored", () => { w.__contextRestored = true; }, { once: true });
+    extension.loseContext();
+    return true;
+  });
+  test.skip(!supported, "This browser does not expose WEBGL_lose_context");
+  await expect.poll(() => callsOf(page).then(calls => calls.filter(c => c.name === "gameplayStop").length)).toBe(1);
+  await page.evaluate(() => (window as unknown as { __loseContext: WEBGL_lose_context }).__loseContext.restoreContext());
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __contextRestored?: boolean }).__contextRestored)), { timeout: 30_000 }).toBe(true);
+  await expect(page.locator('[data-ref="pause"] [data-action="resume"]')).toBeVisible();
+  expect((await callsOf(page)).filter(c => c.name === "gameplayStart")).toHaveLength(1);
+  await page.locator('[data-ref="pause"] [data-action="resume"]').click();
+  await expect(page.locator('[data-action="pause"]')).toBeVisible();
+  await expect.poll(() => callsOf(page).then(calls => calls.filter(c => c.name === "gameplayStart").length)).toBe(2);
+});

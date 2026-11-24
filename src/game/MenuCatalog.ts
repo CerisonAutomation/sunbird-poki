@@ -42,7 +42,7 @@ export type MenuDestination = {
    */
 };
 
-/** Resolve a destination's localized copy. */
+/** Store stable fallback copy; the view resolves localized copy on render. */
 function dest(
   key: string,
   action: string,
@@ -54,8 +54,8 @@ function dest(
     action,
     key,
     icon,
-    title: t(`menu.dest.${key}.title`, undefined, title),
-    detail: t(`menu.dest.${key}.detail`, undefined, detail),
+    title,
+    detail,
   };
 }
 

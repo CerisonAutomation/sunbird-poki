@@ -74,13 +74,13 @@ export type GoalProgress = Record<GoalKind, number>;
 
 const GOAL_SHAPES: { kind: GoalKind; base: number; scale: number; word: (n: number) => string }[] = [
   { kind: "distance", base: 700, scale: 1400, word: (n) => `Fly ${Math.round(n)} m in one run` },
-  { kind: "perfects", base: 2, scale: 6, word: (n) => `Land ${n} perfect launches` },
+  { kind: "perfects", base: 2, scale: 6, word: (n) => `Land ${n} perfect launch${n === 1 ? "" : "es"}` },
   { kind: "combo", base: 2, scale: 4, word: (n) => `Reach a ×${n} launch chain` },
   { kind: "altitude", base: 45, scale: 130, word: (n) => `Climb to ${Math.round(n)} m altitude` },
-  { kind: "coins", base: 12, scale: 34, word: (n) => `Collect ${Math.round(n)} coins` },
-  { kind: "clouds", base: 2, scale: 6, word: (n) => `Touch ${n} clouds` },
-  { kind: "gems", base: 1, scale: 3, word: (n) => `Grab ${n} sky gems` },
-  { kind: "sunflowers", base: 2, scale: 6, word: (n) => `Bounce off ${n} sunflowers` },
+  { kind: "coins", base: 12, scale: 34, word: (n) => `Collect ${Math.round(n)} coin${Math.round(n) === 1 ? "" : "s"}` },
+  { kind: "clouds", base: 2, scale: 6, word: (n) => `Touch ${n} cloud${n === 1 ? "" : "s"}` },
+  { kind: "gems", base: 1, scale: 3, word: (n) => `Grab ${n} sky gem${n === 1 ? "" : "s"}` },
+  { kind: "sunflowers", base: 2, scale: 6, word: (n) => `Bounce off ${n} sunflower${n === 1 ? "" : "s"}` },
 ];
 
 /**

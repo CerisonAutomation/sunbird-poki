@@ -131,3 +131,15 @@ describe("home-hero streak chip (playbook lever 4)", () => {
     expect(root.querySelector(".streak-pill")).toBeNull();
   });
 });
+
+describe("recap information hierarchy", () => {
+  it("shows the flight's results before progression and sharing", () => {
+    const html = recap({ share: { available: true, loaded: null, code: "", busy: false, error: "" } });
+    const summary = html.indexOf("result-summary");
+    expect(summary).toBeGreaterThan(html.indexOf("result-actions"));
+    expect(summary).toBeLessThan(html.indexOf("meta-progress-strip"));
+    expect(summary).toBeLessThan(html.indexOf("share-run"));
+    expect(html.indexOf("result-summary", summary + 1)).toBe(-1);
+    expect(html).not.toContain("birds from 150");
+  });
+});

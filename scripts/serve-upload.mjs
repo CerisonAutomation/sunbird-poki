@@ -21,6 +21,7 @@
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
+import { uploadFile } from "./upload-path.mjs";
 
 const ROOT = "poki-upload";
 const ZIP = "sunbird-poki.zip";
@@ -49,13 +50,23 @@ const OPEN = {
 const requests = [];
 
 const server = createServer((req, res) => {
-  const url = new URL(req.url ?? "/", "http://placeholder");
-  const pathname = decodeURIComponent(url.pathname);
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405, { ...OPEN, Allow: "GET, HEAD" });
+    return res.end();
+  }
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(req.url ?? "/", "http://placeholder").pathname);
+  } catch {
+    res.writeHead(400, OPEN);
+    return res.end("Bad request");
+  }
   requests.push({
     at: new Date().toISOString(),
     path: pathname,
     ua: String(req.headers["user-agent"] ?? "").slice(0, 60),
   });
+  if (requests.length > 500) requests.shift();
 
   const sendText = (status, message) => {
     res.writeHead(status, { ...OPEN, "Content-Type": "text/plain; charset=utf-8" });
@@ -101,11 +112,8 @@ const server = createServer((req, res) => {
   }
 
   const rel = pathname === "/" ? "/index.html" : pathname;
-  const file = path.normalize(path.join(ROOT, rel));
-  if (!file.startsWith(path.normalize(ROOT))) return sendText(403, `403 ${pathname}\n`);
-  if (!existsSync(file)) {
-    return sendText(404, `404 ${pathname}\nThe upload folder holds: index.html, icons/, fonts/, i18n/\n`);
-  }
+  const file = uploadFile(ROOT, rel);
+  if (!file) return sendText(404, `404 ${pathname}\n`);
   sendFile(file);
 });
 

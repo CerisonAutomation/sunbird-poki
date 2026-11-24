@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { Server } from "node:http";
 import {
-  FREEZE, startArtifactServer, stopArtifactServer,
+  FREEZE, startArtifactServer, stopArtifactServer, visualDefects,
 } from "./visual-helpers";
 
 /**
@@ -46,7 +46,6 @@ const HOME_CONTROLS = [
   "nav.home-quick-rail",   // the four actions under "Fly now"
   "nav.destination-grid",  // the Play and Progress tiles
   "button.home-board",     // leaderboard strip
-  "div.home-record",       // Nest Pass record bar
   "button.event-strip",    // tournament countdown
   "button.primary-btn",    // "Fly now" itself
 ].join(", ");
@@ -76,9 +75,12 @@ const SCREEN_TIMEOUT = 45_000;
  * 45-second wait for a control that was never going to appear.
  */
 function homeControl(page: Page, action: string): Locator {
+  // Nest Pass is in the record bar, whose personal-best button is a second
+  // shortcut to Progress. Do not include that bar for other actions.
+  const containers = action === "open-pass" ? `${HOME_CONTROLS}, div.home-record` : HOME_CONTROLS;
   return page.locator(
-    `${CARD} :is(${HOME_CONTROLS}):is([data-action="${action}"]), `
-    + `${CARD} :is(${HOME_CONTROLS}) [data-action="${action}"]`,
+    `${CARD} :is(${containers}):is([data-action="${action}"]), `
+    + `${CARD} :is(${containers}) [data-action="${action}"]`,
   );
 }
 
@@ -121,7 +123,7 @@ async function navigate(
   await patientExpect()(async () => {
     if ((await screenTitle(page)) !== before) return;
     await control.click({ timeout: 5_000 });
-  }, { message: `${label}: the control could not be clicked` }).toPass();
+  }, { message: `${label}: the control could not be clicked` }).toPass({ timeout: SCREEN_TIMEOUT });
   await expect
     .poll(() => screenTitle(page), { timeout: SCREEN_TIMEOUT, message: `${label} never opened a screen` })
     .not.toBe(before);
@@ -146,7 +148,7 @@ async function backToMenu(page: Page): Promise<void> {
     if (await page.locator(HOME_RAIL).isVisible().catch(() => false)) return;
     await screenControl(page, "back").first().click({ timeout: 5_000 });
     await expect(page.locator(HOME_RAIL)).toBeVisible({ timeout: 5_000 });
-  }, { message: "the back button never returned to the home menu" }).toPass();
+  }, { message: "the back button never returned to the home menu" }).toPass({ timeout: SCREEN_TIMEOUT });
 }
 
 /**
@@ -159,98 +161,6 @@ async function backToMenu(page: Page): Promise<void> {
  * nothing, and hung until the test timed out. The route is spelled out here so
  * the test walks the path a player actually takes.
  */
-/**
- * Walk the visible DOM inside the menu card and report what a player would
- * actually see go wrong.
- *
- * A local copy of visual-helpers' `visualDefects`, with one rule changed, and
- * the change is the whole point of this file's existence:
- *
- *   **An inline `<svg>` root is skipped by the "clips its own text" rule.**
- *
- * `el.textContent` on an `<svg>` is its `<title>` — the bird's accessible name,
- * "Jet", not text anybody reads — while a Range over the element measures the
- * *artwork*. So the rule fired on 20 of the Shop's birds with
- * `clipped svg[...]: "Jet" content 101px in an 89px box`, on every screen
- * check and every one of the 22 locales, and none of it was a text defect.
- * That is the same false positive the helper already excludes for decorative
- * `::before`/`::after` glows; the Shop's illustrations are simply more of them.
- *
- * It was masking the rule's real purpose, which still works unchanged: a label
- * longer than its box is still caught, in every language, because the label is
- * a real element with real text.
- *
- * Worth reporting to whoever owns the art rather than hiding here: those 20
- * birds are authored 10 user units wider than their own `viewBox`
- * (`getBBox()` 86×31 in a 76×68 box), and an SVG root clips overflow, so a wing
- * tip really is cropped. That is an illustration bug, not a text bug, and it is
- * in Sunbird.ts rather than in this suite.
- *
- * Deliberately narrow, as upstream: panels scroll, so "below the fold" is not a
- * defect, and `clientWidth` excludes borders, so a bordered button always
- * measures a few px wider than its content box. Only two things count —
- *   1. a box that CLIPS its own TEXT (overflow hidden/clip, text wider),
- *   2. a leaf text node that escapes the panel sideways.
- */
-async function visualDefects(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const defects: string[] = [];
-    const card = document.querySelector<HTMLElement>('[data-ref="menuCard"]');
-    if (!card) return ["menuCard not found"];
-    const cardRect = card.getBoundingClientRect();
-
-    /** True when an ancestor scrolls sideways, so "further right" is reachable. */
-    const inHorizontalScroller = (node: Element) => {
-      for (let p = node.parentElement; p && p !== card; p = p.parentElement) {
-        const s = getComputedStyle(p);
-        if (s.overflowX === "auto" || s.overflowX === "scroll") return true;
-      }
-      return false;
-    };
-    /** Union box of the real content (text + element children, no pseudo-elements). */
-    const contentBox = (el: Element) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      return range.getBoundingClientRect();
-    };
-
-    for (const el of Array.from(card.querySelectorAll<HTMLElement>("*"))) {
-      const style = getComputedStyle(el);
-      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
-      // Skip visually-hidden helpers (.sr-only and friends): 1px boxes with
-      // overflow hidden are their whole point, not a clipping bug.
-      if (style.clip !== "auto" || style.clipPath !== "none") continue;
-      const text = (el.textContent ?? "").trim();
-      if (!text) continue;
-      const label = `${el.tagName.toLowerCase()}[${el.dataset.ref ?? el.dataset.action ?? el.className}]`;
-
-      // 1. A box that clips its own TEXT. Measured with a Range so decorative
-      //    ::before/::after glows — which legitimately overflow a box with
-      //    overflow:hidden — do not count. Inline SVG is the same case: an
-      //    <svg>'s textContent is its accessible <title> and its content box
-      //    is the drawing, so this rule cannot mean "text" there.
-      const clips = style.overflowX === "hidden" || style.overflowX === "clip";
-      if (clips && el.tagName.toLowerCase() !== "svg") {
-        const box = el.getBoundingClientRect();
-        const content = contentBox(el);
-        if (content.width && (content.right > box.right + 2 || content.left < box.left - 2)) {
-          defects.push(`clipped ${label}: "${text.slice(0, 30)}" content ${Math.round(content.width)}px in a ${Math.round(box.width)}px box`);
-        }
-      }
-
-      // 2. A leaf text node that escapes the panel sideways (not reachable by
-      //    scrolling either).
-      if (el.children.length === 0 && !inHorizontalScroller(el)) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width && rect.height && (rect.right > cardRect.right + 4 || rect.left < cardRect.left - 4)) {
-          defects.push(`escapes panel ${label}: "${text.slice(0, 30)}" at x=${Math.round(rect.left)}`);
-        }
-      }
-    }
-    return defects;
-  });
-}
-
 const ROUTES: readonly { readonly label: string; readonly path: readonly string[] }[] = [
   { label: "open-shop", path: ["open-shop"] },
   { label: "open-settings", path: ["open-settings"] },
@@ -282,6 +192,7 @@ const DUPLICATED_ACTIONS: readonly (readonly [action: string, copiedBy: string])
   ["open-live", "flight plan"],
   ["open-settings", "flight plan"],
   ["open-challenges", "daily-ritual banner"],
+  ["open-progress", "personal best shortcut"],
 ];
 
 let server: Server;
@@ -290,13 +201,14 @@ let baseUrl = "";
 test.beforeAll(async () => { ({ server, baseUrl } = await startArtifactServer()); });
 test.afterAll(async () => { await stopArtifactServer(server); });
 
-test(`all ${ROUTES.length} reachable screens fit their box`, async ({ page }) => {
+test(`all ${ROUTES.length} reachable screens fit their box`, async ({ page }, info) => {
   // Sixteen screens, each a click out and a click back, on a build that
   // rasterises on the CPU. The shared 300s budget is not a property of this
   // test's difficulty; it is a leftover from the specs that visit one screen.
   test.slow();
   await bootToMenu(page, baseUrl);
   await page.addStyleTag({ content: FREEZE });
+  if (process.env.VISUAL_CAPTURE === "1") await page.screenshot({ path: info.outputPath("home.png") });
   const problems: string[] = [];
   for (const route of ROUTES) {
     await backToMenu(page);
@@ -307,6 +219,7 @@ test(`all ${ROUTES.length} reachable screens fit their box`, async ({ page }) =>
       await navigate(page, control, route.label);
     }
     const defects = await visualDefects(page);
+    if (process.env.VISUAL_CAPTURE === "1") await page.screenshot({ path: info.outputPath(`${route.label}.png`) });
     if (defects.length) problems.push(`${route.label}: ${defects.join(" | ")}`);
   }
   expect(problems, "screens with visual defects").toEqual([]);

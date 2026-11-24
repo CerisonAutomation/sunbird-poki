@@ -412,16 +412,8 @@ export class PokiAdapter implements PlatformAdapter {
     if (!pokiSdkBooted() || !sdk?.commercialBreak) return;
     let opened = false;
     try {
-      // Exactly the documented shape: the callback pauses audio and input, and
-      // the promise settles when the platform says the break is over. Nothing
-      // here may end it earlier — the game's `AD_SAFETY_SECONDS` valve at
-      // the tick level is the hard second layer; this race is the first.
-      // The Poki docs are explicit: `PokiSDK.commercialBreak(cb).then(() => {
-      // ... proceed with gameplay })` — the `.then()` must always fire,
-      // including when Poki decides not to serve an ad. If the SDK promise
-      // never settles (a broken or blocked CDN, an Inspector with no ad
-      // service behind it), this race wins and the break resolves as declined
-      // rather than trapping the game forever.
+      // The SDK owns the break lifetime, including no-fill opportunities.
+      // Never race it with a timer: a long ad might still be playing.
       await sdk.commercialBreak(() => {
         opened = true;
         this.events.onAdOpened?.();
@@ -445,8 +437,6 @@ export class PokiAdapter implements PlatformAdapter {
     try {
       // Documented shape again: the SDK's own verdict decides the reward, and a
       // declined or failed break resolves false rather than throwing.
-      // Same timeout as commercialBreak — a rewarded break that never
-      // settles must still let the player continue, just without coins.
       const rewarded = await sdk.rewardedBreak(() => {
         opened = true;
         this.events.onAdOpened?.();

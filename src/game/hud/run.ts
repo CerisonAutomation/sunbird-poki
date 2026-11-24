@@ -111,10 +111,14 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${isFirstRun ? `<div class="first-run-bonus-strip">${menuIconSm("coin")} First flight bonus: +25 coins added to your wallet!</div>` : ""}
     <div class="result-actions"><button class="play-again-btn" data-ui data-action="${resultsPrimaryAction(s)}">${s.massRace && s.roomCode ? t("hud.gameover.backToLobby", undefined, "Back to race lobby") : s.massRace && s.racePlace > 0 ? t("hud.gameover.raceAgain", undefined, "Race again · same stakes") : t("hud.gameover.flyAgain", undefined, "Fly Again")}</button><button class="soft-btn" data-ui data-action="menu">${t("hud.gameover.mainMenu", undefined, "Main Menu")}</button></div>
     ${!s.massRace && !isFirstRun ? `<p class="fineprint replay-note">${t("hud.gameover.replayNote", undefined, "Fly again replays this exact course so you can race the ghost of the run you just flew 👻")}</p>` : ""}
+    <div class="over-stats result-summary">
+      <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
+      <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
+      <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
+    </div>
     ${s.newBest ? `<div class="new-best">${menuIconSm("crown")} ${t("hud.gameover.newBest", undefined, "NEW BEST")} · ${distanceText(s.distance)}<small>${t("hud.gameover.farthestFlight", undefined, "your farthest flight yet")}</small></div>` : ""}
     ${s.boardScope === "global" && s.boardMetric === "distance" && s.board && s.board.yourRank > 0 ? `<div class="reward-strip rank-strip">${t("hud.gameover.leaderboardRank", undefined, "Leaderboard rank")} · <b>#${s.board.yourRank}</b> of ${s.board.total}</div>` : ""}
 
-    ${shareBlock}
     ${renderCelebration(s)}
     ${renderFlightRecap(s.flightPath)}
     <div class="over-stats meta-progress-strip">
@@ -122,11 +126,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <div><span>${menuIconSm("trophy")} Trophies</span><b>${s.trophyCounts.unlocked}/${s.trophyCounts.total}</b></div>
       <div><span>${menuIcon("pass")} Nest Pass</span><b>Lv.${s.season.tier}/${s.season.maxTier}</b></div>
     </div>
-    <div class="over-stats result-summary">
-      <div><span>${t("hud.stat.distance", undefined, "Distance")}</span><b>${distanceText(s.distance)}</b></div>
-      <div><span>${t("hud.stat.score", undefined, "Score")}</span><b>${formatNumberLocalized(Math.floor(s.score))}</b></div>
-      <div><span>${t("hud.stat.coins", undefined, "Coins")}</span><b>${formatNumberLocalized(s.coins)}</b></div>
-    </div>
+
 
     ${renderCoinMultiplierCard(s.coins, s.multiplierClaimed, s.portalName !== "none")}
     ${renderNextFlight(s)}
@@ -137,7 +137,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
       <button class="soft-btn" data-ui data-action="open-atlas">${menuIcon("atlas")} Atlas</button>
     </div>
     ${!s.firstSteps.shop ? `<div class="reward-strip new-player-shop-cta">
-      <b>${menuIconSm("coin")} You have ${formatNumberLocalized(s.wallet)} coins</b> — spend them in the Shop: boosts from 40, birds from 150
+      <b>${menuIconSm("coin")} You have ${formatNumberLocalized(s.wallet)} coins</b> — spend them on birds, boosts and trails in the Shop
       <button class="soft-btn wide gold-tint" style="margin-top:8px" data-ui data-action="open-shop">${menuIcon("shop")} Open Shop</button>
     </div>` : ""}
     ${s.nextAction ? `<p class="next-action">${escapeHtml(s.nextAction)}</p>` : ""}
@@ -160,6 +160,7 @@ export function renderGameOver(s: Pick<HudSnapshot, "balloons" | "bestDistance" 
     ${raceStrip}
     <div class="reached-strip">Reached <b>${menuIconSm(s.biomeEmoji)} ${s.biomeName}</b> · Island ${s.island + 1}</div>
 
+    ${shareBlock}
     ${clipboardShare}
     ${isFirstRun
       ? `<p class="fineprint replay-note">Come back tomorrow for 250 free coins! ${menuIconSm("coin")}</p>`
@@ -212,7 +213,11 @@ export function renderCelebration(s: Pick<HudSnapshot, "celebration" | "mastery"
   const beatEl = (b: CelebrationView["staged"][0], withDelay = true): string => {
     const cls = ["beat", b.rarity, b.banner ? "banner" : ""].filter(Boolean).join(" ");
     const delay = withDelay ? ` style="animation-delay:${b.delayMs}ms"` : "";
-    const text = t(b.key, b.params, b.fallback);
+    // The record translations include a crown emoji, but the beat already
+    // renders a vector crown. Drop the duplicate glyph (often tofu on phones)
+    // while retaining the translated words and the accessible SVG slot.
+    const translated = t(b.key, b.params, b.fallback);
+    const text = b.key === "hud.toast.newRecord" ? translated.replace(/^\s*(?:👑|♛)\s*/u, "") : translated;
     // `b.icon` is an icon NAME ("trophy", "egg", "badge"), not art and not a
     // glyph. It used to be `escapeHtml(b.icon)` — the name, escaped, as the
     // row's leading text — so every beat on the results card rendered its own
@@ -377,7 +382,7 @@ export function renderContinue(s: Pick<HudSnapshot, "adAvailable" | "canAffordCo
   `;
 }
 
-export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafetySeconds" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
+export function renderAd(s: Pick<HudSnapshot, "adReason" | "adSkippable" | "adTimer" | "gold" | "portalName">): string {
   const portal = s.portalName !== "none";
   const canRemoveBreaks = SELL_AD_REMOVAL && !s.gold;
   const label = portal
@@ -414,8 +419,7 @@ export function renderAd(s: Pick<HudSnapshot, "adElapsed" | "adReason" | "adSafe
           // A portal break has NO player-initiated exit, and no status chip of
           // its own: the `.portal-ad-wait` block above already says "Your run
           // is paused while the portal serves this break." The SDK's completion
-          // callback ends the break and the fixedUpdate safety valve recovers a
-          // break whose SDK promise never settles — neither path needs a button.
+          // promise ends the break; no game-side timeout can end a live ad.
           // The only control this branch ever drew was `ad-stuck`: an "escape
           // hatch" that, once armed, let a single tap end a live portal ad. That
           // is a click-through skip, so it is gone. What remains is nothing the

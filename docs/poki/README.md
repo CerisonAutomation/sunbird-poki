@@ -1,7 +1,9 @@
 # Poki Developer Guide — extracted corpus
 
 **Extracted:** 2026-09-17 · **Sources:** the public Poki developer guide at `developers.poki.com`
-**Purpose:** the canonical, machine-checkable spec this repository builds against.
+**Purpose:** a historical, machine-checkable rule inventory for this repository.
+
+Poki’s live documentation is authoritative and may have changed since this extraction. A generated pass is not platform certification; confirm current requirements and test in the Inspector before release.
 
 This folder is the *extracted form* of the Poki developer guide, rewritten as a
 page-per-topic corpus of numbered, testable rules. It exists so that:
@@ -20,8 +22,7 @@ Content was extracted from the guide's rendered pages and de-duplicated into rul
 Where the guide states something the platform **requires** (enforced by the Poki
 Inspector or by review) the rule is marked `requirement`; where the guide advises,
 it is marked `recommendation`; platform/business facts with nothing to implement are
-marked `informational`. Extraction is lossy in one direction only — nothing that
-carries an obligation was dropped.
+marked `informational`. The extraction is a snapshot and may omit or misinterpret requirements.
 
 | Source page | Extracted into |
 |---|---|

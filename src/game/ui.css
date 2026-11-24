@@ -3313,11 +3313,19 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
 .customize-race summary::-webkit-details-marker {
   display: none;
 }
+/* CSS chevron rather than a font-dependent triangle (missing on some phones). */
 .customize-race summary::before {
-  content: "▸ ";
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px 2px 1px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
 }
 .customize-race[open] summary::before {
-  content: "▾ ";
+  transform: rotate(45deg);
 }
 .customize-race .lobby-selector-box {
   margin: 10px 0 4px;
@@ -3941,6 +3949,7 @@ button.wake-strip.wake-ad-btn:active { transform: scale(0.985); }
   color: #3a2410;
   box-shadow: 0 1px 3px rgba(80, 40, 10, 0.35);
 }
+.tier-reward.premium .lock-badge .icon-sm { width: 12px; height: 12px; vertical-align: middle; }
 
 /* ══════════════════════════════════════════════════════════════════
    OMEGA PREMIUM SKIN — elevation pass over every surface.

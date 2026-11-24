@@ -30,7 +30,7 @@ function gitShortSha(): string | null {
 const APP_VERSION = (JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as { version: string })
   .version;
 const GIT_SHA = (process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.SUNBIRD_BUILD_SHA ?? gitShortSha() ?? "dev").slice(0, 8);
-const BUILD_ID = `${APP_VERSION}-poki-${GIT_SHA}`;
+const BUILD_ID = `${APP_VERSION}-${PORTAL}-${GIT_SHA}`;
 
 /**
  * Put the inlined bundle AFTER the boot shell instead of before it.
@@ -99,6 +99,18 @@ function inlineAssetsAfterBoot(): Plugin {
   };
 }
 
+/** Keep React out of the Poki player bundle; the Android and dev shells may use it. */
+function assertPokiShellIsFrameworkFree(): Plugin {
+  return {
+    name: "sunbird-poki-no-react",
+    apply: "build",
+    renderChunk(_code, chunk) {
+      const reactModule = Object.keys(chunk.modules).find(id => /\/node_modules\/(?:react|react-dom)\//.test(id.replace(/\\/g, "/")));
+      if (reactModule) this.error(`React entered the Poki player bundle: ${reactModule}`);
+    },
+  };
+}
+
 function copyrightBanner(): Plugin {
   const notice =
     "/*! Sunbird © Cerison. All rights reserved. Unauthorised copying, redistribution or resale is prohibited. */";
@@ -120,17 +132,22 @@ export default defineConfig({
   plugins: [
     {
       name: "sunbird-boot-mark",
-      transformIndexHtml(html) {
-        return html
-          .replace("<!-- BOOT_SUN -->", sunSVG({ size: 84, className: "boot-sun" }))
-          .replace("<!-- BOOT_BIRD -->", sunbirdSVG({ width: 58, className: "boot-bird", animateWings: true }))
-          // Strip the itch.io og:url meta — Poki Inspector flags off-portal host references.
-          .replace(/<meta\s+property=["']og:url["'][^>]*>/i, "")
-          .replace(/<link[^>]*rel=["'](?:preload|canonical|alternate)["'][^>]*href=["']https?:\/\/[^>]+>/gi, "");
+      transformIndexHtml: {
+        order: "pre",
+        handler(html) {
+          return html
+            .replace("/src/main.tsx", "/src/poki-main.ts")
+            .replace("<!-- BOOT_SUN -->", sunSVG({ size: 84, className: "boot-sun" }))
+            .replace("<!-- BOOT_BIRD -->", sunbirdSVG({ width: 58, className: "boot-bird", animateWings: true }))
+            // Strip the itch.io og:url meta — Poki Inspector flags off-portal host references.
+            .replace(/<meta\s+property=["']og:url["'][^>]*>/i, "")
+            .replace(/<link[^>]*rel=["'](?:preload|canonical|alternate)["'][^>]*href=["']https?:\/\/[^>]+>/gi, "");
+        },
       },
     },
     react(),
     tailwindcss(),
+    assertPokiShellIsFrameworkFree(),
     ...(singleFile ? [viteSingleFile(), inlineAssetsAfterBoot()] : [copyrightBanner()]),
     // Opt-in bundle inspector: `ANALYZE=true pnpm build` (or `pnpm build:analyze`)
     // writes dist/stats.html — a treemap of what's actually shipping, sized by
@@ -166,8 +183,7 @@ export default defineConfig({
     "import.meta.env.VITE_PORTAL_TARGET": JSON.stringify(PORTAL),
     // PORTAL is "poki" at build time; the comparison is always false and that is
     // intentional — this flag only fires in a local non-portal dev run.
-    // @ts-expect-error TS2367: literal "poki" never equals "none" by design
-    "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(PORTAL === "none" && process.env.VITE_SIM_BREAKS === "true"),
+    "import.meta.env.VITE_SIM_BREAKS": JSON.stringify(false),
     "import.meta.env.VITE_SELL_AD_REMOVAL": JSON.stringify(false),
   },
   // The dev server runs behind a proxied preview host whose name is generated
@@ -194,7 +210,6 @@ export default defineConfig({
           : {
               manualChunks: {
                 three: ["three"],
-                react: ["react", "react-dom"],
                 audio: ["./src/game/Audio.ts", "./src/game/Music.ts"],
                 net: [
                   "./src/game/Realtime.ts",

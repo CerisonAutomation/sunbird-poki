@@ -147,7 +147,7 @@ describe("a timed coin bonus pays only for the time it was live", () => {
 
   it("opens the window in the game itself, not only in tests", () => {
     const game = readFileSync(join(process.cwd(), "src", "game", "Game.ts"), "utf8");
-    const from = game.indexOf("private startRun(");
+    const from = game.indexOf("private startRunNow(");
     const body = game.slice(from, game.indexOf("\n  private ", from + 1));
     expect(body).toContain("this.save.beginRun();");
   });

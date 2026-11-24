@@ -19,20 +19,20 @@
  *                      lines (`Status:`). Evidence is only useful if a reader
  *                      knows it is a snapshot and what replaced it.
  *  4. ROOT CLUTTER   — the repo root keeps an allowlist of top-level docs. New
-  *                      root markdown has to be deliberate, not sediment.
-  *  5. CLAIMS         — every number docs/README.md states about the repo
-  *                      (test count, test files, barrel keys, locales, untranslated
-  *                      cells, snapshot counts) is measured from disk and compared.
-  *                      The doc carries them in a machine-readable block so the
+ *                      root markdown has to be deliberate, not sediment.
+ *  5. CLAIMS         — every number docs/README.md states about the repo
+ *                      (test count, test files, barrel keys, locales, untranslated
+ *                      cells, snapshot counts) is measured from disk and compared.
+ *                      The doc carries them in a machine-readable block so the
   *                      gate can check them; prose that drifts is prose nobody can
-  *                      trust. This is the failure the first four checks were
+ *                      trust. This is the failure the first four checks were
   *                      written after, recurring, so it gets its own gate.
-  *
-  *     pnpm docs:audit
-  *
-  * Exits 1 on any violation. Generated files (docs/poki/COMPLIANCE.md,
+ *
+ *     pnpm docs:audit
+ *
+ * Exits 1 on any violation. Generated files (docs/poki/COMPLIANCE.md,
   * docs/poki/CSP_REQUEST.md, public/privacy.html) are checked like any other —
-  * a generator that emits a dead link is a bug in the generator.
+ * a generator that emits a dead link is a bug in the generator.
   */
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -44,7 +44,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // that happened to have them, and pass on a clean clone — a gate that reports
 // on untracked files is not a gate. Skip what git ignores; the tracked docs are
 // what this audit is for.
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "dist-poki", "dist-crazy", "dist-generic", "poki-upload", "coverage", "test-results", "target", ".arena", "hive", "palace", "roster-backups", "worktrees", "data", "skills"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "dist-poki", "dist-android", "dist-crazy", "dist-generic", "poki-upload", "coverage", "test-results", "target", ".arena", "hive", "palace", "roster-backups", "worktrees", "data", "skills"]);
 
 /** Top-level markdown the repo root is allowed to keep. */
 const ROOT_ALLOWLIST = new Set([

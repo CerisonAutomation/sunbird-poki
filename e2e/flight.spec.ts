@@ -46,6 +46,9 @@ test("the boot shell ships in the document and is replaced by the menu's canonic
 });
 
 test("flight, pause and resume work without runtime errors", async ({ page }, info) => {
+  // The optional Poki CDN is not required for the offline gameplay path.
+  await page.route("https://game-cdn.poki.com/scripts/v2/poki-sdk.js", route =>
+    route.fulfill({ contentType: "application/javascript", body: "" }));
   const app = new SunbirdPage(page);
   await app.open();
   await app.ready();

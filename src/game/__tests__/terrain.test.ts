@@ -30,11 +30,10 @@ describe("terrain: heightAt", () => {
     t2.dispose();
   });
 
-  it("returns OCEAN_FLOOR in ocean gap region", () => {
+  it("keeps the world transition above water", () => {
     const t = new TerrainSystem("2026-09-12");
-    // Well inside the flat ocean gap (past the smoothstep transition at GAP_START+10)
-    const h = t.heightAt(GAP_START + 50);
-    expect(h).toBeCloseTo(OCEAN_FLOOR, 5);
+    const tpl = islandTemplate(0);
+    for (let x = tpl.gapStart; x <= tpl.gapEnd; x += 2) expect(t.heightAt(x)).toBeGreaterThan(0.4);
     t.dispose();
   });
 
@@ -42,12 +41,6 @@ describe("terrain: heightAt", () => {
     const t = new TerrainSystem("2026-09-12");
     const h = t.heightAt(RAMP_START);
     expect(h).toBeGreaterThan(0);
-    t.dispose();
-  });
-
-  it("height at ocean is exactly OCEAN_FLOOR", () => {
-    const t = new TerrainSystem("2026-09-12");
-    expect(t.heightAt(GAP_START + 50)).toBeCloseTo(OCEAN_FLOOR, 5);
     t.dispose();
   });
 
@@ -100,10 +93,10 @@ describe("terrain: slopeAt", () => {
     t.dispose();
   });
 
-  it("is zero in flat ocean area", () => {
+  it("descends smoothly after the launch crest", () => {
     const t = new TerrainSystem("2026-09-12");
     const slope = t.slopeAt(GAP_START + 50);
-    expect(slope).toBeCloseTo(0, 5);
+    expect(slope).toBeLessThan(0);
     t.dispose();
   });
 
@@ -161,13 +154,11 @@ describe("terrain: normalAt", () => {
     t.dispose();
   });
 
-  it("on flat terrain, tangent is (1, 0)", () => {
+  it("has a normalized tangent on the landing slope", () => {
     const t = new TerrainSystem("2026-09-12");
     const n = t.normalAt(GAP_START + 50);
-    expect(n.tx).toBeCloseTo(1, 5);
-    expect(n.ty).toBeCloseTo(0, 5);
-    expect(n.nx).toBeCloseTo(0, 5);
-    expect(n.ny).toBeCloseTo(1, 5);
+    expect(Math.hypot(n.tx, n.ty)).toBeCloseTo(1, 5);
+    expect(n.ty).toBeLessThan(0);
     t.dispose();
   });
 
@@ -205,9 +196,9 @@ describe("terrain: curvatureAt", () => {
     t2.dispose();
   });
 
-  it("is zero in flat ocean area", () => {
+  it("has finite curvature on the landing slope", () => {
     const t = new TerrainSystem("2026-09-12");
-    expect(t.curvatureAt(GAP_START + 50)).toBeCloseTo(0, 2);
+    expect(Number.isFinite(t.curvatureAt(GAP_START + 50))).toBe(true);
     t.dispose();
   });
 
@@ -233,31 +224,15 @@ describe("terrain: curvatureAt", () => {
 
 // ── isOcean (4 tests) ──────────────────────────────────────────────────────────
 describe("terrain: isOcean", () => {
-  it("returns true at GAP_START", () => {
+  it("does not classify seamless world transitions as ocean", () => {
     const t = new TerrainSystem("2026-09-12");
-    expect(t.isOcean(GAP_START)).toBe(true);
-    t.dispose();
-  });
-
-  it("returns true within gap region", () => {
-    const t = new TerrainSystem("2026-09-12");
-    expect(t.isOcean(GAP_START + 5)).toBe(true);
-    t.dispose();
-  });
-
-  it("returns false on land", () => {
-    const t = new TerrainSystem("2026-09-12");
+    for (const island of [0, 1, 8, 20, 100]) {
+      const tpl = islandTemplate(island);
+      for (let x = tpl.gapStart; x <= tpl.gapEnd; x += 2) {
+        expect(t.isOcean(tpl.start + x)).toBe(false);
+      }
+    }
     expect(t.isOcean(RAMP_START)).toBe(false);
-    t.dispose();
-  });
-
-  it("wraps correctly for x beyond one island", () => {
-    const t = new TerrainSystem("2026-09-12");
-    // The gap of island 1, measured from island 1's own start — islands are
-    // not a fixed pitch any more, so "one island later" is the layout's
-    // question rather than the base constant's.
-    const next = islandTemplate(1);
-    expect(t.isOcean(next.start + next.gapStart + 20)).toBe(true);
     t.dispose();
   });
 });
@@ -529,11 +504,11 @@ describe("terrain: shape budgets", () => {
     const t = new TerrainSystem("daytrip");
     const tpl = islandTemplate(0);
     let steepest = 0;
-    // Scan the whole authored transfer — drop, ramp, and the departure over
-    // the gap. The steepest face lives near the end of the ramp, not the start.
-    for (let lx = 0; lx < tpl.gapStart + 200; lx += 2) {
-      steepest = Math.max(steepest, Math.abs(t.slopeAt(tpl.start + lx + 30)));
+    // Measure the actual launch ramp, not the former cliff after the crest.
+    for (let lx = tpl.rampStart; lx < tpl.gapStart; lx += 2) {
+      steepest = Math.max(steepest, t.slopeAt(tpl.start + lx));
     }
-    expect(steepest).toBeGreaterThan(1.5);
+    expect(steepest).toBeGreaterThan(0.45);
+    t.dispose();
   });
 });

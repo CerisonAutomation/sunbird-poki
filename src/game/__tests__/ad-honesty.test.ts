@@ -53,7 +53,7 @@ describe("the shipped direct build never fakes a sponsored break", () => {
     const config = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8");
 
     expect(config).toMatch(
-      /"import\.meta\.env\.VITE_SIM_BREAKS": JSON\.stringify\(PORTAL === "none" && process\.env\.VITE_SIM_BREAKS === "true"\)/,
+      /"import\.meta\.env\.VITE_SIM_BREAKS": JSON\.stringify\(false\)/,
     );
   });
 

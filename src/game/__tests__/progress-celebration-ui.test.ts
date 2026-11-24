@@ -216,3 +216,11 @@ describe("reduce motion: the celebration must still be readable", () => {
     expect(guarded).toBe(true);
   });
 });
+
+it("shows a single vector crown instead of a duplicate font-dependent record glyph", async () => {
+  const root = await render({ celebration: celebrationView(planCelebration([{ kind: "record", metres: 1234 }])) });
+  const beat = root.querySelector(".celebration .beat")!;
+  expect(beat.querySelector(".beat-icon svg")).not.toBeNull();
+  expect(beat.querySelector(".beat-text")!.textContent).not.toMatch(/[👑♛]/u);
+  expect(beat.querySelector(".beat-text")!.textContent).toContain("NEW DISTANCE RECORD");
+});

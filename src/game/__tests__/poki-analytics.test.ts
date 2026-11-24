@@ -195,16 +195,8 @@ describe("Poki ads: the call shape is exactly the documented one", () => {
    *   "Make sure that audio and keyboard input are disabled during commercial
    *    breaks" — and the callback "might not always get called".
    *
-   * The critical contract is that the `.then()` / promise settlement always
-   * fires — Poki is explicit that not every `commercialBreak()` serves an
-   * ad, and the game must proceed either way. The adapter therefore races
-   * the SDK promise against a settle timeout (BREAK_LOAD_TIMEOUT_MS): a
-   * live ad resolves in well under a second, so this race can never cut a
-   * live ad short. Its only job is to guarantee that a promise which never
-   * settles (broken CDN, Inspector with no ad service behind it) still
-   * releases the game instead of wedging it. The game's own
-   * `AD_SAFETY_SECONDS` valve at the tick level is a hard second layer —
-   * a live break is never abandoned by two competing timers.
+   * The SDK promise owns the lifetime of each opportunity, including no-fill.
+   * A game-side timer cannot safely distinguish a stuck SDK from a long ad.
    */
   it("delegates ad completion to the Poki SDK promise", async () => {
     const fs = await import("node:fs");
@@ -225,22 +217,12 @@ describe("Poki ads: the call shape is exactly the documented one", () => {
 
     expect(adapter, "the documented call shape").toMatch(/sdk\.commercialBreak\(\(\) => \{/);
     expect(adapter, "the documented call shape").toMatch(/sdk\.rewardedBreak\(\(\) => \{/);
-    // The await now races the SDK promise against a settle timer
-    // instead of awaiting the SDK call directly — the SDK call still
-    // runs and resolves or times out; the race is what guarantees the
-    // game never wedges. Inside the SDK argument there is no timer:
-    // a game-side ad timer can only cut a live ad short.
     const bodyOf = (name: string): string => {
       const from = adapter.indexOf(`async ${name}(): Promise`);
       return adapter.slice(from, adapter.indexOf("\n  }", from));
     };
     for (const name of ["commercialBreak", "rewardedBreak"]) {
       expect(bodyOf(name), `${name} must await the SDK promise directly`).toMatch(/await sdk\.(commercialBreak|rewardedBreak)\(/);
-      // The settle timer lives in the throwaway Promise, not in the
-      // argument the SDK receives. Extract just the SDK call's
-      // callback argument (between `name(() => {` and its
-      // matching close) — it must contain no timer, because a
-      // game-side timer can only cut a live ad short.
       const callStart = bodyOf(name).indexOf(`${name}(() => {`);
       let braceDepth = 0;
       let callbackEnd = callStart;
@@ -251,9 +233,8 @@ describe("Poki ads: the call shape is exactly the documented one", () => {
       const callbackBody = bodyOf(name).slice(callStart, callbackEnd);
       expect(callbackBody, `${name} SDK argument must not arm a timer`).not.toMatch(/setTimeout|setInterval/);
     }
-    // And the one last-resort exit lives in the game, not the adapter.
     const game = fs.readFileSync(join(process.cwd(), "src", "game", "Game.ts"), "utf8");
-    expect(game, "the single valve is the game's").toContain("AD_SAFETY_SECONDS");
+    expect(game).not.toMatch(/AD_SAFETY_SECONDS|COMMERCIAL_BREAK_MIN_GAP_MS|lastCommercialBreakAt/);
   });
 
   it("books the ad open/close so audio and input are restored even when the ad never opens", async () => {

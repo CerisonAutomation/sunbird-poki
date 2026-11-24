@@ -410,14 +410,10 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .home-section-title { text-align:left; font-size:11px; font-weight:800; color:#a08060; letter-spacing:.08em; text-transform:uppercase; margin:22px 0 10px; }
 .progress-destinations .destination { min-height:60px; background:rgba(255,255,255,0.5); border-color:#e8dfd0; }
 .home-record { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; font-size:12px; color:#726254; border-top:1px solid var(--rule-warm); padding-top:14px; }
-/* The status bar variant: the home sheet's first row, sticky, so the wallet
-   is on screen for the whole scroll instead of being the last thing found.
-   Paper gradient + bottom border, because content scrolling under a
-   transparent bar turns the numbers into noise. The wash, the hairline and
-   both figure inks are the four home-sheet tokens, not local copies — this
-   rule used to paste all four in by hand, which is why they are tokens. */
+/* The status bar variant. The record strip sits at the end of the home
+   sheet; keeping it in the scroll flow prevents it covering other controls. */
 .home-status-bar {
-  position: sticky; bottom: 0; z-index: 6;
+  position: static;
   display: flex; align-items: stretch;
   flex-wrap: nowrap; gap: 0;
   margin: 0 -18px;
@@ -654,19 +650,7 @@ html.sb-reduce-motion .play-hud *::after { animation: none !important; transitio
 .paper-card.menu-hero h1 { color:#ff7a45; font-size:46px; font-weight:500; letter-spacing:.035em; margin:7px 0 8px; text-shadow:0 2px 1px #a65e1220; background:none; -webkit-text-fill-color:#ff7a45; }
 .menu-hero .hero-sub { display:block; text-align:left; color:#795329; font-size:12px; line-height:1.5; margin:0; }
 .overlay .icon-btn.menu-mute {
-  /* Above the sticky bars, not below them. This sat at 4 while both
-     `.home-status-bar` and `.screen-head` are `position: sticky; z-index: 6`,
-     so the mute — absolutely positioned in the hero, the same top row — was
-     painted over by the sticky status bar's opaque parchment and its lower
-     ~60% was dead to hit-testing. index.css already asks for 6; the menu
-     sheet's higher-specificity `.overlay` rule quietly demoted it below the
-     thing it shares a row with. 7 beats both sticky bars at every viewport
-     measured (1280x800, 360x740, 320x568).
-
-     The `padding-right: 62px` on `.home-status-bar` is the OTHER half of the
-     same collision and does not cover it: padding keeps the bar's *text* clear
-     of the button horizontally, and nothing stops the bar's own background
-     from covering the button. */
+  /* Keep sound above the sticky screen heading and other menu content. */
   z-index: 7;
   /* Safe-area aware. These overrode the inset-aware values in index.css with
      flat 12px, which on a notched iPhone in landscape (~44px inset) put half
@@ -2254,9 +2238,9 @@ button,
   border-radius: 99px !important;
   background: linear-gradient(to right, #e8dcc8, #f0e8d4) !important;
   box-shadow: inset 0 1px 3px rgba(100,70,20,0.1) !important;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
-  margin: 8px 0 4px !important;
+  margin: 8px 0 24px !important;
 }
 .wings-track i {
   display: block;
@@ -2269,9 +2253,12 @@ button,
   position: absolute;
   right: 0;
   top: 14px;
-  font: 400 10px var(--body) !important;
+  font: 600 11px/1.4 var(--body) !important;
   color: var(--sand) !important;
 }
+
+/* Status pills must wrap instead of being centered off the card on phones. */
+.hero-meta { flex-wrap: wrap; gap: 4px; }
 
 /* ── Hero meta pills ────────────────────────────────────────────────────────── */
 .hero-meta .pill {
@@ -4350,3 +4337,11 @@ hr.divider {
 /* Meta-progress strip on game-over: lighter background to distinguish
    from the primary result-summary below it. */
 .over-stats.meta-progress-strip div { background: rgba(255,255,255,0.35); }
+
+/* The row owns its spacing. On narrow cards, give the primary action enough
+   width to read at a glance rather than squeezing it beside the loadout. */
+.menu-hero .home-launch { margin: 0; }
+@container (max-width: 360px) {
+  .home-launch-row { flex-direction: column; }
+  .loadout-quick { width: 100%; max-width: none; min-height: 56px; }
+}

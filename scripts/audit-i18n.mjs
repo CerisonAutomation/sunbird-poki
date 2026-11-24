@@ -64,8 +64,9 @@ const CATEGORIES = [
     id: "toast",
     label: "hud.toast() with literal copy",
     // A toast whose first argument is not a t() call. Both `hud.toast("x")` and
-    // `hud.toast(\`x ${y}\`)` count; `hud.toast(t("k", …))` does not.
-    re: /(?:this\.)?(?:hud|this\.hud)\.toast\(\s*(?!t\(|\s*$)/g,
+    // `hud.toast(\`x ${y}\`)` count; translated t() calls and the
+    // centralized, translation-backed importantMessages helpers do not.
+    re: /(?:this\.)?(?:hud|this\.hud)\.toast\(\s*(?!t\(|messages\.(?:streakDay|streakMilestone|vipDaily|seasonEnd|trophy|firstShop|shopTip|adUnavailable|rewardUnconfirmed|continueUnconfirmed|flightBonus|shopCoins)\(|\s*$)/g,
   },
   {
     id: "screenTitle",

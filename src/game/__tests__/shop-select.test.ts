@@ -146,7 +146,6 @@ function context(save: SaveData, calls: string[], over: Partial<ShopActionContex
     bird: { x: 0, y: 0 } as unknown as Bird,
     telemetry: { track: () => {} } as unknown as Telemetry,
     platform: null,
-    shopAdClaimed: 0,
     checkoutBusy: false,
     adsLive: () => true,
     multiplyCoinsFromShopAd: async () => {},

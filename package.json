@@ -30,7 +30,7 @@
     "test:lookup": "node scripts/smoke-pilot-lookup.mjs",
     "botsim": "node scripts/botsim.mjs",
     "botsim:40": "node scripts/botsim.mjs --players 40 --seconds 15",
-    "build:poki": "pnpm gen-icons && VITE_POKI_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_POKI_NETLIB_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_MULTIPLAYER_URL= VITE_LEADERBOARD_URL= VITE_SOCIAL_URL= vite build --outDir dist-poki && node scripts/package-portal.mjs poki",
+    "build:poki": "pnpm gen-icons && SUNBIRD_TARGET=poki VITE_POKI_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_POKI_NETLIB_GAME_ID=3625e78b-0b3d-4f62-8224-ac1c4b2a9ab2 VITE_MULTIPLAYER_URL= VITE_LEADERBOARD_URL= VITE_SOCIAL_URL= vite build --outDir dist-poki && node scripts/package-portal.mjs poki",
     "poki:upload": "pnpm build:poki && poki upload --name \"$(git rev-parse --short HEAD)\" --notes \"$(git log -1 --pretty=%B)\"",
     "gen-icons": "node scripts/gen-icons.mjs",
     "gen-animated-icon": "node scripts/gen-animated-icon.mjs",
@@ -47,7 +47,7 @@
     "setup:browser": "node scripts/setup-browser.mjs",
     "test:artifact": "pnpm build:poki && playwright test -c playwright.artifact.config.ts",
     "test:policy": "pnpm build:poki && pnpm build && playwright test -c playwright.policy.config.ts",
-    "gate": "pnpm lint && pnpm audit:ui && pnpm typecheck && pnpm test && pnpm verify:prod && pnpm build:poki && pnpm verify:portals && pnpm verify:csp && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm isolation:check && pnpm test:policy && pnpm test:artifact && pnpm test:mobile",
+    "gate": "pnpm check && pnpm test && pnpm verify:prod && pnpm build:poki && pnpm verify:portals && pnpm verify:csp && pnpm audit:zips && pnpm verify:upload && pnpm verify:thumbnail && pnpm isolation:check && pnpm test:policy && pnpm test:artifact && pnpm test:mobile",
     "gate:local": "node scripts/verify-local-ci.mjs",
     "gate:local:full": "node scripts/verify-local-ci.mjs --full",
     "gate:local:list": "node scripts/verify-local-ci.mjs --list",
@@ -56,7 +56,9 @@
     "board:check": "node scripts/board-check.mjs",
     "verify:auds": "pnpm verify:upload && pnpm isolation:check",
     "verify:inspector-qa": "pnpm verify:upload && pnpm audit:zips && pnpm verify:thumbnail",
-    "verify:csp": "tsx scripts/verify-csp.ts"
+    "verify:csp": "tsx scripts/verify-csp.ts",
+    "check": "pnpm lint && pnpm typecheck && pnpm audit:ui && pnpm i18n:audit && pnpm docs:audit && pnpm test:upload-server",
+    "test:upload-server": "node --test scripts/upload-path.test.mjs"
   },
   "dependencies": {
     "@poki/netlib": "^0.0.20",
@@ -74,7 +76,7 @@
     "@types/react-dom": "19.2.3",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "5.1.1",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "gifenc": "^1.0.3",
@@ -86,8 +88,8 @@
     "tsx": "^4.23.13",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.70.0",
-    "vite": "7.3.6",
+    "vite": "7.3.7",
     "vite-plugin-singlefile": "2.3.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

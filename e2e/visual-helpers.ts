@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
@@ -16,24 +16,6 @@ const MIME: Record<string, string> = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
   ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml",
 };
-
-/**
- * Every screen reachable from the home menu.
- *
- * `open-practice` is deliberately absent: the AI flock is now a section *of*
- * `open-live` (the PvP screen), not a second home tile, so there is nothing on
- * the home menu to click. The AI-only view still exists for the in-lobby
- * shortcut, and this list is explicitly "reachable from the menu".
- */
-export const SCREENS = [
-  "open-shop", "open-settings", "open-board", "open-progress", "open-cups",
-  "open-account", "open-challenges", "open-campaign", "open-rank", "open-pass",
-  "open-trophies", "open-atlas", "open-scores", "open-squad", "open-live",
-  "mode-select",
-];
-
-/** The screens whose copy is translated and whose boxes are tightest. */
-export const TRANSLATED_SCREEN_SAMPLE = ["open-settings", "open-board"];
 
 /** Freeze CSS animations so element screenshots are comparable run to run. */
 export const FREEZE = `
@@ -62,49 +44,6 @@ export async function startArtifactServer(): Promise<{ server: Server; baseUrl: 
 
 export function stopArtifactServer(server: Server): Promise<void> {
   return new Promise((resolve) => { server.close(() => resolve()); });
-}
-
-/** Boot the artifact and wait for the root menu, in any language. */
-export async function boot(page: Page, baseUrl: string, locale?: string): Promise<void> {
-  if (locale) {
-    await page.addInitScript((code) => {
-      localStorage.setItem("sunbird.i18n.locale", code);
-    }, locale);
-  }
-  await page.goto(baseUrl, { waitUntil: "commit" });
-  await expect(page.locator("#boot-shell")).toHaveCount(0, { timeout: 45_000 });
-  // First run shows the welcome/name screen before the root menu. Accept the
-  // pre-filled (or curated) name exactly the way SunbirdPage.ready does, so
-  // the visual suite measures the shipping onboarding path, not around it.
-  const home = page.locator('[data-ref="menuCard"] [data-action="open-settings"]');
-  const welcome = page.locator('[data-action="confirm-pilot-name"]');
-  await Promise.race([home.waitFor({ state: "visible", timeout: 45_000 }), welcome.waitFor({ state: "visible", timeout: 45_000 })]);
-  if (await welcome.isVisible().catch(() => false) && !(await home.isVisible().catch(() => false))) {
-    await welcome.click();
-  }
-  // Locale-independent home marker: a root-menu destination.
-  await expect(home).toBeVisible({ timeout: 45_000 });
-}
-
-export async function openScreen(page: Page, action: string): Promise<void> {
-  const card = page.locator('[data-ref="menuCard"]');
-  await card.locator(`[data-action="${action}"]`).first().click();
-  await expect(card.locator(".screen-head h2").first()).toBeVisible({ timeout: 20_000 });
-}
-
-export async function goHome(page: Page): Promise<void> {
-  for (let i = 0; i < 8; i += 1) {
-    const home = await page
-      .locator('[data-ref="menuCard"] [data-action="open-settings"]')
-      .isVisible()
-      .catch(() => false);
-    if (home) return;
-    await page.evaluate(() => {
-      document.querySelector<HTMLElement>('[data-ref="menuCard"] [data-action="back"]')?.click();
-    });
-    await page.waitForTimeout(250);
-  }
-  await expect(page.locator('[data-ref="menuCard"] [data-action="open-settings"]')).toBeVisible();
 }
 
 /**
@@ -152,9 +91,10 @@ export async function visualDefects(page: Page): Promise<string[]> {
 
       // 1. A box that clips its own TEXT. Measured with a Range so decorative
       //    ::before/::after glows — which legitimately overflow a box with
-      //    overflow:hidden — do not count.
+      //    overflow:hidden — do not count. An SVG's title is accessible text,
+      //    not a painted label; the range measures its artwork instead.
       const clips = style.overflowX === "hidden" || style.overflowX === "clip";
-      if (clips) {
+      if (clips && el.tagName.toLowerCase() !== "svg") {
         const box = el.getBoundingClientRect();
         const content = contentBox(el);
         if (content.width && (content.right > box.right + 2 || content.left < box.left - 2)) {

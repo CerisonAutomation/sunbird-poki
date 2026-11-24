@@ -7,7 +7,7 @@
  */
 
 import { formatNumberLocalized, t } from "../../i18n";
-import { DAILY_STIPEND, SHOP_AD_COINS, SHOP_AD_SESSION_CAP } from "../constants";
+import { DAILY_STIPEND, SHOP_AD_COINS } from "../constants";
 import { COLLECTIONS, dailyFlashBird, GOLD, skinById, STARTER_PACK, VIP, type BoostView, type ShopTrailView, type SkinView } from "../Economy";
 import { SELL_AD_REMOVAL } from "../edition";
 import { menuHorizon, menuIcon, menuIconSm } from "../MenuIcons";
@@ -185,7 +185,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
     ${isNewPlayer ? `<div class="onboarding-card shop-intro-card">
       <b>${menuIconSm("crown")} Welcome to the Hangar</b>
       <ul class="shop-intro-tips">
-        <li><b>${menuIconSm("bird")} Birds</b> — permanent unlocks. Each changes your speed, fever, or daylight. From ● 150.</li>
+        <li><b>${menuIconSm("bird")} Birds</b> — permanent unlocks. Each changes your speed, fever, or daylight.</li>
         <li><b>${menuIconSm("lightning")} Boosts</b> — one-use power-ups per flight (sun refill, speed burst, score x2). From ● 40.</li>
         <li><b>${menuIconSm("feather")} Trails</b> — visual cosmetics. Pure style.</li>
       </ul>
@@ -209,7 +209,7 @@ export function renderShop(s: Pick<HudSnapshot, "adAvailable" | "boosts" | "dail
       <span class="pc-icon">${menuIconSm("tv")}</span>
       <div class="pc-body">
         <b>${t("hud.renderShop.FCoins", undefined, "Free Coins")}</b>
-        <span>Watch a short ad · +● ${SHOP_AD_COINS} (max ${SHOP_AD_SESSION_CAP}/hour)</span>
+        <span>+● ${SHOP_AD_COINS}</span>
       </div>
       <button class="primary-btn gold" data-ui data-action="shop-free-coins">${menuIconSm("clapper")} ${t("hud.renderShop.WAd", undefined, "Watch Ad")}</button>
     </div>` : ""}
@@ -362,7 +362,7 @@ export function renderPaywall(s: Pick<HudSnapshot, "gold" | "goldFeatures" | "re
     <div class="redeem"><input data-ui aria-label="${t("hud.renderSettings.PCode", undefined, "Promo code")}" placeholder="Promo code" maxlength="16" autocomplete="off" /><button class="mini-btn" data-ui data-action="redeem">Redeem</button></div>
     <button class="ghost-btn" data-ui data-action="restore">${t("hud.renderPaywall.RPasses", undefined, "Restore passes")}</button>
     ${s.restoreMessage ? `<p class="note">${s.restoreMessage}</p>` : ""}
-    <p class="fineprint">All passes &amp; packs are earnable 100% through in-game flight coins!</p>
+    <p class="fineprint">Gold and the First Flight Pack are available with in-game flight coins.</p>
   `;
 }
 

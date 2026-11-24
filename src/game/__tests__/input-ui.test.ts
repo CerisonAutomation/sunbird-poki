@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Input } from "../Input";
 let input: Input | undefined;
-afterEach(() => { input?.dispose(); vi.restoreAllMocks(); document.body.innerHTML = ""; });
+afterEach(() => { input?.dispose(); vi.restoreAllMocks(); Reflect.deleteProperty(navigator, "getGamepads"); document.body.innerHTML = ""; });
 function fixture(mark = vi.fn()) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -510,5 +510,44 @@ describe("menu overlays keep native scrolling and tapping", () => {
     const ripple = document.querySelector(".touch-ripple");
     expect(ripple).not.toBeNull();
     expect((ripple as HTMLElement).style.left).toBe("40px");
+  });
+});
+
+describe("interruption-safe gamepad input", () => {
+  it.each([false, true])("requires release after an ad or interruption (toggle=%s)", toggle => {
+    const { input } = fixture();
+    let down = false;
+    Object.defineProperty(navigator, "getGamepads", { configurable: true, value: () => [
+      { buttons: [{ pressed: down }], axes: [0, 0] },
+      { buttons: [{ pressed: down }], axes: [0, 0] },
+    ] });
+    input.setToggleDive(toggle);
+    input.pollGamepads();
+    input.setEnabled(false);
+    down = true;
+    input.pollGamepads();
+    expect(input.diving).toBe(false);
+    expect(input.diving2).toBe(false);
+    input.setEnabled(true);
+    input.pollGamepads();
+    expect(input.diving).toBe(false);
+    expect(input.diving2).toBe(false);
+    down = false;
+    input.pollGamepads();
+    down = true;
+    input.pollGamepads();
+    expect(input.diving).toBe(true);
+    expect(input.diving2).toBe(true);
+  });
+
+  it("clears queued hotkeys when input is disabled", () => {
+    const { host, input } = fixture();
+    for (const code of ["Escape", "KeyR", "KeyM", "KeyF"]) key(host, code);
+    input.setEnabled(false);
+    input.setEnabled(true);
+    expect(input.consumePause()).toBe(false);
+    expect(input.consumeRestart()).toBe(false);
+    expect(input.consumeMute()).toBe(false);
+    expect(input.consumeFullscreen()).toBe(false);
   });
 });

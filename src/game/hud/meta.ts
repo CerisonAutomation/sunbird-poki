@@ -105,13 +105,13 @@ export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
     <div class="pass-progress"><i style="width:${pct}%"></i></div>
     <p class="tagline">${s.season.label} — fly to earn XP.${SELL_AD_REMOVAL ? " Gold unlocks premium rewards." : " Fly to unlock rewards."}</p>
     ${!s.gold && SELL_AD_REMOVAL ? `<button class="upsell" data-ui data-action="open-paywall"><div><b>✦ Unlock premium rewards</b><span>${t("hud.renderPass.DTierRewardsGold", undefined, "Get exclusive skins: Owl (Lv.10), Ember (Lv.20), Raven (Lv.50) & Prism trail")}</span></div><span class="mini-btn gold">Unlock</span></button>` : ""}
-    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">✦ Portal edition — the free Nest Pass track is fully earnable with coins. Premium track is optional (Gold owners see both rewards per tier).</p>` : ""}
+    ${!SELL_AD_REMOVAL ? `<p class="fineprint pass-portal-note">${menuIconSm("sparkle")} The free Nest Pass track is earnable through play. Gold owners can claim both tracks.</p>` : ""}
     <div class="tier-track">
       ${s.season.tiers
         .map((t) => {
           const canFree = t.unlocked && !t.freeClaimed;
           const canPremium = t.unlocked && !t.premiumLocked && !t.premiumClaimed;
-          const premiumTitle = t.premiumLocked && !SELL_AD_REMOVAL ? "Portal edition — premium rewards shown for reference" : undefined;
+          const premiumTitle = t.premiumLocked && !SELL_AD_REMOVAL ? "Gold unlocks premium rewards" : undefined;
           // A locked tier emits no verb at all instead of an empty one.
           // The reason is the detector, not the player: the button is `disabled`
           // either way, but an empty verb is owned by no handler, and writing the
@@ -125,7 +125,7 @@ export function renderPass(s: Pick<HudSnapshot, "gold" | "season">): string {
           return `<div class="tier-card ${t.unlocked ? "unlocked" : ""}">
             <div class="tier-num">Lv.${t.tier}</div>
             <button class="tier-reward free ${t.freeClaimed ? "claimed" : ""}" data-ui ${canFree ? 'data-action="claim-pass-free"' : ""} data-id="${t.tier}" title="Free tier — claim for everyone" ${canFree ? "" : "disabled"}>${rewardLabel(t.free)}</button>
-            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui ${canPremium ? 'data-action="claim-pass-premium"' : ""} data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : `title="Premium tier — Gold only"`} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">✦</i>` : ""}</button>
+            <button class="tier-reward premium ${t.premiumClaimed ? "claimed" : ""} ${t.premiumLocked ? "locked" : ""}" data-ui ${canPremium ? 'data-action="claim-pass-premium"' : ""} data-id="${t.tier}" ${premiumTitle ? `title="${premiumTitle}"` : `title="Premium tier — Gold only"`} ${canPremium ? "" : "disabled"}>${rewardLabel(t.premium)}${t.premiumLocked ? `<i class="lock-badge">${menuIconSm("lock")}</i>` : ""}</button>
           </div>`;
         })
         .join("")}
@@ -182,8 +182,8 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
   return `
     ${head(SCREEN.account)}
     ${portalAccount}
-    ${sectionTitle(null, "Membership")}
     ${!SELL_AD_REMOVAL ? "" : `
+    ${sectionTitle(null, "Membership")}
     <div class="sheet">
       <div class="code-row"><span>${s.gold ? "✦ Gold · owned for life" : "✦ Gold · not owned"}</span>${
         s.gold ? `<span class="tag on">Active</span>` : SELL_AD_REMOVAL ? `<button class="mini-btn gold" data-ui data-action="open-paywall">${t("hud.renderAccount.GGold", undefined, "Get Gold")}</button>` : `<span class="tag">${t("hud.renderAccount.PMember", undefined, "Portal member")}</span>`
@@ -204,7 +204,7 @@ export function renderAccount(s: Pick<HudSnapshot, "adsLeftToday" | "cloudCode" 
     </div>
     `}
 
-    ${sectionTitle(null, "Invite friends")}
+    ${sectionTitle(null, t("hud.renderLive.IFriends", undefined, "Invite friends"))}
     <div class="sheet">
       <p class="tagline">Share your code — friends who redeem it get a welcome bonus on their device.</p>
       <div class="code-row"><span class="code">${s.referralCode}</span><button class="mini-btn" data-ui data-action="copy-referral">Copy</button></div>

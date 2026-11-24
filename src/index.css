@@ -389,7 +389,7 @@ textarea {
   width: 100%;
   height: 16px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2a1a4a, #e8783a 45%, #ffd36a 100%);
+  background: rgba(30, 24, 47, 0.78);
   box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25), 0 4px 0 rgba(42, 28, 40, 0.12);
   overflow: visible;
 }
@@ -398,7 +398,7 @@ textarea {
   height: 100%;
   width: 70%;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.35));
+  background: linear-gradient(90deg, #f47746, #ffc95c);
   transition: width 0.12s ease-out;
   box-shadow: 0 0 0 0px rgba(255, 210, 110, 0);
 }
@@ -406,7 +406,7 @@ textarea {
 .sun-fill.low {
   animation: dayUrgent 0.55s ease-in-out infinite;
   box-shadow: 0 0 0 3px rgba(255, 80, 40, 0.5);
-  background: linear-gradient(90deg, rgba(255,60,20,0.3), rgba(255,120,40,0.5));
+  background: linear-gradient(90deg, #ed593b, #ffac52);
 }
 @keyframes dayUrgent {
   0%, 100% { box-shadow: 0 0 0 3px rgba(255,80,40,0.5), 0 0 12px rgba(255,80,40,0.3); }

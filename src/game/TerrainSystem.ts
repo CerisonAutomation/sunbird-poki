@@ -8,7 +8,6 @@ import { biomeForIsland, islandIndexFor, islandTemplate, localXFor, rampPeakFor,
 import {
   CHUNK_RES,
   CHUNK_SIZE,
-  OCEAN_FLOOR,
   TERRAIN_FACE_DEPTH,
   TERRAIN_HALF_Z,
   VISIBLE_CHUNKS_BACK,
@@ -326,10 +325,10 @@ export class TerrainSystem {
     const shoulder = lip + SHOULDER_MARGIN + hash01(island, this.seedN) * 3;
     const valley = 1.2; // skim just above water — the bird nearly touches the ocean
     if (lx >= tpl.gapStart && lx < gapEnd) {
-      // Start at the actual ramp height, NOT the unrelated procedural hills.
-      // The old branch had a vertical discontinuity precisely at take-off.
-      const departure = lerp(lip, OCEAN_FLOOR, smoothstep(tpl.gapStart, tpl.gapStart + 26, lx));
-      return lerp(departure, 16, smoothstep(gapEnd - 26, gapEnd, lx));
+      // Keep the launch crest, but replace the repeated ocean-floor cut with
+      // a long, continuous landing slope. Rendering and collision share this
+      // curve: concealing a chasm with decorative geometry would mislead pilots.
+      return lerp(lip, 16, smoothstep(tpl.gapStart, gapEnd, lx));
     }
 
     // The inter-island shelf used to be `return 16`, and that was wrong twice
@@ -479,19 +478,10 @@ export class TerrainSystem {
   }
 
   isOcean(x: number): boolean {
-    const tpl = islandTemplate(this.islandIndex(x));
-    // localX without localXFor's own islandTemplate lookup: the
-    // straight subtraction for x ≥ 0, the island-0 wrap for
-    // negative x (the menu's attract camera). One template per
-    // call instead of two — this runs every physics step.
-    let lx: number;
-    if (x < 0) {
-      const p = islandTemplate(0).period;
-      lx = ((x % p) + p) % p;
-    } else {
-      lx = x - tpl.start;
-    }
-    return lx >= tpl.gapStart && lx < tpl.gapEnd;
+    // Classify the surface actually under the bird, not the old periodic gap:
+    // the world transitions are now land, while submerged terrain can still
+    // trigger water physics (for example at a finite course's finale).
+    return this.heightAt(x) < WATER_Y;
   }
 
   /**
